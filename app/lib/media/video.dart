@@ -37,6 +37,7 @@ class MediaVideoChannel {
       width: (value['width'] as num).toInt(),
       height: (value['height'] as num).toInt(),
       durationMs: (value['durationMs'] as num).toInt(),
+      rotation: (value['rotation'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -76,11 +77,18 @@ class MediaVideoChannel {
 }
 
 class MediaVideoHandle {
-  const MediaVideoHandle({required this.texture, required this.width, required this.height, required this.durationMs});
+  const MediaVideoHandle({
+    required this.texture,
+    required this.width,
+    required this.height,
+    required this.durationMs,
+    this.rotation = 0,
+  });
   final int texture;
   final int width;
   final int height;
   final int durationMs;
+  final int rotation;
   double get aspectRatio => width > 0 && height > 0 ? width / height : 16 / 9;
 }
 

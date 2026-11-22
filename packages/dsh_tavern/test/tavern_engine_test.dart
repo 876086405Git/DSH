@@ -190,7 +190,49 @@ void main() {
     expect(_requestText(transport.requests.single.body), isNot(contains('改写')));
     await engine.deleteFrom(chatId, greeting.nodeId);
     expect(await engine.path(chatId), isEmpty);
-    expect((await engine.watchChats().first).single.messageCount, 0);
+    final empty = (await engine.watchChats().first).single;
+    expect(empty.messageCount, 0);
+    expect(empty.lastText, isNull);
+  });
+
+  test('chat previews retain exact text across edits, branches and external writes', () async {
+    final (characterId, chatId) = await chat();
+    final root = (await engine.path(chatId)).single;
+    final raw =
+        '<script>${'s' * 32768}</script><style>${'c' * 32768}</style>'
+        '<p>**alpha** &amp;lt;literal&amp;gt; &lt;tag&gt; &amp; tail</p>';
+    const tail = '&lt;literal&gt; <tag> & tail';
+    Future<TavernChatSummary> preview() async => (await engine.watchChats(characterId: characterId).first).single;
+    await engine.edit(chatId, root.nodeId, raw);
+    expect((await preview()).lastText, 'alpha $tail');
+    expect((await preview()).lastText, 'alpha $tail');
+    final edited = raw.replaceFirst('alpha', 'bravo');
+    expect(edited.length, raw.length);
+    await engine.edit(chatId, root.nodeId, edited);
+    expect((await preview()).lastText, 'bravo $tail');
+
+    transport.reply(raw.replaceFirst('alpha', 'delta'));
+    final alternate = _done(await engine.regenerate(chatId, root.nodeId).toList());
+    expect((await preview()).lastText, 'delta $tail');
+    await engine.selectSibling(chatId, alternate.nodeId, 0);
+    expect((await preview()).lastText, 'bravo $tail');
+    await engine.selectSibling(chatId, root.nodeId, 1);
+    expect((await preview()).lastText, 'delta $tail');
+
+    final writer = ChatStore.open('${directory.path}/tavern/tavern.sqlite3');
+    try {
+      writer.updateChat(chatId, title: 'External title');
+      final renamed = await preview();
+      expect(renamed.title, 'External title');
+      expect(renamed.lastText, 'delta $tail');
+      expect(renamed.messageCount, 1);
+      writer.updateMessage(chatId, alternate.nodeId, text: raw.replaceFirst('alpha', 'cider'));
+      expect((await preview()).lastText, 'cider $tail');
+      writer.updateMessage(chatId, alternate.nodeId, text: '');
+      expect((await preview()).lastText, '');
+    } finally {
+      await writer.close();
+    }
   });
 
   test('continue writes the same node; postfix is local and ordinary trailing spaces suppress it', () async {

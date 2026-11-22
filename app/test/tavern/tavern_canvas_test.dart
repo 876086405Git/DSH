@@ -292,9 +292,12 @@ void main() {
     for (final name in ['generate', 'generateRaw', 'stopGenerationById', 'stopAllGeneration']) {
       expect(open, contains("['$name',"));
     }
-    expect(open, contains("if(d.kind==='generation'){generationEvent(d);return;}"));
+    expect(open, contains("if(d.kind==='helperState'){helperIds=d.activeIds||[];return;}"));
     expect(open, contains("if(d.kind==='invoke'){invoke(d);return;}"));
-    expect(open, contains("['custom_api','tools','tool_choice','json_schema','image']"));
+    // The whole config goes to the engine's Helper requests; the engine's
+    // iframe-namespace events are 酒馆助手's js_ ones.
+    expect(open, contains("return ask(kind,{config:json});"));
+    expect(open, contains("var name=d.namespace==='iframe'?'js_'+String(d.name||'').toLowerCase():(d.name||'');"));
     expect(open, contains('if(!window.iframe_events)window.iframe_events=iframe_events;'));
     expect(open, contains('if(!window.injectPrompts)window.injectPrompts=injectPrompts;'));
     // The rest of 酒馆助手's events and its displayed messages (their

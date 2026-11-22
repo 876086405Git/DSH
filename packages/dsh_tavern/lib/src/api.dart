@@ -1148,6 +1148,7 @@ abstract interface class Tavern {
 
   /// Native ST JSON, with preserved project data under extensions.dshgo.
   Future<String> exportPreset(String presetId);
+
   Future<TavernPresetSelection> presetSelection({String? chatId});
   Future<void> setDefaultPreset(String? presetId);
 

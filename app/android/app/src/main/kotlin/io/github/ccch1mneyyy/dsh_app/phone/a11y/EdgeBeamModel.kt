@@ -7,12 +7,13 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // The screen-edge rim's pure half (EdgeBeamModelTest): the colour Distortion waves leaves on the
-// screen's edges (its shader's rim and WaveRim.lumps), on its own and kept still in place. EdgeBeam.kt
-// draws what these decide.
+// screen's edges (its shader's rim and WaveRim.lumps), with Border beam's bright stroke hugging the
+// edge and two beams of light travelling round it. EdgeBeam.kt draws what these decide.
 
 /** The rim's numbers. */
 internal object EdgeBeamSpec {
@@ -22,11 +23,52 @@ internal object EdgeBeamSpec {
     /** The still line the rim settles into while paused: the same falloff, this wide. */
     const val LINE_DP = 3f
 
-    /** Peak opacity on the screen's edge, and the still line's. */
-    class Preset(val rim: Float, val line: Float)
+    /** Border beam's stroke: a bright line right on the screen's edge, the same falloff, this wide. */
+    const val CORE_DP = 2.5f
 
-    val DARK = Preset(rim = 0.42f, line = 0.26f)
-    val LIGHT = Preset(rim = 0.26f, line = 0.16f)
+    /** Border beam's bloom: a wider glow, strongest under a beam, the same falloff, this wide. */
+    const val BLOOM_DP = 26f
+
+    /**
+     * Peak opacity on the screen's edge where a beam passes ([rim]; between the beams it is
+     * rim / (1 + [BEAM_GAIN])), the still line's, the stroke's and the bloom's where a beam passes.
+     */
+    class Preset(val rim: Float, val line: Float, val core: Float, val bloom: Float)
+
+    val DARK = Preset(rim = 0.9f, line = 0.55f, core = 0.95f, bloom = 0.6f)
+    val LIGHT = Preset(rim = 0.75f, line = 0.45f, core = 0.85f, bloom = 0.5f)
+
+    /**
+     * How uneven the band is: the lumps' thickness pulled towards 1 by this share. One band all
+     * round (about 0.7–1.6 × [WIDTH_DP]), never thin stretches between peaks.
+     */
+    const val UNEVEN = 0.3f
+
+    /**
+     * Two beams, half a lap apart, each going once round the screen in this long (Border beam's
+     * rotate). They are long and soft: a brighter swell moving through one continuous band, not
+     * bright spots circling.
+     */
+    const val BEAMS = 2
+    const val BEAM_LAP_S = 8.0
+
+    /** A beam's length along the edge: a Gaussian this share of the perimeter wide (two cover it end to end). */
+    const val BEAM_SHARE = 0.2f
+
+    /** How much brighter the rim is under a beam than between the beams. */
+    const val BEAM_GAIN = 0.35f
+
+    /** The stroke between the beams, as a share of its peak: always there, brightest under a beam. */
+    const val CORE_REST = 0.75f
+
+    /** The bloom between the beams, as a share of its peak. */
+    const val BLOOM_REST = 0.6f
+
+    /** Dark screens: the stroke whitens this much under a beam (Border beam's spike). */
+    const val CORE_WHITEN = 0.5f
+
+    /** The palette flows once round the screen in this long (Border beam's hue shift): the colours move, the band stays whole. */
+    const val HUE_LAP_S = 24.0
 
     /** Fade in 0.6 s, out 0.5 s, CSS `ease`. */
     const val FADE_IN_MS = 600L
@@ -41,15 +83,15 @@ internal object EdgeBeamSpec {
     /** Corner radius when the display does not report one (before Android 12). */
     const val CORNER_FALLBACK_DP = 28f
 
-    /** One frame at most every this many ms: 30 fps is plenty for colour drifting a few dp a second. */
-    const val FRAME_MS = 33L
+    /** One frame at most every this many ms: 60 fps, so the beams glide rather than step. */
+    const val FRAME_MS = 16L
 
     /**
      * How far in anything is drawn, as a share of [WIDTH_DP]: past it the thickest lump (×[EdgeRim.MAX_THICKNESS])
-     * is under half a step of 8-bit alpha. The shader fades to nothing before it, so two lumps overlapping
-     * never end in a hard edge.
+     * and the bloom are under half a step of 8-bit alpha. The shader fades to nothing before it, so
+     * nothing ends in a hard edge.
      */
-    val REACH: Float get() = EdgeRim.MAX_THICKNESS * 2.4f
+    val REACH: Float get() = max(EdgeRim.MAX_THICKNESS, BLOOM_DP / WIDTH_DP) * 2.55f
 
     fun preset(dark: Boolean) = if (dark) DARK else LIGHT
 
@@ -74,8 +116,12 @@ internal object EdgeRim {
     private val B = DoubleArray(COUNT) { hash(it.toDouble(), 78.233, 4.1) }
     private val C = DoubleArray(COUNT) { hash(it.toDouble(), 39.425, 2.7) }
 
-    /** The rim's thickness never gets past this share of [EdgeBeamSpec.WIDTH_DP] (one lump at its deepest breath). */
-    val MAX_THICKNESS: Float = (B.maxOf { (0.2 + 2.6 * it) * 1.25 } + BASE).div(NORM).toFloat()
+    /**
+     * The rim's thickness never gets past this share of [EdgeBeamSpec.WIDTH_DP]: one lump at its
+     * deepest breath. Lumps drifting over each other could sum past it, so [thickness] (and the
+     * shader) cap there: the drawn reach is built on it.
+     */
+    val MAX_THICKNESS: Float = even((B.maxOf { (0.2 + 2.6 * it) * 1.25 } + BASE).div(NORM).toFloat())
 
     /** The length round a [w] × [h] rect with corners of radius [r] (any unit). */
     fun perimeter(w: Float, h: Float, r: Float): Float {
@@ -117,8 +163,11 @@ internal object EdgeRim {
             val k = ds / lumps[i * STRIDE + 1]
             t += lumps[i * STRIDE + 2] * exp(-k * k)
         }
-        return max((t / NORM).toFloat(), 0.04f)
+        return min(even(max((t / NORM).toFloat(), 0.04f)), MAX_THICKNESS)
     }
+
+    /** The lumps' thickness [raw] pulled towards 1 by [EdgeBeamSpec.UNEVEN]: one band all round, gently uneven. */
+    fun even(raw: Float): Float = 1f + EdgeBeamSpec.UNEVEN * (raw - 1f)
 
     /** The rim's opacity (0–1 of the preset's) [inset] px in from the edge where it is [thickness] thick, [widthPx] the average. */
     fun hug(inset: Float, thickness: Float, widthPx: Float): Float {
@@ -135,8 +184,49 @@ internal object EdgeRim {
     }
 }
 
+/**
+ * The beams round the edge (Border beam's rotate, on the screen): [BEAMS][EdgeBeamSpec.BEAMS]
+ * Gaussians along the perimeter, half a lap apart, travelling clockwise. The shader sums them as
+ * [at] does.
+ */
+internal object EdgeFlow {
+    /** The first beam's centre at [time] s of travel, px along a [perimeter] edge (clockwise from the top centre). */
+    fun head(time: Double, perimeter: Float): Float {
+        val lap = time / EdgeBeamSpec.BEAM_LAP_S
+        return (perimeter * (lap - floor(lap))).toFloat()
+    }
+
+    /** How strongly the beams light [s] along the edge, 0–1 (at most one beam is ever near). */
+    fun at(s: Float, perimeter: Float, head: Float): Float {
+        val sigma = perimeter * EdgeBeamSpec.BEAM_SHARE
+        var b = 0f
+        for (k in 0 until EdgeBeamSpec.BEAMS) {
+            var ds = (s - head - perimeter * k / EdgeBeamSpec.BEAMS).toDouble()
+            ds -= perimeter * floor(ds / perimeter + 0.5)
+            val q = ds / sigma
+            b += exp(-q * q).toFloat()
+        }
+        return b.coerceAtMost(1f)
+    }
+
+    /** How far the palette has flowed at [time] s, in palette steps (nine to a lap). */
+    fun hue(time: Double): Float {
+        val lap = time / EdgeBeamSpec.HUE_LAP_S
+        return (9 * (lap - floor(lap))).toFloat()
+    }
+}
+
 /** The theme palette: nine soft tones round the app's accent hue (BeamPalette.fromSeed in the Dart port). */
 internal object EdgeBeamPalette {
+    /**
+     * The edge's own tones: [fromSeed]'s hues, more saturated, and darker on a [dark] == false
+     * screen, so the colour reads over whatever app is underneath.
+     */
+    fun edge(seed: Int, dark: Boolean): IntArray = fromSeed(seed).map {
+        val (h, s, _) = hsl(it)
+        fromHsl(h, (s * 1.45f).coerceIn(0.6f, 0.88f), if (dark) 0.62f else 0.5f)
+    }.toIntArray()
+
     /** ARGB of the nine rim colours for the accent [seed] (ARGB). */
     fun fromSeed(seed: Int): IntArray {
         val (hue, s, _) = hsl(seed)

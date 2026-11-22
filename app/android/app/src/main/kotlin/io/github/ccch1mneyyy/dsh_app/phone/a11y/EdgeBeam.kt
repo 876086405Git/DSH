@@ -1,4 +1,4 @@
-// Portions derived from Libraries.dev Distortion waves (https://github.com/Jakubantalik/Libraries.dev), MIT, Copyright (c) 2026 Jakub Antalik. See THIRD_PARTY_NOTICES.md.
+// Portions derived from Libraries.dev Border beam and Distortion waves (https://github.com/Jakubantalik/Libraries.dev), MIT, Copyright (c) 2026 Jakub Antalik. See THIRD_PARTY_NOTICES.md.
 
 package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
@@ -24,16 +24,17 @@ import androidx.annotation.RequiresApi
 import kotlin.math.roundToInt
 
 /**
- * A soft band of colour all round the screen's edge while DSH operates the phone: the colour
- * Distortion waves leaves on the edges (docs/design/phone-overlay.md §12), uneven along the edge in
- * seven lumps that drift and breathe slowly. Its own full-screen TYPE_ACCESSIBILITY_OVERLAY window,
+ * A band of colour all round the screen's edge while DSH operates the phone (docs/design/phone-overlay.md
+ * §12): the colour Distortion waves leaves on the edges, uneven along the edge in seven lumps that
+ * drift and breathe slowly, under Border beam's bright stroke right on the edge, with two beams of
+ * light travelling round it. Its own full-screen TYPE_ACCESSIBILITY_OVERLAY window,
  * never touchable or focusable, over the bars and the cutout, added under the control's windows.
  * [ControlOverlay] says when it is on, paused or hidden (every screenshot and injected gesture);
  * this class fades it and draws it.
  *
- * Android 13+ draws it with one AGSL shader on the band along the edge (the reference's rim and
- * WaveRim lumps); per frame only the lumps' uniforms and the paint's alpha change. Android 9–12
- * draw an even, still band (a blurred stroke); Android 8.x only the still line.
+ * Android 13+ draws it with one AGSL shader on the band along the edge; per frame only the lumps',
+ * the beams' and the palette's uniforms and the paint's alpha change. Android 9–12 draw an even,
+ * still band (a blurred stroke) and the stroke; Android 8.x only the still line.
  */
 internal class EdgeBeam(private val context: Context, private val wm: WindowManager) {
     private val view = BeamView(context)
@@ -67,7 +68,9 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
     fun attach(title: CharSequence, dark: Boolean, seed: Int, hidden: Boolean): Boolean {
         view.setLook(dark, seed)
         if (attached) return true
-        clock = EdgeBeamClock(OverlayMotion.on())
+        val motion = OverlayMotion.on()
+        clock = EdgeBeamClock(motion)
+        view.travels = motion
         removeWhenGone = false
         view.show(0f, 0f, 0.0)
         view.visibility = if (hidden) View.INVISIBLE else View.VISIBLE
@@ -157,7 +160,7 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
         val now = SystemClock.uptimeMillis()
         if (removeWhenGone && clock.gone(now)) { remove(); return }
         val animating = clock.animating(now, view.drifts)
-        // The colour drifts a few dp a second: 30 fps is plenty, also on a 120 Hz screen.
+        // The beams glide round at 60 fps at most, also on a 120 Hz screen.
         if (!animating || now - drawnAt >= EdgeBeamSpec.FRAME_MS) {
             clock.frame(now)
             view.show(clock.fadeNow, clock.stillNow, clock.phase)
@@ -174,6 +177,14 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
         private var fade = 0f
         private var still = 0f
         private var phase = 0.0
+
+        /** Without animations the beams are left out: a still rim, evenly bright. */
+        var travels = true
+            set(value) {
+                if (value == field) return
+                field = value
+                if (width > 0) build(width, height)
+            }
 
         /** The display's corner radius in px (the largest it reports); 0 means not reported. */
         var corner = 0
@@ -193,6 +204,8 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
         private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val bandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
         private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+        private val core = Path()
+        private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
         private val lumps = FloatArray(EdgeRim.COUNT * EdgeRim.STRIDE)
         private var perimeter = 0f
         // Made once, here: whether this view's picture drifts is known before its first frame.
@@ -228,11 +241,12 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
         }
 
         private fun build(w: Int, h: Int) {
-            val palette = EdgeBeamPalette.fromSeed(seed)
+            val palette = EdgeBeamPalette.edge(seed, dark)
             val p = EdgeBeamSpec.preset(dark)
             val r = EdgeBeamSpec.cornerPx(corner.takeIf { it > 0 }, density)
             val widthPx = EdgeBeamSpec.WIDTH_DP * density
             val linePx = EdgeBeamSpec.LINE_DP * density
+            val corePx = EdgeBeamSpec.CORE_DP * density
             val screen = RectF(0f, 0f, w.toFloat(), h.toFloat())
             perimeter = EdgeRim.perimeter(w.toFloat(), h.toFloat(), r)
             if (Build.VERSION.SDK_INT >= 33) {
@@ -244,7 +258,8 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
                     band.fillType = Path.FillType.EVEN_ODD
                     band.addRoundRect(screen, r, r, Path.Direction.CW)
                     band.addRect(inset(screen, reach), Path.Direction.CW)
-                    RimShader.look(shader, w, h, r, widthPx, linePx, reach, p.line / p.rim, palette)
+                    val bloomPx = EdgeBeamSpec.BLOOM_DP * density
+                    RimShader.look(shader, w, h, r, widthPx, linePx, corePx, bloomPx, reach, p, dark, travels, palette)
                     RimShader.frame(shader, phase, perimeter, density, still, lumps)
                     rimPaint.shader = shader
                     return
@@ -257,6 +272,10 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
             line.addRoundRect(inset(screen, linePx / 2), r - linePx / 2, r - linePx / 2, Path.Direction.CW)
             linePaint.strokeWidth = linePx
             linePaint.shader = SweepGradient(w / 2f, h / 2f, colours, null)
+            core.reset()
+            core.addRoundRect(inset(screen, corePx / 2), r - corePx / 2, r - corePx / 2, Path.Direction.CW)
+            corePaint.strokeWidth = corePx
+            corePaint.shader = SweepGradient(w / 2f, h / 2f, colours, null)
             if (blurred) {
                 // A stroke centred on the edge: solid for one width inside, then blurred away over another.
                 bandPaint.strokeWidth = 2 * widthPx
@@ -269,12 +288,14 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
             if (fade <= 0f || width == 0) return
             val p = EdgeBeamSpec.preset(dark)
             if (rim != null) {
-                // The shader blends the rim into the still line itself (uniform `still`).
-                draw(canvas, band, rimPaint, p.rim * fade)
+                // The shader has the opacities and blends the rim into the still line itself (uniform `still`).
+                draw(canvas, band, rimPaint, fade)
                 return
             }
             if (blurred) {
-                draw(canvas, ring, bandPaint, p.rim * fade * (1f - still))
+                // No beams here: the rim and the stroke as they are between them.
+                draw(canvas, ring, bandPaint, p.rim / (1f + EdgeBeamSpec.BEAM_GAIN) * fade * (1f - still))
+                draw(canvas, core, corePaint, p.core * EdgeBeamSpec.CORE_REST * fade * (1f - still))
                 draw(canvas, line, linePaint, p.line * fade * still)
             } else {
                 draw(canvas, line, linePaint, p.line * fade)
@@ -290,7 +311,7 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
         private fun inset(r: RectF, by: Float) = RectF(r.left + by, r.top + by, r.right - by, r.bottom - by)
     }
 
-    /** The rim as an AGSL shader (Distortion waves' waveBand, its rim part only). */
+    /** The rim as an AGSL shader (Distortion waves' waveBand, its rim part only) under Border beam's stroke and beams. */
     @RequiresApi(33)
     private object RimShader {
         /**
@@ -306,15 +327,28 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
         }
 
         /** What changes with the size and the look. */
-        fun look(s: Shader, w: Int, h: Int, radius: Float, width: Float, line: Float, reach: Float, lineShare: Float, palette: IntArray) {
+        fun look(
+            s: Shader, w: Int, h: Int, radius: Float, width: Float, line: Float, core: Float, bloom: Float, reach: Float,
+            p: EdgeBeamSpec.Preset, dark: Boolean, travels: Boolean, palette: IntArray,
+        ) {
             s as RuntimeShader
+            val perimeter = EdgeRim.perimeter(w.toFloat(), h.toFloat(), radius)
             s.setFloatUniform("size", w.toFloat(), h.toFloat())
             s.setFloatUniform("radius", radius)
             s.setFloatUniform("width", width)
             s.setFloatUniform("line", line)
+            s.setFloatUniform("core", core)
             s.setFloatUniform("reach", reach)
-            s.setFloatUniform("lineShare", lineShare)
-            s.setFloatUniform("perimeter", EdgeRim.perimeter(w.toFloat(), h.toFloat(), radius))
+            s.setFloatUniform("peaks", p.rim, p.line, p.core, EdgeBeamSpec.CORE_REST)
+            s.setFloatUniform("bloom", bloom, p.bloom)
+            s.setFloatUniform("bloomRest", EdgeBeamSpec.BLOOM_REST)
+            s.setFloatUniform("uneven", EdgeBeamSpec.UNEVEN)
+            s.setFloatUniform("maxThick", EdgeRim.MAX_THICKNESS)
+            s.setFloatUniform("gain", EdgeBeamSpec.BEAM_GAIN)
+            s.setFloatUniform("whiten", if (dark) EdgeBeamSpec.CORE_WHITEN else 0f)
+            s.setFloatUniform("beamOn", if (travels) 1f else 0f)
+            s.setFloatUniform("sigma", perimeter * EdgeBeamSpec.BEAM_SHARE)
+            s.setFloatUniform("perimeter", perimeter)
             val rgb = FloatArray(palette.size * 4)
             palette.forEachIndexed { i, c ->
                 rgb[i * 4] = (c shr 16 and 0xFF) / 255f
@@ -325,28 +359,45 @@ internal class EdgeBeam(private val context: Context, private val wm: WindowMana
             s.setFloatUniform("palette", rgb)
         }
 
-        /** What changes every frame: the lumps and the stillness; [lumps] is reused. */
+        /** What changes every frame: the lumps, the beams, the palette's flow and the stillness; [lumps] is reused. */
         fun frame(s: Shader, phase: Double, perimeter: Float, density: Float, still: Float, lumps: FloatArray) {
             s as RuntimeShader
             EdgeRim.lumps(phase, perimeter, density, lumps)
             s.setFloatUniform("lumps", lumps)
+            s.setFloatUniform("head", EdgeFlow.head(phase, perimeter))
+            s.setFloatUniform("hue", EdgeFlow.hue(phase))
             s.setFloatUniform("still", still)
         }
 
         /**
          * Inset from the rounded screen edge, position along it (clockwise from the top centre, as
          * the reference's perimeterAt), the lumps' thickness there, and the colour's falloff inward:
-         * exp(−(inset / (width × thickness))²), blending into the still line's exp(−(inset / line)²).
-         * The palette is laid once round the screen. Output is premultiplied.
+         * exp(−(inset / (width × thickness))²), brighter where a beam passes (EdgeFlow.at). Over it the
+         * stroke, exp(−(inset / core)²), brightest (and on a dark screen whitest) under a beam, and a
+         * wider bloom, exp(−(inset / bloom.x)²) × bloom.y, also strongest there. The lumps' thickness
+         * is pulled towards 1 by `uneven` (EdgeRim.even): one band all round. Paused, all blend into
+         * the still line's exp(−(inset / line)²). The palette is laid once round the screen and flows
+         * along it. Output is premultiplied; `peaks` = rim, line, stroke, stroke at rest.
          */
         private const val AGSL = """
 uniform float2 size;
 uniform float radius;
 uniform float width;
 uniform float line;
+uniform float core;
+uniform float2 bloom;
+uniform float bloomRest;
+uniform float uneven;
+uniform float maxThick;
 uniform float reach;
-uniform float lineShare;
+uniform float4 peaks;
+uniform float gain;
+uniform float whiten;
+uniform float beamOn;
+uniform float sigma;
 uniform float perimeter;
+uniform float head;
+uniform float hue;
 uniform float still;
 uniform float4 lumps[7];
 uniform float4 palette[9];
@@ -388,11 +439,24 @@ half4 main(float2 xy) {
         float k = ds / lumps[i].y;
         t += lumps[i].z * exp(-k * k);
     }
-    float rimK = inset / (width * max(t / 1.0498, 0.04));
+    float beam = 0.0;
+    for (int b = 0; b < 2; b++) {
+        float ds = s - head - perimeter * 0.5 * float(b);
+        ds -= perimeter * floor(ds / perimeter + 0.5);
+        float k = ds / sigma;
+        beam += exp(-k * k);
+    }
+    beam = min(beam, 1.0) * beamOn * (1.0 - still);
+    float rimK = inset / (width * min(1.0 + uneven * (max(t / 1.0498, 0.04) - 1.0), maxThick));
     float lineK = inset / line;
-    float a = mix(exp(-rimK * rimK), exp(-lineK * lineK) * lineShare, still)
+    float coreK = inset / core;
+    float rimA = mix(exp(-rimK * rimK) * peaks.x * (1.0 + gain * beam) / (1.0 + gain), exp(-lineK * lineK) * peaks.y, still);
+    float coreA = exp(-coreK * coreK) * peaks.z * mix(peaks.w, 1.0, beam) * (1.0 - still);
+    float bloomK = inset / bloom.x;
+    rimA = (1.0 - (1.0 - rimA) * (1.0 - exp(-bloomK * bloomK) * bloom.y * mix(bloomRest, 1.0, beam) * (1.0 - still)))
         * (1.0 - smoothstep(reach * 0.8, reach, inset));
-    float u = s / perimeter * 9.0;
+    float u = s / perimeter * 9.0 + hue;
+    u -= 9.0 * floor(u / 9.0);
     float fu = floor(u);
     int i0 = int(fu);
     float m = u - fu;
@@ -403,7 +467,10 @@ half4 main(float2 xy) {
         if (j == i0) c0 = palette[j];
         if (j == i0 + 1) c1 = palette[j];
     }
-    return half4(half3(mix(c0.rgb, c1.rgb, m) * a), half(a));
+    float3 rgb = mix(c0.rgb, c1.rgb, m);
+    float3 coreRgb = mix(rgb, float3(1.0), whiten * beam);
+    float a = coreA + rimA * (1.0 - coreA);
+    return half4(half3(coreRgb * coreA + rgb * rimA * (1.0 - coreA)), half(a));
 }
 """
     }

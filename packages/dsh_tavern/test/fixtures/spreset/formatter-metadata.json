@@ -1,0 +1,1175 @@
+{
+  "sources": {
+    "spreset": "53bd585da14248ba10baaede7fc7ed0cebe1eeeb",
+    "st": "7e8663cd9c184a550b37238218bdd32c6efc68e9"
+  },
+  "fixtureBoundaries": [
+    "known formatter output/error",
+    "tool availability true",
+    "JSON frames already dispatched"
+  ],
+  "nonstream": [
+    {
+      "name": "signature wins camel and snake",
+      "input": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "call_a",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "signature": "raw",
+                  "thoughtSignature": "camel",
+                  "thought_signature": "snake"
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3
+        }
+      },
+      "failed": false,
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "call_a",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "raw"
+            }
+          ],
+          "defaultText": "ok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": false,
+          "final": true,
+          "channel": "choice:0"
+        }
+      ],
+      "result": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "answer\nchoice:0|call_a:raw"
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3
+        }
+      }
+    },
+    {
+      "name": "camel accepted snake ignored",
+      "input": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "call_b",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "thoughtSignature": "camel"
+                },
+                {
+                  "id": "call_c",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "thought_signature": "snake"
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3
+        }
+      },
+      "failed": false,
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "call_b",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "camel"
+            },
+            {
+              "id": "call_c",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": ""
+            }
+          ],
+          "defaultText": "ok\nok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": false,
+          "final": true,
+          "channel": "choice:0"
+        }
+      ],
+      "result": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "answer\nchoice:0|call_b:camel,call_c:"
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3
+        }
+      }
+    },
+    {
+      "name": "empty signature wins fallback",
+      "input": {
+        "choices": [
+          {
+            "index": 7,
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "call_empty",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "signature": "",
+                  "thoughtSignature": "camel"
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3
+        }
+      },
+      "failed": false,
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "call_empty",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": ""
+            }
+          ],
+          "defaultText": "ok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": false,
+          "final": true,
+          "channel": "choice:7"
+        }
+      ],
+      "result": {
+        "choices": [
+          {
+            "index": 7,
+            "message": {
+              "role": "assistant",
+              "content": "answer\nchoice:7|call_empty:"
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3
+        }
+      }
+    },
+    {
+      "name": "missing index channel zero",
+      "input": {
+        "choices": [
+          {
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "call_noindex",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "signature": "s"
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3
+        }
+      },
+      "failed": false,
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "call_noindex",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "s"
+            }
+          ],
+          "defaultText": "ok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": false,
+          "final": true,
+          "channel": "choice:0"
+        }
+      ],
+      "result": {
+        "choices": [
+          {
+            "message": {
+              "role": "assistant",
+              "content": "answer\nchoice:0|call_noindex:s"
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3
+        }
+      }
+    },
+    {
+      "name": "all choices observed before return",
+      "input": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "first",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "signature": "a"
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          },
+          {
+            "index": 4,
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "second",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "signature": "b"
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ]
+      },
+      "failed": false,
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "first",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "a"
+            }
+          ],
+          "defaultText": "ok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": false,
+          "final": true,
+          "channel": "choice:0"
+        },
+        {
+          "calls": [
+            {
+              "id": "second",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "b"
+            }
+          ],
+          "defaultText": "ok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": false,
+          "final": true,
+          "channel": "choice:4"
+        }
+      ],
+      "result": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "answer\nchoice:0|first:a"
+            },
+            "finish_reason": "stop"
+          },
+          {
+            "index": 4,
+            "message": {
+              "role": "assistant",
+              "content": "answer\nchoice:4|second:b"
+            },
+            "finish_reason": "stop"
+          }
+        ]
+      }
+    },
+    {
+      "name": "later failure rolls response back",
+      "input": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "first",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "signature": "a"
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          },
+          {
+            "index": 4,
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "fail",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "signature": "b"
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ]
+      },
+      "failed": true,
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "first",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "a"
+            }
+          ],
+          "defaultText": "ok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": false,
+          "final": true,
+          "channel": "choice:0"
+        },
+        {
+          "calls": [
+            {
+              "id": "fail",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "b"
+            }
+          ],
+          "defaultText": "ok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": false,
+          "final": true,
+          "channel": "choice:4"
+        }
+      ],
+      "result": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "first",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "signature": "a"
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          },
+          {
+            "index": 4,
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "fail",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "signature": "b"
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "name": "malformed structured arguments",
+      "input": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "bad",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":"
+                  }
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3
+        }
+      },
+      "failed": true,
+      "formatter": [],
+      "result": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "answer",
+              "tool_calls": [
+                {
+                  "id": "bad",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":"
+                  }
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3
+        }
+      }
+    },
+    {
+      "name": "legacy function call",
+      "input": {
+        "choices": [
+          {
+            "message": {
+              "role": "assistant",
+              "content": "",
+              "function_call": {
+                "name": "legacy",
+                "arguments": "{\"text\":\"legacy\"}",
+                "signature": "legacy-s"
+              }
+            },
+            "finish_reason": "function_call"
+          }
+        ]
+      },
+      "failed": false,
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "",
+              "name": "legacy",
+              "arguments": {
+                "text": "legacy"
+              },
+              "signature": "legacy-s"
+            }
+          ],
+          "defaultText": "legacy",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": false,
+          "final": true,
+          "channel": "choice:0"
+        }
+      ],
+      "result": {
+        "choices": [
+          {
+            "message": {
+              "role": "assistant",
+              "content": "choice:0|:legacy-s"
+            },
+            "finish_reason": "stop"
+          }
+        ]
+      }
+    },
+    {
+      "name": "visible content parts preserve source extraction",
+      "input": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "before "
+                },
+                {
+                  "type": "output_text",
+                  "text": "after"
+                }
+              ],
+              "tool_calls": [
+                {
+                  "id": "parts",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"text\":\"ok\"}"
+                  },
+                  "signature": "part-s"
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ]
+      },
+      "failed": false,
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "parts",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "part-s"
+            }
+          ],
+          "defaultText": "ok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": false,
+          "final": true,
+          "channel": "choice:0"
+        }
+      ],
+      "result": {
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "before "
+                },
+                {
+                  "type": "output_text",
+                  "text": "after\nchoice:0|parts:part-s"
+                }
+              ]
+            },
+            "finish_reason": "stop"
+          }
+        ]
+      }
+    }
+  ],
+  "stream": [
+    {
+      "name": "first identity and concatenated signatures",
+      "source": "openrouter",
+      "frames": [
+        {
+          "choices": [
+            {
+              "index": 0,
+              "delta": {
+                "tool_calls": [
+                  {
+                    "index": 0,
+                    "id": "call_one",
+                    "type": "function",
+                    "function": {
+                      "name": "lookup",
+                      "arguments": "{\"text\":\""
+                    },
+                    "signature": "A",
+                    "thoughtSignature": "C"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "choices": [
+            {
+              "index": 0,
+              "delta": {
+                "tool_calls": [
+                  {
+                    "index": 0,
+                    "id": "call_two",
+                    "type": "function",
+                    "function": {
+                      "name": "ignored",
+                      "arguments": "ok\"}"
+                    },
+                    "signature": "B",
+                    "thoughtSignature": "D"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "folded": [
+        [
+          {
+            "index": 0,
+            "id": "call_one",
+            "type": "function",
+            "function": {
+              "name": "lookup",
+              "arguments": "{\"text\":\"ok\"}"
+            },
+            "signature": "AB",
+            "thoughtSignature": "CD"
+          }
+        ]
+      ],
+      "state": {
+        "reasoning": "",
+        "images": [],
+        "signature": "",
+        "toolSignatures": {}
+      },
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "call_one",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "AB"
+            }
+          ],
+          "defaultText": "ok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": true,
+          "final": true,
+          "channel": "main"
+        }
+      ],
+      "result": "main|call_one:AB"
+    },
+    {
+      "name": "OpenRouter detail overrides only on a call delta",
+      "source": "openrouter",
+      "frames": [
+        {
+          "choices": [
+            {
+              "index": 0,
+              "delta": {
+                "tool_calls": [
+                  {
+                    "index": 0,
+                    "id": "call_one",
+                    "type": "function",
+                    "function": {
+                      "name": "lookup",
+                      "arguments": "{\"text\":\"ok\"}"
+                    },
+                    "signature": "raw"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "choices": [
+            {
+              "index": 0,
+              "delta": {
+                "reasoning_details": [
+                  {
+                    "type": "reasoning.encrypted",
+                    "id": "call_one",
+                    "data": "detail"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "choices": [
+            {
+              "index": 0,
+              "delta": {
+                "tool_calls": [
+                  {
+                    "index": 0,
+                    "function": {
+                      "arguments": ""
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "folded": [
+        [
+          {
+            "index": 0,
+            "id": "call_one",
+            "type": "function",
+            "function": {
+              "name": "lookup",
+              "arguments": "{\"text\":\"ok\"}"
+            },
+            "signature": "detail"
+          }
+        ]
+      ],
+      "state": {
+        "reasoning": "",
+        "images": [],
+        "signature": "",
+        "toolSignatures": {
+          "call_one": "detail"
+        }
+      },
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "call_one",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "detail"
+            }
+          ],
+          "defaultText": "ok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": true,
+          "final": true,
+          "channel": "main"
+        }
+      ],
+      "result": "main|call_one:detail"
+    },
+    {
+      "name": "detail alone does not mutate prior tool",
+      "source": "openrouter",
+      "frames": [
+        {
+          "choices": [
+            {
+              "index": 0,
+              "delta": {
+                "tool_calls": [
+                  {
+                    "index": 0,
+                    "id": "call_one",
+                    "type": "function",
+                    "function": {
+                      "name": "lookup",
+                      "arguments": "{\"text\":\"ok\"}"
+                    },
+                    "signature": "raw"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "choices": [
+            {
+              "index": 0,
+              "delta": {
+                "reasoning_details": [
+                  {
+                    "type": "reasoning.encrypted",
+                    "id": "call_one",
+                    "data": "late"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "folded": [
+        [
+          {
+            "index": 0,
+            "id": "call_one",
+            "type": "function",
+            "function": {
+              "name": "lookup",
+              "arguments": "{\"text\":\"ok\"}"
+            },
+            "signature": "raw"
+          }
+        ]
+      ],
+      "state": {
+        "reasoning": "",
+        "images": [],
+        "signature": "",
+        "toolSignatures": {
+          "call_one": "late"
+        }
+      },
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "call_one",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "raw"
+            }
+          ],
+          "defaultText": "ok",
+          "provider": {
+            "adapter": "openrouter",
+            "source": "openrouter",
+            "model": "fixture"
+          },
+          "stream": true,
+          "final": true,
+          "channel": "main"
+        }
+      ],
+      "result": "main|call_one:raw"
+    },
+    {
+      "name": "all choice calls use main channel",
+      "source": "custom",
+      "frames": [
+        {
+          "choices": [
+            {
+              "index": 0,
+              "delta": {
+                "tool_calls": [
+                  {
+                    "index": 0,
+                    "id": "call_one",
+                    "type": "function",
+                    "function": {
+                      "name": "lookup",
+                      "arguments": "{\"text\":\"ok\"}"
+                    },
+                    "signature": "a"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "choices": [
+            {
+              "index": 2,
+              "delta": {
+                "tool_calls": [
+                  {
+                    "index": 2,
+                    "id": "call_two",
+                    "type": "function",
+                    "function": {
+                      "name": "lookup",
+                      "arguments": "{\"text\":\"ok\"}"
+                    },
+                    "thoughtSignature": "b"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "folded": [
+        [
+          {
+            "index": 0,
+            "id": "call_one",
+            "type": "function",
+            "function": {
+              "name": "lookup",
+              "arguments": "{\"text\":\"ok\"}"
+            },
+            "signature": "a"
+          }
+        ],
+        null,
+        [
+          null,
+          null,
+          {
+            "index": 2,
+            "id": "call_two",
+            "type": "function",
+            "function": {
+              "name": "lookup",
+              "arguments": "{\"text\":\"ok\"}"
+            },
+            "thoughtSignature": "b"
+          }
+        ]
+      ],
+      "state": {
+        "reasoning": "",
+        "images": [],
+        "signature": "",
+        "toolSignatures": {}
+      },
+      "formatter": [
+        {
+          "calls": [
+            {
+              "id": "call_one",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "a"
+            },
+            {
+              "id": "call_two",
+              "name": "lookup",
+              "arguments": {
+                "text": "ok"
+              },
+              "signature": "b"
+            }
+          ],
+          "defaultText": "ok\nok",
+          "provider": {
+            "adapter": "openai",
+            "source": "custom",
+            "model": "fixture"
+          },
+          "stream": true,
+          "final": true,
+          "channel": "main"
+        }
+      ],
+      "result": "main|call_one:a,call_two:b"
+    },
+    {
+      "name": "missing choice index does not collect",
+      "source": "custom",
+      "frames": [
+        {
+          "choices": [
+            {
+              "delta": {
+                "tool_calls": [
+                  {
+                    "index": 0,
+                    "id": "ignored",
+                    "type": "function",
+                    "function": {
+                      "name": "lookup",
+                      "arguments": "{\"text\":\"ok\"}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "folded": [],
+      "state": {
+        "reasoning": "",
+        "images": [],
+        "signature": "",
+        "toolSignatures": {}
+      },
+      "formatter": [],
+      "result": null
+    }
+  ]
+}

@@ -58,6 +58,19 @@ void main() {
     }
   });
 
+  test("an assistant message's reasoning goes to OpenRouter and is dropped for other generic services", () {
+    final body = {
+      'messages': [
+        {'role': 'assistant', 'content': 'a', 'reasoning': 'r', 'reasoning_content': 'x'},
+      ],
+    };
+    Map<String, Object?> sent(String url) =>
+        (prepareModelRequestBody(config(deepseek: false, baseUrl: url), body)['messages']! as List).single
+            as Map<String, Object?>;
+    expect(sent('https://openrouter.ai/api/v1'), {'role': 'assistant', 'content': 'a', 'reasoning': 'r'});
+    expect(sent('https://example.test/v1'), {'role': 'assistant', 'content': 'a'});
+  });
+
   test('streams reasoning and text, then reads usage with empty choices', () async {
     late http.BaseRequest captured;
     final client = _Client((request) async {

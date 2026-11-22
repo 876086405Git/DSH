@@ -1,5 +1,10 @@
 {
   "@@locale": "zh",
+  "androidBackgroundProtectionTitle": "增强保活",
+  "androidBackgroundProtectionAudioHint": "有本机任务时在后台播放静音音频，可能增加耗电。",
+  "androidBackgroundProtectionLocationHint": "使用粗略位置，可能增加耗电；不保存或发送坐标。关闭后停止定位，但不撤回系统权限。",
+  "androidBackgroundProtectionNeedsLocation": "尚未授予位置权限。点此打开 App 的系统设置，在「权限」中允许访问位置。",
+  "androidBackgroundProtectionNeedsAlways": "后台定位尚未生效。点此打开 App 的系统设置，在「权限」中将位置设为“始终允许”。",
   "backgroundProtectionDescription": "默认关闭，仅在有本机任务且 App 退到后台时尝试保护；系统仍可能暂停任务。",
   "backgroundProtectionAudio": "静音音频保护",
   "backgroundProtectionAudioHint": "任务期间在后台播放静音音频，会增加耗电；不会抢占录音、通话或朗读。",

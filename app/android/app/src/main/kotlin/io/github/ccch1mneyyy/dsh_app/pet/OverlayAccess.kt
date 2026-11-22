@@ -6,7 +6,7 @@ enum class OverlayHost { ACCESSIBILITY, APPLICATION, NONE }
 /**
  * What the settings show about permission (`permission` in the status map):
  *
- * - `accessibility`: the phone-control accessibility service is on; its overlay needs nothing else;
+ * - `accessibility`: the service is on and needs no new application-overlay permission grant;
  * - `granted`: the overlay permission works (or nothing has failed yet with it reported on);
  * - `blocked`: the system reports the permission but adding the window failed — a vendor's own
  *   floating-window switch (vivo, some others) that `canDrawOverlays` doesn't see;
@@ -27,7 +27,10 @@ enum class OverlayPermission(val wire: String) {
 enum class AddResult { OK, FAILED }
 
 object OverlayAccess {
-    fun permission(a11yConnected: Boolean, canDraw: Boolean, lastAdd: AddResult?): OverlayPermission = when {
+    fun permission(
+        a11yConnected: Boolean, canDraw: Boolean, lastAdd: AddResult?, a11yFailed: Boolean = false,
+    ): OverlayPermission = when {
+        a11yFailed && !canDraw -> OverlayPermission.DENIED
         a11yConnected -> OverlayPermission.ACCESSIBILITY
         lastAdd == AddResult.OK -> OverlayPermission.GRANTED
         lastAdd == AddResult.FAILED -> if (canDraw) OverlayPermission.BLOCKED else OverlayPermission.DENIED

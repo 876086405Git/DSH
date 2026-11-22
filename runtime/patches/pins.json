@@ -258,6 +258,14 @@
         }
       }
     },
+    "input-recovery.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js": {
+          "after": "3f24d26d55bfd18bb091b6b1c5bd7a702261d06f25d6ce67d3d5ea67b2df753d",
+          "before": "c2510a4d02661f87f1c86fdc0bebd4ac9072328671b03e54cda717a5cc3b33f7"
+        }
+      }
+    },
     "input-trigger-source-recovery.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-client-ui-input-trigger/lib/client.js": {
@@ -559,8 +567,8 @@
     "ohos-web-converter-lazy.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-tool-web/lib/index.js": {
-          "after": "2265c123e7f6bec161d7071709de939f1404df08e6816ec740cba976e48ccbe6",
-          "before": "08a37554c57a8a1a98b47489cd6a0c53c43b646060bdcc94b2b211bf04c2498c"
+          "after": "e5bfef727988aecc089a6f05b97f42547bcdfe19a77bad9d64289a4ea182c4bf",
+          "before": "2d1697b39860bcee2e2cd04629b8526c4d838538f12c9dfc39799e782c3959fc"
         }
       }
     },
@@ -915,6 +923,14 @@
         "node_modules/@deepseek-ai/dsh-client-ui-settings-web-search/lib/client.js": {
           "after": "88445a93f6145c0e29521f257f7706516aef249fc262afa4365fb2d08cffbede",
           "before": "1d42b683573864152655c88d0b2f41dbe88e4c25e5d692e2bdc275dfc708f0df"
+        }
+      }
+    },
+    "web-table-pipes.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-web/lib/index.js": {
+          "after": "2d1697b39860bcee2e2cd04629b8526c4d838538f12c9dfc39799e782c3959fc",
+          "before": "08a37554c57a8a1a98b47489cd6a0c53c43b646060bdcc94b2b211bf04c2498c"
         }
       }
     },
@@ -2025,8 +2041,8 @@
     "zzzzzzzzzzzzz-ohos-lifecycle.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js": {
-          "after": "4674309362ae3236b0132377c9f92bd4e2ff03328a5dddd7c3d876b7ec3fa5d5",
-          "before": "c2510a4d02661f87f1c86fdc0bebd4ac9072328671b03e54cda717a5cc3b33f7"
+          "after": "fe2442220d2a2041a5fb8a742ba3e2ef9d36002e8d0e89c9bbdb19f849b565ca",
+          "before": "3f24d26d55bfd18bb091b6b1c5bd7a702261d06f25d6ce67d3d5ea67b2df753d"
         },
         "node_modules/@deepseek-ai/dsh-http-proxy/lib/index.js": {
           "after": "61254bcefd6a84084c021ca83b69834790347d56ee8f154554cb86b74869ba4d",
@@ -2718,7 +2734,9 @@
       "companion-lookup-answer-window.diff",
       "companion-find-drafts-files.diff",
       "companion-compare-output-window.diff",
-      "companion-receipt-file-bytes.diff"
+      "companion-receipt-file-bytes.diff",
+      "web-table-pipes.diff",
+      "input-recovery.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2894,6 +2912,8 @@
       "companion-find-drafts-files.diff",
       "companion-compare-output-window.diff",
       "companion-receipt-file-bytes.diff",
+      "web-table-pipes.diff",
+      "input-recovery.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",

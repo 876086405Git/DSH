@@ -167,11 +167,21 @@ final class PromptInjection {
 }
 
 final class PromptSegment {
-  const PromptSegment({required this.id, required this.message, required this.sources, required this.tokens});
+  const PromptSegment({
+    required this.id,
+    required this.message,
+    required this.sources,
+    required this.tokens,
+    this.collectionId,
+  });
   final String id;
   final Map<String, Object?> message;
   final List<PromptSource> sources;
   final int tokens;
+
+  /// Prompt-manager collection identity, including controls in chatHistory.
+  /// Internal grouping metadata; never part of a provider's message body.
+  final String? collectionId;
   Map<String, Object?> toJson() => {
     'id': id,
     'message': message,

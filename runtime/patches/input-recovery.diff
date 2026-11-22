@@ -1,0 +1,5 @@
+--- a/node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js
+@@ -920 +920 @@
+-					if (this.inbox.recover()) {
++					if (this.inbox.recover() && turnEnds?.kind !== "aborted") {

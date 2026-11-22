@@ -78,7 +78,7 @@ class _ScriptCancellation implements TavernScriptCancellation {
   }
 }
 
-class _ScriptCoordinator implements TavernScriptBridge {
+class _ScriptCoordinator implements TavernScriptBridge, TavernHelperGenerationControl {
   _ScriptCoordinator(this.engine);
   final TavernEngine engine;
   final epoch = 'engine-${_newStateId()}';
@@ -91,6 +91,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
   TavernJsonObject? _presetLibraryMetadata;
   final _variableVersions = <String, _ScriptVariableVersion>{};
   final _generations = <String, _ScriptGenerationRecord>{};
+  late final _HelperGenerationController _helperControl = _HelperGenerationController(this);
   final _generationDrains = <Future<void>>{};
   final _slashExecutions = <String, _SlashExecutionRecord>{};
   final _effectCacheScopes = HashMap<Future<void>, Set<_ScriptEffectScope>>.identity();
@@ -122,6 +123,14 @@ class _ScriptCoordinator implements TavernScriptBridge {
   TavernScriptException _scriptFailure(Object error) {
     if (error is TavernScriptException) {
       return error;
+    }
+    if (error is SPresetException) {
+      return _scriptError(
+        error.stage == 'host' ? TavernScriptErrorCode.hostUnavailable : TavernScriptErrorCode.hookFailure,
+        'SPreset',
+        error.detail,
+        fieldPath: 'SPreset.${error.stage}',
+      );
     }
     if (error is TavernAuthoringException) {
       final receipt = error.receipt;
@@ -417,7 +426,12 @@ class _ScriptCoordinator implements TavernScriptBridge {
     if (identical(_host, host)) {
       return;
     }
+    engine._clearAllSPresetEntryDecisions();
+    engine._spresetPromptManagers.clear();
     _slashHostReplaced(_host, _hostVersion);
+    for (final generation in engine._spresetGenerations) {
+      generation.token.cancel('hostUnavailable');
+    }
     _hostVersion++;
     for (final context in contexts.values) {
       for (final token in context.pending.values) {
@@ -625,6 +639,21 @@ class _ScriptCoordinator implements TavernScriptBridge {
     record.cancellation.cancel();
     return true;
   }
+
+  @override
+  TavernHelperGenerationControlState get helperGenerationState => _helperControl.state;
+  @override
+  Stream<TavernHelperGenerationControlState> watchHelperGenerations() => _helperControl.watch();
+  @override
+  Future<bool> stopHelperGenerationById(String generationId) async => _helperControl.stop(generationId);
+  @override
+  Future<bool> stopAllHelperGenerations() async {
+    _helperControl.stopMatching(includeSilent: true);
+    return true;
+  }
+
+  @override
+  Future<int> stopNonSilentHelperGenerations() async => _helperControl.stopMatching(includeSilent: false);
 
   @override
   Future<List<TavernScriptRegex>> getTavernRegexes(String contextId, TavernScriptRegexQuery query) =>
@@ -934,9 +963,20 @@ class _ScriptCoordinator implements TavernScriptBridge {
       ];
       for (final target in bindingTargets) {
         try {
-          bindingViews.add(
-            await _captureBookBindingView(context.value.id, target, characterData: characterData, chatRead: chatRead),
+          final view = await _captureBookBindingView(
+            context.value.id,
+            target,
+            characterData: characterData,
+            chatRead: chatRead,
           );
+          bindingViews.add(view);
+          if (view.issue case final issue?) {
+            bindingIssues.add({
+              'scope': target.scope.name,
+              'targetId': target.targetId,
+              ..._scriptDirectoryIssueJson(issue),
+            });
+          }
         } on FormatException catch (error) {
           if (target.scope != TavernScriptBookBindingScope.character) {
             rethrow;
@@ -1950,6 +1990,10 @@ class _ScriptCoordinator implements TavernScriptBridge {
         turn.cancellation.check();
       }
       if (refreshStarted != null) turn.profile?.recordElapsed('script_before_refresh', refreshStarted);
+      // SP's source makeFirst listener completes its conditions/registration
+      // before these ordinary public START handlers. Keep their direct writes
+      // enabled, and reuse this generation at the later preparation phase.
+      await engine._beginNativeSPreset(turn);
       for (final name in const ['GENERATION_STARTED', 'GENERATION_AFTER_COMMANDS']) {
         for (final context in active) {
           if (context.closed) {
@@ -2078,6 +2122,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
   }
 
   void ended(_Turn turn) {
+    engine._clearSPresetEntryDecisions(turn.chat.id);
     final terminal = turn.terminalEvent;
     final success = terminal is TavernTurnDone ? terminal : null;
     final failure = terminal is TavernTurnFailed ? terminal : null;
@@ -2153,6 +2198,7 @@ class _ScriptCoordinator implements TavernScriptBridge {
       injectionRegistry.closeOwner(context.value.id, context.value.instanceId);
     }
     _host = null;
+    _helperControl.close();
     // Cancellation resolves our races even when a host ignores its token.
     // Keep the observation stream open until those outcomes are published;
     // a paused observer must still never hold engine.close().

@@ -1,0 +1,218 @@
+{
+  "createdAt": "2026-11-22T08:27:01.153669+00:00",
+  "helper": {
+    "repository": "N0VI028/JS-Slash-Runner",
+    "commit": "29331c36fb9b2e880d4d488ff919317e1bc95684",
+    "observedAt": "2026-11-22 06:38:32 UTC",
+    "version": "4.12.2",
+    "license": {
+      "name": "PolyForm Noncommercial 1.0.0",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/LICENSE",
+      "sha256": "a44f3b77533264a8082b3b2af6ecb381437a33d238e693e239ddc5effb54bc85",
+      "bytes": 4564
+    },
+    "verification": "Each referenced Helper file rehashed and Git blob recomputed against the pinned retrieval manifest; inject.ts extra extraction LF normalized after a fresh pinned retrieval.",
+    "files": [
+      {
+        "path": "@types/function/generate.d.ts",
+        "blob": "269aa475c1a31d554ee47625fb58454a1c9cdf3d",
+        "sha256": "cdc46ae5ee4aafc37c97382bcbdcc867cb6db52a080fa99fa10e8400e1480a09",
+        "bytes": 19775,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/@types/function/generate.d.ts"
+      },
+      {
+        "path": "@types/iframe/event.d.ts",
+        "blob": "5ab6b425aed873cd92411d72cc4a8281acbadb31",
+        "sha256": "33deb24c14916ff0958898b7890ab69bd584d33261297dc0a57448011760cd8e",
+        "bytes": 21830,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/@types/iframe/event.d.ts"
+      },
+      {
+        "path": "manifest.json",
+        "blob": "8853c8b3320c6fca1736070f6c8e15e27f36426c",
+        "sha256": "f384740dfd16625eaec7b5990942ccabd5d394a2a1beaf8d0cc208522c78c2f5",
+        "bytes": 539,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/manifest.json"
+      },
+      {
+        "path": "src/function/generate/createGenerationParametersCompat.ts",
+        "blob": "e113d583b1e9e6cc24f5f4fa8bbc20a12b11f3df",
+        "sha256": "31ec72ee62332871095ca63cc04f062298e2247676b14fa543a15c987f614249",
+        "bytes": 9621,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/generate/createGenerationParametersCompat.ts"
+      },
+      {
+        "path": "src/function/generate/dataProcessor.ts",
+        "blob": "bdeb7746a147270b9fa193a06f395f64ecd2deea",
+        "sha256": "b55f1ef897cfa024601454f865fad77e99f0e10ed24c4b201465ae9fbd8a0dfe",
+        "bytes": 12717,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/generate/dataProcessor.ts"
+      },
+      {
+        "path": "src/function/generate/generate.ts",
+        "blob": "71d28c8422d1a08f281d3647aa078e540a587996",
+        "sha256": "bcfb14c6dea0dc4e525f72c6d82300b2fd10420ac06338534d427d3e52c1f6fa",
+        "bytes": 2591,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/generate/generate.ts"
+      },
+      {
+        "path": "src/function/generate/generateRaw.ts",
+        "blob": "e7a019ee5b828461d0f3ba13bc659ee0b4b85617",
+        "sha256": "2bcb8b91a0657b6788c32899ec0b8256749cf00c83d1f4a22d7d1e3fca694a57",
+        "bytes": 19293,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/generate/generateRaw.ts"
+      },
+      {
+        "path": "src/function/generate/index.ts",
+        "blob": "64a4751db7e719278dee16cbf09c0654c2990dc7",
+        "sha256": "3810e6c1c2eb0396672b78733f5be86769aaebb8abd85ca9fe08df389a446efb",
+        "bytes": 14247,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/generate/index.ts"
+      },
+      {
+        "path": "src/function/generate/inputProcessor.ts",
+        "blob": "485b7dc2caf4e8c5ee8ee6542ab79dc98aa891b5",
+        "sha256": "db994f43c5672c6264bd6da4ebc72d0533d9fcdab6ea54d3d0611cc44a997b7a",
+        "bytes": 2517,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/generate/inputProcessor.ts"
+      },
+      {
+        "path": "src/function/generate/responseGenerator.ts",
+        "blob": "44952c6a9db73097652fa184142f45c1c0c28d27",
+        "sha256": "be4056e874afccc4374b9d14d6f48fae3e2810c276258c00d5d24cdb8c7c3f63",
+        "bytes": 21704,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/generate/responseGenerator.ts"
+      },
+      {
+        "path": "src/function/generate/toolCallCompat.ts",
+        "blob": "f350943046fcf219196049c24e2003104d42faec",
+        "sha256": "e7ea136488b9d1dd5f05e8d87362b9369e46e75309024757bcdf3a283e070082",
+        "bytes": 14634,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/generate/toolCallCompat.ts"
+      },
+      {
+        "path": "src/function/generate/types.ts",
+        "blob": "a90d842465c22584f5ae177407a85c8df76839e7",
+        "sha256": "7635093fba551b047421ec2b8872b633ac732f0bcd9232974213ce3679fe8a3d",
+        "bytes": 8283,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/generate/types.ts"
+      },
+      {
+        "path": "src/function/generate/utils.ts",
+        "blob": "cb94f1c6ae28ca174c8adc47141906bb4ae86974",
+        "sha256": "9aace591938c207d8c3e81a5619ed39ccc6a1d53a1d3e84190243ca6c69ca3ff",
+        "bytes": 10706,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/generate/utils.ts"
+      },
+      {
+        "path": "src/function/preset.ts",
+        "blob": "47788477ca781b69ec9e60a46184b978cc3a721e",
+        "sha256": "cb87f8af8c3c9cbe65c7fd71721f2e9c68af42a1f079f62c18d67d24f9b3bd85",
+        "bytes": 22357,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/preset.ts"
+      },
+      {
+        "path": "src/function/inject.ts",
+        "blob": "cd416215de35df96531b61cc1fd13b07f7046a41",
+        "sha256": "9a988fbd25c086beaf995005b60f1a123f6afc9a2da7b1237ea7185cbfc0d500",
+        "bytes": 1552,
+        "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/29331c36fb9b2e880d4d488ff919317e1bc95684/src/function/inject.ts"
+      }
+    ]
+  },
+  "otherSources": [
+    {
+      "repository": "SillyTavern/SillyTavern",
+      "commit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+      "path": "public/script.js",
+      "localResearchPath": "research/st/public/script.js",
+      "sha256": "955c603d0bad84bac5a716f0818d85c2543e44d4c43878e0d63ef1e55ca91855",
+      "bytes": 497669,
+      "calculatedGitBlob": "777a2d5983a6283ef9b26726e75192da1e3f3cea",
+      "url": "https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/public/script.js",
+      "license": "AGPL-3.0"
+    },
+    {
+      "repository": "SillyTavern/SillyTavern",
+      "commit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+      "path": "public/scripts/openai.js",
+      "localResearchPath": "research/batch2-r2-squash/source-pins/public/scripts/openai.js",
+      "sha256": "0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604",
+      "bytes": 307267,
+      "calculatedGitBlob": "bab82eec57e0927b809b0571534e96f1b13360e1",
+      "url": "https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/public/scripts/openai.js",
+      "license": "AGPL-3.0",
+      "verification": "ADDENDUM-14 #11: fixed-commit original bytes recompute the repository Git blob. The former local copy had one additional trailing LF; old research files and frozen reports remain unchanged. See tool/st_differential/ST-SOURCE-PIN.md for current raw identity and historical correction."
+    },
+    {
+      "repository": "SillyTavern/SillyTavern",
+      "commit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+      "path": "public/scripts/reasoning.js",
+      "localResearchPath": "research/batch2-r2-squash/source-pins/public/scripts/reasoning.js",
+      "sha256": "c489812f2598d1a4879b1a7287abde092741adafdf67f5b15cf18f2dd71d82d1",
+      "bytes": 68726,
+      "calculatedGitBlob": "c82e95fc1abc4d8547254886c758c8b926cf4453",
+      "url": "https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/public/scripts/reasoning.js",
+      "license": "AGPL-3.0",
+      "verification": "ADDENDUM-14 #11: fixed-commit original bytes recompute the repository Git blob. The former local copy had one additional trailing LF; old research files and frozen reports remain unchanged. See tool/st_differential/ST-SOURCE-PIN.md for current raw identity and historical correction."
+    },
+    {
+      "repository": "SillyTavern/SillyTavern",
+      "commit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+      "path": "public/scripts/utils.js",
+      "localResearchPath": "reviews/sources/st1.19-utils.js",
+      "sha256": "2a2cfe240d5a84ce2e09ba053db6c0c71473b6406173f614f3521d89f50ada61",
+      "bytes": 113042,
+      "calculatedGitBlob": "6d57bb7b1700c06d160df049dea87dd56cbc9f28",
+      "url": "https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/public/scripts/utils.js",
+      "license": "AGPL-3.0"
+    },
+    {
+      "repository": "SillyTavern/SillyTavern",
+      "commit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+      "path": "src/util.js",
+      "localResearchPath": "reviews/sources/st1.19-backend-util.js",
+      "sha256": "d33d67234af4e188bb7fcfac9c3ca7952c19e8c58791e96b19f9ad748dd168cd",
+      "bytes": 51689,
+      "calculatedGitBlob": "ad5afb1539b59799ede088e883e5a6ab6c117438",
+      "url": "https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/src/util.js",
+      "license": "AGPL-3.0"
+    },
+    {
+      "repository": "starowo/starowo.github.io",
+      "commit": "53bd585da14248ba10baaede7fc7ed0cebe1eeeb",
+      "path": "regex_bind/inject.js",
+      "localResearchPath": "research/add10-source-pin/inject.53bd585d.raw.js",
+      "sha256": "4858bcb57530e3ff6ef68f0c94a4d291e2914c766c274f888e9a2fdf8d0efb59",
+      "bytes": 290243,
+      "calculatedGitBlob": "efb49a4c8e7a713ada65116f8959183f7d1dd7a5",
+      "url": "https://github.com/starowo/starowo.github.io/blob/53bd585da14248ba10baaede7fc7ed0cebe1eeeb/regex_bind/inject.js",
+      "license": "No root LICENSE located in the pinned source research; no source body copied into this Helper patch",
+      "verification": "ADDENDUM-10: decoded fixed-commit base64 bytes recompute the repository Git blob. See tool/st_differential/SPRESET-SOURCE-PIN.md. The earlier research/spreset/site_inject.js copy equals these original bytes plus one trailing LF; its historical bytes and evidence remain unchanged. The original save command was not retained."
+    },
+    {
+      "repository": "SillyTavern/SillyTavern",
+      "commit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+      "path": "src/endpoints/backends/chat-completions.js",
+      "localResearchPath": "research/st/src/endpoints/backends/chat-completions.js",
+      "sha256": "e6315848585264ab4fa14246eb49c5a3413b93f0b8b0c5249cdb6cfa8f595574",
+      "bytes": 126476,
+      "calculatedGitBlob": "19c04e35da1db39d9096487c124d2d066eea6f0e",
+      "url": "https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/src/endpoints/backends/chat-completions.js",
+      "license": "AGPL-3.0"
+    },
+    {
+      "repository": "SillyTavern/SillyTavern",
+      "commit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+      "path": "public/scripts/tool-calling.js",
+      "localResearchPath": "research/st/public/scripts/tool-calling.js",
+      "sha256": "934be74f6bd672a821e5f3e5dc34ad4548c1cac60ee41c48feaa630e6e2f7712",
+      "bytes": 48987,
+      "calculatedGitBlob": "41a3b78ce12926d27dbfb77ca3d74b65bef2a60f",
+      "url": "https://github.com/SillyTavern/SillyTavern/blob/7e8663cd9c184a550b37238218bdd32c6efc68e9/public/scripts/tool-calling.js",
+      "license": "AGPL-3.0"
+    }
+  ],
+  "scope": "Source files remain research-only. Patch contains independently written Dart and synthetic fixtures; no copied Helper function bodies or community preset payloads.",
+  "retrievalTimeBoundary": "Helper initial retrieval timestamp is above; inject.ts reverified 2026-11-22T08:27:01.144388+00:00. Other sources were retrieved earlier in this shared W11 workspace; per-file network timestamps are not reconstructed from mtimes."
+}

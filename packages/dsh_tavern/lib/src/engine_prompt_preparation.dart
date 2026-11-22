@@ -1,5 +1,16 @@
 part of 'engine.dart';
 
+// Infer only known wire dialects from the configured connection. A preset's
+// saved source or URL must never redirect the user's active connection.
+String _modelChatCompletionSource(TavernModelConfig config) {
+  if (config.deepseek) return 'deepseek';
+  final host = Uri.tryParse(config.baseUrl)?.host.toLowerCase() ?? '';
+  if (host == 'openrouter.ai' || host.endsWith('.openrouter.ai')) return 'openrouter';
+  if (host == 'api.openai.com') return 'openai';
+  if (host.endsWith('.openai.azure.com')) return 'azure_openai';
+  return 'custom';
+}
+
 // These preparation segments own no engine or store. The native driver keeps
 // its user/secret/reply adoption points between the same segments; authoring
 // supplies a detached turn, local variables, a fixed clock and its own RNG.
@@ -162,6 +173,8 @@ PromptAssembly _assemblePreparedPrompt({
   required PromptTokenCounter counter,
   List<PromptHistoryMessage> prefix = const [],
   PromptHistoryWindow? cacheWindow,
+  void Function(PromptInput)? onInput,
+  void Function(PromptManagerSnapshot)? onPromptManager,
 }) {
   final examples = [for (var index = 0; index < world.activated.length; index++) (index, world.activated[index])];
   examples.sort((a, b) {
@@ -170,50 +183,55 @@ PromptAssembly _assemblePreparedPrompt({
     final byOrder = aOrder == bOrder ? 0 : bOrder.compareTo(aOrder);
     return byOrder != 0 ? byOrder : a.$1.compareTo(b.$1);
   });
+  final input = PromptInput(
+    preset: preset,
+    macroNestRuntime: turn.spreset?.macroNestRuntime,
+    onSPresetDiagnostic: turn.spreset?.diagnose,
+    cacheFriendlyTrimming: switch (turn.settings['cacheFriendlyTrimming']) {
+      final bool value => value,
+      _ => null,
+    },
+    historyWindow: cacheWindow,
+    card: data,
+    history: [for (final node in promptHistory) _promptHistory(node)],
+    model: turn.config.model,
+    userName: environment.userName,
+    characterId: turn.actorId,
+    groupNames: turn.groupView?.names ?? const [],
+    generationType: turn.generationType,
+    deepseek: turn.config.deepseek,
+    chatCompletionSource: _modelChatCompletionSource(turn.config),
+    persona: environment.persona,
+    personaInPrompt: turn.settings['personaInPrompt'] != false,
+    worldBefore: world.before.map(_worldFragment).toList(),
+    worldAfter: world.after.map(_worldFragment).toList(),
+    worldSections: {for (final entry in world.sections.entries) entry.key: entry.value.map(_worldFragment).toList()},
+    disabledUiPrompts: world.disabledUiPrompts,
+    assistantPrefill: [
+      if (turn.config.deepseek)
+        for (final depth in world.depths)
+          for (final hit in depth.entries)
+            if (_worldPrefill(hit)) _worldFragment(hit),
+    ],
+    injections: injections,
+    tools: turn.spreset?.offerTools(_ordinaryTurnTools(turn)) ?? _ordinaryTurnTools(turn),
+    worldExamples: [
+      for (final item in examples.reversed)
+        if (item.$2.content.isNotEmpty && item.$2.section == null && (item.$2.position == 5 || item.$2.position == 6))
+          PromptExample(fragment: _worldFragment(item.$2), before: item.$2.position == 5),
+    ],
+    pinExamples: turn.settings['pinExamples'] == true,
+    stripExamples: turn.settings['stripExamples'] == true,
+    bias: _string(turn.settings['bias']),
+    stops: _strings(turn.settings['stops']),
+    expansion: environment.expand,
+    cardExpansion: environment.baseExpand,
+    preparedFields: prepared,
+  );
+  onInput?.call(input);
   return assemblePromptWindow(
-    PromptAssembler(counter: counter),
-    PromptInput(
-      preset: preset,
-      cacheFriendlyTrimming: switch (turn.settings['cacheFriendlyTrimming']) {
-        final bool value => value,
-        _ => null,
-      },
-      historyWindow: cacheWindow,
-      card: data,
-      history: [for (final node in promptHistory) _promptHistory(node)],
-      model: turn.config.model,
-      userName: environment.userName,
-      characterId: turn.actorId,
-      groupNames: turn.groupView?.names ?? const [],
-      generationType: turn.generationType,
-      deepseek: turn.config.deepseek,
-      persona: environment.persona,
-      personaInPrompt: turn.settings['personaInPrompt'] != false,
-      worldBefore: world.before.map(_worldFragment).toList(),
-      worldAfter: world.after.map(_worldFragment).toList(),
-      worldSections: {for (final entry in world.sections.entries) entry.key: entry.value.map(_worldFragment).toList()},
-      disabledUiPrompts: world.disabledUiPrompts,
-      assistantPrefill: [
-        if (turn.config.deepseek)
-          for (final depth in world.depths)
-            for (final hit in depth.entries)
-              if (_worldPrefill(hit)) _worldFragment(hit),
-      ],
-      injections: injections,
-      tools: _ordinaryTurnTools(turn),
-      worldExamples: [
-        for (final item in examples.reversed)
-          if (item.$2.content.isNotEmpty && item.$2.section == null && (item.$2.position == 5 || item.$2.position == 6))
-            PromptExample(fragment: _worldFragment(item.$2), before: item.$2.position == 5),
-      ],
-      pinExamples: turn.settings['pinExamples'] == true,
-      stripExamples: turn.settings['stripExamples'] == true,
-      bias: _string(turn.settings['bias']),
-      stops: _strings(turn.settings['stops']),
-      expansion: environment.expand,
-      cardExpansion: environment.baseExpand,
-      preparedFields: prepared,
-    ),
+    PromptAssembler(counter: counter, onPromptManager: onPromptManager),
+    input,
     prefix: prefix,
   );
 }

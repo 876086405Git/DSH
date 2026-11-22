@@ -4,10 +4,14 @@
 import 'dart:convert';
 
 import '../js_string.dart';
+import '../spreset.dart';
 import 'character_fields.dart';
 import 'deepseek_processing.dart';
 import 'preset.dart';
+import 'post_processing.dart';
 import 'prompt_types.dart';
+import 'prompt_manager_snapshot.dart';
+import 'reasoning.dart';
 
 final class PromptInput {
   const PromptInput({
@@ -19,6 +23,7 @@ final class PromptInput {
     this.characterId = '',
     this.generationType = 'normal',
     this.deepseek = true,
+    this.chatCompletionSource = 'custom',
     this.persona = '',
     this.personaInPrompt = true,
     this.groupNames = const [],
@@ -43,6 +48,9 @@ final class PromptInput {
     this.expansion,
     this.cardExpansion,
     this.preparedFields,
+    this.onSPresetDiagnostic,
+    this.macroNestRuntime,
+    this.spresetProvider,
   });
   final ChatPreset preset;
 
@@ -56,6 +64,13 @@ final class PromptInput {
   final String characterId;
   final String generationType;
   final bool deepseek;
+
+  /// Actual connection dialect, not an imported endpoint selection.
+  final String chatCompletionSource;
+
+  /// SPreset hooks read the page's current provider even when one Helper
+  /// request uses a different custom transport. Omitted by native callers.
+  final SPresetProvider? spresetProvider;
   final String persona;
   final bool personaInPrompt;
   final List<String> groupNames;
@@ -98,12 +113,19 @@ final class PromptInput {
   /// assembly uses a limited names/fields fallback and retains unknown macros.
   final PromptExpansion? cardExpansion;
   final PreparedCharacterFields? preparedFields;
+  final SPresetDiagnostic? onSPresetDiagnostic;
+
+  /// Reuse for one native runtime; isolated previews may omit it.
+  final SPresetMacroNestRuntime? macroNestRuntime;
 }
 
 final class PromptAssembler {
-  const PromptAssembler({this.counter = const EstimatedTokenCounter()});
+  const PromptAssembler({this.counter = const EstimatedTokenCounter(), this.onPromptManager});
   final PromptTokenCounter counter;
-  PromptAssembly assemble(PromptInput input) => _AssemblyRun(input, counter).run();
+
+  /// Runtime-only setter boundary; detached previews omit this observer.
+  final void Function(PromptManagerSnapshot)? onPromptManager;
+  PromptAssembly assemble(PromptInput input) => _AssemblyRun(input, counter, onPromptManager: onPromptManager).run();
 }
 
 /// The engine has already proved the unread prefix cannot fit. Retain its
@@ -112,7 +134,27 @@ PromptAssembly assemblePromptWindow(
   PromptAssembler assembler,
   PromptInput input, {
   required List<PromptHistoryMessage> prefix,
-}) => _AssemblyRun(input, assembler.counter, historyPrefix: prefix).run();
+}) => _AssemblyRun(input, assembler.counter, historyPrefix: prefix, onPromptManager: assembler.onPromptManager).run();
+
+/// Rebuild provider conversion after an asynchronous prompt hook. Admission,
+/// macro effects and stop expansion have already happened and are not replayed.
+PromptAssembly reprocessPromptAssembly(
+  PromptAssembly original,
+  List<PromptSegment> before,
+  PromptInput input, {
+  PromptTokenCounter counter = const EstimatedTokenCounter(),
+}) {
+  final run = _AssemblyRun(input, counter);
+  run.excluded
+    ..clear()
+    ..addAll(
+      original.excluded.where(
+        (item) => item.reason != 'reasoning-prefill-unsupported' && item.reason != 'no-preset-prefill-tail',
+      ),
+    );
+  final stops = original.body['stop'];
+  return run.finish(before, stops: stops is List<Object?> ? stops.cast<String>() : const [], original: original);
+}
 
 /// Cost of an unchanged, meaningful history message, using the assembler's
 /// exact name/CR/tool-field normalization. Only pure counters may preflight.
@@ -141,6 +183,7 @@ PromptAssembly assembleScriptPrompt(
   input,
   assembler.counter,
   preparedStops: preparedStops,
+  onPromptManager: assembler.onPromptManager,
   preparedBiasHasContent: trimJsWhitespace(input.bias).isNotEmpty,
 ).run();
 
@@ -270,6 +313,7 @@ final class _AssemblyRun {
     this.preparedStops,
     this.preparedBiasHasContent,
     this.historyPrefix = const [],
+    this.onPromptManager,
   }) : settings = input.preset.executionSettings {
     cacheFriendlyTrimming = input.cacheFriendlyTrimming ?? (settings['cacheFriendlyTrimming'] != false);
     final window = cacheFriendlyTrimming ? input.historyWindow : null;
@@ -316,11 +360,14 @@ final class _AssemblyRun {
     remaining = budget - 3;
   }
   final PromptInput input;
+  final void Function(PromptManagerSnapshot)? onPromptManager;
   final List<String> Function()? preparedStops;
   final bool? preparedBiasHasContent;
   final List<PromptHistoryMessage> historyPrefix;
   final PromptTokenCounter counter;
   final Map<String, Object?> settings;
+  late final spreset = SPresetConfig.fromPreset(settings);
+  late final macroNestRuntime = input.macroNestRuntime ?? SPresetMacroNestRuntime();
   late final bool cacheFriendlyTrimming;
   PromptHistoryWindow? historyWindow;
   final olderHistory = <String>{};
@@ -338,6 +385,10 @@ final class _AssemblyRun {
   final prompts = <_Prompt>[];
   final collections = <String, List<PromptSegment>>{};
   final tail = <PromptSegment>[];
+  final historyTail = <PromptSegment>{};
+  final managerTails = <String, List<PromptSegment>>{};
+  final logicalIdentifiers = <PromptSegment, String?>{};
+  bool historyStoredNewestFirst = false;
   final excluded = <PromptExclusion>[];
   final disabled = <String>{};
   final uiDisabled = <String>{};
@@ -359,6 +410,13 @@ final class _AssemblyRun {
     // temporary values (e.g. original) may override that environment.
     if (input.expansion != null) return input.expansion!(text, overrides);
     return fallbackExpand(text, overrides);
+  }
+
+  String prepareText(String id, String text, [Map<String, String> overrides = const {}]) {
+    final expanded = spreset.macroNest && text.isNotEmpty
+        ? macroNestRuntime.expand(text, (value) => expand(value, overrides))
+        : expand(text, overrides);
+    return expanded.isEmpty && spresetHasStructuredBinding(spreset, id) ? '\u200b' : expanded;
   }
 
   String baseExpand(String text) =>
@@ -577,7 +635,7 @@ final class _AssemblyRun {
       prompts.add(
         _Prompt(
           id,
-          expand(allowed ? presetContent(definition['content']) : ''),
+          prepareText(id, allowed ? presetContent(definition['content']) : ''),
           [source],
           role: definition['role'],
           data: {...definition},
@@ -604,7 +662,7 @@ final class _AssemblyRun {
               for (var i = 0; i < fragments.length; i++)
                 _Prompt(
                   '$id-piece-$i',
-                  fragments[i].expandMacros ? expand(fragments[i].content) : fragments[i].content,
+                  fragments[i].expandMacros ? prepareText('$id-piece-$i', fragments[i].content) : fragments[i].content,
                   [fragments[i].source],
                   role: fragments[i].role ?? inheritedRole,
                   data: {...metadata},
@@ -615,7 +673,7 @@ final class _AssemblyRun {
             ];
       final replacement = _Prompt(
         id,
-        pieces == null ? expand(content) : pieces.map((p) => p.content).join('\n'),
+        pieces == null ? prepareText(id, content) : pieces.map((p) => p.content).join('\n'),
         pieces == null ? sources : [for (final piece in pieces) ...piece.sources],
         role: inheritedRole,
         data: metadata,
@@ -741,19 +799,17 @@ final class _AssemblyRun {
           !disabled.contains(pair.$1) &&
           prompt.data['forbid_overrides'] != true &&
           field(pair.$2).isNotEmpty) {
-        prompt.content = expand(field(pair.$2), {'original': prompt.content});
+        prompt.content = prepareText(prompt.id, field(pair.$2), {'original': prompt.content});
         prompt.sources = [cardSource(pair.$2), ...prompt.sources];
       }
     }
   }
 
-  PromptAssembly run() {
+  PromptSource get prefillSource =>
+      PromptSource('preset', 'assistant_prefill', details: {'enhanced': true, 'target': prefillTarget});
+
+  PromptHistoryWindow? admit() {
     prepare();
-    final prefillSource = PromptSource(
-      'preset',
-      'assistant_prefill',
-      details: {'enhanced': true, 'target': prefillTarget},
-    );
     PromptSegment? configuredPrefill;
     if (enhancedPrefillEnabled && type == 'continue') {
       excluded.add(PromptExclusion('assistant_prefill', 'enhanced-prefill-continue', [prefillSource]));
@@ -877,27 +933,95 @@ final class _AssemblyRun {
       commitReserved(control);
     }
     tail.addAll(controls);
+    if (controls.isNotEmpty) managerTails['controlPrompts'] = controls;
     for (final prefill in worldPrefill) {
       commitReserved(prefill);
     }
     // CCV3 prefill follows all native controls. An explicitly enabled preset
     // prefix may follow it; its reasoning channel keeps a separate boundary.
     tail.addAll(worldPrefill);
+    if (worldPrefill.isNotEmpty) managerTails['dshWorldPrefill'] = worldPrefill;
     if (configuredPrefill != null) {
       tail.add(configuredPrefill);
+      managerTails['dshConfiguredPrefill'] = [configuredPrefill];
     }
     // The decorator says "reaches" maximum context, including an exact fit.
     // This has no effect without optional fragments and never re-expands text.
     makeRoom(1);
     // Unpinned examples have already made their ordinary admission choices.
     // Releasing extra history space any earlier would let them refill it.
-    final nextHistoryWindow = finishHistoryWindow();
+    return finishHistoryWindow();
+  }
+
+  PromptManagerSnapshot managerSnapshot() {
+    PromptManagerMessage message(PromptSegment segment) => PromptManagerMessage(
+      segment,
+      identifier: logicalIdentifiers.containsKey(segment)
+          ? logicalIdentifiers[segment]
+          : segment.message['role'] == 'tool'
+          ? segment.message['tool_call_id'] as String?
+          : segment.id,
+    );
+    final snapshot = PromptManagerSnapshot([
+      for (final id in prompts.map((prompt) => prompt.id).toSet())
+        if (collections.containsKey(id))
+          PromptManagerCollection(id, [
+            for (final segment
+                in id == 'chatHistory' && historyStoredNewestFirst ? collections[id]!.reversed : collections[id]!)
+              if (!removed(segment)) message(segment),
+          ]),
+      for (final entry in managerTails.entries)
+        PromptManagerCollection(entry.key, [
+          for (final segment in entry.value)
+            if (!removed(segment)) message(segment),
+        ]),
+    ]);
+    return settings['squash_system_messages'] == true ? snapshot.squashSystems() : snapshot;
+  }
+
+  PromptAssembly run() {
+    PromptHistoryWindow? nextHistoryWindow;
+    try {
+      nextHistoryWindow = admit();
+    } finally {
+      // A failed admission publishes only objects already added to root.
+      // This runs before MI and does not retry expansions or token admission.
+      onPromptManager?.call(managerSnapshot());
+    }
     var flattened = <PromptSegment>[
-      for (final id in prompts.map((prompt) => prompt.id).toSet()) ...?collections[id],
-      ...tail,
-    ].where((segment) => !removed(segment)).toList();
+      for (final id in prompts.map((prompt) => prompt.id).toSet())
+        for (final segment in collections[id] ?? const <PromptSegment>[])
+          if (!removed(segment)) inCollection(segment, id),
+      for (final segment in tail)
+        if (!removed(segment)) historyTail.contains(segment) ? inCollection(segment, 'chatHistory') : segment,
+    ];
+    flattened = spresetInjectSegments(
+      flattened.where(meaningful).toList(),
+      spreset,
+      input.spresetProvider ??
+          SPresetProvider(source: input.deepseek ? 'deepseek' : input.chatCompletionSource, model: input.model),
+      counter,
+      onDiagnostic: (stage, error) {
+        excluded.add(PromptExclusion('SPreset.$stage', '$error', const [PromptSource('control', 'SPreset')]));
+        input.onSPresetDiagnostic?.call(stage, error);
+      },
+    );
     if (settings['squash_system_messages'] == true) flattened = squash(flattened);
-    final before = flattened.where(meaningful).toList();
+    // The SPreset hook may replace its nonempty placeholder with an empty
+    // content channel carrying reasoning/signatures/tools. ST retains it.
+    final before = flattened;
+    final stops = preparedStops == null
+        ? input.stops.where((stop) => stop.isNotEmpty).map((stop) => expand(stop)).toList()
+        : List<String>.of(preparedStops!());
+    return finish(before, stops: stops, nextHistoryWindow: nextHistoryWindow);
+  }
+
+  PromptAssembly finish(
+    List<PromptSegment> before, {
+    required List<String> stops,
+    PromptAssembly? original,
+    PromptHistoryWindow? nextHistoryWindow,
+  }) {
     final last = before.lastOrNull;
     final enhancedTail =
         enhancedPrefillEnabled &&
@@ -914,9 +1038,18 @@ final class _AssemblyRun {
     } else if (enhancedPrefillEnabled && type != 'continue' && prefillTarget == 'reasoning' && !enhancedTail) {
       excluded.add(PromptExclusion('assistant_prefill', 'no-preset-prefill-tail', [prefillSource]));
     }
+    final converted = postProcessPrompt(
+      before,
+      presetString(settings['custom_prompt_post_processing']),
+      userName: input.userName,
+      characterName: characterName,
+      groupNames: input.groupNames,
+      counter: counter,
+      separateLast: enhancedTail && input.deepseek && prefillTarget == 'reasoning' && settings['show_thoughts'] == true,
+    );
     final after = input.deepseek
         ? postProcessDeepSeek(
-            before,
+            converted,
             userName: input.userName,
             characterName: characterName,
             groupNames: input.groupNames,
@@ -925,10 +1058,7 @@ final class _AssemblyRun {
             reasoningPrefill: enhancedTail && prefillTarget == 'reasoning' && settings['show_thoughts'] == true,
             counter: counter,
           )
-        : before;
-    final stops = preparedStops == null
-        ? input.stops.where((stop) => stop.isNotEmpty).map((stop) => expand(stop)).toList()
-        : List<String>.of(preparedStops!());
+        : converted;
     final body = input.deepseek
         ? deepSeekRequestBody(
             messages: after,
@@ -945,11 +1075,11 @@ final class _AssemblyRun {
       beforePostProcessing: before,
       afterPostProcessing: after,
       excluded: excluded,
-      budget: budget,
-      remainingBudget: remaining,
-      counterName: counter.name,
-      exactTokenCounts: counter.exact,
-      historyWindow: nextHistoryWindow,
+      budget: original?.budget ?? budget,
+      remainingBudget: original?.remainingBudget ?? remaining,
+      counterName: original?.counterName ?? counter.name,
+      exactTokenCounts: original?.exactTokenCounts ?? counter.exact,
+      historyWindow: original?.historyWindow ?? nextHistoryWindow,
     );
   }
 
@@ -1171,6 +1301,8 @@ final class _AssemblyRun {
   void addHistory(List<_Prompt> history, String cyclePrompt) {
     if (get('chatHistory') == null) return;
     final reverseOutput = <PromptSegment>[];
+    collections['chatHistory'] = reverseOutput;
+    historyStoredNewestFirst = true;
     final newChatKey = input.groupNames.isEmpty ? 'new_chat_prompt' : 'new_group_chat_prompt';
     final newChat = message(_Prompt('newMainChat', expand(setting(newChatKey)), [PromptSource('control', newChatKey)]));
     reserve(newChat);
@@ -1180,7 +1312,12 @@ final class _AssemblyRun {
     if (type == 'continue' && cyclePrompt.isNotEmpty && settings['continue_prefill'] != true) {
       final nudge = expand(setting('continue_nudge_prompt'), {'lastChatMessage': cyclePrompt.trim()});
       final index = history.lastIndexWhere((prompt) => !prompt.injected);
-      if (index >= 0) continuation.add(message(history.removeAt(index), expandText: true));
+      if (index >= 0) {
+        final continued = message(history.removeAt(index), expandText: true);
+        continuation.add(continued);
+        // ST displaces the original chat object before assigning loop IDs.
+        logicalIdentifiers[continued] = null;
+      }
       continuation.add(
         message(_Prompt('continueNudge', expand(nudge), const [PromptSource('control', 'continue_nudge_prompt')])),
       );
@@ -1221,6 +1358,9 @@ final class _AssemblyRun {
         }
       }
       final segment = message(prompt, expandText: true, includeName: settings['names_behavior'] == 1);
+      logicalIdentifiers[segment] = segment.message['role'] == 'tool'
+          ? segment.message['tool_call_id'] as String?
+          : '${segment.message.containsKey('tool_calls') ? 'toolCall-' : ''}chatHistory-${pool.length - i}';
       makeRoom(segment.tokens);
       if (removed(segment)) continue;
       if (segment.tokens > remaining) {
@@ -1258,6 +1398,7 @@ final class _AssemblyRun {
     // Keep newest-first expansion and budgeting, then order references once.
     final output = <PromptSegment>[newChat, ...reverseOutput.reversed];
     collections['chatHistory'] = output;
+    historyStoredNewestFirst = false;
     if (groupNudge != null) {
       commitReserved(groupNudge);
       output.add(groupNudge);
@@ -1265,7 +1406,9 @@ final class _AssemblyRun {
     for (final segment in continuation) {
       commitReserved(segment);
     }
+    historyTail.addAll(continuation);
     tail.addAll(continuation);
+    if (continuation.isNotEmpty) managerTails['continueNudge'] = continuation;
   }
 
   void prepareExamples() {
@@ -1478,6 +1621,14 @@ final class _AssemblyRun {
     );
   }
 
+  PromptSegment inCollection(PromptSegment segment, String id) => PromptSegment(
+    id: segment.id,
+    message: segment.message,
+    sources: segment.sources,
+    tokens: segment.tokens,
+    collectionId: id,
+  );
+
   List<PromptSegment> squash(List<PromptSegment> input) {
     const protected = {'newMainChat', 'newChat', 'groupNudge'};
     bool eligible(PromptSegment message) =>
@@ -1494,6 +1645,7 @@ final class _AssemblyRun {
             message: data,
             sources: [...previous.sources, ...segment.sources],
             tokens: counter.countMessage(data),
+            collectionId: previous.collectionId == segment.collectionId ? previous.collectionId : null,
           ),
         );
       } else {
@@ -1511,6 +1663,7 @@ final class _AssemblyRun {
     stops: stops,
     tools: tools,
     toolChoice: input.toolChoice,
+    source: input.chatCompletionSource,
   );
 }
 
@@ -1524,6 +1677,7 @@ Map<String, Object?> genericChatRequestBody({
   List<String> stops = const [],
   List<Map<String, Object?>> tools = const [],
   Object? toolChoice,
+  String source = 'custom',
 }) => {
   'messages': messages.map((segment) => segment.message).toList(),
   'model': model,
@@ -1537,6 +1691,7 @@ Map<String, Object?> genericChatRequestBody({
   if (presetJsNumber(settings['seed']) >= 0) 'seed': settings['seed'],
   if (tools.isNotEmpty) 'tools': tools,
   if (tools.isNotEmpty && toolChoice != null) 'tool_choice': toolChoice,
+  ...genericReasoningFields(settings, model, source),
 };
 
 List<PromptSegment> convertExplicitPromptMessages(

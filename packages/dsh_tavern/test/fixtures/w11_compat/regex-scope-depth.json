@@ -1,0 +1,126 @@
+{
+  "openai_max_context": 12000,
+  "openai_max_tokens": 100,
+  "stream_openai": false,
+  "squash_system_messages": false,
+  "names_behavior": 0,
+  "prompts": [
+    {
+      "identifier": "main",
+      "name": "main",
+      "role": "system",
+      "content": "REGEX_FIXTURE",
+      "injection_position": 0,
+      "system_prompt": true
+    }
+  ],
+  "prompt_order": [
+    {
+      "character_id": 100001,
+      "order": [
+        {
+          "identifier": "main",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "extensions": {
+    "regex_scripts": [
+      {
+        "id": "both",
+        "scriptName": "both",
+        "findRegex": "/(token)/g",
+        "replaceString": "[$1]",
+        "trimStrings": [],
+        "placement": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "disabled": false,
+        "markdownOnly": true,
+        "promptOnly": true,
+        "runOnEdit": true,
+        "substituteRegex": 0,
+        "minDepth": 1,
+        "maxDepth": 2
+      },
+      {
+        "id": "reasoning",
+        "scriptName": "reasoning",
+        "findRegex": "hidden",
+        "replaceString": "visible",
+        "trimStrings": [],
+        "placement": [
+          6
+        ],
+        "disabled": false,
+        "markdownOnly": true,
+        "promptOnly": false,
+        "runOnEdit": false,
+        "substituteRegex": 0,
+        "minDepth": null,
+        "maxDepth": null
+      },
+      {
+        "id": "capture_trim",
+        "scriptName": "capture_trim",
+        "findRegex": "(abXYZcd)",
+        "replaceString": "<$1>",
+        "trimStrings": [
+          "XYZ"
+        ],
+        "placement": [
+          2
+        ],
+        "disabled": false,
+        "markdownOnly": false,
+        "promptOnly": true,
+        "runOnEdit": true,
+        "substituteRegex": 0,
+        "minDepth": null,
+        "maxDepth": null
+      },
+      {
+        "id": "macro_pattern",
+        "scriptName": "macro_pattern",
+        "findRegex": "{{user}}",
+        "replaceString": "MATCH",
+        "trimStrings": [],
+        "placement": [
+          1
+        ],
+        "disabled": false,
+        "markdownOnly": false,
+        "promptOnly": true,
+        "runOnEdit": true,
+        "substituteRegex": 1,
+        "minDepth": null,
+        "maxDepth": null
+      },
+      {
+        "id": "disabled",
+        "scriptName": "disabled",
+        "findRegex": ".+",
+        "replaceString": "NEVER",
+        "trimStrings": [],
+        "placement": [
+          1,
+          2,
+          3,
+          5,
+          6
+        ],
+        "disabled": true,
+        "markdownOnly": true,
+        "promptOnly": true,
+        "runOnEdit": true,
+        "substituteRegex": 0,
+        "minDepth": null,
+        "maxDepth": null
+      }
+    ]
+  }
+}

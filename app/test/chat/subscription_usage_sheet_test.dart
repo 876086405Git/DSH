@@ -54,6 +54,37 @@ void main() {
     expect(find.text('已使用 75%'), findsOneWidget);
   });
 
+  testWidgets('official OpenAI does not request Codex or official quota, or show DeepSeek balance', (tester) async {
+    var profileReads = 0;
+    var quotaReads = 0;
+    await tester.pumpWidget(
+      testApp(
+        const Scaffold(
+          body: UsageSheet(sessionId: 's', model: ModelSelection(provider: 'openai-siwc', model: 'test-model')),
+        ),
+        overrides: [
+          sessionUsageProvider.overrideWith2((id) => FakeUsage(id, SessionUsage.empty)),
+          balanceProvider.overrideWith(_FakeBalanceController.new),
+          for (final subscription in [Subscription.chatgptOfficial, Subscription.chatgpt]) ...[
+            subscriptionProfileProvider(subscription).overrideWith((ref) async {
+              profileReads++;
+              return ProviderProfile(route: subscription.wire);
+            }),
+            subscriptionUsageProvider(subscription).overrideWith((ref) async {
+              quotaReads++;
+              return _usage;
+            }),
+          ],
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(BalanceCard), findsNothing);
+    expect(find.textContaining('订阅额度'), findsNothing);
+    expect(profileReads, 0);
+    expect(quotaReads, 0);
+  });
+
   testWidgets('same-named API key route uses DeepSeek balance, not OAuth quota', (tester) async {
     var requests = 0;
     await tester.pumpWidget(

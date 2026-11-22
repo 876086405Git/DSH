@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "origin": "Independently authored context. Not a copied character card or world book.",
+  "card": {
+    "name": "Synthetic Character",
+    "description": "CARD_DESCRIPTION",
+    "personality": "CARD_PERSONALITY",
+    "scenario": "CARD_SCENARIO",
+    "system_prompt": "CARD_OVERRIDE",
+    "post_history_instructions": "CARD_TAIL",
+    "mes_example": "<START>\nUser: EXAMPLE_USER\nSynthetic Character: EXAMPLE_ASSISTANT"
+  },
+  "user_name": "User",
+  "persona": "PERSONA",
+  "history": [
+    {
+      "role": "user",
+      "content": "HISTORY_USER"
+    },
+    {
+      "role": "assistant",
+      "content": "HISTORY_ASSISTANT"
+    }
+  ],
+  "world_info_fragments": {
+    "before": "WORLD_BEFORE",
+    "after": "WORLD_AFTER",
+    "outlet": "WORLD_OUTLET"
+  },
+  "message_variables": {
+    "stat_data": {
+      "value": 7
+    }
+  },
+  "notes": [
+    "World info fragments are assembler-level input only; this fixture does not claim library binding/activation/insertion was exercised.",
+    "No fetched preset contains a top-level character/worldbook payload; actual card/WB/helper/MVU ecosystem needs separate end-to-end verification."
+  ]
+}

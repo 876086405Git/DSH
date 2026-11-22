@@ -129,11 +129,25 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     /** 「已发给 DSH：…」 for a moment after 插话, in the line's place. */
     private var steerNote: String? = null
     private var pill: OverlayCapsule? = null
+
+    /** The background screen, shown in the capsule's place (§13); null when not showing. */
+    private var screen: OverlayScreen? = null
+
+    /** The task the time on the island counts from, and when it started (uptime ms). */
+    private var timedTask: Long? = null
+    private var taskStartedAt: Long? = null
+
+    /** App icons by label, as the island shows them (null: none found for that label). */
+    private val icons = HashMap<String, android.graphics.drawable.Drawable?>()
     private val previewOwner = Any()
     private var previewTaskId: Long? = null
     private var previewPill: OverlayCapsule? = null
     @Volatile private var destroying = false
     private val previewDecoder = OverlayPreviewDecoder { bitmap ->
+        screen?.takeIf { previewToScreen }?.let { w ->
+            w.showFrame(bitmap, if (bitmap == null) s(R.string.overlay_preview_unavailable) else null)
+            return@OverlayPreviewDecoder
+        }
         val target = previewPill
         if (target == null || destroying) bitmap?.recycle()
         else target.showPreview(bitmap, s(if (bitmap == null) R.string.overlay_preview_unavailable else R.string.overlay_preview_readonly))
@@ -184,11 +198,14 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     /** A narrower line may shrink the capsule now. */
     private val shrinkTick = Runnable { renderPill() }
 
-    // 闲置时不透明度 (the ball's) and 「闲置时自动收起」 (设置 → 手机操控 → 悬浮条), live while showing.
+    // 闲置时不透明度 (the ball's), 「闲置时自动收起」 and 「屏幕边缘光效」 (设置 → 手机操控 → 悬浮条), live while showing.
     private val overlayPrefs = OverlayPrefs.prefs(service)
     private var idleOpacity = OverlayPrefs.from(overlayPrefs).idleOpacity
+    private var edgeGlow = OverlayPrefs.from(overlayPrefs).edgeGlow
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == OverlayPrefs.K_OPACITY || key == OverlayPrefs.K_AUTO_FOLD) main.post { onPrefsChanged() }
+        if (key == OverlayPrefs.K_OPACITY || key == OverlayPrefs.K_AUTO_FOLD || key == OverlayPrefs.K_EDGE_GLOW) {
+            main.post { onPrefsChanged() }
+        }
     }
 
     init {
@@ -416,9 +433,10 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
             syncWindows()
             confirmCard?.root?.visibility = v
             handoffCard?.root?.visibility = v
+            screen?.setHidden(captureHidden)
             beam.setHidden(captureHidden || passThrough)
         }
-        return hide && (pill != null || confirmCard != null || handoffCard != null || beam.attached)
+        return hide && (pill != null || confirmCard != null || handoffCard != null || screen != null || beam.attached)
     }
 
     /** Screen off, lock, 停止 elsewhere, service going away: answer everything pending with STOP. */
@@ -458,7 +476,8 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
             if (v is android.view.ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i))?.let { return it }
             return null
         }
-        val roots = listOfNotNull(confirmCard?.root, handoffCard?.root, pill?.root?.takeIf { it.isShown }, ball?.root?.takeIf { it.isShown })
+        val roots = listOfNotNull(confirmCard?.root, handoffCard?.root, pill?.root?.takeIf { it.isShown }, ball?.root?.takeIf { it.isShown },
+            screen?.root?.takeIf { it.isShown })
         roots.firstNotNullOfOrNull { find(it) }?.let { v ->
             val loc = IntArray(2)
             v.getLocationOnScreen(loc)
@@ -508,6 +527,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
                     ball?.let { b -> if (ballResting()) b.move(b.dockPos()) }
                 }
                 beam.relayout()
+                screen?.relayout()
                 confirmCard?.let { place(it.root, it.params, top = false) }
                 handoffCard?.let { place(it.root, it.params, top = true) }
             }
@@ -528,19 +548,24 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         }
     }
 
-    /** Subscription visibility follows the existing card, never the mere existence of its View. */
+    /**
+     * Subscription visibility follows what shows: the background-screen window, or else the
+     * existing card — never the mere existence of a View.
+     */
     private fun syncPreview() {
         val p = pill
         val control = PhoneControl.peek()
-        val taskId = if (!destroying && p != null && p.root.isAttachedToWindow && fold.expanded &&
+        val toScreen = screen?.attached == true && !captureHidden
+        val taskId = if (!destroying && p != null && (toScreen || (p.root.isAttachedToWindow && fold.expanded &&
             !ballShown && !captureHidden && !stoppedNote && !waiting() &&
-            confirmCard == null && handoffCard == null && pendingHandoff == null)
+            confirmCard == null && handoffCard == null && pendingHandoff == null)))
             control?.liveTask()?.id else null
-        if (taskId == previewTaskId && (taskId == null || previewPill === p)) return
+        if (taskId == previewTaskId && toScreen == previewToScreen && (taskId == null || previewPill === p)) return
         clearPreview()
         if (taskId == null || p == null || control == null) return
         previewTaskId = taskId
         previewPill = p
+        previewToScreen = toScreen
         control.preview.addConsumer(previewOwner, taskId, BackgroundPreview.ConsumerKind.OVERLAY) { frame ->
             if (destroying || previewTaskId != taskId || previewPill !== p) return@addConsumer
             when (frame["state"]) {
@@ -554,7 +579,8 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
                         "waiting" -> s(R.string.overlay_preview_waiting)
                         else -> s(R.string.overlay_preview_unavailable)
                     }
-                    p.showPreview(null, label)
+                    if (previewToScreen) screen?.showFrame(null, label ?: s(R.string.overlay_preview_waiting))
+                    else p.showPreview(null, label)
                 }
             }
         }
@@ -566,6 +592,65 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         previewPill?.showPreview(null, null)
         previewPill = null
         previewTaskId = null
+        previewToScreen = false
+    }
+
+    private var previewToScreen = false
+
+    /**
+     * The live task runs on the background screen: the person's own screen isn't being operated
+     * (no edge glow), and with 实时查看后台屏 on its picture shows in the capsule's place.
+     */
+    private fun onBackground(): Boolean {
+        val control = PhoneControl.peek() ?: return false
+        val id = control.liveTask()?.id ?: return false
+        return control.background.previewTarget(id) != null
+    }
+
+    /** The background-screen window instead of the capsule and the ball (§13). Kept through 已停止 once shown. */
+    private fun screenMode(): Boolean {
+        if (destroying || pill == null || handoffCard != null) return false
+        if (stoppedNote) return screen != null
+        return onBackground() && PhoneControl.peek()?.preview?.enabled == true
+    }
+
+    /** Shows or takes away the background-screen window as [screenMode] says; true when it came or went. */
+    private fun syncScreen(): Boolean {
+        val want = screenMode()
+        val w = screen
+        if (want && w == null) {
+            val made = buildScreen()
+            if (made.show(s(R.string.overlay_window_title), captureHidden)) {
+                screen = made
+                if (passThrough) applyTouchable(made.root, made.params, false)
+                return true
+            }
+        } else if (!want && w != null) {
+            screen = null
+            w.remove(animated = animationsOn())
+            return true
+        }
+        return false
+    }
+
+    private fun buildScreen(): OverlayScreen {
+        val strings = OverlayScreen.Strings(
+            pause = s(R.string.overlay_pause_description), resume = s(R.string.overlay_resume_description),
+            stop = s(R.string.overlay_stop_description), back = s(R.string.overlay_back_description),
+            view = s(R.string.overlay_screen_view), separator = s(R.string.overlay_meta_separator),
+        )
+        return OverlayScreen(service, wm, islandColors(), strings, ::safeArea, object : OverlayScreen.Actions {
+            override fun touched() = onPillTouched()
+            override fun pause() = togglePause()
+            override fun stop() = stopFromPill()
+            override fun back() = backToApp()
+        })
+    }
+
+    private fun applyTouchable(root: View, params: WindowManager.LayoutParams, touchable: Boolean) {
+        params.flags = if (!touchable) params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        else params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        update(root, params)
     }
 
     // ---- capsule ----------------------------------------------------------------------------------
@@ -615,8 +700,15 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
             else -> steerNote ?: base.text
         }
         val sep = s(R.string.overlay_meta_separator)
-        val app = debugApp ?: PhoneControl.peek()?.liveTask()?.app
+        val live = PhoneControl.peek()?.liveTask()
+        val app = debugApp ?: live?.app
         val meta = listOfNotNull(app, if (base.waived) s(R.string.overlay_waived) else null).joinToString(sep).ifEmpty { null }
+        // The island's second line: 「微信 · 第 6 步」 and the time since the task started.
+        if (live != null && live.id != timedTask) { timedTask = live.id; taskStartedAt = now() }
+        val stepsDone = steps.count
+        val sub = listOfNotNull(app, if (stepsDone > 0) s(R.string.overlay_step, stepsDone) else null).joinToString(sep)
+            .ifEmpty { s(R.string.overlay_dsh_working) }
+        val icon = app?.let(::iconFor)
         val state = CapsuleState(
             line = text,
             look = look,
@@ -627,8 +719,13 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
             unlockedLine = if (u.any) unlockedLine(u) else null,
             meta = meta,
             steps = steps.before(base, StepHistory.CAPACITY),
+            sub = sub,
+            startedAt = if (stoppedNote) null else taskStartedAt,
+            icon = icon,
         )
         p.render(state, animated && p.root.isShown && !ballShown, now())
+        val switched = syncScreen()
+        screen?.render(state)
         main.removeCallbacks(shrinkTick)
         p.shrinkAt?.let { main.postAtTime(shrinkTick, it + 1) }
         ball?.setLook(
@@ -643,18 +740,45 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
             ),
             badge = u.any && !stoppedNote,
             stopLabel = if (stoppedNote) null else s(R.string.overlay_stop_description),
+            icon = icon,
         )
-        syncPreview()
-        syncBeam()
+        // Window visibility is only re-laid when the screen window came or went: mid-morph the
+        // capsule may be up, transparent, while the ball still shows.
+        if (switched) syncWindows() else { syncPreview(); syncBeam() }
     }
 
     /**
-     * The edge beam: on while the control shows for a live task (not once 已停止, not while the
-     * handoff card has the screen), still and faint while paused, not drawn during a screenshot or
-     * an injected stroke.
+     * The icon of the app labelled [label]: the app DSH is in now, read off the active window
+     * (so no package list is needed), kept by label. Null when the label isn't the active app's.
+     */
+    private fun iconFor(label: String): android.graphics.drawable.Drawable? {
+        if (icons.containsKey(label)) return icons[label]
+        // Not found a moment ago (another app was still in front): ask the window again in a while, not on every line.
+        iconMiss[label]?.let { if (now() - it < ICON_RETRY_MS) return null }
+        iconMiss[label] = now()
+        val pm = service.packageManager
+        val pkg = runCatching {
+            @Suppress("DEPRECATION")
+            service.rootInActiveWindow?.let { node -> try { node.packageName?.toString() } finally { node.recycle() } }
+        }.getOrNull()?.takeIf { it != service.packageName } ?: return null
+        val info = runCatching { pm.getApplicationInfo(pkg, 0) }.getOrNull() ?: return null
+        if (pm.getApplicationLabel(info).toString() != label) return null
+        val icon = runCatching { pm.getApplicationIcon(info).mutate() }.getOrNull()
+        icons[label] = icon
+        iconMiss.remove(label)
+        return icon
+    }
+
+    private val iconMiss = HashMap<String, Long>()
+
+    /**
+     * The edge beam: on while the control shows for a live task on the person's own screen (not on
+     * the background screen, not once 已停止, not while the handoff card has the screen, never with
+     * 屏幕边缘光效 off), still and faint while paused, not drawn during a screenshot or an injected
+     * stroke.
      */
     private fun syncBeam() {
-        beam.set(on = pill != null && !stoppedNote && handoffCard == null, paused = paused)
+        beam.set(on = edgeGlow && pill != null && !stoppedNote && handoffCard == null && !onBackground(), paused = paused)
         beam.setHidden(captureHidden || passThrough)
     }
 
@@ -678,6 +802,9 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     /** Takes the control away; [animated]: it fades first (a task that ended, not a rebuild). */
     private fun removePill(animated: Boolean, preservePrompts: Boolean = false) {
         clearPreview()
+        screen?.let { screen = null; it.remove(animated && animationsOn()) }
+        timedTask = null
+        taskStartedAt = null
         val p = pill ?: return
         endEditing()
         main.removeCallbacks(foldTick)
@@ -716,13 +843,14 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     }
 
     private fun buildPill(): OverlayCapsule {
-        val c = colors()
+        val c = islandColors()
         val strings = OverlayCapsule.Strings(
             fold = s(R.string.overlay_fold), expand = s(R.string.overlay_expand), collapse = s(R.string.overlay_collapse),
             pause = s(R.string.overlay_pause_description), resume = s(R.string.overlay_resume_description),
-            stop = s(R.string.overlay_stop_description), steerHint = s(R.string.overlay_steer_hint), send = s(R.string.overlay_send),
+            stop = s(R.string.overlay_stop_description), back = s(R.string.overlay_back_description), stopRow = s(R.string.overlay_stop_row),
+            steerHint = s(R.string.overlay_steer_hint), send = s(R.string.overlay_send),
             unlocksDescription = s(R.string.overlay_unlocked_description), review = s(R.string.overlay_unlocks_review),
-            foldRow = s(R.string.overlay_fold_row), holdHint = s(R.string.overlay_hold_hint),
+            foldRow = s(R.string.overlay_fold_row), holdHint = s(R.string.overlay_hold_hint), separator = s(R.string.overlay_meta_separator),
             moveLeft = s(R.string.overlay_move_left), moveCentre = s(R.string.overlay_move_centre), moveRight = s(R.string.overlay_move_right),
         )
         lateinit var capsule: OverlayCapsule
@@ -736,6 +864,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
             override fun line() = onLineTapped()
             override fun pause() = togglePause()
             override fun stop() = stopFromPill()
+            override fun back() = backToApp()
             override fun unlocks() = openUnlocks()
             override fun steer() = startSteer()
             override fun send() = sendInterjection()
@@ -941,6 +1070,22 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         try { service.startActivity(intent) } catch (e: Exception) { Log.w(TAG, "unlocks page: ${e.javaClass.simpleName}") }
     }
 
+    /**
+     * 回到 DSH Go: the chat this task belongs to. A task on the person's own screen is paused first —
+     * DSH would otherwise go on tapping in whatever app is in front, now DSH Go itself; one on the
+     * background screen goes on.
+     */
+    private fun backToApp() {
+        if (!stoppedNote && !paused && !onBackground()) togglePause()
+        endEditing()
+        val control = PhoneControl.peek()
+        val session = control?.liveTask()?.id?.let { control.taskSession(it) }
+        if (control == null || !control.reopen(session, null)) {
+            val intent = service.packageManager.getLaunchIntentForPackage(service.packageName)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try { if (intent != null) service.startActivity(intent) } catch (e: Exception) { Log.w(TAG, "back to app: ${e.javaClass.simpleName}") }
+        }
+    }
+
     private fun togglePause() {
         if (stoppedNote) return
         val controls = statusOwnership.controls ?: return
@@ -972,7 +1117,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     }
 
     private fun announce(text: String) {
-        val v = if (ballShown) ball?.root else pill?.root
+        val v = screen?.root ?: if (ballShown) ball?.root else pill?.root
         if (a11y.isEnabled) v?.announceForAccessibility(text)
     }
 
@@ -1400,6 +1545,11 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         val p = OverlayPrefs.from(overlayPrefs)
         idleOpacity = p.idleOpacity
         fold.setAutoFold(p.autoFold, now())
+        // 屏幕边缘光效 turned off fades the glow out at once; turned on, it fades in for a live task.
+        if (p.edgeGlow != edgeGlow) {
+            edgeGlow = p.edgeGlow
+            syncBeam()
+        }
         // A new 不透明度 shows at once on a faded ball or capsule.
         applyIdle(animated = false)
         scheduleFold()
@@ -1429,7 +1579,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     private fun ensureBall(): OverlayBall? {
         ball?.let { return it }
         val b = OverlayBall(
-            service, wm, ::safeArea, colors(), ::onBallTapped, ::stopFromPill, ::onBallTouched,
+            service, wm, ::safeArea, islandColors(), ::onBallTapped, ::stopFromPill, ::onBallTouched,
             capsuleCentre = { capsuleCentre() },
             bottomLimit = { obstacleTop()?.minus(dp(CapsulePlacement.GAP_DP)) },
         )
@@ -1523,7 +1673,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         renderPill(animated = false)
         p.prepareUnfold(side)
         p.root.alpha = 0f
-        p.root.visibility = if (captureHidden) View.INVISIBLE else View.VISIBLE
+        p.root.visibility = if (screen != null) View.GONE else if (captureHidden) View.INVISIBLE else View.VISIBLE
         // The ball goes back to the capsule's end first, its mark fading.
         b.fadeMark(0f, animated = true, durationMs = UNFOLD_GLIDE_MS)
         unfolding = true
@@ -1546,18 +1696,21 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
      * touches, so the hidden one is never in the way.
      */
     private fun syncWindows() {
+        syncScreen()
         syncPreview()
         syncBeam()
         val p = pill ?: return
-        val handoff = handoffCard != null
+        val away = handoffCard != null || screen != null
         val shown = if (captureHidden) View.INVISIBLE else View.VISIBLE
-        p.root.visibility = if (handoff || ballShown) View.GONE else shown
-        ball?.root?.visibility = if (handoff || !ballShown) View.GONE else shown
+        p.root.visibility = if (away || ballShown) View.GONE else shown
+        ball?.root?.visibility = if (away || !ballShown) View.GONE else shown
     }
 
     private fun showWindow(root: View) {
         root.alpha = 1f
-        root.visibility = if (captureHidden) View.INVISIBLE else View.VISIBLE
+        // While the background screen shows, the capsule and the ball stay away.
+        val away = screen != null && (root === pill?.root || root === ball?.root)
+        root.visibility = if (away) View.GONE else if (captureHidden) View.INVISIBLE else View.VISIBLE
     }
 
     /** The screen and its bars and cutout, in px (the ball's dock is kept clear of them). */
@@ -1661,6 +1814,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     private fun windows(): List<Pair<View, WindowManager.LayoutParams>> = listOfNotNull(
         pill?.let { it.root to it.params }, ball?.let { it.root to it.params },
         confirmCard?.let { it.root to it.params }, handoffCard?.let { it.root to it.params },
+        screen?.let { it.root to it.params },
     )
 
     /** Every window of this control, the beam's included. */
@@ -1721,6 +1875,9 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         ?: (service.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES)
     private fun colors() = if (isDark()) OverlayPalette.DARK else OverlayPalette.LIGHT
 
+    /** The capsule, the card, the ball and the background-screen window: one dark island in either theme. */
+    private fun islandColors() = OverlayPalette.island(ThemeAccent.notificationColor(service))
+
     /** The confirm and handoff cards' surface: the control's, as a drawable. */
     private fun surface(c: OverlayPalette, radius: Float) = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c.surfaceTop, c.surfaceBottom)).apply {
         cornerRadius = radius
@@ -1763,6 +1920,9 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
 
         /** The app's page link for 解除限制 (lib/ui/settings/index/spots.dart). */
         private const val UNLOCKS_LINK = "dshgo://open/phone-unlocks"
+
+        /** An app icon not found in the active window is looked for again after this long. */
+        private const val ICON_RETRY_MS = 3_000L
 
         /** The ball's way back to the capsule on a tap: quicker than the way out. */
         private const val UNFOLD_GLIDE_MS = 220L

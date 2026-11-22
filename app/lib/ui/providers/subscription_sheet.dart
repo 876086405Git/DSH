@@ -21,26 +21,32 @@ import '../theme/theme.dart';
 
 /// A subscription's monogram letter (a plain letter, no brand mark).
 String subscriptionLetter(Subscription s) => switch (s) {
-  Subscription.chatgpt => 'G',
+  Subscription.chatgpt || Subscription.chatgptOfficial => 'G',
   Subscription.claude => 'C',
 };
 
 /// Opens the sign-in sheet; true once signed in. Closing it cancels the
 /// attempt.
-Future<bool> showSubscriptionLogin(BuildContext context, Subscription subscription) async {
+Future<bool> showSubscriptionLogin(BuildContext context, Subscription subscription, {bool newAccount = false}) async {
   final signedIn = await showAppSheet<bool>(
     context,
     dismissal: SheetDismissal.button,
     isScrollControlled: true,
-    builder: (_) => SubscriptionLoginSheet(subscription: subscription),
+    builder: (_) => SubscriptionLoginSheet(subscription: subscription, newAccount: newAccount),
   );
   return signedIn ?? false;
 }
 
 class SubscriptionLoginSheet extends ConsumerStatefulWidget {
-  const SubscriptionLoginSheet({super.key, required this.subscription, this.interval = const Duration(seconds: 1)});
+  const SubscriptionLoginSheet({
+    super.key,
+    required this.subscription,
+    this.newAccount = false,
+    this.interval = const Duration(seconds: 1),
+  });
 
   final Subscription subscription;
+  final bool newAccount;
 
   /// Poll interval (tests shorten it).
   final Duration interval;
@@ -70,7 +76,12 @@ class _SubscriptionLoginSheetState extends ConsumerState<SubscriptionLoginSheet>
     super.initState();
     final backend = ref.read(subscriptionBackendProvider);
     if (backend == null) return;
-    final session = LoginSession(backend, widget.subscription, interval: widget.interval)..addListener(_onStep);
+    final session = LoginSession(
+      backend,
+      widget.subscription,
+      newAccount: widget.newAccount,
+      interval: widget.interval,
+    )..addListener(_onStep);
     _session = session;
     unawaited(session.start());
   }

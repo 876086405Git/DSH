@@ -296,6 +296,7 @@ ToolWireAuthorization toolWireAuthorization({
   required TavernModelConfig config,
   required Map<String, Object?> body,
   required ToolCapturedPolicy policy,
+  bool? showThoughts,
 }) {
   final diagnostics = <Map<String, Object?>>[];
   final offered = <String>[];
@@ -307,7 +308,7 @@ ToolWireAuthorization toolWireAuthorization({
       if (function is Map<String, Object?> && function['name'] is String) offered.add(function['name']! as String);
     }
   }
-  var common = config.deepseek && !config.thinking;
+  var common = config.deepseek && !(showThoughts ?? config.thinking);
   if (!common) diagnostics.add({'code': 'unsupported_tool_model_mode'});
   if (body.containsKey('thinking')) {
     final thinking = body['thinking'];

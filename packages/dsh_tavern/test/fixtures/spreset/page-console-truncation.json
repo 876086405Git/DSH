@@ -1,0 +1,18 @@
+{
+  "requestId": "snapshot-1",
+  "value": true,
+  "isUndefined": false,
+  "arguments": [],
+  "scriptLogs": [
+    {
+      "level": "info",
+      "stage": "EntryCondition",
+      "values": [
+        "[OMITTED string: 8193 chars]",
+        "[OMITTED string: 8194 chars]"
+      ]
+    }
+  ],
+  "scriptLogsDropped": 0,
+  "scriptLogValuesTruncated": 2
+}

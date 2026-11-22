@@ -1,5 +1,10 @@
 {
   "@@locale": "en",
+  "androidBackgroundProtectionTitle": "Enhanced background protection",
+  "androidBackgroundProtectionAudioHint": "Plays silent audio while local tasks run in the background. May use more battery.",
+  "androidBackgroundProtectionLocationHint": "Uses approximate location and may use more battery. Coordinates are not saved or sent. Turning it off stops location updates without revoking system access.",
+  "androidBackgroundProtectionNeedsLocation": "Location access hasn’t been granted. Tap to open the app’s system settings and allow location under Permissions.",
+  "androidBackgroundProtectionNeedsAlways": "Background location is not active. Tap to open the app’s system settings and choose “Allow all the time” for Location under Permissions.",
   "backgroundProtectionDescription": "Off by default. Protection is attempted only while local tasks are active and the app is in the background; the system may still pause them.",
   "backgroundProtectionAudio": "Silent audio protection",
   "backgroundProtectionAudioHint": "Plays silent audio in the background during tasks, using more battery. Does not take over recording, calls, or speech playback.",

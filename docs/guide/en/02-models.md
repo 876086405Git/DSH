@@ -34,6 +34,7 @@ Switching hosts or reconnecting reads that host's defaults again; unsubmitted ch
 Providers come in three groups:
 
 - **Official**: DeepSeek. Tap it to open your account, where you sign in or enter an API key. On a remote host, this only shows whether that host is set up; configure it on that host.
+- OpenAI under **Official**: shown only on a supported local Android engine. Sign in with ChatGPT in your browser and allow subscription usage, then choose a model available to that account. This is separate from ChatGPT (Codex) under Subscriptions; existing sign-ins and chats are not migrated. Manage usage and app access in [ChatGPT usage settings](https://chatgpt.com/settings/usage). After signing out, reconnect the same account to keep its app limits, or choose another account. Resetting the local engine does not sign you out of OpenAI; use this provider’s sign-out control to disconnect.
 - **Subscriptions**: shown when the engine supports them and is connected. Tap **Sign in** and follow the steps in your browser. Open a signed-in subscription to see its models or **Sign out**, which removes its models from the model list.
 - **Custom**: providers you add, plus ones configured in DSH Web or the engine's config file. Connect to the engine to add one.
 

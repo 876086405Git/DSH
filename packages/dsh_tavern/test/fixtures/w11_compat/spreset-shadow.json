@@ -1,0 +1,92 @@
+{
+  "openai_max_context": 12000,
+  "openai_max_tokens": 100,
+  "stream_openai": false,
+  "squash_system_messages": false,
+  "names_behavior": 0,
+  "prompts": [
+    {
+      "identifier": "main",
+      "name": "main",
+      "role": "system",
+      "content": "SPRESET_FIXTURE",
+      "injection_position": 0,
+      "system_prompt": true
+    }
+  ],
+  "prompt_order": [
+    {
+      "character_id": 100001,
+      "order": [
+        {
+          "identifier": "main",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "extensions": {
+    "SPreset": {
+      "ChatSquash": {
+        "enabled": false,
+        "separate_chat_history": false,
+        "parse_clewd": false,
+        "role": "user",
+        "stop_string": "STOP",
+        "user_prefix": "U:",
+        "user_suffix": "",
+        "char_prefix": "A:",
+        "char_suffix": "",
+        "prefix_system": "S:",
+        "suffix_system": "",
+        "enable_squashed_separator": false,
+        "squashed_separator_regex": "",
+        "squashed_separator_string": "\n",
+        "squashed_post_script_enable": false,
+        "squashed_post_script": "",
+        "enable_stop_string": false
+      },
+      "MacroNest": false,
+      "RegexBinding": {
+        "regexes": [
+          {
+            "id": "shadow",
+            "scriptName": "shadow",
+            "findRegex": "token",
+            "replaceString": "SHADOW",
+            "trimStrings": [],
+            "placement": [
+              2
+            ],
+            "disabled": true,
+            "markdownOnly": true,
+            "promptOnly": false,
+            "runOnEdit": true,
+            "substituteRegex": 0,
+            "minDepth": null,
+            "maxDepth": null
+          }
+        ]
+      }
+    },
+    "regex_scripts": [
+      {
+        "id": "active",
+        "scriptName": "active",
+        "findRegex": "token",
+        "replaceString": "ACTIVE",
+        "trimStrings": [],
+        "placement": [
+          2
+        ],
+        "disabled": false,
+        "markdownOnly": true,
+        "promptOnly": false,
+        "runOnEdit": true,
+        "substituteRegex": 0,
+        "minDepth": null,
+        "maxDepth": null
+      }
+    ]
+  }
+}

@@ -4,9 +4,10 @@
 import 'dart:convert';
 
 import 'preset.dart';
+import 'post_processing.dart';
 import 'prompt_types.dart';
 
-/// The text-only `semi_tools` path used by ST's native DeepSeek backend.
+/// The `semi_tools` path used by ST's native DeepSeek backend.
 /// It preserves historical tool messages even when no new tools are configured.
 /// [enhancedPrefill] identifies a verified final preset assistant, not a history
 /// message. [reasoningPrefill] additionally requires the caller's thinking mode
@@ -21,51 +22,16 @@ List<PromptSegment> postProcessDeepSeek(
   bool reasoningPrefill = false,
   required PromptTokenCounter counter,
 }) {
-  var messages = <PromptSegment>[];
-  for (final item in input) {
-    final message = jsonDecode(jsonEncode(item.message)) as Map<String, Object?>;
-    var content = message['content'] as String? ?? '';
-    final role = message['role'];
-    final name = message['name'];
-    if (role == 'system' &&
-        name == 'example_assistant' &&
-        characterName.isNotEmpty &&
-        !content.startsWith('$characterName: ') &&
-        !groupNames.any((name) => content.startsWith('$name: '))) {
-      content = '$characterName: $content';
-    }
-    if (role == 'system' && name == 'example_user' && userName.isNotEmpty && !content.startsWith('$userName: ')) {
-      content = '$userName: $content';
-    }
-    if (name is String && name.isNotEmpty && role != 'system' && !content.startsWith('$name: ')) {
-      content = '$name: $content';
-    }
-    message['content'] = content;
-    message.remove('name');
-    message.remove('reasoning');
-    message.remove('reasoning_content');
-    messages.add(_segment(item, message, counter));
-  }
   final separateTail = enhancedPrefill && reasoningPrefill;
-  messages = _merge(messages, counter, separateTail: separateTail);
-  if (messages.isEmpty) {
-    const message = <String, Object?>{'role': 'user', 'content': "Let's get started."};
-    messages.add(
-      PromptSegment(
-        id: 'empty-prompt',
-        message: message,
-        sources: const [PromptSource('control', 'empty-prompt')],
-        tokens: counter.countMessage(message),
-      ),
-    );
-  }
-  for (var i = 1; i < messages.length; i++) {
-    final item = messages[i];
-    if (item.message['role'] == 'system') {
-      messages[i] = _segment(item, {...item.message, 'role': 'user'}, counter);
-    }
-  }
-  messages = _merge(messages, counter, separateTail: separateTail);
+  final messages = postProcessPrompt(
+    input,
+    'semi_tools',
+    userName: userName,
+    characterName: characterName,
+    groupNames: groupNames,
+    counter: counter,
+    separateLast: separateTail,
+  );
   final hasTools = tools.isNotEmpty || messages.any((message) => message.message['role'] == 'tool');
   if ((!hasTools || enhancedPrefill) && messages.last.message['role'] == 'assistant') {
     final last = messages.last;
@@ -78,7 +44,7 @@ List<PromptSegment> postProcessDeepSeek(
   }
   for (var i = 0; i < messages.length; i++) {
     final item = messages[i];
-    if (item.message['tool_calls'] is List<Object?>) {
+    if (item.message['tool_calls'] is List<Object?> && !item.message.containsKey('reasoning_content')) {
       messages[i] = _segment(item, {...item.message, 'reasoning_content': ''}, counter);
     }
   }
@@ -90,6 +56,7 @@ PromptSegment _segment(PromptSegment original, Map<String, Object?> message, Pro
       id: original.id,
       message: message,
       sources: original.sources,
+      collectionId: original.collectionId,
       tokens: counter.countMessage(_countable(message)),
     );
 
@@ -104,32 +71,6 @@ Map<String, Object?> _countable(Map<String, Object?> message) {
         : content,
     if (message.containsKey('name')) 'name': message['name'],
   };
-}
-
-List<PromptSegment> _merge(List<PromptSegment> input, PromptTokenCounter counter, {bool separateTail = false}) {
-  final result = <PromptSegment>[];
-  for (var index = 0; index < input.length; index++) {
-    final item = input[index];
-    if (result.isNotEmpty &&
-        !(separateTail && index == input.length - 1) &&
-        result.last.message['role'] == item.message['role'] &&
-        item.message['content'] != '' &&
-        item.message['role'] != 'tool') {
-      final previous = result.removeLast();
-      final message = {...previous.message, 'content': '${previous.message['content']}\n\n${item.message['content']}'};
-      result.add(
-        PromptSegment(
-          id: '${previous.id}+${item.id}',
-          message: message,
-          sources: [...previous.sources, ...item.sources],
-          tokens: counter.countMessage(_countable(message)),
-        ),
-      );
-    } else {
-      result.add(item);
-    }
-  }
-  return result;
 }
 
 // Prefix tag behavior follows the MIT dsh-preset-enhance implementation,

@@ -417,9 +417,11 @@ Future<void> _failOrdinaryToolTurn(TavernEngine engine, _Turn turn, Object error
 }
 
 class _OrdinaryToolRequest {
-  _OrdinaryToolRequest(this.authorization, this.stateAllowed);
+  _OrdinaryToolRequest(this.authorization, this.stateAllowed, Iterable<String> spresetNames)
+    : spresetNames = Set.unmodifiable(spresetNames);
   final ToolWireAuthorization authorization;
   final bool stateAllowed;
+  final Set<String> spresetNames;
   final accumulator = ModelToolAccumulator();
   final streamingUsage = StreamingToolUsage();
   late TavernToolRequestSnapshot snapshot;
@@ -530,17 +532,24 @@ void _toolActivity(_Turn turn, {String? requestId, String? executionId, String? 
 _OrdinaryToolRequest _registerOrdinaryRequest(TavernEngine engine, _Turn turn, Map<String, Object?> body) {
   final started = turn.profile?.now;
   try {
-    final authorization = toolWireAuthorization(config: turn.config, body: body, policy: turn.toolPolicy!);
+    final authorization = toolWireAuthorization(
+      config: turn.config,
+      body: body,
+      policy: turn.toolPolicy!,
+      showThoughts: turn.effectiveShowThoughts,
+    );
     final request = _OrdinaryToolRequest(
       authorization,
-      turn.stateAutomatic && !turn.config.thinking && _finalStateToolAllowed(body),
+      turn.stateAutomatic && !turn.effectiveThinking && _finalStateToolAllowed(body),
+      turn.spreset?.offeredNames(body) ?? const <String>[],
     );
     final requests = [...turn.toolRequests, request];
     final inspection = requests.length < 2 ? turn.inspection : turn.inspection.copyWith(clearReportedUsage: true);
     engine._store.registerToolRequest(
       turn.toolOwner!,
       offeredTools: authorization.offeredTools,
-      wireAuthorization: authorization.toJson(),
+      wireAuthorization: {...authorization.toJson(), 'spresetTools': request.spresetNames.toList()},
+      requestLimit: turn.spreset == null ? 4 : turn.spreset!.requestLimit,
       onCommitted: (snapshot) {
         request.snapshot = snapshot;
         turn.toolRequests = requests;
@@ -563,7 +572,14 @@ void _finishOrdinaryRequest(TavernEngine engine, _Turn turn, _OrdinaryToolReques
   final started = turn.profile?.now;
   try {
     final batch = request.batch ??= request.accumulator.finish();
-    final rejection = _ordinaryBatchRejection(request);
+    final active = turn.spreset;
+    // A valid SPreset follow-up keeps its own budget even if this response also
+    // contains a now-exhausted native roll. Actual offer names were persisted.
+    final needsSPreset =
+        active != null &&
+        active.permitsDepth(request.snapshot.requestIndex - 1) &&
+        batch.calls.any((call) => request.spresetNames.contains(call.name));
+    final rejection = _ordinaryBatchRejection(request, skipNativeBudget: needsSPreset);
     final pending = request.streamingUsage.record(request.usage);
     final diagnostics = <String, Object?>{
       ...request.diagnostics,
@@ -609,7 +625,9 @@ void _finishOrdinaryRequest(TavernEngine engine, _Turn turn, _OrdinaryToolReques
     } catch (_) {
       // Only an adopted complete response can supply this primary preflight
       // failure when publication of its durable response seal itself fails.
-      if (request.rowFinished) turn.toolFailureCode ??= _ordinaryBatchRejection(request)?.code;
+      if (request.rowFinished) {
+        turn.toolFailureCode ??= _ordinaryBatchRejection(request, skipNativeBudget: needsSPreset)?.code;
+      }
       rethrow;
     }
     _toolActivity(turn, requestId: request.snapshot.requestId);
@@ -662,7 +680,10 @@ bool _sameAssistantCalls(ModelAssistantSnapshot snapshot, ModelToolBatch batch) 
   return true;
 }
 
-({String code, String outcome, String detail})? _ordinaryBatchRejection(_OrdinaryToolRequest request) {
+({String code, String outcome, String detail})? _ordinaryBatchRejection(
+  _OrdinaryToolRequest request, {
+  bool skipNativeBudget = false,
+}) {
   final batch = request.batch;
   if (!request.responseComplete ||
       batch == null ||
@@ -671,7 +692,7 @@ bool _sameAssistantCalls(ModelAssistantSnapshot snapshot, ModelToolBatch batch) 
       !batch.rollNameObserved) {
     return null;
   }
-  if (request.snapshot.requestIndex == 4) {
+  if (!skipNativeBudget && request.snapshot.requestIndex >= 4) {
     return (
       code: 'budget_exhausted',
       outcome: 'not_executed_budget',
@@ -717,9 +738,10 @@ bool _sameAssistantCalls(ModelAssistantSnapshot snapshot, ModelToolBatch batch) 
 Future<void> _consumeOrdinaryTools(TavernEngine engine, _Turn turn, Map<String, Object?> initialBody) async {
   var body = _copy(initialBody);
   while (true) {
-    final request = _registerOrdinaryRequest(engine, turn, body);
+    final wireBody = await turn.spreset?.request(body) ?? body;
+    final request = _registerOrdinaryRequest(engine, turn, wireBody);
     try {
-      await engine._consume(turn, body, request: request);
+      await engine._consume(turn, wireBody, request: request);
     } catch (error) {
       _finishOrdinaryRequest(engine, turn, request, error: error);
       rethrow;
@@ -732,18 +754,74 @@ Future<void> _consumeOrdinaryTools(TavernEngine engine, _Turn turn, Map<String, 
       _stageOrdinaryStateDiagnostics(turn, request, normal: false);
       return;
     }
-    final needsRoll = request.authorization.rollAllowed && batch.rollNameObserved;
-    final rejection = _ordinaryBatchRejection(request);
+    final nativeRollExhausted = request.snapshot.requestIndex >= 4;
+    final needsRoll = !nativeRollExhausted && request.authorization.rollAllowed && batch.rollNameObserved;
+    final spreset = turn.spreset;
+    final spresetNames = request.spresetNames;
+    final needsSPreset =
+        spreset != null &&
+        spreset.permitsDepth(request.snapshot.requestIndex - 1) &&
+        batch.calls.any((call) => spresetNames.contains(call.name));
+    if (needsSPreset &&
+        (batch.resourceOverflow ||
+            batch.hasUnassignedFragment ||
+            !batch.finalIdentityComplete ||
+            !batch.originalArgumentsStringComplete ||
+            batch.metadataConflict ||
+            batch.unsupportedEnvelope ||
+            request.assistant?.completeForReplay != true ||
+            !_sameAssistantCalls(request.assistant!, batch))) {
+      _rejectOrdinaryBatch(
+        engine,
+        turn,
+        request,
+        'protocol_invalid',
+        'not_executed_protocol',
+        'SPreset tool calls require a complete replayable assistant response.',
+      );
+    }
+    final rejection = _ordinaryBatchRejection(request, skipNativeBudget: needsSPreset);
     if (rejection != null) {
       _rejectOrdinaryBatch(engine, turn, request, rejection.code, rejection.outcome, rejection.detail);
     }
     _stageOrdinaryStateBatchTrace(turn, request);
+    var stealth = false;
     for (final call in batch.calls) {
       turn.cancellation.check();
       _requireOrdinaryOwnership(engine, turn, StoredToolPhase.owned);
-      _processOrdinaryToolCall(engine, turn, request, call);
+      if (spresetNames.contains(call.name)) {
+        if (needsSPreset) {
+          stealth = await _processSPresetToolCall(engine, turn, request, call, spreset) || stealth;
+        } else if (call.identityComplete && call.originalArgumentsStringComplete) {
+          final receipt = _prepareOrdinaryReceipt(
+            engine,
+            turn,
+            request,
+            call,
+            status: 'rejected',
+            error: {'code': 'spreset_recursion_limit'},
+          );
+          _sealOrdinaryReceipt(engine, turn, request, call, receipt);
+          spreset?.diagnose(
+            'ToolBindings',
+            const SPresetException('ToolBindings', 'Tool recursion limit reached; no action was invoked.'),
+          );
+        }
+      } else if (nativeRollExhausted && call.name == 'roll' && needsSPreset) {
+        final receipt = _prepareOrdinaryReceipt(
+          engine,
+          turn,
+          request,
+          call,
+          status: 'rejected',
+          error: {'code': 'native_roll_budget_exhausted'},
+        );
+        _sealOrdinaryReceipt(engine, turn, request, call, receipt);
+      } else {
+        _processOrdinaryToolCall(engine, turn, request, call);
+      }
     }
-    if (!needsRoll) return;
+    if (stealth || !needsRoll && !needsSPreset) return;
     turn.cancellation.check();
     final messages = body['messages'];
     if (messages is! List<Object?>) {
@@ -757,7 +835,8 @@ Future<void> _consumeOrdinaryTools(TavernEngine engine, _Turn turn, Map<String, 
       }
       final wire = engine._store.toolWireResult(receipt.executionId);
       if (wire == null) throw const _ToolLoopFailure('receipt_failure', 'A batch result was not sealed.');
-      exchange.add({'role': 'tool', 'tool_call_id': call.id, 'content': wire});
+      final content = spresetNames.contains(call.name) ? _map(jsonDecode(wire))['spresetResult'] ?? wire : wire;
+      exchange.add({'role': 'tool', 'tool_call_id': call.id, 'content': content});
     }
     body = {
       ...body,
@@ -1189,7 +1268,7 @@ T _toolPreparationSql<T>(
 
 List<Map<String, Object?>> _ordinaryTurnTools(_Turn turn) => [
   ..._stateTurnTools(turn),
-  if (turn.kind != _TurnKind.impersonate && turn.config.deepseek && !turn.config.thinking && turn.toolPolicy != null)
+  if (turn.kind != _TurnKind.impersonate && turn.config.deepseek && !turn.effectiveThinking && turn.toolPolicy != null)
     ...ordinaryToolDefinitions(turn.toolPolicy!),
 ];
 

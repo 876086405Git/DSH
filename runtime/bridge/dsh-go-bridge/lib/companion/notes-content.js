@@ -88,15 +88,16 @@ export function readNotesProposal(output, inputs) {
   return value;
 }
 
-const inline = value => String(value).replace(/[\r\n\t]+/g, ' ')
-  .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
-  .replace(/[\\`*_{}\[\]<>#!|~]/g, '\\$&');
+const plainInline = value => String(value).replace(/[\r\n\t]+/g, ' ')
+  .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '');
 const gapText = reason => ({not_regular_file: '不是可直接读取的普通文件，未跟随链接',
   metadata_unavailable: '未能核实文件日期和版本', input_changed: '所选版本已改变',
   input_too_large: '所选文件超出整份读取上限', input_not_text: '不是可读的 UTF-8 纯文本',
   input_unavailable: '未能完整读回所选版本'}[reason] ?? '未能完整读回所选版本');
 
-export function renderNotesPage(proposal, inputs) {
+export function renderNotesPage(proposal, inputs, mediaType = 'text/markdown') {
+  const inline = value => mediaType === 'text/plain' ? plainInline(value)
+    : plainInline(value).replace(/[\\`*_{}\[\]<>#!|~]/g, '\\$&');
   const gaps = inputs.scope.gaps ?? [];
   const lines = ['# 笔记待办', '',
     `范围：按 ${inline(inputs.scope.localDate)}（${inline(inputs.scope.timeZone)}）最后修改的本层笔记整理；不递归，不跟随链接。`,

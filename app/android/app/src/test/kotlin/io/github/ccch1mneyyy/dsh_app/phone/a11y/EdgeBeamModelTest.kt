@@ -22,27 +22,63 @@ class EdgeBeamModelTest {
         assertEquals(2 * (1080f + 2400f) - 8 * 110f + (2 * PI * 110).toFloat(), perimeter, 0.01f)
     }
 
-    @Test fun theRimIsAllRoundUnevenAndAveragesTheReferenceWidth() {
+    @Test fun theRimIsOneBandAllRoundGentlyUneven() {
         val l = lumpsAt(40.0)
         val n = 2000
         val t = FloatArray(n) { EdgeRim.thickness(perimeter * it / n, perimeter, l) }
         val mean = t.average()
-        assertTrue("mean thickness $mean", mean in 0.75..1.25)
-        // Nowhere gone (the colour is all round), nowhere past the bound the shader's reach is built on.
-        assertTrue(t.min() >= 0.04f)
-        assertTrue(t.max() <= EdgeRim.MAX_THICKNESS * 1.25f)
-        // Uneven: thin stretches and lumps several times as deep.
-        assertTrue("min ${t.min()} max ${t.max()}", t.max() > 3 * t.min())
+        assertTrue("mean thickness $mean", mean in 0.85..1.15)
+        // One band: no thin stretches between peaks, nowhere past the bound the shader's reach is built on.
+        assertTrue("min ${t.min()}", t.min() >= 0.65f)
+        assertTrue(t.max() <= EdgeRim.MAX_THICKNESS)
+        // Lumps drifting over each other never take it past the bound the reach is built on.
+        for (time in listOf(0.0, 60.0, 137.0, 600.0, 3_600.0)) {
+            val m = lumpsAt(time)
+            for (i in 0 until n) assertTrue(EdgeRim.thickness(perimeter * i / n, perimeter, m) <= EdgeRim.MAX_THICKNESS)
+        }
+        // Still a little uneven, so it doesn't read as a drawn frame.
+        assertTrue("min ${t.min()} max ${t.max()}", t.max() in (1.2f * t.min())..(2.5f * t.min()))
     }
 
     @Test fun theColourFadesInwardToNothingWithinTheReach() {
         val w = EdgeBeamSpec.WIDTH_DP * density
         assertEquals(1f, EdgeRim.hug(0f, 1f, w), 0f)
         assertEquals(exp(-1f), EdgeRim.hug(w, 1f, w), 1e-6f)
-        // At the edge of the drawn band even the thickest lump is under half a step of 8-bit alpha.
+        // At the edge of the drawn band even the thickest lump and the bloom are under half a step of 8-bit alpha.
         val reach = EdgeBeamSpec.REACH * w
         assertTrue(EdgeRim.hug(reach, EdgeRim.MAX_THICKNESS, w) * EdgeBeamSpec.DARK.rim * 255 < 0.5f)
+        assertTrue(EdgeRim.hug(reach, 1f, EdgeBeamSpec.BLOOM_DP * density) * EdgeBeamSpec.DARK.bloom * 255 < 0.5f)
         assertEquals(14f, EdgeBeamSpec.WIDTH_DP, 0f)
+    }
+
+    // ---- 光束：长而柔，连成一片地绕圈 -------------------------------------------------------------------
+
+    @Test fun theBeamsTravelRoundOnceALap() {
+        assertEquals(0f, EdgeFlow.head(0.0, perimeter), 0f)
+        assertEquals(perimeter / 4, EdgeFlow.head(EdgeBeamSpec.BEAM_LAP_S / 4, perimeter), 0.01f)
+        assertEquals(0f, EdgeFlow.head(EdgeBeamSpec.BEAM_LAP_S * 3, perimeter), 0.01f)
+        // Under a beam it is at full strength; half a lap on, the other beam is there.
+        assertEquals(1f, EdgeFlow.at(100f, perimeter, 100f), 1e-3f)
+        assertEquals(1f, EdgeFlow.at(100f + perimeter / 2, perimeter, 100f), 1e-3f)
+    }
+
+    @Test fun betweenTheBeamsTheBandStaysLit() {
+        // Not spots circling: the rim between the beams is at least 80 % of its brightness under one.
+        val n = 1000
+        val glow = FloatArray(n) {
+            val b = EdgeFlow.at(perimeter * it / n, perimeter, 0f)
+            (1 + EdgeBeamSpec.BEAM_GAIN * b) / (1 + EdgeBeamSpec.BEAM_GAIN)
+        }
+        assertTrue("dimmest ${glow.min()}", glow.min() >= 0.8f)
+        assertEquals(1f, glow.max(), 1e-3f)
+        assertTrue(EdgeBeamSpec.CORE_REST >= 0.7f)
+        assertTrue(EdgeBeamSpec.BLOOM_REST >= 0.5f)
+    }
+
+    @Test fun thePaletteFlowsRoundSlowly() {
+        assertEquals(0f, EdgeFlow.hue(0.0), 0f)
+        assertEquals(4.5f, EdgeFlow.hue(EdgeBeamSpec.HUE_LAP_S / 2), 1e-4f)
+        assertTrue(EdgeFlow.hue(EdgeBeamSpec.HUE_LAP_S * 5 + 1) in 0f..9f)
     }
 
     @Test fun theLumpsDriftSlowerThanTheReference() {
@@ -73,11 +109,14 @@ class EdgeBeamModelTest {
         for (i in 0 until EdgeRim.COUNT) assertTrue(far[i * EdgeRim.STRIDE] in 0f..perimeter)
     }
 
-    @Test fun thePresetsStayUnderTheBorderBeamsOpacity() {
-        assertTrue(EdgeBeamSpec.DARK.rim <= 0.42f)
-        assertTrue(EdgeBeamSpec.LIGHT.rim <= 0.26f)
-        assertTrue(EdgeBeamSpec.DARK.line < EdgeBeamSpec.DARK.rim)
-        assertTrue(EdgeBeamSpec.LIGHT.line < EdgeBeamSpec.LIGHT.rim)
+    @Test fun thePresetsReadOverAnyAppAndStayOrdered() {
+        for (p in listOf(EdgeBeamSpec.DARK, EdgeBeamSpec.LIGHT)) {
+            // Between the beams the rim is still clearly there (the old calm rim peaked at 0.42 / 0.26).
+            assertTrue(p.rim / (1 + EdgeBeamSpec.BEAM_GAIN) >= 0.5f)
+            assertTrue(p.rim <= 1f && p.core <= 1f)
+            assertTrue(p.line < p.rim)
+            assertTrue(p.bloom < p.rim)
+        }
         // At most 60 fps.
         assertTrue(EdgeBeamSpec.FRAME_MS >= 16)
     }
@@ -108,6 +147,21 @@ class EdgeBeamModelTest {
                 assertTrue("hue $h vs $hue", d <= 36.5f)
                 assertTrue("saturation $s", s in 0.33f..0.67f)
                 assertTrue("lightness $l", l in 0.57f..0.71f)
+            }
+        }
+    }
+
+    @Test fun theEdgesTonesAreTheThemesHuesMadeVivid() {
+        for (seed in intArrayOf(0xFF4B67B4.toInt(), 0xFF236185.toInt(), 0xFFD0453B.toInt(), 0xFF808080.toInt())) {
+            val theme = EdgeBeamPalette.fromSeed(seed)
+            for (dark in listOf(true, false)) {
+                EdgeBeamPalette.edge(seed, dark).forEachIndexed { i, c ->
+                    val (h, s, l) = EdgeBeamPalette.hsl(c)
+                    val (th, _, _) = EdgeBeamPalette.hsl(theme[i])
+                    assertTrue("hue $h vs $th", abs(((h - th + 540f) % 360f) - 180f) <= 1.5f)
+                    assertTrue("saturation $s", s in 0.59f..0.89f)
+                    assertEquals(if (dark) 0.62f else 0.5f, l, 0.01f)
+                }
             }
         }
     }

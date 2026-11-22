@@ -1,0 +1,116 @@
+{
+  "openai_max_context": 12000,
+  "openai_max_tokens": 100,
+  "stream_openai": false,
+  "squash_system_messages": false,
+  "names_behavior": 0,
+  "prompts": [
+    {
+      "identifier": "main",
+      "name": "main",
+      "role": "system",
+      "content": "HEADER",
+      "injection_position": 0,
+      "forbid_overrides": true,
+      "system_prompt": true
+    },
+    {
+      "identifier": "user_hint",
+      "name": "user_hint",
+      "role": "user",
+      "content": "USER_HINT",
+      "injection_position": 0,
+      "system_prompt": false
+    },
+    {
+      "identifier": "assistant_hint",
+      "name": "assistant_hint",
+      "role": "assistant",
+      "content": "ASSISTANT_HINT",
+      "injection_position": 0,
+      "system_prompt": false
+    },
+    {
+      "identifier": "chatHistory",
+      "name": "history",
+      "role": "system",
+      "marker": true,
+      "system_prompt": true
+    },
+    {
+      "identifier": "near",
+      "name": "near",
+      "role": "user",
+      "content": "NEAR",
+      "injection_position": 1,
+      "injection_depth": 0,
+      "injection_order": 1000000000000000000,
+      "injection_trigger": [
+        "normal"
+      ],
+      "system_prompt": false
+    },
+    {
+      "identifier": "far",
+      "name": "far",
+      "role": "system",
+      "content": "FAR",
+      "injection_position": 1,
+      "injection_depth": 1,
+      "injection_order": 1,
+      "system_prompt": false
+    },
+    {
+      "identifier": "disabled",
+      "name": "disabled",
+      "role": "system",
+      "content": "OFF",
+      "injection_position": 0,
+      "system_prompt": false
+    }
+  ],
+  "prompt_order": [
+    {
+      "character_id": 100000,
+      "order": [
+        {
+          "identifier": "disabled",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "character_id": "100001",
+      "order": [
+        {
+          "identifier": "main",
+          "enabled": true
+        },
+        {
+          "identifier": "user_hint",
+          "enabled": true
+        },
+        {
+          "identifier": "assistant_hint",
+          "enabled": true
+        },
+        {
+          "identifier": "chatHistory",
+          "enabled": true
+        },
+        {
+          "identifier": "near",
+          "enabled": true
+        },
+        {
+          "identifier": "far",
+          "enabled": true
+        },
+        {
+          "identifier": "disabled",
+          "enabled": false
+        }
+      ]
+    }
+  ]
+}

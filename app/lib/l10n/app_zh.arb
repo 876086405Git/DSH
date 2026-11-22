@@ -1063,6 +1063,11 @@
   "androidShellErrorStopped": "本轮已结束或暂停，请重新开启后再试。",
   "androidShellErrorStopFailed": "未确认已停止，请刷新状态并重试停止。",
   "androidShellErrorUnknown": "未能确认操作结果。先核实结果；已派发的命令不要自动重试。",
+  "androidBackgroundProtectionTitle": "增强保活",
+  "androidBackgroundProtectionAudioHint": "有本机任务时在后台播放静音音频，可能增加耗电。",
+  "androidBackgroundProtectionLocationHint": "使用粗略位置，可能增加耗电；不保存或发送坐标。关闭后停止定位，但不撤回系统权限。",
+  "androidBackgroundProtectionNeedsLocation": "尚未授予位置权限。点此打开 App 的系统设置，在「权限」中允许访问位置。",
+  "androidBackgroundProtectionNeedsAlways": "后台定位尚未生效。点此打开 App 的系统设置，在「权限」中将位置设为“始终允许”。",
   "backgroundProtectionDescription": "默认关闭，仅在有本机任务且 App 退到后台时尝试保护；系统仍可能暂停任务。",
   "backgroundProtectionAudio": "静音音频保护",
   "backgroundProtectionAudioHint": "任务期间在后台播放静音音频，会增加耗电；不会抢占录音、通话或朗读。",
@@ -4591,6 +4596,11 @@
   "engineProvidersSigningIn": "正在登录…",
   "engineProvidersSignInOrKey": "登录账号或填写 API Key",
   "engineProvidersOfficial": "官方",
+  "engineProvidersChatGptOfficial": "ChatGPT 官方订阅",
+  "engineSubscriptionReconnectAccount": "登录原账号",
+  "engineSubscriptionUseAnotherAccount": "使用其他账号",
+  "engineSubscriptionPlanNotEnabled": "此授权无法使用 ChatGPT 订阅模型。",
+  "engineSubscriptionRevocationUnconfirmed": "已在本机退出，但没能确认 OpenAI 已撤销授权。",
   "engineProvidersSubscription": "订阅",
   "engineProvidersCustom": "自定义",
   "engineProvidersCompatibleHint": "OpenAI、Anthropic 兼容的服务",
@@ -7944,6 +7954,8 @@
   "phoneIdleOpacity": "闲置时不透明度",
   "phoneAutoCollapse": "闲置时自动收起",
   "phoneAutoCollapseHint": "收成小球，点按展开",
+  "phoneEdgeGlow": "屏幕边缘光效",
+  "phoneEdgeGlowHint": "操控时屏幕四周的流光",
   "phoneDeveloperOptions": "开发者选项",
   "phoneDirectEngine": "直接启动本机引擎",
   "phoneDirectHint": "实验功能，默认关闭，下次启动生效。部分手机（例如 Android 16）会拦截直接启动，届时自动改用兼容启动，数据不受影响。",
@@ -11107,6 +11119,7 @@
   "searchKwNotifySystem": "声音,横幅,锁屏,系统通知",
   "searchKwPhoneConfirm": "别问我,免确认,每次都询问,始终免确认,确认",
   "searchKwPhoneAutoCollapse": "悬浮条,收起,悬浮球",
+  "searchKwPhoneEdgeGlow": "边缘光,光效,流光,特效,边框",
   "searchKwPhoneReturn": "返回,完成后返回",
   "searchKwPhoneBackgroundGuide": "后台确认,返回 App",
   "searchKwAutoStart": "自动启动,开机启动,自启",
@@ -14204,6 +14217,8 @@
   "tavernIslandsSubtitle": "卡在消息里写的 HTML 和样式（状态栏、面板），单独放进一个网页里显示；关掉就按文字显示",
   "tavernSettingsSafety": "安全",
   "tavernIslandNoScripts": "网页里不运行卡的脚本",
+  "tavernSPresetExternal": "让预设自己加载 SPreset",
+  "tavernSPresetExternalSubtitle": "默认用内置的 SPreset，不从预设作者的网站加载脚本；打开后改用预设自己加载的",
   "tavernIslandNoScriptsSubtitle": "卡自带的 JavaScript 不运行；要靠脚本动起来的状态栏会停住",
   "tavernIslandOffline": "网页不联网",
   "tavernIslandOfflineSubtitle": "只用卡里自带的图片和字体，不从网上加载任何东西",
@@ -15223,6 +15238,15 @@
     "placeholders": {
       "count": {
         "type": "int"
+      }
+    }
+  },
+  "tavernIslandStoryWaiting": "正在读取本条消息的数据…",
+  "tavernIslandStoryFailed": "本条消息的数据读取失败：{reason}",
+  "@tavernIslandStoryFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
       }
     }
   },

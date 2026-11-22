@@ -78,6 +78,7 @@
   "searchKwNotifySystem": "sound,banner,lock screen,system",
   "searchKwPhoneConfirm": "don't ask,confirm,always ask,no confirmation",
   "searchKwPhoneAutoCollapse": "floating bar,collapse,bubble",
+  "searchKwPhoneEdgeGlow": "edge glow,glow,light,effect,border",
   "searchKwPhoneReturn": "return,come back",
   "searchKwPhoneBackgroundGuide": "background confirmation,return",
   "searchKwAutoStart": "auto start,launch",

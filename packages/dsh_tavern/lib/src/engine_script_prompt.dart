@@ -16,12 +16,13 @@ extension _ScriptPromptPreparation on _ScriptCoordinator {
         if (part is TavernScriptPromptPlaceholderPart) part.kind,
     };
     final overrides = request.overrides.fields;
-    var history = false;
-    var card = false;
+    var history = _helperOptions(request) != null;
+    var card = _helperOptions(request) != null;
     var worldInfo = false;
     for (final kind in kinds) {
       final key = kind.name;
       if (kind == TavernScriptPromptPlaceholder.chatHistory) {
+        if (_helperFiltersHistory(request)) continue;
         if (overrides['withDepthEntries'] != false) worldInfo = true;
         final rows = overrides['chatHistory'];
         if (request.maxChatHistory != 0 && (rows == null || (rows as List<Object?>).isNotEmpty)) {
@@ -70,6 +71,7 @@ extension _ScriptPromptPreparation on _ScriptCoordinator {
     void Function(String)? onBudgetSource,
     void Function(String)? onPhase,
     _SlashQuietPreparation? quiet,
+    _SPresetGeneration? spreset,
   }) async {
     onPhase?.call('capture');
     if (capture.config.deepseek && capture.request.samplingOverrides.containsKey('seed')) {
@@ -99,7 +101,7 @@ extension _ScriptPromptPreparation on _ScriptCoordinator {
     try {
       cancellation.check();
       onPhase?.call('assemble');
-      final run = _ScriptPromptRun(this, capture, cancellation, uses, worldBooks, quiet: quiet);
+      final run = _ScriptPromptRun(this, capture, cancellation, uses, worldBooks, quiet: quiet, spreset: spreset);
       onBudgetSource?.call(run.budgetSource);
       try {
         return await run.prepare();
@@ -190,7 +192,7 @@ Future<_ScriptWorldBooksSnapshot?> _scriptCaptureWorldBooks(
         if (part is TavernScriptPromptPlaceholderPart) part.kind,
     };
     final overrides = request.overrides.fields;
-    final history = kinds.contains(TavernScriptPromptPlaceholder.chatHistory);
+    final history = kinds.contains(TavernScriptPromptPlaceholder.chatHistory) && !_helperFiltersHistory(request);
     final note = _map(capture.settings['authorNote']);
     final interval = note['interval'];
     final users = capture.history.where((node) => node.message.role == TavernRole.user).length;
@@ -267,7 +269,7 @@ void _scriptCheckPromptSources(_ScriptGenerationCapture capture) {
     for (final part in request.orderedPrompts)
       if (part is TavernScriptPromptPlaceholderPart) part.kind,
   };
-  final history = kinds.contains(TavernScriptPromptPlaceholder.chatHistory);
+  final history = kinds.contains(TavernScriptPromptPlaceholder.chatHistory) && !_helperFiltersHistory(request);
   if (history && !overrides.containsKey('chatHistory') && request.maxChatHistory != 0 && capture.chat == null) {
     missing('chatHistory');
   }
@@ -287,7 +289,7 @@ void _scriptCheckPromptSources(_ScriptGenerationCapture capture) {
 }
 
 class _ScriptPromptRun {
-  _ScriptPromptRun(this.owner, this.capture, this.cancellation, this.uses, this.worldBooks, {this.quiet})
+  _ScriptPromptRun(this.owner, this.capture, this.cancellation, this.uses, this.worldBooks, {this.quiet, this.spreset})
     : overrides = capture.request.overrides.fields,
       macroHistory = List.of(capture.history),
       promptHistory = List.of(capture.history),
@@ -302,6 +304,7 @@ class _ScriptPromptRun {
     } else {
       requested.addAll(TavernScriptPromptPlaceholder.values);
     }
+    if (_helperOptions(request) != null) requested.add(TavernScriptPromptPlaceholder.userInput);
     for (final entry in _cardFields.entries) {
       if (requested.any((kind) => kind.name == entry.key) && overrides.containsKey(entry.key)) {
         card[entry.value] = overrides[entry.key];
@@ -318,7 +321,12 @@ class _ScriptPromptRun {
     final selected = capture.promptPreset;
     promptPreset = selected == null
         ? null
-        : ChatPreset({...selected.raw, 'stream_openai': request.stream, 'show_thoughts': capture.config.thinking});
+        : ChatPreset({
+            ...(spreset?.preset ?? selected.raw),
+            'stream_openai': request.stream,
+            if (!selected.raw.containsKey('show_thoughts'))
+              'show_thoughts': !capture.config.deepseek || capture.config.thinking,
+          });
     final macroPreset = promptPreset ?? ChatPreset({'openai_max_context': 4095, 'openai_max_tokens': 300});
     initialHash = _finiteNumber(capture.metadata['chat_id_hash']);
     environment = _MacroEnvironment(
@@ -364,6 +372,7 @@ class _ScriptPromptRun {
   final _ScriptInjectionUseSet uses;
   final _ScriptWorldBooksSnapshot? worldBooks;
   final _SlashQuietPreparation? quiet;
+  final _SPresetGeneration? spreset;
   final Map<String, Object?> overrides, card, settings;
   final List<StoredNode> macroHistory;
   final List<StoredNode> promptHistory;
@@ -379,17 +388,27 @@ class _ScriptPromptRun {
   late final num? initialHash;
   WorldInfoResult? world;
   var preparedInput = '';
+  void Function(Map<String, Object?>)? validateFinalBody;
   PreparedCharacterFields? ordinaryFields;
   List<PromptHistoryMessage>? _preparedHistory;
   List<_ConfiguredInjection> configured = const [];
   late _ScriptPreparedInjections shared;
   final configuredScan = <String>[];
+  final helperImageSlots = <String, List<String>>{};
+  final helperRequiredImageSlots = <String>{};
+  final helperMaterializedImageSlots = <String>{};
   int _pieceSerial = 0;
   bool get raw => capture.request is TavernScriptRawRequest;
   String get generationType => quiet == null ? 'normal' : 'quiet';
-  bool get hasHistory => requested.contains(TavernScriptPromptPlaceholder.chatHistory);
+  bool get hasHistory =>
+      requested.contains(TavernScriptPromptPlaceholder.chatHistory) && !_helperFiltersHistory(capture.request);
   bool get inputRequested => requested.contains(TavernScriptPromptPlaceholder.userInput);
-  bool get ordinaryInputSlot => !raw && inputRequested && capture.request.userInput.isNotEmpty;
+  bool get ordinaryInputSlot =>
+      !raw &&
+      inputRequested &&
+      (_helperOptions(capture.request) == null
+          ? capture.request.userInput.isNotEmpty
+          : preparedInput.isNotEmpty || capture.helper?.images.isNotEmpty == true);
   bool get depthRequested => hasHistory && overrides['withDepthEntries'] != false;
   String get budgetSource => promptPreset == null
       ? requested.isEmpty &&
@@ -415,7 +434,11 @@ class _ScriptPromptRun {
 
   Future<_ScriptPreparedGeneration> prepare() async {
     quiet?.prepareLeading(this);
-    if (inputRequested && capture.request.userInput.isNotEmpty) {
+    final helper = _helperOptions(capture.request);
+    if (helper != null) {
+      _prepareHelperNamedPreset();
+      preparedInput = environment.expand(capture.request.userInput, const {});
+    } else if (inputRequested && capture.request.userInput.isNotEmpty) {
       final regexed = environment.regex.apply(
         capture.request.userInput,
         placement: RegexPlacement.userInput,
@@ -429,7 +452,10 @@ class _ScriptPromptRun {
           prepareCharacterFields(card, persona: environment.persona, expand: environment.baseExpand);
       // Retain the ordinary eager phase in a private prompt copy. It never
       // edits the actual greeting or changes the independent WI clock input.
-      if (promptHistory.isNotEmpty && !overrides.containsKey('chatHistory') && capture.request.maxChatHistory != 0) {
+      if (helper == null &&
+          promptHistory.isNotEmpty &&
+          !overrides.containsKey('chatHistory') &&
+          capture.request.maxChatHistory != 0) {
         final first = promptHistory.first;
         promptHistory[0] = _nodeWithText(first, environment.expand(first.message.text, const {}));
       }
@@ -449,6 +475,10 @@ class _ScriptPromptRun {
         expand: environment.regexExpand,
       );
     }
+    if (helper != null && preparedInput.isEmpty) {
+      preparedInput = trimJsWhitespace(_string(capture.contextRegexPresetSettings['send_if_empty']));
+    }
+    if (capture.helper != null) preparedInput = await capture.helper!.prepareImageInput(preparedInput);
     if (hasHistory) _history();
     if (raw && hasHistory) configured = _rawAuthorNote();
     shared = owner.injectionRegistry.prepareInjections(uses, environment);
@@ -472,7 +502,8 @@ class _ScriptPromptRun {
         configured.any((injection) => injection.scan);
     if (needWorld) await _evaluateWorld();
     cancellation.check();
-    final body = raw ? _rawBody() : _ordinaryBody();
+    if (!raw && capture.helper != null) await capture.helper!.prepareNormalSingleImage();
+    final body = raw ? await _rawBody() : await _ordinaryBody();
     // Legacy macro passes catch handler exceptions to preserve ST behavior.
     // Remember actual unavailable reads so that catch cannot turn a missing
     // source into an accepted request with a silently unresolved macro.
@@ -480,6 +511,7 @@ class _ScriptPromptRun {
     if (unavailableHistory.accessed) _noContext('history macro');
     checkCharacterDependency();
     _applyFinalOptions(body);
+    _restoreHelperImages(body);
     quiet?.spec.applyWireOptions(body, capture.config);
     cancellation.check();
     final stateUpdates = <String, Object?>{};
@@ -496,6 +528,7 @@ class _ScriptPromptRun {
       capture: capture,
       body: body,
       budgetSource: budgetSource,
+      validateFinalBody: validateFinalBody,
       injectionUses: uses,
       stateUpdates: stateUpdates,
       packWorldInfo: evaluated?.packWorldInfo,
@@ -611,10 +644,31 @@ class _ScriptPromptRun {
     final prepared =
         ordinaryFields ?? PreparedCharacterFields(_preparedFields, _preparedFields['persona'] ?? '', const []);
     final real = eligibleRealHistory;
+    // Helper scans the same prepared/limited/overridden history that feeds
+    // its prompt, even when raw output omits the chat_history slot. Its
+    // independent physical chat clocks must not shrink with this scan list.
+    final scan = _helperOptions(capture.request) == null
+        ? [for (final node in real) WorldInfoMessage(node.message.text, speaker: node.message.speaker)]
+        : [
+            for (final message in _history())
+              if (message.role != 'system')
+                WorldInfoMessage(
+                  message.content,
+                  // A stored message keeps its own speaker (a group's other
+                  // member); an override row without one is the user's or
+                  // the character's by its role.
+                  speaker: message.name.isNotEmpty
+                      ? message.name
+                      : message.role == 'user'
+                      ? environment.userName
+                      : _string(card['name']),
+                ),
+          ];
     world = await owner.engine._worldInfoEngine.evaluate(
       WorldInfoInput(
         books: books,
-        messages: [for (final node in real) WorldInfoMessage(node.message.text, speaker: node.message.speaker)],
+        messages: scan,
+        messageCount: real.length,
         maxContext: environment.maxContext - environment.maxResponse,
         tokenCount: owner.engine._counter.countText,
         random: owner.engine._random,
@@ -668,6 +722,7 @@ class _ScriptPromptRun {
   List<PromptHistoryMessage> _history() => _preparedHistory ??= _prepareHistory();
 
   List<PromptHistoryMessage> _prepareHistory() {
+    if (_helperOptions(capture.request) != null) return _prepareHelperHistory();
     final maximum = capture.request.maxChatHistory;
     if (maximum == 0) return const [];
     final replacement = overrides['chatHistory'];
@@ -702,7 +757,7 @@ class _ScriptPromptRun {
     return [for (final node in prepared) _promptHistory(node)];
   }
 
-  Map<String, Object?> _ordinaryBody() {
+  Future<Map<String, Object?>> _ordinaryBody() async {
     final evaluated = world!;
     final fields = ordinaryFields!;
     List<PromptFragment> outlet(String name, List<WorldInfoHit> values) {
@@ -733,7 +788,7 @@ class _ScriptPromptRun {
         PromptHistoryMessage(
           id: 'scriptUserInput',
           role: 'user',
-          content: preparedInput,
+          content: _helperImageText(preparedInput, capture.helper?.images, required: true),
           name: environment.userName,
           expandMacros: false,
         ),
@@ -741,6 +796,10 @@ class _ScriptPromptRun {
     }
     final input = PromptInput(
       preset: promptPreset!,
+      chatCompletionSource: _modelChatCompletionSource(capture.config),
+      spresetProvider: capture.helper?.provider,
+      macroNestRuntime: spreset?.macroNestRuntime,
+      onSPresetDiagnostic: spreset?.diagnose,
       card: card,
       history: history,
       model: capture.config.model,
@@ -774,16 +833,34 @@ class _ScriptPromptRun {
       quietPrompt: quiet?.quietPrompt ?? '',
       bias: quiet?.bias ?? _string(settings['bias']),
       stops: quiet == null ? _strings(settings['stops']) : const [],
+      tools: capture.helper == null ? const [] : spreset?.offerTools(const []) ?? const [],
+      toolChoice: capture.helper == null ? null : 'auto',
       expansion: environment.expand,
       cardExpansion: quiet == null
           ? environment.baseExpand
           : (text, overrides) => quiet!.baseExpand(this, text, overrides),
       preparedFields: fields,
     );
-    final assembler = PromptAssembler(counter: owner.engine._counter);
-    final assembly = quiet == null
+    final counter = capture.helper == null ? owner.engine._counter : _helperImageCounter;
+    final assembler = PromptAssembler(counter: counter, onPromptManager: spreset?.capturePromptManager);
+    var assembly = quiet == null
         ? assembler.assemble(input)
         : assembleScriptPrompt(assembler, input, preparedStops: () => quiet!.wireStops(this));
+    if (capture.helper?.normalImageArray == true) {
+      final ready = await _helperNormalArrayReady(assembly.beforePostProcessing);
+      if (!identical(ready, assembly.beforePostProcessing)) {
+        assembly = reprocessPromptAssembly(assembly, ready, input, counter: owner.engine._counter);
+      }
+    }
+    if (helperImageSlots.isNotEmpty) {
+      assembly = reprocessPromptAssembly(
+        assembly,
+        _materializeHelperImageSegments(assembly.beforePostProcessing),
+        input,
+        counter: owner.engine._counter,
+      );
+    }
+    if (spreset != null) assembly = await spreset!.assembly(assembly, input, owner.engine._counter);
     final excluded = <(String, String)>{
       for (final exclusion in assembly.excluded)
         if (exclusion.reason == 'v3-ignore-on-max-context')
@@ -795,7 +872,8 @@ class _ScriptPromptRun {
     return _captureScriptObject(assembly.body);
   }
 
-  Map<String, Object?> _rawBody() {
+  Future<Map<String, Object?>> _rawBody() async {
+    if (_helperOptions(capture.request) != null) return _helperRawBody();
     final request = capture.request as TavernScriptRawRequest;
     final base = <_ScriptRawPiece>[];
     for (final part in request.orderedPrompts) {
@@ -885,12 +963,72 @@ class _ScriptPromptRun {
       }
     }
     if (world != null && dropped.isNotEmpty) world = world!.withoutEntries(dropped);
-    return explicitPromptRequestBody(
+    List<Object?>? rawMessages;
+    if (spreset?.config.present == true) {
+      final mode = _spString(promptPreset?.settings['custom_prompt_post_processing']);
+      final squashed = await spresetSquashSegments(
+        [
+          for (final piece in explicit)
+            if (piece.worldIdentity == null || !dropped.contains(piece.worldIdentity))
+              piece.segment(owner.engine._counter),
+        ],
+        spreset!.config,
+        owner.engine._counter,
+        expand: (text) => environment.expand(text, const {}),
+        evaluate: spreset!.evaluate,
+        diagnose: spreset!.diagnose,
+        historyIds: {
+          for (final piece in explicit)
+            if (piece.source.kind == 'history') piece.id,
+        },
+        onUnconvertedMessages: spreset!.allowsRawMessageArray(mode) ? (messages) => rawMessages = messages : null,
+      );
+      if (rawMessages == null) {
+        converted = convertExplicitPromptMessages(
+          postProcessPrompt(
+            squashed,
+            mode,
+            userName: environment.userName,
+            characterName: _string(card['name']),
+            groupNames: capture.groupView?.names ?? const [],
+            counter: owner.engine._counter,
+          ),
+          deepseek: capture.config.deepseek,
+          userName: environment.userName,
+          characterName: _string(card['name']),
+          groupNames: capture.groupView?.names ?? const [],
+          counter: owner.engine._counter,
+        );
+        // Count the actual converted result, without replaying preparation.
+        if (promptPreset != null) {
+          _checkExplicitRawBudget(
+            converted.map((item) => item.message),
+            environment.maxContext - environment.maxResponse,
+            owner.engine._counter,
+          );
+        }
+      } else if (promptPreset != null) {
+        // Primitive/mixed arrays have no message-token representation yet.
+        // Preserve FinalRequestProcessing's repair window. A repaired Map-only
+        // array is counted before observation/logging/HTTP, never by reusing
+        // the old pre-script `converted` messages as its cost.
+        final budget = environment.maxContext - environment.maxResponse;
+        final counter = owner.engine._counter;
+        validateFinalBody = (body) {
+          final messages = body['messages'];
+          if (messages is! List<Object?> || messages.any((item) => item is! Map<String, Object?>)) return;
+          _checkExplicitRawBudget(messages.cast<Map<String, Object?>>(), budget, counter);
+        };
+      }
+    }
+    final body = explicitPromptRequestBody(
       messages: converted,
       settings: promptPreset?.settings,
       deepseek: capture.config.deepseek,
       model: capture.config.model,
     );
+    if (rawMessages != null) body['messages'] = rawMessages;
+    return body;
   }
 
   List<_ScriptRawPiece> _rawSource(TavernScriptPromptPlaceholder kind) {
@@ -898,7 +1036,9 @@ class _ScriptPromptRun {
     final source = PromptSource('scriptPlaceholder', name);
     if (kind == TavernScriptPromptPlaceholder.chatHistory) {
       final result = <_ScriptRawPiece>[];
-      final names = capture.contextRegexPresetSettings['names_behavior'];
+      final names = _helperOptions(capture.request) != null && overrides.containsKey('chatHistory')
+          ? -1
+          : capture.contextRegexPresetSettings['names_behavior'];
       for (final item in _history()) {
         final role = item.role == 'narrator' ? 'system' : item.role;
         var text = environment.expand(item.content, const {}).replaceAll('\r', '');
@@ -1120,8 +1260,9 @@ class _ScriptPromptRun {
     }
     body['stream'] = capture.request.stream;
     if (capture.config.deepseek) {
-      body['thinking'] = {'type': capture.config.thinking ? 'enabled' : 'disabled'};
-      if (!capture.config.thinking) body.remove('reasoning_effort');
+      final thinking = presetTruthy(promptPreset?.settings['show_thoughts'] ?? capture.config.thinking);
+      body['thinking'] = {'type': thinking ? 'enabled' : 'disabled'};
+      if (!thinking) body.remove('reasoning_effort');
     }
   }
 }
@@ -1201,4 +1342,13 @@ class _ScriptUnavailableHistory extends ListBase<MacroMessage> {
   MacroMessage operator [](int index) => _missing();
   @override
   void operator []=(int index, MacroMessage value) => _missing();
+}
+
+void _checkExplicitRawBudget(Iterable<Map<String, Object?>> messages, int budget, PromptTokenCounter counter) {
+  if (messages.fold<int>(0, (total, message) => total + counter.countMessage(message)) > budget) {
+    throw const TavernModelException(
+      TavernFailure.contextTooLong,
+      'The final explicit raw messages exceed the selected parameter preset budget.',
+    );
+  }
 }

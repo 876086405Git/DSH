@@ -1,0 +1,3077 @@
+{
+  "passed": true,
+  "count": 26,
+  "pins": {
+    "utils": [
+      "research/helper/src/function/generate/utils.ts",
+      "9aace591938c207d8c3e81a5619ed39ccc6a1d53a1d3e84190243ca6c69ca3ff"
+    ],
+    "raw": [
+      "research/helper/src/function/generate/generateRaw.ts",
+      "2bcb8b91a0657b6788c32899ec0b8256749cf00c83d1f4a22d7d1e3fca694a57"
+    ],
+    "st": [
+      "research/st/public/scripts/openai.js",
+      "0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604"
+    ],
+    "pm": [
+      "research/st/PromptManager.js",
+      "b0054793b763d92b265f5f487645b68b4eca0867cb5ad6b5deb1034004b2c1cc"
+    ],
+    "script": [
+      "research/st/public/script.js",
+      "955c603d0bad84bac5a716f0818d85c2543e44d4c43878e0d63ef1e55ca91855"
+    ],
+    "input": [
+      "research/helper/src/function/generate/inputProcessor.ts",
+      "db994f43c5672c6264bd6da4ebc72d0533d9fcdab6ea54d3d0611cc44a997b7a"
+    ]
+  },
+  "extracted": [
+    {
+      "file": "research/helper/src/function/generate/utils.ts",
+      "marker": "export async function convertFileToBase64(",
+      "sha256": "7cf79186bfebe0f3de9cbcc29d05eda83f0c5d40210e47cc5395ac11669ba485"
+    },
+    {
+      "file": "research/helper/src/function/generate/utils.ts",
+      "marker": "export async function processImageArrayDirectly(",
+      "sha256": "1fb4da05cd5ce181df2fc392ae3bbe47dfa3d5ca89e5d201a163ea1aaf5caea1"
+    },
+    {
+      "file": "research/helper/src/function/generate/utils.ts",
+      "marker": "export function isPromptFiltered(",
+      "sha256": "5e25822fc439b24dd895422c099ee5564464745cac069a712bbd0e0f10bf2910"
+    },
+    {
+      "file": "research/helper/src/function/generate/utils.ts",
+      "marker": "export function processUserInput(",
+      "sha256": "2ae999d519946a44b116c1e2b7af586d6ae4ea375b563d008bcbb9b0e3414193"
+    },
+    {
+      "file": "research/helper/src/function/generate/inputProcessor.ts",
+      "marker": "export function processInitialUserInput(",
+      "sha256": "3e71935aa6d5d449193d50aa793c15199f94c3e3e593b4284986d354fc151904"
+    },
+    {
+      "file": "research/helper/src/function/generate/inputProcessor.ts",
+      "marker": "export async function processUserInputWithImages(",
+      "sha256": "9d0c668d05cd4af2312877ea56edf8b6e9dedc87b43c57f06ba3b21223e8fd08"
+    },
+    {
+      "file": "research/st/public/script.js",
+      "marker": "export function substituteParams(",
+      "sha256": "959239a86b80b62bb7ff62800c44218c0ae19f4cde9a5413db528867a0fd4716"
+    },
+    {
+      "file": "research/helper/src/function/generate/generateRaw.ts",
+      "marker": "async function populationInjectionPrompts(",
+      "sha256": "b811dc9e516cac88b4bab5d78bfdce9a44ec52b88e6e91a1dafde16734e781a4"
+    },
+    {
+      "file": "research/helper/src/function/generate/generateRaw.ts",
+      "marker": "async function filteredGetExtensionPrompt(",
+      "sha256": "2f2046da7cf20c7fd296a4217e902b5244941eac57367d5a06b8e1fb63470311"
+    },
+    {
+      "file": "research/helper/src/function/generate/generateRaw.ts",
+      "marker": "async function convertSystemPromptsToCollection(",
+      "sha256": "da060fded1c9ca05fe8347e12e579e2a94ca5fc0007b80f539350adaeee312bf"
+    },
+    {
+      "file": "research/helper/src/function/generate/generateRaw.ts",
+      "marker": "async function processChatHistoryAndInject(",
+      "sha256": "94fbcd28e3c079a8acffb8d760f02e5eb6e5c8d846d9d03b335467507034340f"
+    },
+    {
+      "file": "research/helper/src/function/generate/generateRaw.ts",
+      "marker": "export async function handleCustomPath(",
+      "sha256": "7fb55b28f3d93a0e2f206e6eada9c36bc7aef79b397e1811213e5ef570961a10"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class IdentifierNotFoundError ",
+      "sha256": "a73819cf67dccc1c7a8b3f3ffd1d90dce2bc03ffe7e37359d41f5227c21cc8fc"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class TokenBudgetExceededError ",
+      "sha256": "d7587846aea2d1cda33f0a2dffa5d2a46f0e946c8e1fd8a0326bfd8ae0ce6fda"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class InvalidCharacterNameError ",
+      "sha256": "982ff86499c4d570b968bf312f4d83bd40142e479cbcf4256b896c22b00b7cfe"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class Message {",
+      "sha256": "ed3d871c7e0f7b56d2d006158651c167b3a927d06dbd75c67aab0243a514c091"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class MessageCollection {",
+      "sha256": "3e4920967f2ea8b6ce56eef9246048fb6e3862d5dee41495e76a8c6c50d0a41c"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "export class ChatCompletion {",
+      "sha256": "87cd603263f4f3219a63d810941364686f68eb898312bab55cb9f82aade1b651"
+    },
+    {
+      "file": "research/st/PromptManager.js",
+      "marker": "class Prompt {",
+      "sha256": "ccbf6fbc7aee36cff0898e92f3b2efd295afc82eecb87c9c89430364be099f69"
+    },
+    {
+      "file": "research/st/PromptManager.js",
+      "marker": "export class PromptCollection {",
+      "sha256": "50a4a0a8b65839914246eae9aee1d1d76e36209e62503dd397ca5a9003a74c8d"
+    }
+  ],
+  "scope": "Actual fixed Helper input/image/raw/history functions and ST substituteParams/Message/collection classes. Empty WI/injection/name state, observed identity macro backends and regex identity, image capability and network are explicit boundaries. The actual substituteParams owns the coercion and engine dispatch; actual native variable-macro side effects are tested separately. String coercion executes before both macro evaluator branches; no full extension/browser or exact token claim.",
+  "results": [
+    {
+      "modern": false,
+      "kind": "plain",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "engine": "legacy",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "plain",
+      "explicitInput": true,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "array",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "engine": "legacy",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "warnings": [
+        "substituteParams: content will be coerced to string"
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "[object Object],[object Object]"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 31,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 988,
+          "tokens": 31,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 988,
+          "after": 989,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "array",
+      "explicitInput": true,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Q"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,AQ==",
+                "detail": "low"
+              }
+            }
+          ]
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "parts",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1020,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "failedArray",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "[object Object]"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "engine": "legacy",
+          "content": "[object Object]"
+        }
+      ],
+      "warnings": [
+        "[TavernHelper][Generate:图片数组处理] 图片处理失败，跳过该图片",
+        "substituteParams: content will be coerced to string"
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "[object Object]"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "[object Object]"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 15,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1004,
+          "tokens": 15,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1004,
+          "after": 1005,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "failedArray",
+      "explicitInput": true,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Q"
+            }
+          ]
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "Q"
+        }
+      ],
+      "warnings": [
+        "[TavernHelper][Generate:图片数组处理] 图片处理失败，跳过该图片"
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "parts",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1020,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "emptyArray",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "engine": "legacy",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "emptyArray",
+      "explicitInput": true,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "failedSingle",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "engine": "legacy",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "failedSingle",
+      "explicitInput": true,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "array",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": true,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "array",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "",
+      "inputPresent": false,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "warnings": [
+        "substituteParams: content will be coerced to string"
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "[object Object],[object Object]"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 31,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1020,
+          "after": 989,
+          "tokens": 31,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 989,
+          "after": 989,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": false,
+      "kind": "array",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "legacy",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "warnings": [
+        "substituteParams: content will be coerced to string"
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "legacy",
+          "content": "[object Object],[object Object]"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 31,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1020,
+          "after": 989,
+          "tokens": 31,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 989,
+          "after": 989,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "plain",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "engine": "modern",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "plain",
+      "explicitInput": true,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "array",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "engine": "modern",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "warnings": [
+        "substituteParams: content will be coerced to string"
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "[object Object],[object Object]"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 31,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 988,
+          "tokens": 31,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 988,
+          "after": 989,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "array",
+      "explicitInput": true,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Q"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,AQ==",
+                "detail": "low"
+              }
+            }
+          ]
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "parts",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1020,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "failedArray",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "[object Object]"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "engine": "modern",
+          "content": "[object Object]"
+        }
+      ],
+      "warnings": [
+        "[TavernHelper][Generate:图片数组处理] 图片处理失败，跳过该图片",
+        "substituteParams: content will be coerced to string"
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "[object Object]"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "[object Object]"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 15,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1004,
+          "tokens": 15,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1004,
+          "after": 1005,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "failedArray",
+      "explicitInput": true,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Q"
+            }
+          ]
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "Q"
+        }
+      ],
+      "warnings": [
+        "[TavernHelper][Generate:图片数组处理] 图片处理失败，跳过该图片"
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "parts",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1020,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "emptyArray",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "engine": "modern",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "emptyArray",
+      "explicitInput": true,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "failedSingle",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "engine": "modern",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1019,
+          "after": 1019,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "failedSingle",
+      "explicitInput": true,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "array",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "Q",
+      "inputPresent": true,
+      "filteredHistory": true,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "Q"
+        }
+      ],
+      "warnings": [],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "trace": [
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "Q"
+        },
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 1019,
+          "after": 1018,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1018,
+          "after": 1019,
+          "tokens": 1,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "array",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "",
+      "inputPresent": false,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "warnings": [
+        "substituteParams: content will be coerced to string"
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "[object Object],[object Object]"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 31,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1020,
+          "after": 989,
+          "tokens": 31,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 989,
+          "after": 989,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    },
+    {
+      "modern": true,
+      "kind": "array",
+      "explicitInput": false,
+      "imageGate": true,
+      "input": "",
+      "inputPresent": true,
+      "filteredHistory": false,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "macroInputs": [
+        {
+          "engine": "modern",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "warnings": [
+        "substituteParams: content will be coerced to string"
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "[object Object],[object Object]"
+        }
+      ],
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 1023,
+          "tokens": 1024,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1023,
+          "after": 1020,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 0,
+          "identifier": "emptyUserMessageReplacement"
+        },
+        {
+          "method": "macroBackend",
+          "engine": "modern",
+          "content": "[object Object],[object Object]"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 31,
+          "identifier": "chat_history-1"
+        },
+        {
+          "method": "freeBudget",
+          "before": 1020,
+          "after": 1020,
+          "tokens": 0,
+          "identifier": "newMainChat"
+        },
+        {
+          "method": "add",
+          "before": 1020,
+          "after": 989,
+          "tokens": 31,
+          "identifier": "chat_history"
+        },
+        {
+          "method": "freeBudget",
+          "before": 989,
+          "after": 989,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ]
+    }
+  ]
+}

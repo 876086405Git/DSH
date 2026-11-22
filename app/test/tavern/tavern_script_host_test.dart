@@ -7,6 +7,8 @@ import 'package:dsh_app/tavern/tavern_interact.dart';
 import 'package:dsh_app/tavern/tavern_script_host.dart';
 import 'package:dsh_tavern/dsh_tavern.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   late Directory dir;
@@ -484,15 +486,103 @@ void main() {
     expect((ack.eventId, ack.status), ('ev', TavernScriptAckStatus.completed));
     expect(ack.issues, isEmpty);
   });
+
+  test("a preset's SPreset function is evaluated by its chat's page; a cancel is passed on, and its answer still settles it", () async {
+    final pages = TavernScriptPages();
+    TavernSPresetEvaluationRequest request(String id) => TavernSPresetEvaluationRequest(
+      requestId: id,
+      chatId: 'c1',
+      generationId: 'g',
+      sessionId: 'g:s',
+      stage: 'OutputPreprocessing',
+      source: '(x) => x',
+      arguments: const [1],
+    );
+    // No page for that chat: said so.
+    await expectLater(
+      pages.evaluateSPreset(request('r0'), _Never()),
+      throwsA(isA<TavernScriptException>().having((e) => e.code, 'code', TavernScriptErrorCode.hostUnavailable)),
+    );
+    final sent = <Map<String, Object?>>[];
+    pages.add('ctx', (d) async {
+      sent.add(d);
+      return true;
+    }, chatId: 'c1');
+    final cancel = _Cancel();
+    final answer = pages.evaluateSPreset(request('r1'), cancel);
+    await pumpEventQueue();
+    expect(sent.single['kind'], 'spreset');
+    expect((sent.single['request']! as Map)['source'], '(x) => x');
+    cancel.cancel();
+    await pumpEventQueue();
+    expect(sent.last, {'kind': 'spresetCancel', 'requestId': 'r1'});
+    pages.spresetAnswered({
+      'requestId': 'r1',
+      'value': 2,
+      'arguments': const [1],
+      'type': 'spreset',
+    });
+    expect((await answer).value, 2);
+    // What threw there fails here; a page that goes leaves it unknown, failed.
+    final threw = pages.evaluateSPreset(request('r2'), _Never());
+    await pumpEventQueue();
+    pages.spresetAnswered({'requestId': 'r2', 'error': 'boom'});
+    await expectLater(threw, throwsA(isA<TavernScriptException>().having((e) => e.message, 'message', 'boom')));
+    final lost = pages.evaluateSPreset(request('r3'), _Never());
+    await pumpEventQueue();
+    pages.drop('ctx');
+    await expectLater(lost, throwsA(isA<TavernScriptException>()));
+    await pages.releaseSPresetSession('g:s');
+    expect(sent.last, {'kind': 'spresetRelease', 'sessionId': 'g:s'});
+  });
+
+  test(
+    "酒馆助手's URL image: fetched as a data URI; a failed download is the failure the engine skips; no named proxies",
+    () async {
+      final pages = TavernScriptPages(
+        client: () => MockClient((request) async {
+          if (request.url.path == '/cat.png') {
+            return http.Response.bytes([1, 2, 3], 200, headers: {'content-type': 'image/png'});
+          }
+          if (request.url.path == '/page') return http.Response('<html>', 200, headers: {'content-type': 'text/html'});
+          return http.Response('gone', 404);
+        }),
+      );
+      expect(await pages.resolveHelperImage('https://x.test/cat.png', _Never()), 'data:image/png;base64,AQID');
+      await expectLater(
+        pages.resolveHelperImage('https://x.test/missing.png', _Never()),
+        throwsA(
+          isA<TavernHelperImageConversionFailure>().having(
+            (e) => e.stage,
+            'stage',
+            TavernHelperImageConversionStage.download,
+          ),
+        ),
+      );
+      await expectLater(
+        pages.resolveHelperImage('https://x.test/page', _Never()),
+        throwsA(isA<TavernHelperImageConversionFailure>()),
+      );
+      expect(await pages.resolveHelperProxy('主代理', _Never()), isNull);
+      // Offline chosen: nothing is fetched, and it is not a skipped image.
+      final offline = TavernScriptPages(client: () => throw StateError('fetched'), offline: () => true);
+      await expectLater(
+        offline.resolveHelperImage('https://x.test/cat.png', _Never()),
+        throwsA(
+          isA<TavernScriptException>().having((e) => e.code, 'code', TavernScriptErrorCode.unsupportedCapability),
+        ),
+      );
+    },
+  );
 }
 
 class _Recording extends TavernScriptPages {
   final interactors = <String, TavernScriptInteractor>{};
 
   @override
-  void add(String contextId, TavernScriptPage page, {TavernScriptInteractor? interact}) {
+  void add(String contextId, TavernScriptPage page, {TavernScriptInteractor? interact, String? chatId}) {
     if (interact != null) interactors[contextId] = interact;
-    super.add(contextId, page, interact: interact);
+    super.add(contextId, page, interact: interact, chatId: chatId);
   }
 }
 

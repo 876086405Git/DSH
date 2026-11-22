@@ -1,0 +1,289 @@
+{
+  "sourceCommit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+  "sourceSha256": "7275aa31d7cd45d7b3083849d291e467066ffd2f38fbe0e78e61636bca015e7b",
+  "names": {
+    "userName": "User",
+    "charName": "Character",
+    "groupNames": [
+      "Other"
+    ]
+  },
+  "cases": [
+    {
+      "id": "names-and-mid-system",
+      "modes": [
+        "merge",
+        "semi",
+        "strict",
+        "single",
+        "claude"
+      ],
+      "messages": [
+        {
+          "role": "system",
+          "content": "RULE"
+        },
+        {
+          "role": "system",
+          "name": "example_assistant",
+          "content": "hello"
+        },
+        {
+          "role": "user",
+          "name": "Alex",
+          "content": "next"
+        },
+        {
+          "role": "system",
+          "content": "LATE"
+        },
+        {
+          "role": "assistant",
+          "content": "done"
+        }
+      ]
+    },
+    {
+      "id": "tool-fields",
+      "modes": [
+        "merge",
+        "merge_tools",
+        "semi",
+        "semi_tools",
+        "strict_tools"
+      ],
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning_content": "kept",
+          "tool_calls": [
+            {
+              "id": "a",
+              "type": "function",
+              "function": {
+                "name": "sum",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "3",
+          "tool_call_id": "a"
+        },
+        {
+          "role": "tool",
+          "content": "4",
+          "tool_call_id": "b"
+        },
+        {
+          "role": "assistant",
+          "content": "ok"
+        }
+      ]
+    },
+    {
+      "id": "media-and-unknown-parts",
+      "modes": [
+        "merge",
+        "semi_tools"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "see"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,AA=="
+              }
+            },
+            {
+              "type": "text",
+              "text": "end"
+            },
+            {
+              "type": "unknown",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "audio_url",
+              "audio_url": {
+                "url": "data:audio/wav;base64,AA=="
+              }
+            },
+            {
+              "type": "video_url",
+              "video_url": {
+                "url": "https://example.invalid/synthetic.mp4"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "system-only",
+      "modes": [
+        "semi",
+        "strict"
+      ],
+      "messages": [
+        {
+          "role": "system",
+          "content": "only"
+        }
+      ]
+    },
+    {
+      "id": "assistant-first",
+      "modes": [
+        "strict",
+        "strict_tools"
+      ],
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "start"
+        }
+      ]
+    },
+    {
+      "id": "empty",
+      "modes": [
+        "merge",
+        "strict"
+      ],
+      "messages": []
+    },
+    {
+      "id": "single-and-existing-names",
+      "modes": [
+        "single"
+      ],
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "Other: hello"
+        },
+        {
+          "role": "user",
+          "content": "User: reply"
+        },
+        {
+          "role": "system",
+          "content": "rule"
+        },
+        {
+          "role": "tool",
+          "content": "result",
+          "tool_call_id": "x"
+        }
+      ]
+    },
+    {
+      "id": "none-preserves",
+      "modes": [
+        "",
+        "unrecognized"
+      ],
+      "messages": [
+        {
+          "role": "system",
+          "name": "example_user",
+          "content": "a"
+        },
+        {
+          "role": "system",
+          "content": "b"
+        }
+      ]
+    },
+    {
+      "id": "primitive-and-null-text-parts",
+      "modes": [
+        "merge",
+        "semi_tools"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            "A",
+            3,
+            false,
+            {
+              "type": "text",
+              "text": null
+            },
+            {
+              "type": "text"
+            },
+            {
+              "type": "text",
+              "text": "Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "object-content-without-string-methods",
+      "modes": [
+        "merge",
+        "semi_tools"
+      ],
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "synthetic": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "object-content-concatenation",
+      "modes": [
+        "merge"
+      ],
+      "messages": [
+        {
+          "role": "assistant",
+          "content": {
+            "synthetic": 1
+          }
+        },
+        {
+          "role": "assistant",
+          "content": "TAIL"
+        }
+      ]
+    },
+    {
+      "id": "null-content-part",
+      "modes": [
+        "merge"
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            null
+          ]
+        }
+      ]
+    }
+  ]
+}

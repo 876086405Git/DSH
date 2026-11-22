@@ -322,7 +322,11 @@ class _MediaVideoViewerPageState extends State<MediaVideoViewerPage> with Widget
                       ? const SizedBox.shrink()
                       : AspectRatio(
                           aspectRatio: handle.aspectRatio,
-                          child: Texture(textureId: handle.texture),
+                          // Dimensions already describe the display; rotate the buffer inside them.
+                          child: RotatedBox(
+                            quarterTurns: handle.rotation ~/ 90,
+                            child: Texture(textureId: handle.texture),
+                          ),
                         ),
                 ),
               ),

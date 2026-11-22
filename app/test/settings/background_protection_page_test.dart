@@ -51,6 +51,8 @@ void main() {
           return await update(call);
         case 'openBackgroundProtectionSettings':
           return opens;
+        case 'backgroundSettings':
+          return {'vendor': 'vivo', 'label': 'DSH Go'};
         default:
           return null;
       }
@@ -266,11 +268,121 @@ void main() {
     expect(find.text(l10n.backgroundProtectionUpdateFailed), findsOneWidget);
   });
 
-  testWidgets('Android retains its existing guide without querying enhanced protection', (tester) async {
-    await pump(tester, os: 'android');
-    expect(find.byType(SettingsSwitchTile), findsNothing);
-    expect(find.text(l10n.pluginsBackgroundDescription), findsOneWidget);
-    expect(calls.where((call) => call.method == 'backgroundProtection'), isEmpty);
+  group('Android', () {
+    testWidgets('an older host shows the existing guide without enhanced controls', (tester) async {
+      actual = null;
+      await pump(tester, os: 'android');
+      expect(find.byType(SettingsSwitchTile), findsNothing);
+      expect(find.byKey(status), findsNothing);
+      expect(find.text(l10n.pluginsBackgroundDescription), findsOneWidget);
+      expect(find.text(l10n.pluginsAllowHighPower), findsOneWidget);
+      expect(calls.where((call) => call.method == 'backgroundProtection'), hasLength(1));
+    });
+
+    testWidgets('supported hosts show two independent off switches alongside the vendor guide', (tester) async {
+      actual = {'supported': true, 'locationAuthorization': 'notDetermined'};
+      await pump(tester, os: 'android');
+      expect(find.text(l10n.pluginsAllowHighPower), findsOneWidget);
+      expect(find.byType(SettingsSwitchTile), findsNWidgets(2));
+      expect(toggle(tester, audio).value, isFalse);
+      expect(toggle(tester, location).value, isFalse);
+      expect(find.text(l10n.backgroundProtectionOff), findsOneWidget);
+      expect(tester.widget<SettingsTile>(find.byKey(status)).onTap, isNull);
+
+      update = (call) => actual = {...actual!, 'audioEnabled': true};
+      await tester.tap(find.text(l10n.backgroundProtectionAudio));
+      await tester.pumpAndSettle();
+      expect(calls.singleWhere((call) => call.method == 'setBackgroundProtection').arguments, {'audioEnabled': true});
+      expect(toggle(tester, audio).value, isTrue);
+      expect(toggle(tester, location).value, isFalse);
+      expect(find.text(l10n.backgroundProtectionReady), findsOneWidget);
+    });
+
+    testWidgets('denied location stays inactive and offers system settings without auto-opening', (tester) async {
+      actual = {'supported': true, 'locationAuthorization': 'notDetermined'};
+      final pending = Completer<Object?>();
+      update = (call) => pending.future;
+      await pump(tester, os: 'android');
+      await tester.tap(find.text(l10n.backgroundProtectionLocation));
+      await tester.pump();
+      expect(calls.singleWhere((call) => call.method == 'setBackgroundProtection').arguments, {
+        'locationEnabled': true,
+      });
+      expect(toggle(tester, location).value, isFalse);
+      expect(toggle(tester, location).onChanged, isNull);
+      actual = {...actual!, 'locationEnabled': true};
+      pending.complete(actual);
+      await tester.pumpAndSettle();
+      expect(toggle(tester, location).value, isTrue);
+      expect(find.text(l10n.androidBackgroundProtectionNeedsLocation), findsOneWidget);
+      expect(find.text(l10n.backgroundProtectionLocationActive), findsNothing);
+      expect(find.text(l10n.backgroundProtectionUpdateFailed), findsNothing);
+      expect(calls.where((call) => call.method == 'openBackgroundProtectionSettings'), isEmpty);
+
+      await tester.tap(find.text(l10n.backgroundProtectionStatus));
+      await tester.pumpAndSettle();
+      expect(calls.where((call) => call.method == 'openBackgroundProtectionSettings'), hasLength(1));
+      expect(find.text(l10n.androidBackgroundProtectionNeedsLocation), findsOneWidget);
+    });
+
+    testWidgets('reads Always access on resume and sends only the location preference when turned off', (tester) async {
+      actual = {
+        'supported': true,
+        'audioEnabled': true,
+        'audioActive': true,
+        'locationEnabled': true,
+        'locationAuthorization': 'authorizedWhenInUse',
+      };
+      await pump(tester, os: 'android');
+      expect(
+        find.text('${l10n.backgroundProtectionAudioActive} · ${l10n.androidBackgroundProtectionNeedsAlways}'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text(l10n.backgroundProtectionStatus));
+      await tester.pumpAndSettle();
+      expect(calls.where((call) => call.method == 'openBackgroundProtectionSettings'), hasLength(1));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      actual = {...actual!, 'locationAuthorization': 'authorizedAlways', 'locationActive': true};
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.backgroundProtectionBothActive), findsOneWidget);
+      expect(tester.widget<SettingsTile>(find.byKey(status)).onTap, isNull);
+
+      update = (call) => actual = {...actual!, 'locationEnabled': false, 'locationActive': false};
+      await tester.tap(find.text(l10n.backgroundProtectionLocation));
+      await tester.pumpAndSettle();
+      expect(calls.singleWhere((call) => call.method == 'setBackgroundProtection').arguments, {
+        'locationEnabled': false,
+      });
+      expect(toggle(tester, audio).value, isTrue);
+      expect(toggle(tester, location).value, isFalse);
+      expect(find.text(l10n.backgroundProtectionAudioActive), findsOneWidget);
+    });
+
+    testWidgets('distinguishes disabled system location from other start errors', (tester) async {
+      actual = {
+        'supported': true,
+        'locationEnabled': true,
+        'locationAuthorization': 'authorizedWhenInUse',
+        'error': 'android_background_location_services_disabled',
+      };
+      await pump(tester, os: 'android');
+      expect(find.text(l10n.backgroundProtectionLocationServicesOff), findsOneWidget);
+      await tester.tap(find.text(l10n.backgroundProtectionStatus));
+      await tester.pumpAndSettle();
+      expect(calls.where((call) => call.method == 'openBackgroundProtectionSettings'), hasLength(1));
+
+      actual = {
+        ...actual!,
+        'locationAuthorization': 'authorizedAlways',
+        'error': 'android_background_location_unavailable',
+      };
+      runtime.changed();
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.backgroundProtectionUnavailable), findsOneWidget);
+      expect(tester.widget<SettingsTile>(find.byKey(status)).onTap, isNull);
+      expect(find.text(l10n.backgroundProtectionLocationActive), findsNothing);
+    });
   });
 
   testWidgets('pending cleanup is not reported as stopped or active', (tester) async {

@@ -1,6 +1,7 @@
 // 设置 → 手机操控 → 悬浮条 (lib/ui/phone/phone_control_screen.dart): 闲置时不透明度
 // (30–100 %, 70 % by default, sent to the native side on every step so a showing
-// pill follows), 闲置时自动收起 (off by default) and 完成后返回 DSH Go, shown
+// pill follows), 闲置时自动收起 (on by default), 屏幕边缘光效 (on by default) and
+// 完成后返回 DSH Go, shown
 // once phone control is on.
 
 import 'dart:ui' show Tristate;
@@ -23,6 +24,7 @@ import 'support.dart';
 const _group = '悬浮条';
 const _opacity = '闲置时不透明度';
 const _auto = '闲置时自动收起';
+const _glow = '屏幕边缘光效';
 const _return = '完成后返回 DSH Go';
 
 Finder _row(String title) => find.ancestor(of: find.text(title), matching: find.byType(ListPageRow)).first;
@@ -123,6 +125,18 @@ void main() {
       expect(h.native!.overlay['autoCollapse'], isTrue);
     });
 
+    testWidgets('屏幕边缘光效: on by default, the row turns it off on the native side', (tester) async {
+      final h = await pumpPhone(tester, const PhoneControlScreen(), native: FakePhoneNative(status: phoneStatus()));
+      await openPhoneFold(tester, 'phone-more-options');
+      await _reveal(tester);
+      expect(_switch(tester, _glow).value, isTrue);
+      await tester.tap(find.text(_glow));
+      await settlePhone(tester);
+      expect(_switch(tester, _glow).value, isFalse);
+      expect(h.native!.overlay['edgeGlow'], isFalse);
+      expect(_container(tester).read(phoneOverlayPrefsProvider).edgeGlow, isFalse);
+    });
+
     testWidgets('完成后返回 DSH Go: toggled and kept in the app', (tester) async {
       await pumpPhone(tester, const PhoneControlScreen(), native: FakePhoneNative(status: phoneStatus()));
       await openPhoneFold(tester, 'phone-more-options');
@@ -173,6 +187,9 @@ void main() {
       expect(const PhoneOverlayPrefs().autoCollapse, isTrue);
       expect(PhoneOverlayPrefs.fromMap(const {'autoCollapse': false}).autoCollapse, isFalse);
       expect(PhoneOverlayPrefs.fromMap(const {'idleOpacity': 0.5, 'autoCollapse': true}).percent, 50);
+      // 屏幕边缘光效 likewise.
+      expect(PhoneOverlayPrefs.fromMap(const {}).edgeGlow, isTrue);
+      expect(PhoneOverlayPrefs.fromMap(const {'edgeGlow': false}).edgeGlow, isFalse);
     });
   });
 

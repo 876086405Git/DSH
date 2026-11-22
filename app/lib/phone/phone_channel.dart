@@ -716,19 +716,27 @@ class PhoneStatus {
 // ── 悬浮条 ───────────────────────────────────────────────────────────────────
 
 /// 设置 → 手机操控 → 悬浮条 (`overlayPrefs` / `setOverlayPrefs`): how opaque the
-/// ball is when idle, and whether an idle capsule folds into the ball by itself
-/// (on unless the person turned it off, as OverlayPrefs.kt). A showing overlay
-/// follows changes at once.
+/// ball is when idle, whether an idle capsule folds into the ball by itself, and
+/// whether the screen's edge glows while DSH works (both on unless the person
+/// turned them off, as OverlayPrefs.kt). A showing overlay follows changes at once.
 class PhoneOverlayPrefs {
-  const PhoneOverlayPrefs({this.idleOpacity = defaultOpacity, this.autoCollapse = defaultAutoCollapse});
+  const PhoneOverlayPrefs({
+    this.idleOpacity = defaultOpacity,
+    this.autoCollapse = defaultAutoCollapse,
+    this.edgeGlow = defaultEdgeGlow,
+  });
 
   factory PhoneOverlayPrefs.fromMap(Map<Object?, Object?> m) => PhoneOverlayPrefs(
     idleOpacity: clampOpacity(m['idleOpacity'] is num ? (m['idleOpacity'] as num).toDouble() : defaultOpacity),
     autoCollapse: _maybeFlag(m['autoCollapse']) ?? defaultAutoCollapse,
+    edgeGlow: _maybeFlag(m['edgeGlow']) ?? defaultEdgeGlow,
   );
 
   /// On: the capsule shows what DSH starts doing, then gets out of the way.
   static const defaultAutoCollapse = true;
+
+  /// On: the screen's edge glows while DSH operates the phone.
+  static const defaultEdgeGlow = true;
 
   /// 70 %: the line reads over light and dark pages alike (see OverlayPrefs.kt).
   static const defaultOpacity = 0.7;
@@ -745,19 +753,26 @@ class PhoneOverlayPrefs {
   /// 闲置时自动收起.
   final bool autoCollapse;
 
+  /// 屏幕边缘光效.
+  final bool edgeGlow;
+
   int get percent => (idleOpacity * 100).round();
 
-  PhoneOverlayPrefs copyWith({double? idleOpacity, bool? autoCollapse}) => PhoneOverlayPrefs(
+  PhoneOverlayPrefs copyWith({double? idleOpacity, bool? autoCollapse, bool? edgeGlow}) => PhoneOverlayPrefs(
     idleOpacity: idleOpacity == null ? this.idleOpacity : clampOpacity(idleOpacity),
     autoCollapse: autoCollapse ?? this.autoCollapse,
+    edgeGlow: edgeGlow ?? this.edgeGlow,
   );
 
   @override
   bool operator ==(Object other) =>
-      other is PhoneOverlayPrefs && other.idleOpacity == idleOpacity && other.autoCollapse == autoCollapse;
+      other is PhoneOverlayPrefs &&
+      other.idleOpacity == idleOpacity &&
+      other.autoCollapse == autoCollapse &&
+      other.edgeGlow == edgeGlow;
 
   @override
-  int get hashCode => Object.hash(idleOpacity, autoCollapse);
+  int get hashCode => Object.hash(idleOpacity, autoCollapse, edgeGlow);
 }
 
 // ── Results ──────────────────────────────────────────────────────────────────
@@ -1577,8 +1592,8 @@ class PhoneChannel {
   Future<PhoneOverlayPrefs?> overlayPrefs() => _overlay('overlayPrefs');
 
   /// Writes what is given (the rest stays); the stored result, null without the native side.
-  Future<PhoneOverlayPrefs?> setOverlayPrefs({double? idleOpacity, bool? autoCollapse}) =>
-      _overlay('setOverlayPrefs', {'idleOpacity': ?idleOpacity, 'autoCollapse': ?autoCollapse});
+  Future<PhoneOverlayPrefs?> setOverlayPrefs({double? idleOpacity, bool? autoCollapse, bool? edgeGlow}) =>
+      _overlay('setOverlayPrefs', {'idleOpacity': ?idleOpacity, 'autoCollapse': ?autoCollapse, 'edgeGlow': ?edgeGlow});
 
   Future<PhoneOverlayPrefs?> _overlay(String method, [Object? args]) async {
     try {

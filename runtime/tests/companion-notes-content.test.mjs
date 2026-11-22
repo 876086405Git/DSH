@@ -87,6 +87,18 @@ test('SOURCE_UNIT Markdown escape keeps literal evidence and filenames from beco
   assert.match(result.content, /\\\[click\\\]/);
   assert.match(result.content, /\\<script\\>/);
 });
+test('SOURCE_UNIT plain text output keeps literal task, quote, filename and assignee characters', () => {
+  const text = '待办：修复 user_id 字段，整理 C:\\notes；负责人 dev_team。';
+  const plainInputs = {...inputs, entries: [{name: 'meeting_notes.txt', text}]};
+  const item = {source: 'meeting_notes.txt', startLine: 1, endLine: 1, quote: text,
+    task: '修复 user_id 字段', assignee: 'dev_team', due: null};
+  const proposal = readNotesProposal(JSON.stringify({todos: [item]}), plainInputs);
+  const result = renderNotesPage(proposal, plainInputs, 'text/plain');
+  assert.ok(result.content.includes('- [ ] 修复 user_id 字段'));
+  assert.ok(result.content.includes('来源：meeting_notes.txt'));
+  assert.ok(result.content.includes('负责人：dev_team'));
+  assert.ok(result.content.includes(`原文：${text}`));
+});
 test('SOURCE_UNIT heuristic covers complete request and preserves unknown context window', () => {
   const body = JSON.stringify({system: notesSystem, messages: [{role: 'user', content: [{type: 'text', text: notesModelInput(inputs)}]}]});
   const estimate = notesInputEstimate(body);

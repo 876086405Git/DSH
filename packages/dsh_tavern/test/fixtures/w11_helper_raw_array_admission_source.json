@@ -1,0 +1,705 @@
+{
+  "passed": true,
+  "count": 8,
+  "pins": {
+    "utils": [
+      "research/helper/src/function/generate/utils.ts",
+      "9aace591938c207d8c3e81a5619ed39ccc6a1d53a1d3e84190243ca6c69ca3ff"
+    ],
+    "raw": [
+      "research/helper/src/function/generate/generateRaw.ts",
+      "2bcb8b91a0657b6788c32899ec0b8256749cf00c83d1f4a22d7d1e3fca694a57"
+    ],
+    "st": [
+      "research/st/public/scripts/openai.js",
+      "0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604"
+    ],
+    "pm": [
+      "research/st/PromptManager.js",
+      "b0054793b763d92b265f5f487645b68b4eca0867cb5ad6b5deb1034004b2c1cc"
+    ]
+  },
+  "extracted": [
+    {
+      "file": "research/helper/src/function/generate/utils.ts",
+      "marker": "export async function convertFileToBase64(",
+      "sha256": "7cf79186bfebe0f3de9cbcc29d05eda83f0c5d40210e47cc5395ac11669ba485"
+    },
+    {
+      "file": "research/helper/src/function/generate/utils.ts",
+      "marker": "export async function processImageArrayDirectly(",
+      "sha256": "1fb4da05cd5ce181df2fc392ae3bbe47dfa3d5ca89e5d201a163ea1aaf5caea1"
+    },
+    {
+      "file": "research/helper/src/function/generate/utils.ts",
+      "marker": "export function isPromptFiltered(",
+      "sha256": "5e25822fc439b24dd895422c099ee5564464745cac069a712bbd0e0f10bf2910"
+    },
+    {
+      "file": "research/helper/src/function/generate/generateRaw.ts",
+      "marker": "async function convertSystemPromptsToCollection(",
+      "sha256": "da060fded1c9ca05fe8347e12e579e2a94ca5fc0007b80f539350adaeee312bf"
+    },
+    {
+      "file": "research/helper/src/function/generate/generateRaw.ts",
+      "marker": "async function processChatHistoryAndInject(",
+      "sha256": "94fbcd28e3c079a8acffb8d760f02e5eb6e5c8d846d9d03b335467507034340f"
+    },
+    {
+      "file": "research/helper/src/function/generate/generateRaw.ts",
+      "marker": "export async function handleCustomPath(",
+      "sha256": "7fb55b28f3d93a0e2f206e6eada9c36bc7aef79b397e1811213e5ef570961a10"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class IdentifierNotFoundError ",
+      "sha256": "a73819cf67dccc1c7a8b3f3ffd1d90dce2bc03ffe7e37359d41f5227c21cc8fc"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class TokenBudgetExceededError ",
+      "sha256": "d7587846aea2d1cda33f0a2dffa5d2a46f0e946c8e1fd8a0326bfd8ae0ce6fda"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class InvalidCharacterNameError ",
+      "sha256": "982ff86499c4d570b968bf312f4d83bd40142e479cbcf4256b896c22b00b7cfe"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class Message {",
+      "sha256": "ed3d871c7e0f7b56d2d006158651c167b3a927d06dbd75c67aab0243a514c091"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class MessageCollection {",
+      "sha256": "3e4920967f2ea8b6ce56eef9246048fb6e3862d5dee41495e76a8c6c50d0a41c"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "export class ChatCompletion {",
+      "sha256": "87cd603263f4f3219a63d810941364686f68eb898312bab55cb9f82aade1b651"
+    },
+    {
+      "file": "research/st/PromptManager.js",
+      "marker": "class Prompt {",
+      "sha256": "ccbf6fbc7aee36cff0898e92f3b2efd295afc82eecb87c9c89430364be099f69"
+    },
+    {
+      "file": "research/st/PromptManager.js",
+      "marker": "export class PromptCollection {",
+      "sha256": "50a4a0a8b65839914246eae9aee1d1d76e36209e62503dd397ca5a9003a74c8d"
+    }
+  ],
+  "measuredPlainCost": 4,
+  "measuredNativePartsCost": 36,
+  "measurementOriginSha256": "e4a3e9ae7ffc8c766af966365660af8ff8a76ec3179bc2580f66fd361465bd1a",
+  "scope": "Actual fixed Helper raw builder/array conversion and ST message/budget classes. Receiver-preserving method wrappers only observe. The plain token callback uses the separately measured native default estimate; arrays never invoke it. History is explicitly filtered. Network failure and empty media metadata are controlled; no full browser, exact tokenizer or image billing claim.",
+  "results": [
+    {
+      "name": "array-before-plain-reserve",
+      "kind": "array",
+      "context": 7,
+      "explicitInput": true,
+      "maxResponse": 1,
+      "arrayPiece": true,
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 6,
+          "tokens": 7,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 6,
+          "after": 3,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 3,
+          "after": -1,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "parts",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": -1,
+          "after": -1,
+          "tokens": 0,
+          "identifier": "user_input",
+          "error": "TokenBudgetExceeded"
+        }
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "remainingBudget": -1,
+      "failure": {
+        "name": "TokenBudgetExceeded",
+        "message": "Token budged exceeded. Message: user_input"
+      },
+      "wireMessages": null
+    },
+    {
+      "name": "array-at-plain-reserve",
+      "kind": "array",
+      "context": 8,
+      "explicitInput": true,
+      "maxResponse": 1,
+      "arrayPiece": true,
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 7,
+          "tokens": 8,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 7,
+          "after": 4,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 4,
+          "after": 0,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "parts",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 0,
+          "after": 0,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 0,
+          "after": 4,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "remainingBudget": 4,
+      "failure": null,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Q"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,AQ==",
+                "detail": "low"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "plain-at-plain-reserve",
+      "kind": "plain",
+      "context": 8,
+      "explicitInput": true,
+      "maxResponse": 1,
+      "arrayPiece": false,
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 7,
+          "tokens": 8,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 7,
+          "after": 4,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 4,
+          "after": 0,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 0,
+          "after": 0,
+          "tokens": 4,
+          "identifier": "user_input",
+          "error": "TokenBudgetExceeded"
+        }
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "remainingBudget": 0,
+      "failure": {
+        "name": "TokenBudgetExceeded",
+        "message": "Token budged exceeded. Message: user_input"
+      },
+      "wireMessages": null
+    },
+    {
+      "name": "empty-array-at-plain-reserve",
+      "kind": "emptyArray",
+      "context": 8,
+      "explicitInput": true,
+      "maxResponse": 1,
+      "arrayPiece": false,
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 7,
+          "tokens": 8,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 7,
+          "after": 4,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 4,
+          "after": 0,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 0,
+          "after": 0,
+          "tokens": 4,
+          "identifier": "user_input",
+          "error": "TokenBudgetExceeded"
+        }
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "remainingBudget": 0,
+      "failure": {
+        "name": "TokenBudgetExceeded",
+        "message": "Token budged exceeded. Message: user_input"
+      },
+      "wireMessages": null
+    },
+    {
+      "name": "failed-array-at-plain-reserve",
+      "kind": "failedArray",
+      "context": 8,
+      "explicitInput": true,
+      "maxResponse": 1,
+      "arrayPiece": true,
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 7,
+          "tokens": 8,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 7,
+          "after": 4,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 4,
+          "after": 0,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "parts",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 0,
+          "after": 0,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 0,
+          "after": 4,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "remainingBudget": 4,
+      "failure": null,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Q"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "array-before-old-threshold",
+      "kind": "array",
+      "context": 43,
+      "explicitInput": true,
+      "maxResponse": 1,
+      "arrayPiece": true,
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 42,
+          "tokens": 43,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 42,
+          "after": 39,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 39,
+          "after": 35,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "parts",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 35,
+          "after": 35,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 35,
+          "after": 39,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "remainingBudget": 39,
+      "failure": null,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Q"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,AQ==",
+                "detail": "low"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "array-at-old-threshold",
+      "kind": "array",
+      "context": 44,
+      "explicitInput": true,
+      "maxResponse": 1,
+      "arrayPiece": true,
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 43,
+          "tokens": 44,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 43,
+          "after": 40,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 40,
+          "after": 36,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "parts",
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 36,
+          "after": 36,
+          "tokens": 0,
+          "identifier": "user_input"
+        },
+        {
+          "method": "freeBudget",
+          "before": 36,
+          "after": 40,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "emit",
+          "name": "ready"
+        }
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "remainingBudget": 40,
+      "failure": null,
+      "wireMessages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Q"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,AQ==",
+                "detail": "low"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "array-without-explicit-input-slot",
+      "kind": "array",
+      "context": 8,
+      "explicitInput": false,
+      "maxResponse": 1,
+      "arrayPiece": false,
+      "trace": [
+        {
+          "method": "setTokenBudget",
+          "before": 0,
+          "after": 7,
+          "tokens": 8,
+          "identifier": null
+        },
+        {
+          "method": "reserveBudget",
+          "before": 7,
+          "after": 4,
+          "tokens": 3,
+          "identifier": null
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "reserveBudget",
+          "before": 4,
+          "after": 0,
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "Message.createAsync",
+          "kind": "string",
+          "tokens": 4,
+          "identifier": "user_input"
+        },
+        {
+          "method": "add",
+          "before": 0,
+          "after": 0,
+          "tokens": 4,
+          "identifier": "user_input",
+          "error": "TokenBudgetExceeded"
+        }
+      ],
+      "counterCalls": [
+        {
+          "role": "user",
+          "content": "Q"
+        },
+        {
+          "role": "user",
+          "content": "Q"
+        }
+      ],
+      "remainingBudget": 0,
+      "failure": {
+        "name": "TokenBudgetExceeded",
+        "message": "Token budged exceeded. Message: user_input"
+      },
+      "wireMessages": null
+    }
+  ]
+}

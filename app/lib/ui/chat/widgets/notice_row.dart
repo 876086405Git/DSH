@@ -26,7 +26,9 @@ Subscription? lapsedSubscription(LlmFailure? failure, [String text = '']) {
   for (final source in [?failure?.message, text]) {
     final m = _grantLost.firstMatch(source);
     if (m == null) continue;
-    return Subscription.fromWire(m.group(1) ?? m.group(2));
+    final subscription = Subscription.fromWire(m.group(1) ?? m.group(2));
+    // These pi-ai errors must not offer the official, local-only login.
+    return subscription == Subscription.chatgptOfficial ? null : subscription;
   }
   return null;
 }

@@ -183,6 +183,45 @@ void main() {
     expect(pages.added, isEmpty);
     expect(bridge.closed, ['ctx']);
   });
+
+  test('a page that is up registers with the host with no call of its own, once; its SPreset reaches it', () async {
+    final bridge = _SlowOpen();
+    final pages = _Pages();
+    final calls = TavernCanvasCalls(bridge, chatId: 'chat', characterId: () => 'c', pages: pages);
+    final sent = <Map<String, Object?>>[];
+    calls.deliver = (d) async {
+      sent.add(d);
+      return true;
+    };
+    calls.pageReady();
+    calls.pageReady();
+    bridge.opening.complete(const TavernScriptContext(id: 'ctx', engineEpoch: 'e', instanceId: 'canvas'));
+    await pumpEventQueue();
+    expect(pages.added, ['ctx']);
+    final answer = pages.evaluateSPreset(
+      TavernSPresetEvaluationRequest(
+        requestId: 'r',
+        chatId: 'chat',
+        generationId: 'g',
+        sessionId: 'g:s',
+        stage: 'FinalRequestProcessing',
+        source: '(x) => x',
+      ),
+      _Never(),
+    );
+    await pumpEventQueue();
+    expect(sent.single['kind'], 'spreset');
+    calls.spreset({'requestId': 'r', 'value': true});
+    expect((await answer).value, true);
+  });
+}
+
+class _Never implements TavernScriptCancellation {
+  @override
+  bool get isCancelled => false;
+
+  @override
+  Future<void> get whenCancelled => Completer<void>().future;
 }
 
 /// A bridge whose context opens only when told; closes are noted.
@@ -207,8 +246,8 @@ class _Pages extends TavernScriptPages {
   final added = <String>[];
 
   @override
-  void add(String contextId, TavernScriptPage page, {TavernScriptInteractor? interact}) {
+  void add(String contextId, TavernScriptPage page, {TavernScriptInteractor? interact, String? chatId}) {
     added.add(contextId);
-    super.add(contextId, page, interact: interact);
+    super.add(contextId, page, interact: interact, chatId: chatId);
   }
 }

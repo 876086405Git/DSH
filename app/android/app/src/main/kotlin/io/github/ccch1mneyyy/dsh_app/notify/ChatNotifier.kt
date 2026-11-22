@@ -234,7 +234,7 @@ class ChatNotifier(private val app: Context) {
     }
 
     fun ensureChannels() {
-        if (nm.getNotificationChannel(CHANNEL_DONE) != null && nm.getNotificationChannel(CHANNEL_ATTENTION) != null) return
+        // Refresh localized labels; Android preserves user-controlled channel behavior.
         // An app can't raise a channel's importance once created: the old IMPORTANCE_DEFAULT
         // "一轮结束" channel goes, and the heads-up one lives under a new id.
         nm.deleteNotificationChannel(LEGACY_CHANNEL_DONE)
