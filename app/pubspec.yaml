@@ -171,9 +171,9 @@ flutter:
     - assets/whale/
     # The tavern's own sample card (林晚), offered on its empty home.
     - assets/tavern/
-    # Engine-side auth bridge (ChatGPT / Claude sign-in), copied into the guest at
-    # every engine start by runtime/AppAuthGuest.kt; tests in tool/engine_auth/.
+    # Engine-side subscription sign-in, copied by runtime/AppAuthGuest.kt.
     - assets/engine/auth/
+    - assets/engine/auth/siwc/
     # 社区 hub content shipped with the app (lib/state/community_state.dart),
     # shown until a newer community.json is fetched.
     - assets/community/

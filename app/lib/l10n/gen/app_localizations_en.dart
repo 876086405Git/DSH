@@ -8496,6 +8496,22 @@ class L10nEn extends L10n {
   String get engineProvidersOfficial => 'Official';
 
   @override
+  String get engineProvidersChatGptOfficial => 'Official ChatGPT subscription';
+
+  @override
+  String get engineSubscriptionReconnectAccount => 'Sign in to previous account';
+
+  @override
+  String get engineSubscriptionUseAnotherAccount => 'Use another account';
+
+  @override
+  String get engineSubscriptionPlanNotEnabled => 'This grant does not allow ChatGPT subscription models.';
+
+  @override
+  String get engineSubscriptionRevocationUnconfirmed =>
+      'Signed out on this phone, but OpenAI revocation could not be confirmed.';
+
+  @override
   String get engineProvidersSubscription => 'Subscriptions';
 
   @override

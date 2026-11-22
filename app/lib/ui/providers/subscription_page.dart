@@ -38,7 +38,8 @@ class SubscriptionPage extends ConsumerStatefulWidget {
 class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
   bool _busy = false;
 
-  String get _label => subscriptionLabel(widget.subscription);
+  bool get _official => widget.subscription == Subscription.chatgptOfficial;
+  String get _label => _official ? 'OpenAI' : subscriptionLabel(widget.subscription);
 
   Future<void> _signOut() async {
     final ok = await showAppDialog<bool>(
@@ -60,6 +61,10 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
       ),
     );
     if (ok != true || !mounted) return;
+    if (_official) {
+      final current = ref.read(officialChatGptStatusProvider);
+      if (current == null || (!current.signedIn && !current.signOutPending)) return;
+    }
     final backend = ref.read(subscriptionBackendProvider);
     if (backend == null) return;
     setState(() => _busy = true);
@@ -69,10 +74,22 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;
+      if (_official && error is DshRemoteException && error.code == 'app-auth/revocation-unconfirmed') {
+        refreshAfterSubscriptionChange(ref);
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(context.l10n.engineSubscriptionRevocationUnconfirmed)),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
+      final cleanupFailed = _official && error is DshRemoteException && error.code == 'app-auth/sign-out-failed';
+      if (cleanupFailed) refreshAfterSubscriptionChange(ref);
       setState(() => _busy = false);
-      ScaffoldMessenger.maybeOf(
-        context,
-      )?.showSnackBar(SnackBar(content: Text(context.l10n.engineSubscriptionSignOutFailed(describeLoginError(error)))));
+      final l10n = context.l10n;
+      final reason = cleanupFailed ? l10n.commonFailedTryAgain : describeLoginError(error);
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text(l10n.engineSubscriptionSignOutFailed(reason))),
+      );
     }
   }
 
@@ -106,15 +123,17 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final colors = DshColors.of(context);
-    final snapshot = ref.watch(subscriptionsProvider).value;
-    final status = snapshot?.of(widget.subscription);
-    final signedIn = status?.signedIn ?? false;
+    final status = _official
+        ? ref.watch(officialChatGptStatusProvider)
+        : ref.watch(subscriptionsProvider).value?.of(widget.subscription);
+    final signOutPending = _official && (status?.signOutPending ?? false);
+    final signedIn = !signOutPending && (status?.signedIn ?? false);
     final catalog = ref.watch(modelCatalogProvider);
     final wire = widget.subscription.wire;
     // The pi-ai route this subscription declared: the model overrides hang off
     // it (`providers.<route>.modelOverrides`). Null before sign-in or while the
     // bridge is declaring it.
-    final profile = ref.watch(subscriptionProfileProvider(widget.subscription)).value;
+    final profile = _official ? null : ref.watch(subscriptionProfileProvider(widget.subscription)).value;
     final models = [
       for (final group in catalog.value?.groups ?? const [])
         if (group.id == wire) ...group.models,
@@ -161,7 +180,17 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
               ],
             ),
             gap,
-            if (models.isEmpty && !catalog.isLoading && failed)
+            if (signOutPending)
+              FeatureNote(l10n.engineSubscriptionSignOutFailed(l10n.commonRetry))
+            else if (_official && signedIn && status?.planEnabled == false)
+              FeatureMessage(
+                icon: AppIcons.account,
+                title: l10n.engineSubscriptionPlanNotEnabled,
+                action: _busy
+                    ? null
+                    : (l10n.chatSignInAgain, () => showSubscriptionLogin(context, widget.subscription)),
+              )
+            else if (models.isEmpty && !catalog.isLoading && failed)
               _modelsFailed(catalog.error)
             else if (models.isEmpty && !catalog.isLoading && catalog.value == null)
               const FeatureOffline()
@@ -192,7 +221,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
             Center(
               child: TextButton.icon(
                 style: TextButton.styleFrom(foregroundColor: colors.danger),
-                onPressed: _busy || !signedIn ? null : _signOut,
+                onPressed: _busy || (!signedIn && !signOutPending) ? null : _signOut,
                 icon: const Icon(AppIcons.logout, size: 19),
                 label: Text(l10n.commonSignOut),
               ),

@@ -5,17 +5,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/l10n.dart';
+import 'android_features.dart';
 import 'connection_state.dart';
 import 'engine_error_text.dart';
 import 'models_state.dart';
 import 'providers_state.dart';
 import 'read_list_epoch.dart';
+import 'read_list_identity.dart' show readListLiveConnectionProvider;
 
 export 'package:dsh_client/dsh_client.dart' show LoginPhase, LoginStep, Subscription, SubscriptionStatus;
 
 /// 订阅在界面上的名字。
 String subscriptionLabel(Subscription s) => switch (s) {
-  Subscription.chatgpt => 'ChatGPT',
+  Subscription.chatgpt || Subscription.chatgptOfficial => 'ChatGPT',
   Subscription.claude => 'Claude',
 };
 
@@ -45,7 +47,7 @@ String describeLoginError(Object error) {
 abstract class SubscriptionBackend {
   Future<List<SubscriptionStatus>> list();
 
-  Future<String> begin(Subscription subscription);
+  Future<String> begin(Subscription subscription, {bool newAccount = false});
 
   Future<LoginStep> poll(String attemptId);
 
@@ -65,7 +67,8 @@ class ClientSubscriptionBackend implements SubscriptionBackend {
   Future<List<SubscriptionStatus>> list() => client.subscriptions();
 
   @override
-  Future<String> begin(Subscription subscription) => client.beginLogin(subscription);
+  Future<String> begin(Subscription subscription, {bool newAccount = false}) =>
+      client.beginLogin(subscription, newAccount: newAccount);
 
   @override
   Future<LoginStep> poll(String attemptId) => client.pollLogin(attemptId);
@@ -119,6 +122,19 @@ final subscriptionsProvider = FutureProvider.autoDispose<SubscriptionsSnapshot?>
   }
 });
 
+/// The official ChatGPT flow is only exposed on the local Android host, and
+/// only when that host advertises it in appAuth/list.
+final officialChatGptStatusProvider = Provider.autoDispose<SubscriptionStatus?>((ref) {
+  if (ref.watch(readListLiveConnectionProvider)?.isLocal != true ||
+      ref.watch(operatingSystemProvider) != 'android') {
+    return null;
+  }
+  final subscriptions = ref.watch(subscriptionsProvider);
+  final snapshot = subscriptions.value;
+  if (subscriptions.isReloading || snapshot == null || !snapshot.available) return null;
+  return snapshot.of(Subscription.chatgptOfficial);
+});
+
 /// Quota belongs to the active host and is fetched only while the sheet is open.
 final subscriptionUsageProvider = FutureProvider.autoDispose.family<SubscriptionUsage?, Subscription>((
   ref,
@@ -164,10 +180,11 @@ final subscriptionProfileProvider = FutureProvider.autoDispose.family<ProviderPr
 /// [close] stops polling and requests cancellation unless the engine has
 /// reported the attempt finished.
 class LoginSession extends ChangeNotifier {
-  LoginSession(this.backend, this.subscription, {this.interval = const Duration(seconds: 1)});
+  LoginSession(this.backend, this.subscription, {this.newAccount = false, this.interval = const Duration(seconds: 1)});
 
   final SubscriptionBackend backend;
   final Subscription subscription;
+  final bool newAccount;
   final Duration interval;
 
   LoginStep _step = const LoginStep(phase: LoginPhase.starting);
@@ -200,7 +217,7 @@ class LoginSession extends ChangeNotifier {
     if (previous != null) unawaited(backend.cancel(previous).catchError((_) {}));
     _set(const LoginStep(phase: LoginPhase.starting));
     try {
-      final id = await backend.begin(subscription);
+      final id = await backend.begin(subscription, newAccount: newAccount);
       if (_closed) {
         unawaited(backend.cancel(id).catchError((_) {}));
         return;

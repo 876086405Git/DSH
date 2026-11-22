@@ -176,6 +176,7 @@ class UsageSheet extends ConsumerWidget {
     final l10n = context.l10n;
     final usage = ref.watch(sessionUsageProvider(sessionId));
     final pricing = model == null ? null : knownPricing['${model!.provider}/${model!.model}'];
+    final subscription = Subscription.fromWire(model?.provider);
     return SafeArea(
       top: false,
       child: SingleChildScrollView(
@@ -187,10 +188,10 @@ class UsageSheet extends ConsumerWidget {
             SheetTitleBar(l10n.activityUsage),
             SessionUsageSections(usage: usage, pricing: pricing, sheet: true, margin: _margin),
             const SizedBox(height: 16),
-            if (Subscription.fromWire(model?.provider) case final subscription?)
-              _SubscriptionQuota(subscription: subscription, margin: _margin)
-            else
-              BalanceCard(title: l10n.activityUsageBalance, margin: _margin),
+            if (subscription == null)
+              BalanceCard(title: l10n.activityUsageBalance, margin: _margin)
+            else if (subscription != Subscription.chatgptOfficial)
+              _SubscriptionQuota(subscription: subscription, margin: _margin),
           ],
         ),
       ),

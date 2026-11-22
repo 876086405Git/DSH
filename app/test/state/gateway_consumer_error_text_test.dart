@@ -140,7 +140,7 @@ class _FailingBeginBackend implements SubscriptionBackend {
   int cancels = 0;
 
   @override
-  Future<String> begin(Subscription subscription) async {
+  Future<String> begin(Subscription subscription, {bool newAccount = false}) async {
     begins++;
     throw error;
   }

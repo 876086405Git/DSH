@@ -15054,6 +15054,36 @@ abstract class L10n {
   /// **'官方'**
   String get engineProvidersOfficial;
 
+  /// No description provided for @engineProvidersChatGptOfficial.
+  ///
+  /// In zh, this message translates to:
+  /// **'ChatGPT 官方订阅'**
+  String get engineProvidersChatGptOfficial;
+
+  /// No description provided for @engineSubscriptionReconnectAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录原账号'**
+  String get engineSubscriptionReconnectAccount;
+
+  /// No description provided for @engineSubscriptionUseAnotherAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用其他账号'**
+  String get engineSubscriptionUseAnotherAccount;
+
+  /// No description provided for @engineSubscriptionPlanNotEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'此授权无法使用 ChatGPT 订阅模型。'**
+  String get engineSubscriptionPlanNotEnabled;
+
+  /// No description provided for @engineSubscriptionRevocationUnconfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已在本机退出，但没能确认 OpenAI 已撤销授权。'**
+  String get engineSubscriptionRevocationUnconfirmed;
+
   /// No description provided for @engineProvidersSubscription.
   ///
   /// In zh, this message translates to:

@@ -167,6 +167,7 @@ void main() {
       );
       // Other providers' OAuth and ordinary failures are not a sign-in.
       expect(lapsedSubscription(_lapsed('github-copilot').failure), isNull);
+      expect(lapsedSubscription(_lapsed('openai-siwc').failure), isNull);
       expect(lapsedSubscription(const LlmFailure(message: 'HTTP 429 Too Many Requests', code: 'RATE_LIMIT')), isNull);
       expect(lapsedSubscription(null), isNull);
     });

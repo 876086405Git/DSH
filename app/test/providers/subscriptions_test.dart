@@ -2,9 +2,11 @@
 // step of the sign-in sheet against a fake bridge, polling that stops with
 // the sheet, and the signed-in page's sign-out.
 
-import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/state/account_state.dart' show accountBrowserProvider;
+import 'package:dsh_app/state/android_features.dart';
+import 'package:dsh_app/state/connection_state.dart';
+import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/models_state.dart';
 import 'package:dsh_app/state/subscriptions_state.dart';
 import 'package:dsh_app/ui/common/list_page_row.dart';
@@ -14,11 +16,14 @@ import 'package:dsh_app/ui/providers/subscription_sheet.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' show AsyncData;
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
-import '../clipboard/fake_paste.dart';
 import '../account/support.dart' show FakeBrowser;
+import '../clipboard/fake_paste.dart';
+import '../engine_settings/support.dart' show FakeSettingsHost;
+import '../phone/support.dart' show FixedActiveHost;
 import '../shell/golden_harness.dart' show goldenApp, loadGoldenFonts;
 import 'support.dart';
 
@@ -36,6 +41,26 @@ final _codexCatalog = ModelCatalog(
     ProviderGroup('openai-codex', 'ChatGPT', [
       ModelInfo(provider: 'openai-codex', id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex'),
       ModelInfo(provider: 'openai-codex', id: 'gpt-5.1', name: 'gpt-5.1'),
+    ]),
+  ],
+  failures: const [],
+);
+
+const _official = Subscription.chatgptOfficial;
+const _signedOutOfficial = SubscriptionStatus(subscription: _official, signedIn: false);
+const _officialProfile = ProviderProfile(
+  route: 'openai-siwc',
+  displayName: 'OpenAI',
+  modelOverrides: {'test-model': ModelOverride(contextWindow: 65536)},
+);
+
+final _officialCatalog = ModelCatalog(
+  defaultSelection: null,
+  routableProviders: ['openai-siwc', ..._codexCatalog.routableProviders],
+  groups: [
+    ..._codexCatalog.groups,
+    const ProviderGroup('openai-siwc', 'OpenAI', [
+      ModelInfo(provider: 'openai-siwc', id: 'test-model', name: 'Official test model'),
     ]),
   ],
   failures: const [],
@@ -162,6 +187,198 @@ void main() {
       expect(capsule.center.dy, moreOrLessEquals(row.center.dy, epsilon: 0.6));
       expect(capsule.height, moreOrLessEquals(LoginCapsule.height, epsilon: 0.6));
       expect(row.height, moreOrLessEquals(52, epsilon: 0.6));
+    });
+  });
+
+  group('official OpenAI', () {
+    testWidgets('local Android shows OpenAI under DeepSeek and starts SIWC in the shared sheet', (tester) async {
+      final bridge = FakeSubscriptionBackend(
+        statuses: [..._signedInChatGpt, _signedOutOfficial],
+        steps: const [LoginStep(phase: LoginPhase.open, url: _url)],
+      );
+      final browser = FakeBrowser();
+      await _pump(tester, const ProvidersPage(), [
+        ...providerOverrides(FakeProviderBackend(profiles: const [_officialProfile]), subscriptions: bridge),
+        operatingSystemProvider.overrideWithValue('android'),
+        modelCatalogProvider.overrideWith((ref) async => _codexCatalog),
+        accountBrowserProvider.overrideWithValue(browser),
+      ]);
+      final officialCard = find.widgetWithText(ListPageCard, appL10n.engineProvidersOfficial);
+      final rows = find.descendant(of: officialCard, matching: find.byType(ListPageRow));
+      expect(tester.widgetList<ListPageRow>(rows).map((row) => row.title), ['DeepSeek', 'OpenAI']);
+      expect(find.text('OpenAI'), findsOneWidget, reason: 'not repeated as a custom channel');
+      expect(find.text('ChatGPT 官方订阅'), findsOneWidget);
+      final legacyCard = find.widgetWithText(ListPageCard, appL10n.engineProvidersSubscription);
+      expect(find.descendant(of: legacyCard, matching: find.text('ChatGPT')), findsOneWidget);
+      expect(find.descendant(of: legacyCard, matching: find.text('Claude')), findsOneWidget);
+
+      final openAi = find.widgetWithText(ListPageRow, 'OpenAI');
+      await tester.tap(find.descendant(of: openAi, matching: find.widgetWithText(FilledButton, '登录')));
+      await settle(tester);
+      expect(find.text('登录 ChatGPT'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(bridge.calls.where((call) => call.startsWith('begin:')), ['begin:openai-siwc']);
+      expect(browser.opened, [Uri.parse(_url)]);
+      await tester.tap(find.byTooltip('关闭'));
+      await settle(tester);
+      expect(bridge.calls, contains('cancel:att-1'));
+    });
+
+    for (final (button, expected) in [
+      ('取消', null),
+      ('登录原账号', 'begin:openai-siwc'),
+      ('使用其他账号', 'begin:openai-siwc:newAccount'),
+    ]) {
+      testWidgets('previous official registration: $button', (tester) async {
+        final bridge = FakeSubscriptionBackend(
+          statuses: const [SubscriptionStatus(subscription: _official, signedIn: false, reconnectAvailable: true)],
+          steps: const [LoginStep(phase: LoginPhase.failed)],
+        );
+        await _pump(tester, const ProvidersPage(), [
+          ...providerOverrides(FakeProviderBackend(), subscriptions: bridge),
+          operatingSystemProvider.overrideWithValue('android'),
+          modelCatalogProvider.overrideWith((ref) async => _codexCatalog),
+        ]);
+        final openAi = find.widgetWithText(ListPageRow, 'OpenAI');
+        await tester.tap(find.descendant(of: openAi, matching: find.byType(LoginCapsule)));
+        await settle(tester);
+        expect(find.widgetWithText(AlertDialog, '登录 ChatGPT'), findsOneWidget);
+        expect(find.widgetWithText(FilledButton, '登录原账号'), findsOneWidget);
+        expect(find.widgetWithText(TextButton, '使用其他账号'), findsOneWidget);
+        expect(bridge.calls.where((call) => call.startsWith('begin:')), isEmpty);
+        await tester.tap(find.text(button));
+        await settle(tester);
+        expect(bridge.calls.where((call) => call.startsWith('begin:')), [?expected]);
+        expect(find.byType(SubscriptionLoginSheet), expected == null ? findsNothing : findsOneWidget);
+      });
+    }
+
+    testWidgets('pending sign-out blocks login and can be retried after a refreshed failure', (tester) async {
+      final bridge = _PendingSignOutBridge();
+      await _pump(tester, const ProvidersPage(), [
+        ...providerOverrides(FakeProviderBackend(), subscriptions: bridge),
+        operatingSystemProvider.overrideWithValue('android'),
+        modelCatalogProvider.overrideWith((ref) async => _officialCatalog),
+      ]);
+      final openAi = find.widgetWithText(ListPageRow, 'OpenAI');
+      expect(find.descendant(of: openAi, matching: find.byType(LoginCapsule)), findsNothing);
+      await tester.tap(find.text('OpenAI'));
+      await settle(tester);
+      expect(find.byType(SubscriptionPage), findsOneWidget);
+      expect(find.text('Official test model'), findsNothing);
+      expect(find.text('重新登录'), findsNothing);
+      expect(find.text('使用其他账号'), findsNothing);
+
+      Future<void> signOut() async {
+        await tester.tap(find.text('退出登录'));
+        await settle(tester);
+        await tester.tap(find.widgetWithText(FilledButton, '退出登录'));
+        await settle(tester);
+      }
+
+      final before = bridge.calls.where((call) => call == 'list').length;
+      await signOut();
+      expect(bridge.calls.where((call) => call == 'list').length, greaterThan(before));
+      expect(find.byType(SubscriptionPage), findsOneWidget);
+      expect(find.byType(SubscriptionLoginSheet), findsNothing);
+      await signOut();
+      expect(find.byType(SubscriptionPage), findsNothing);
+      expect(find.descendant(of: openAi, matching: find.byType(LoginCapsule)), findsOneWidget);
+      expect(bridge.calls.where((call) => call.startsWith('signOut:')), ['signOut:openai-siwc', 'signOut:openai-siwc']);
+      expect(bridge.calls.where((call) => call.startsWith('begin:')), isEmpty);
+    });
+
+    for (final (os, local, advertised) in [
+      ('ohos', true, true),
+      ('ios', true, true),
+      ('android', false, true),
+      ('android', true, false),
+    ]) {
+      testWidgets('$os, local=$local, advertised=$advertised does not show OpenAI', (tester) async {
+        final bridge = FakeSubscriptionBackend(
+          statuses: [..._signedInChatGpt, if (advertised) _signedOutOfficial],
+        );
+        final client = DshClient.withCarrier(FakeSettingsHost());
+        addTearDown(client.close);
+        final host = local ? HostRef.local : const HostRef.ssh('mock-host');
+        final overrides = providerOverrides(FakeProviderBackend(isLocal: local), subscriptions: bridge);
+        await _pump(tester, const ProvidersPage(), [
+          for (final override in overrides)
+            if (override.origin != activeConnectionProvider) override,
+          activeHostProvider.overrideWith(() => FixedActiveHost(host)),
+          activeConnectionProvider.overrideWithValue(
+            AsyncData(
+              HostConnection(client: client, isLocal: local, kind: host.kind, hostId: local ? null : host.id),
+            ),
+          ),
+          operatingSystemProvider.overrideWithValue(os),
+          modelCatalogProvider.overrideWith((ref) async => _officialCatalog),
+        ]);
+        expect(bridge.calls, contains('list'));
+        expect(find.text('OpenAI'), findsNothing);
+        expect(find.text('ChatGPT'), findsOneWidget);
+        expect(find.text('Claude'), findsOneWidget);
+      });
+    }
+
+    testWidgets('detail shows only its own catalog, with no pi-ai override controls', (tester) async {
+      final bridge = FakeSubscriptionBackend(
+        statuses: const [SubscriptionStatus(subscription: _official, signedIn: true, planEnabled: true)],
+      );
+      var profileReads = 0;
+      await _pump(tester, const ProvidersPage(), [
+        ...providerOverrides(FakeProviderBackend(), subscriptions: bridge),
+        operatingSystemProvider.overrideWithValue('android'),
+        modelCatalogProvider.overrideWith((ref) async => _officialCatalog),
+        subscriptionProfileProvider(_official).overrideWith((ref) async {
+          profileReads++;
+          return _officialProfile;
+        }),
+      ]);
+      expect(find.text('2 个渠道 · 2 个可用'), findsOneWidget);
+      await tester.tap(find.text('OpenAI'));
+      await settle(tester);
+      expect(tester.widget<SubscriptionPage>(find.byType(SubscriptionPage)).subscription, _official);
+      expect(find.text('模型 · 1'), findsOneWidget);
+      expect(find.text('GPT-5.1 Codex'), findsNothing);
+      final row = tester.widget<ListPageRow>(find.widgetWithText(ListPageRow, 'Official test model'));
+      expect(row.onTap, isNull);
+      expect(row.value, isNull);
+      expect(profileReads, 0);
+    });
+
+    testWidgets('a disabled plan stays signed in and unconfirmed revocation refreshes to signed out', (tester) async {
+      final bridge = _UnconfirmedRevocationBridge();
+      await _pump(tester, const ProvidersPage(), [
+        ...providerOverrides(FakeProviderBackend(), subscriptions: bridge),
+        operatingSystemProvider.overrideWithValue('android'),
+        modelCatalogProvider.overrideWith((ref) async => _officialCatalog),
+      ]);
+      expect(find.text('2 个渠道 · 1 个可用'), findsOneWidget);
+      await tester.tap(find.text('OpenAI'));
+      await settle(tester);
+      expect(find.widgetWithText(ListPageRow, '已登录'), findsOneWidget);
+      expect(find.text(appL10n.engineSubscriptionPlanNotEnabled), findsOneWidget);
+      expect(find.text('Official test model'), findsNothing);
+      await tester.tap(find.text('重新登录'));
+      await settle(tester);
+      expect(tester.widget<SubscriptionLoginSheet>(find.byType(SubscriptionLoginSheet)).subscription, _official);
+      expect(bridge.calls.where((call) => call.startsWith('begin:')), ['begin:openai-siwc']);
+      expect(bridge.calls.where((call) => call.startsWith('signOut:')), isEmpty);
+      await tester.tap(find.byTooltip('关闭'));
+      await settle(tester);
+      await tester.ensureVisible(find.text('退出登录'));
+      await tester.tap(find.text('退出登录'));
+      await settle(tester);
+      await tester.tap(find.widgetWithText(FilledButton, '退出登录'));
+      await settle(tester);
+      expect(bridge.calls.where((call) => call.startsWith('signOut:')), ['signOut:openai-siwc']);
+      expect(find.byType(SubscriptionPage), findsNothing);
+      expect(find.text(appL10n.engineSubscriptionRevocationUnconfirmed), findsOneWidget);
+      expect(
+        find.descendant(of: find.widgetWithText(ListPageRow, 'OpenAI'), matching: find.byType(LoginCapsule)),
+        findsOneWidget,
+      );
     });
   });
 
@@ -596,6 +813,38 @@ class _PageOpener extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _PendingSignOutBridge extends FakeSubscriptionBackend {
+  _PendingSignOutBridge()
+    : super(
+        statuses: const [
+          SubscriptionStatus(subscription: _official, signedIn: false, reconnectAvailable: true, signOutPending: true),
+        ],
+      );
+
+  bool fail = true;
+
+  @override
+  Future<void> signOut(Subscription subscription) async {
+    if (fail) {
+      fail = false;
+      calls.add('signOut:${subscription.wire}');
+      throw const DshRemoteException('app-auth/sign-out-failed', 'local cleanup failed');
+    }
+    await super.signOut(subscription);
+  }
+}
+
+class _UnconfirmedRevocationBridge extends FakeSubscriptionBackend {
+  _UnconfirmedRevocationBridge()
+    : super(statuses: const [SubscriptionStatus(subscription: _official, signedIn: true, planEnabled: false)]);
+
+  @override
+  Future<void> signOut(Subscription subscription) async {
+    await super.signOut(subscription);
+    throw const DshRemoteException('app-auth/revocation-unconfirmed', 'remote revocation failed');
+  }
 }
 
 /// Polls fail [failures] times, then the attempt is done.
