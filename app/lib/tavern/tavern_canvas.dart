@@ -1293,13 +1293,15 @@ ${lowPower ? tavernCalmJs : ''}
     function answer(o){o.type='invoked';o.requestId=d.requestId;post(o);}
     var fn=filters[d.callbackId];
     if(typeof fn!=='function'){answer({status:'failed',message:'This page keeps no filter '+d.callbackId});return;}
+    // Only the writes the filter starts as it is called are its own: a page
+    // cannot tell whose a later one is, so a filter that awaits is answered
+    // without them (never waiting on the page's other calls, or on a
+    // generation that waits on this very answer).
     var w={entries:[]};watching.push(w);
     var r;try{r=Promise.resolve(fn.apply(null,d.args||[]));}catch(e){r=Promise.reject(e);}
+    var at=watching.indexOf(w);if(at>=0)watching.splice(at,1);
     var value=null,error=null;
     r.then(function(v){value=v;},function(e){error=e||new Error('failed');}).then(function(){
-      var at=watching.indexOf(w);if(at>=0)watching.splice(at,1);
-      // Only the writes this filter started: never the page's other calls
-      // (a generation may be waiting on this very answer).
       return Promise.all(w.entries.map(function(e){return e.done;}));
     }).then(function(){
       var issues=[];
