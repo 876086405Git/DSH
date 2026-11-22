@@ -44,12 +44,16 @@ class PcmFrames(private val rate: Int) {
             filled += take
             offset += take
             if (filled != input.size) continue
-            for (i in output.indices) {
-                val first = i * rate / 16000
-                val end = (i + 1) * rate / 16000
-                var sum = 0
-                for (j in first until end) sum += input[j]
-                output[i] = (sum / (end - first)).toShort()
+            if (rate == 16000) {
+                input.copyInto(output)
+            } else {
+                for (i in output.indices) {
+                    val first = i * rate / 16000
+                    val end = (i + 1) * rate / 16000
+                    var sum = 0
+                    for (j in first until end) sum += input[j]
+                    output[i] = (sum / (end - first)).toShort()
+                }
             }
             send(output)
             filled = 0
