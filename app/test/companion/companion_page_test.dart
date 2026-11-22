@@ -149,16 +149,6 @@ List<Override> get _hostRoom => [
   companionSessionsProvider.overrideWith(_BoundSessions.new),
 ];
 
-/// Skipped, product gap: with no connection the Agent offers no computer
-/// tools (companionAgentHostProvider is null and CompanionAgentTaskTools only
-/// binds hostDefinitions in a connected full room), so "等电脑开了…" can no
-/// longer be queued offline from originals chosen earlier. The saved-input
-/// pickers (CompanionAgentTaskUi.chooseSavedDirectory, the `client == null`
-/// branches of the receipt/draft pickers) are never reached from the Agent.
-/// Re-enable once offline queueing is back; the reconnect half still exists
-/// (_CompanionAgentVisit.resumeNotes).
-const _offlineQueueGap = true;
-
 /// Skipped, product divergence: a map handoff whose scope the person left
 /// for an unrelated page still shows 查看地址 when they come back. The Agent's
 /// map_open calls ui.accepted (adding the pill) when the task is created,
@@ -516,6 +506,103 @@ class _AgentModel {
 
   /// Every tool result sent back, across chat rounds.
   List<Map<String, Object?>> get results => [for (final request in chats) ..._toolResults(request)];
+}
+
+/// Her phone model for one offline Host-task turn: the selected computer is
+/// not connected, so only originals saved earlier can be chosen. For [said]
+/// it asks once for [call]; after the real tool result it ends with
+/// [failureLine] when that result is the actual selection_cancelled failure
+/// (nothing saved to choose), or a plain 嗯。 once the task was accepted.
+/// Memory upkeep also offers tools, so it is told apart by its maintenance
+/// JSON envelope and answered with an ordinary end_turn.
+class _OfflineTaskModel {
+  _OfflineTaskModel(this.said, this.call, {this.failureLine});
+
+  final String said;
+  final (String, Map<String, Object?>) call;
+  final String? failureLine;
+
+  /// Her chat rounds for [said]; maintenance requests are kept apart.
+  final ordinary = <Map<String, Object?>>[];
+  final maintenance = <Map<String, Object?>>[];
+
+  /// Requests that broke the script, checked in the test body.
+  final problems = <String>[];
+  String? issuedId;
+
+  late final _model = _AgentModel(_answer);
+  http.Client get client => _model.client;
+
+  static bool _isMaintenance(Map<String, Object?> body) {
+    final content = ((body['messages']! as List).first as Map)['content'];
+    if (content is! String) return false;
+    try {
+      final input = jsonDecode(content);
+      return input is Map && input['type'] == 'memory_maintenance_context';
+    } on FormatException {
+      return false;
+    }
+  }
+
+  List<Map<String, Object?>> _problem(String what) {
+    problems.add(what);
+    return _wordsTurn('出了点问题。');
+  }
+
+  List<Map<String, Object?>> _answer(int index, Map<String, Object?> body) {
+    if (_isMaintenance(body)) {
+      maintenance.add(body);
+      return _wordsTurn('这轮没有新增记忆。');
+    }
+    ordinary.add(body);
+    final turn = _turnOf(body);
+    if (turn.said != said) return _problem('unexpected words: ${turn.said}');
+    if (turn.round == 0) {
+      if (issuedId != null) return _problem('planned the task again');
+      issuedId = 'offline-task-$index';
+      return _toolTurn(issuedId!, call.$1, call.$2);
+    }
+    final blocks = _toolResults2(body);
+    if (turn.round != 1 || blocks.length != 1 || blocks.single['tool_use_id'] != issuedId) {
+      return _problem('no single original tool result in round ${turn.round}');
+    }
+    final result = _toolResults(body).single;
+    if (failureLine != null) {
+      if (result['accepted'] != false || result['code'] != 'selection_cancelled' || blocks.single['is_error'] != true) {
+        return _problem('not the actual selection failure: $result');
+      }
+      return _wordsTurn(failureLine!);
+    }
+    if (result['accepted'] != true || blocks.single['is_error'] == true) {
+      return _problem('original task not accepted: $result');
+    }
+    // Accepted only: the offline computer has not run anything yet.
+    return _wordsTurn('嗯。');
+  }
+
+  /// The one tool result her second round carried back.
+  Map<String, Object?> get result => _toolResults(ordinary.last).single;
+
+  /// Exactly one planned call and one continuation with its real result: the
+  /// offline tool was offered (notes_to_todo is not, it needs a live Host),
+  /// and the result is the real failure or acceptance.
+  void expectTurn() {
+    expect(problems, isEmpty);
+    expect(ordinary, hasLength(2));
+    final offered = [for (final tool in ordinary.first['tools']! as List) (tool as Map)['name']! as String];
+    expect(offered, contains(call.$1));
+    expect(offered, isNot(contains('notes_to_todo')));
+    final block = _toolResults2(ordinary.last).single;
+    expect(block['tool_use_id'], issuedId);
+    if (failureLine != null) {
+      expect(block['is_error'], isTrue);
+      expect(result['accepted'], isFalse);
+      expect(result['code'], 'selection_cancelled');
+    } else {
+      expect(block['is_error'], isNot(true));
+      expect(result['accepted'], isTrue);
+    }
+  }
 }
 
 void main() {
@@ -1677,6 +1764,7 @@ void main() {
         testWidgets(
           'J actual Page keeps original offline selections and only first-delivers never-sent tasks: $scenario',
           (tester) async {
+            _resumeApp(tester);
             const channel = MethodChannel('dsh/companion_reminders');
             var now = 1795219200000;
             final memory = _ReceiptMemory(
@@ -1688,7 +1776,20 @@ void main() {
             peer.capability = receiptsCapability;
             final checked = Completer<void>();
             final posted = Completer<void>();
-            var modelPosts = 0;
+            // Her model asks for what was said; compare needs two plain drafts,
+            // which four receipts (three too large, one PDF) cannot be.
+            final compareOnly = scenario == 'compare-only-large-and-pdf';
+            final model = compareOnly
+                ? _OfflineTaskModel(
+                    compareSpokenExample,
+                    _compareCall,
+                    failureLine: '先连上原来的电脑，选好 A 旧稿和 B 新稿；还没有可供离线选择的两份原稿。',
+                  )
+                : _OfflineTaskModel(
+                    receiptSpokenExample,
+                    _receiptsCall,
+                    failureLine: scenario == 'no-saved-inputs' ? '先连回原电脑，选好四张票和放新表的文件夹；没有选过的原件，我不能替你猜。' : null,
+                  );
             MemoryRow? snapshot;
             final selectedInputs = [
               for (final input in receiptInputs())
@@ -1751,11 +1852,8 @@ void main() {
             };
             await openLight(
               tester,
-              apiKey: '',
-              client: MockClient((_) async {
-                modelPosts++;
-                throw StateError('Receipt tasks do not use a phone model');
-              }),
+              apiKey: 'sk-test',
+              client: model.client,
               connectionOverride: activeConnectionProvider.overrideWith(
                 (ref) => AsyncData(ref.watch(_findConnectionProvider)),
               ),
@@ -1842,43 +1940,49 @@ void main() {
               expect(memory.store.tasks().any((row) => row['kind'] == 'host.receipts_to_sheet'), isFalse);
             }
             final saidAt = now;
-            await tester.enterText(
-              find.byType(TextField),
-              scenario == 'compare-only-large-and-pdf' ? compareSpokenExample : receiptSpokenExample,
-            );
+            await tester.enterText(find.byType(TextField), model.said);
             await tester.pump();
             await tester.tap(find.byIcon(AppIcons.send).last);
-            if (scenario == 'compare-only-large-and-pdf') {
-              await _notesVisible(tester, find.text('先连上原来的电脑，选好 A 旧稿和 B 新稿；还没有可供离线选择的两份原稿。'));
-              await settleMixed(tester, memory.lastReceipt);
+            if (compareOnly) {
+              await _notesVisible(tester, find.text(model.failureLine!));
+              await _drained(tester, memory);
+              model.expectTurn();
               expect(memory.store.hostTaskInputs(hostKey: hostKey), hasLength(4));
               expect(memory.store.tasks(sourceSessionId: sourceRoom), isEmpty);
               expect(find.byType(SimpleDialog), findsNothing);
               expect(peer.calls, isEmpty);
-              expect(modelPosts, 0);
               return;
             }
             if (scenario == 'no-saved-inputs') {
-              await _notesVisible(tester, find.text('先连回原电脑，选好四张票和放新表的文件夹；没有选过的原件，我不能替你猜。'));
-              await settleMixed(tester, memory.lastReceipt);
+              await _notesVisible(tester, find.text(model.failureLine!));
+              await _drained(tester, memory);
+              model.expectTurn();
               expect(memory.store.tasks(), isEmpty);
-              expect(memory.store.messages().single['text'], receiptSpokenExample);
+              // Her reply is kept beside it now; the person's words are the one source.
+              expect(
+                memory.store.messages().where((row) => row['role'] == 'user').single['text'],
+                receiptSpokenExample,
+              );
               expect(peer.calls, isEmpty);
-              expect(modelPosts, 0);
               return;
             }
             await _notesVisible(tester, find.text('选之前选过的第 1 份票据'));
             final handled = memory.lastReceipt;
             for (var i = 0; i < 4; i++) {
               await _notesVisible(tester, find.text('选之前选过的第 ${i + 1} 份票据'));
+              // Let the previous dialog finish closing and this one land.
+              await tester.pump(const Duration(milliseconds: 500));
               await tester.tap(find.text(receiptInputs()[i]['displayName']! as String));
             }
             await _notesVisible(tester, find.text('把新表放到之前选过的哪个文件夹？'));
+            await tester.pump(const Duration(milliseconds: 500));
             await tester.tap(find.text('/本人选的输出'));
             await settleMixed(tester, handled);
-            await tester.pump();
+            await _drained(tester, memory);
+            model.expectTurn();
             final task = memory.store.tasks(sourceSessionId: sourceRoom).single;
             final id = task['task_id']! as String;
+            expect((model.result['task']! as Map)['task_id'], id);
             expect(task['state'], 'queued');
             expect(memory.store.hostTask(id)!['directory_labels'], {
               'inputs': receiptInputs(),
@@ -1939,13 +2043,12 @@ void main() {
               isEmpty,
             );
             expect(memory.store.hostTaskCommands(id), hasLength(1));
-            expect(modelPosts, 0);
+            // The reconnection resumes the saved command; it plans nothing anew.
+            expect(model.ordinary, hasLength(2));
             await tester.pumpWidget(const SizedBox());
             // The real HttpClient keeps its idle connection on a 15-second fake-clock timer.
             await tester.pump(const Duration(seconds: 16));
           },
-          // Product gap, see [_offlineQueueGap].
-          skip: _offlineQueueGap,
         );
       }
 
@@ -2240,6 +2343,7 @@ void main() {
 
       for (final scenario in ['no-saved-inputs', 'queued-behind-two-hundred-tasks', 'already-possible']) {
         testWidgets('I actual Page offline input selection and original Host recovery: $scenario', (tester) async {
+          _resumeApp(tester);
           const channel = MethodChannel('dsh/companion_reminders');
           var now = 1795219200000;
           final memory = _ReceiptMemory(
@@ -2250,7 +2354,11 @@ void main() {
           final peer = (await tester.runAsync(NotesPeer.open))!;
           peer.capability = compareCapability;
           var seeding = true;
-          var modelPosts = 0;
+          final model = _OfflineTaskModel(
+            compareSpokenExample,
+            _compareCall,
+            failureLine: scenario == 'no-saved-inputs' ? '先连上原来的电脑，选好 A 旧稿和 B 新稿；还没有可供离线选择的两份原稿。' : null,
+          );
           MemoryRow? snapshot;
           final recovered = Completer<void>();
           final posted = Completer<void>();
@@ -2321,11 +2429,8 @@ void main() {
           };
           await openLight(
             tester,
-            apiKey: '',
-            client: MockClient((_) async {
-              modelPosts++;
-              throw StateError('The comparison entry must not call a phone model');
-            }),
+            apiKey: 'sk-test',
+            client: model.client,
             connectionOverride: activeConnectionProvider.overrideWith(
               (ref) => AsyncData(ref.watch(_findConnectionProvider)),
             ),
@@ -2417,23 +2522,29 @@ void main() {
           await tester.pump();
           await tester.tap(find.byIcon(AppIcons.send).last);
           if (scenario == 'no-saved-inputs') {
-            await _notesVisible(tester, find.text('先连上原来的电脑，选好 A 旧稿和 B 新稿；还没有可供离线选择的两份原稿。'));
-            await settleMixed(tester, memory.lastReceipt);
+            await _notesVisible(tester, find.text(model.failureLine!));
+            await _drained(tester, memory);
+            model.expectTurn();
             expect(memory.store.tasks(), isEmpty);
-            expect(memory.store.messages().single['text'], compareSpokenExample);
+            // Her reply is kept beside it now; the person's words are the one source.
+            expect(memory.store.messages().where((row) => row['role'] == 'user').single['text'], compareSpokenExample);
             expect(peer.calls, isEmpty);
-            expect(modelPosts, 0);
             return;
           }
           await _notesVisible(tester, find.text('选择之前选过的 A · 旧稿'));
           final handled = memory.lastReceipt;
+          await tester.pump(const Duration(milliseconds: 500));
           await tester.tap(find.text('A.md'));
           await _notesVisible(tester, find.text('选择之前选过的 B · 新稿'));
+          // Let the A dialog finish closing and the B one land.
+          await tester.pump(const Duration(milliseconds: 500));
           await tester.tap(find.text('B.txt'));
           await settleMixed(tester, handled);
-          await tester.pump();
+          await _drained(tester, memory);
+          model.expectTurn();
           final task = memory.store.tasks(sourceSessionId: sourceRoom).single;
           final id = task['task_id']! as String;
+          expect((model.result['task']! as Map)['task_id'], id);
           expect(task['state'], 'queued');
           expect(memory.store.hostTask(id)!['directory_labels'], {'inputs': compareInputs()});
           expect(memory.store.hostTaskCommands(id).single['possible_sent_at_ms'], isNull);
@@ -2488,12 +2599,12 @@ void main() {
             isEmpty,
           );
           expect(memory.store.hostTaskCommands(id), hasLength(1));
-          expect(modelPosts, 0);
+          // The reconnection resumes the saved command; it plans nothing anew.
+          expect(model.ordinary, hasLength(2));
           await tester.pumpWidget(const SizedBox());
           // The real HttpClient keeps its idle connection on a 15-second fake-clock timer.
           await tester.pump(const Duration(seconds: 16));
-          // Product gap, see [_offlineQueueGap].
-        }, skip: _offlineQueueGap);
+        });
       }
 
       for (final scenario in [
@@ -3478,6 +3589,7 @@ void main() {
         testWidgets('H actual Page reconnects a saved light-room find without losing the original queue: $scenario', (
           tester,
         ) async {
+          _resumeApp(tester);
           const channel = MethodChannel('dsh/companion_reminders');
           var now = 1795219200000;
           final memory = _ReceiptMemory(
@@ -3485,6 +3597,19 @@ void main() {
             CompanionLocal.at(root),
             nowMilliseconds: () => now,
           );
+          const raw = '等家里电脑开了，在“演讲稿”本层找昨天改的稿子，离开后继续';
+          // Her model asks for the find as said: yesterday (the fixed clock's
+          // 2026-11-20 in Shanghai), md/txt, queued until the computer is on.
+          final model = _OfflineTaskModel(raw, (
+            'find_draft',
+            <String, Object?>{
+              'operation': 'create',
+              'localDate': '2026-11-20',
+              'extensions': ['md', 'txt'],
+              'afterExit': 'continue',
+              'allowQueue': true,
+            },
+          ));
           void addLaterTasks(int start) {
             for (var i = start; i < start + 100; i++) {
               now++;
@@ -3508,7 +3633,6 @@ void main() {
 
           final peer = (await tester.runAsync(NotesPeer.open))!;
           peer.capability = findCapability;
-          var modelPosts = 0;
           final readBack = Completer<void>();
           final posted = Completer<void>();
           Map<String, Object?>? snapshot;
@@ -3579,11 +3703,8 @@ void main() {
           };
           await openLight(
             tester,
-            apiKey: '',
-            client: MockClient((_) async {
-              modelPosts++;
-              throw StateError('H must not use the light model');
-            }),
+            apiKey: 'sk-test',
+            client: model.client,
             connectionOverride: activeConnectionProvider.overrideWith(
               (ref) => AsyncData(ref.watch(_findConnectionProvider)),
             ),
@@ -3647,17 +3768,20 @@ void main() {
             expect(memory.store.tasks().any((row) => row['kind'] == 'host.find_draft'), isFalse);
           }
           final saidAt = now;
-          const raw = '等家里电脑开了，在“演讲稿”本层找昨天改的稿子，离开后继续';
           await tester.enterText(find.byType(TextField), raw);
           await tester.pump();
           await tester.tap(find.byIcon(AppIcons.send).last);
           await _notesVisible(tester, find.text('选一个之前用过的文件夹'));
           final handled = memory.lastReceipt;
+          // Let the saved-directory choice finish sliding in.
+          await tester.pump(const Duration(milliseconds: 500));
           await tester.tap(find.text('/本人选的稿件'));
           await settleMixed(tester, handled);
-          await tester.pump();
+          await _drained(tester, memory);
+          model.expectTurn();
           final task = memory.store.tasks(sourceSessionId: sourceRoom).single;
           final id = task['task_id']! as String;
+          expect((model.result['task']! as Map)['task_id'], id);
           final source = memory.store.messages().singleWhere((row) => row['id'] == task['source_message_id']);
           expect(source['text'], raw);
           expect(source['said_at_utc'], saidAt);
@@ -3725,10 +3849,10 @@ void main() {
             isFalse,
           );
           expect(memory.store.hostTaskCommands(id), hasLength(1));
-          expect(modelPosts, 0);
+          // The reconnection resumes the saved command; it plans nothing anew.
+          expect(model.ordinary, hasLength(2));
           await cleanUp();
-          // Product gap, see [_offlineQueueGap].
-        }, skip: _offlineQueueGap);
+        });
       }
 
       for (final operation in ['amend', 'cancel']) {
