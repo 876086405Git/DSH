@@ -60,6 +60,12 @@ final tavernCanvasLibrariesProvider = FutureProvider<List<String>>(
   ],
 );
 
+/// SPreset's page side, for the canvas only: a preset's SPreset functions
+/// are evaluated with it where the preset's scripts run.
+final tavernSPresetRuntimeProvider = FutureProvider<String>(
+  (ref) => rootBundle.loadString('packages/dsh_tavern/assets/spreset_page_runtime.js'),
+);
+
 /// Builds the canvas. Tests swap it.
 final tavernCanvasBuilderProvider = Provider<TavernCanvasBuilder>(
   (ref) =>
@@ -212,13 +218,14 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       card = null;
     } else {
       final loaded = ref.read(tavernCanvasLibrariesProvider);
+      final spreset = ref.read(tavernSPresetRuntimeProvider);
       // The chat's scripts are told to the page once it is up (_pushScripts),
       // but it waits for them, so they start with the story.
       final chat = widget.calls?.chatId;
       final scripts = chat == null ? null : ref.read(tavernChatScriptsProvider((chat, character)));
       final data = character == null ? null : ref.read(tavernCardDataProvider(character));
-      if (loaded.isLoading || (scripts?.isLoading ?? false) || (data?.isLoading ?? false)) return;
-      libraries = loaded.value ?? const [];
+      if (loaded.isLoading || spreset.isLoading || (scripts?.isLoading ?? false) || (data?.isLoading ?? false)) return;
+      libraries = [...?loaded.value, ?spreset.value];
       card = data?.value;
     }
     // The colours are set in place on the loaded page (_pushColors), never by
@@ -341,6 +348,8 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
         unawaited(_answer(data));
       case 'invoked':
         widget.calls?.invoked(data);
+      case 'spreset':
+        widget.calls?.spreset(data);
       case 'ack':
         widget.calls?.acknowledge(data);
       case 'toast':
@@ -568,6 +577,9 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
         _pushScripts();
       });
     }
+    ref.listen(tavernSPresetRuntimeProvider, (_, next) {
+      if (!next.isLoading) _open();
+    });
     ref.listen(tavernCanvasLibrariesProvider, (_, next) {
       if (!next.isLoading) _open();
     });

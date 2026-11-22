@@ -207,8 +207,8 @@ class _Pages extends TavernScriptPages {
   final added = <String>[];
 
   @override
-  void add(String contextId, TavernScriptPage page, {TavernScriptInteractor? interact}) {
+  void add(String contextId, TavernScriptPage page, {TavernScriptInteractor? interact, String? chatId}) {
     added.add(contextId);
-    super.add(contextId, page, interact: interact);
+    super.add(contextId, page, interact: interact, chatId: chatId);
   }
 }

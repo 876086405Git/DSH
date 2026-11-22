@@ -72,7 +72,7 @@ class TavernCanvasCalls {
     )).id;
     if (released != _released) return id;
     _registered = id;
-    pages?.add(id, (delivery) => deliver?.call(delivery) ?? Future.value(false), interact: interact);
+    pages?.add(id, (delivery) => deliver?.call(delivery) ?? Future.value(false), interact: interact, chatId: chatId);
     return id;
   }
 
@@ -215,6 +215,9 @@ class TavernCanvasCalls {
   void invoked(Map<Object?, Object?> answer) {
     if (answer['requestId'] case final String id) pages?.invoked(id, answer);
   }
+
+  /// The page's answer to an SPreset evaluation it ran.
+  void spreset(Map<Object?, Object?> answer) => pages?.spresetAnswered(answer);
 
   /// The page's answer to a lifecycle event it ran ({eventId, status, issues}).
   void acknowledge(Map<Object?, Object?> answer) {

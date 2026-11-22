@@ -484,15 +484,64 @@ void main() {
     expect((ack.eventId, ack.status), ('ev', TavernScriptAckStatus.completed));
     expect(ack.issues, isEmpty);
   });
+
+  test("a preset's SPreset function is evaluated by its chat's page; a cancel is passed on, and its answer still settles it", () async {
+    final pages = TavernScriptPages();
+    TavernSPresetEvaluationRequest request(String id) => TavernSPresetEvaluationRequest(
+      requestId: id,
+      chatId: 'c1',
+      generationId: 'g',
+      sessionId: 'g:s',
+      stage: 'OutputPreprocessing',
+      source: '(x) => x',
+      arguments: const [1],
+    );
+    // No page for that chat: said so.
+    await expectLater(
+      pages.evaluateSPreset(request('r0'), _Never()),
+      throwsA(isA<TavernScriptException>().having((e) => e.code, 'code', TavernScriptErrorCode.hostUnavailable)),
+    );
+    final sent = <Map<String, Object?>>[];
+    pages.add('ctx', (d) async {
+      sent.add(d);
+      return true;
+    }, chatId: 'c1');
+    final cancel = _Cancel();
+    final answer = pages.evaluateSPreset(request('r1'), cancel);
+    await pumpEventQueue();
+    expect(sent.single['kind'], 'spreset');
+    expect((sent.single['request']! as Map)['source'], '(x) => x');
+    cancel.cancel();
+    await pumpEventQueue();
+    expect(sent.last, {'kind': 'spresetCancel', 'requestId': 'r1'});
+    pages.spresetAnswered({
+      'requestId': 'r1',
+      'value': 2,
+      'arguments': const [1],
+      'type': 'spreset',
+    });
+    expect((await answer).value, 2);
+    // What threw there fails here; a page that goes leaves it unknown, failed.
+    final threw = pages.evaluateSPreset(request('r2'), _Never());
+    await pumpEventQueue();
+    pages.spresetAnswered({'requestId': 'r2', 'error': 'boom'});
+    await expectLater(threw, throwsA(isA<TavernScriptException>().having((e) => e.message, 'message', 'boom')));
+    final lost = pages.evaluateSPreset(request('r3'), _Never());
+    await pumpEventQueue();
+    pages.drop('ctx');
+    await expectLater(lost, throwsA(isA<TavernScriptException>()));
+    await pages.releaseSPresetSession('g:s');
+    expect(sent.last, {'kind': 'spresetRelease', 'sessionId': 'g:s'});
+  });
 }
 
 class _Recording extends TavernScriptPages {
   final interactors = <String, TavernScriptInteractor>{};
 
   @override
-  void add(String contextId, TavernScriptPage page, {TavernScriptInteractor? interact}) {
+  void add(String contextId, TavernScriptPage page, {TavernScriptInteractor? interact, String? chatId}) {
     if (interact != null) interactors[contextId] = interact;
-    super.add(contextId, page, interact: interact);
+    super.add(contextId, page, interact: interact, chatId: chatId);
   }
 }
 

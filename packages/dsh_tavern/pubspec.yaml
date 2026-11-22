@@ -23,3 +23,8 @@ dependencies:
 dev_dependencies:
   lints: ^6.0.0
   test: ^1.26.0
+
+# The App puts SPreset's page side on its canvas (docs/SPRESET-HOST.md).
+flutter:
+  assets:
+    - assets/spreset_page_runtime.js
