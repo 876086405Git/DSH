@@ -160,6 +160,7 @@ piai-usage-evidence.diff
 piai-tool-call-id.diff
 piai-bedrock-usage-evidence.diff
 empty-tool-name-replay.diff
+piai-dashscope-system-role.diff
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
 ohos-hap-native-libraries.diff

@@ -395,8 +395,8 @@
     "ohos-provider-body-timeout.diff": {
       "0.2.2-rc.1": {
         "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js": {
-          "after": "56c8036e7fb7f580097b17f5257a5f6f1b149e25b68a6caae6d2712de624949a",
-          "before": "0f90990333c18d9470b3bb02148159cbcbe754e0e7238cba577da0c012d7ba8f"
+          "after": "36cad7733e5e6d594f2f2751e672c2c7eecfc77cd562084bdc9e9fa4952f7c71",
+          "before": "4aab9d6a269605fbce671e1dea78a55bec068dd07c962399f355358024822e6a"
         }
       }
     },
@@ -489,6 +489,14 @@
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
           "after": "2c75fbaa9a704c782494931e399839d40366194af3e27873a1859b1b1f154190",
           "before": "bf5c03ca763a7ee3ea7e6b193f07fd7e658d1ad4b43b24e69db12b51650e9b80"
+        }
+      }
+    },
+    "piai-dashscope-system-role.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js": {
+          "after": "4aab9d6a269605fbce671e1dea78a55bec068dd07c962399f355358024822e6a",
+          "before": "0f90990333c18d9470b3bb02148159cbcbe754e0e7238cba577da0c012d7ba8f"
         }
       }
     },
@@ -2573,7 +2581,8 @@
       "piai-usage-evidence.diff",
       "piai-tool-call-id.diff",
       "piai-bedrock-usage-evidence.diff",
-      "empty-tool-name-replay.diff"
+      "empty-tool-name-replay.diff",
+      "piai-dashscope-system-role.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2736,6 +2745,7 @@
       "piai-tool-call-id.diff",
       "piai-bedrock-usage-evidence.diff",
       "empty-tool-name-replay.diff",
+      "piai-dashscope-system-role.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
