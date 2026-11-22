@@ -145,7 +145,7 @@ class MediaPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
         }
         val source = File(path)
         val name = FilesPlugin.safeName(call.argument<String>("name")?.trim().orEmpty().ifEmpty { source.name })
-        val mime = when (source.extension.lowercase()) {
+        val mime = when (File(name).extension.lowercase()) {
             "mp4", "m4v" -> "video/mp4"
             "mov" -> "video/quicktime"
             "webm" -> "video/webm"
