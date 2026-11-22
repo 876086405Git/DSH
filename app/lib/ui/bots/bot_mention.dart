@@ -31,13 +31,12 @@ import 'bots_page.dart' show BotTag;
   while (at >= 0) {
     final unit = text[at];
     if (unit == '@') break;
-    if (RegExp(r'\s').hasMatch(unit)) return null;
+    if (caret - at > 40 || RegExp(r'\s').hasMatch(unit)) return null;
     at -= 1;
   }
   if (at < 0) return null;
   if (at > 0 && RegExp(r'[A-Za-z0-9_.]').hasMatch(text[at - 1])) return null;
   final query = text.substring(at + 1, caret);
-  if (query.length > 40) return null;
   return (start: at, query: query);
 }
 
