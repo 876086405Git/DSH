@@ -1,0 +1,65 @@
+{
+  "status": "4/4 actual source controls passed",
+  "stCommit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+  "helperCommit": "29331c36fb9b2e880d4d488ff919317e1bc95684",
+  "messageClassSha256": "ed3d871c7e0f7b56d2d006158651c167b3a927d06dbd75c67aab0243a514c091",
+  "scope": "Actual fixed Message.createAsync/ensureContentIsArray/addImage plus actual Helper convertFileToBase64; fetch/base64 outcomes and text counter are explicit controls. No whole browser, image compression or token accuracy claim.",
+  "rows": [
+    {
+      "path": "raw-history-image",
+      "stage": "download",
+      "content": [
+        {
+          "type": "text",
+          "text": "H"
+        }
+      ],
+      "calls": [
+        "download"
+      ],
+      "warnings": [
+        "Image adding skipped"
+      ],
+      "textTokensUnchanged": true
+    },
+    {
+      "path": "top-level-single-image",
+      "stage": "download",
+      "content": "H",
+      "calls": [
+        "download"
+      ],
+      "warnings": [],
+      "textTokensUnchanged": true
+    },
+    {
+      "path": "raw-history-image",
+      "stage": "base64",
+      "content": [
+        {
+          "type": "text",
+          "text": "H"
+        }
+      ],
+      "calls": [
+        "download",
+        "base64"
+      ],
+      "warnings": [
+        "Image adding skipped"
+      ],
+      "textTokensUnchanged": true
+    },
+    {
+      "path": "top-level-single-image",
+      "stage": "base64",
+      "content": "H",
+      "calls": [
+        "download",
+        "base64"
+      ],
+      "warnings": [],
+      "textTokensUnchanged": true
+    }
+  ]
+}

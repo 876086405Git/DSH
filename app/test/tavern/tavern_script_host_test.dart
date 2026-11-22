@@ -7,6 +7,8 @@ import 'package:dsh_app/tavern/tavern_interact.dart';
 import 'package:dsh_app/tavern/tavern_script_host.dart';
 import 'package:dsh_tavern/dsh_tavern.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   late Directory dir;
@@ -533,6 +535,45 @@ void main() {
     await pages.releaseSPresetSession('g:s');
     expect(sent.last, {'kind': 'spresetRelease', 'sessionId': 'g:s'});
   });
+
+  test(
+    "酒馆助手's URL image: fetched as a data URI; a failed download is the failure the engine skips; no named proxies",
+    () async {
+      final pages = TavernScriptPages(
+        client: () => MockClient((request) async {
+          if (request.url.path == '/cat.png') {
+            return http.Response.bytes([1, 2, 3], 200, headers: {'content-type': 'image/png'});
+          }
+          if (request.url.path == '/page') return http.Response('<html>', 200, headers: {'content-type': 'text/html'});
+          return http.Response('gone', 404);
+        }),
+      );
+      expect(await pages.resolveHelperImage('https://x.test/cat.png', _Never()), 'data:image/png;base64,AQID');
+      await expectLater(
+        pages.resolveHelperImage('https://x.test/missing.png', _Never()),
+        throwsA(
+          isA<TavernHelperImageConversionFailure>().having(
+            (e) => e.stage,
+            'stage',
+            TavernHelperImageConversionStage.download,
+          ),
+        ),
+      );
+      await expectLater(
+        pages.resolveHelperImage('https://x.test/page', _Never()),
+        throwsA(isA<TavernHelperImageConversionFailure>()),
+      );
+      expect(await pages.resolveHelperProxy('主代理', _Never()), isNull);
+      // Offline chosen: nothing is fetched, and it is not a skipped image.
+      final offline = TavernScriptPages(client: () => throw StateError('fetched'), offline: () => true);
+      await expectLater(
+        offline.resolveHelperImage('https://x.test/cat.png', _Never()),
+        throwsA(
+          isA<TavernScriptException>().having((e) => e.code, 'code', TavernScriptErrorCode.unsupportedCapability),
+        ),
+      );
+    },
+  );
 }
 
 class _Recording extends TavernScriptPages {

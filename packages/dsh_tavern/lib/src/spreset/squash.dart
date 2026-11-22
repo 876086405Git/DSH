@@ -8,6 +8,9 @@ class _SPresetUndefined {
 
 /// Runs at the GENERATE_AFTER_DATA boundary, before provider post-processing.
 /// historyIds identifies the assembler's complete chatHistory collection.
+/// A caller whose remaining conversion is a no-op can retain a postprocessor's
+/// arbitrary JSON message array in the request body. Its typed admission
+/// snapshot remains [input]; no primitive is recast as a fabricated message.
 Future<List<PromptSegment>> spresetSquashSegments(
   List<PromptSegment> input,
   SPresetConfig config,
@@ -16,6 +19,8 @@ Future<List<PromptSegment>> spresetSquashSegments(
   required SPresetEvaluate evaluate,
   required SPresetDiagnostic diagnose,
   Set<String> historyIds = const {},
+  PromptManagerSnapshot? Function()? readPromptManager,
+  void Function(List<Object?> messages)? onUnconvertedMessages,
 }) async {
   if (!config.present) return input;
   final settings = config.chatSquash;
@@ -24,6 +29,10 @@ Future<List<PromptSegment>> spresetSquashSegments(
     final messages = input.map((segment) => segment.message).toList();
     final processed = await _spPostScript(messages, settings, evaluate, diagnose, array: true);
     final values = processed! as List<Object?>;
+    if (onUnconvertedMessages != null && values.any((value) => value is! Map<String, Object?>)) {
+      onUnconvertedMessages(values);
+      return input;
+    }
     return [
       for (var i = 0; i < values.length; i++)
         PromptSegment(
@@ -65,6 +74,44 @@ Future<List<PromptSegment>> spresetSquashSegments(
     if (group.isEmpty) return;
     output.addAll(await _spSquashGroup(group, settings, counter, expand, evaluate, diagnose));
     group.clear();
+  }
+
+  if (readPromptManager != null) {
+    final snapshot = readPromptManager();
+    if (snapshot == null) {
+      throw const SPresetException('ChatSquash', 'The chat PromptManager collection has not been initialized.');
+    }
+    for (final item in snapshot.withCurrentMessages(prepared).items) {
+      switch (item) {
+        case PromptManagerCollection():
+          await flush();
+          final messages = [
+            for (final message in item.messages)
+              if (message.meaningful) message.serialize(counter, direct: false, collectionId: item.identifier),
+          ];
+          if (item.identifier == 'chatHistory') {
+            output.addAll(await _spSquashGroup(messages, settings, counter, expand, evaluate, diagnose));
+          } else {
+            output.addAll(messages);
+          }
+        case PromptManagerMessage():
+          if (!item.meaningful) continue;
+          final identifier = item.identifier;
+          final continuation = item.collectionIdentifier == 'continueNudge';
+          if (identifier == null && !continuation) {
+            throw const SPresetException('ChatSquash', 'A direct PromptManager message has no logical identifier.');
+          }
+          final message = item.serialize(counter, direct: true, collectionId: item.collectionIdentifier);
+          if (!continuation && identifier!.startsWith('chatHistory')) {
+            group.add(message);
+          } else {
+            await flush();
+            output.add(message);
+          }
+      }
+    }
+    await flush();
+    return output;
   }
 
   for (final segment in prepared) {

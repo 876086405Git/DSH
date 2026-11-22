@@ -53,7 +53,7 @@ class TavernCanvasCalls {
   TavernScriptPage? deliver;
 
   // A generation's events go to the page as they come, like a delivery.
-  late final _wire = TavernScriptWire(_bridge, onGeneration: (e) => deliver?.call({...e, 'kind': 'generation'}));
+  late final _wire = TavernScriptWire(_bridge);
   Future<String>? _context;
   String? _registered;
 
@@ -194,21 +194,22 @@ class TavernCanvasCalls {
   /// keeps), made the reference the engine calls back with: this context,
   /// this instance. A filter the page did not name that way goes as it was.
   Map<String, Object?> _filters(Map<Object?, Object?> params, String context) {
-    if (params['prompts'] case final List<Object?> prompts) {
-      return {
-        'prompts': [
-          for (final prompt in prompts)
-            if (prompt case {'filter': {'callbackId': final String callbackId}})
-              {
-                ...prompt,
-                'filter': {'contextId': context, 'instanceId': instanceId, 'callbackId': callbackId},
-              }
-            else
-              prompt,
-        ],
-      };
-    }
-    return const {};
+    Object? ref(Object? item) => switch (item) {
+      {'filter': {'callbackId': final String callbackId}} && final Map<String, Object?> named => {
+        ...named,
+        'filter': {'contextId': context, 'instanceId': instanceId, 'callbackId': callbackId},
+      },
+      _ => item,
+    };
+    return {
+      if (params['prompts'] case final List<Object?> prompts) 'prompts': [for (final prompt in prompts) ref(prompt)],
+      // A Helper generation's own injects carry their filters the same way.
+      if (params['config'] case {'injects': final List<Object?> injects} && final Map<String, Object?> config)
+        'config': {
+          ...config,
+          'injects': [for (final inject in injects) ref(inject)],
+        },
+    };
   }
 
   /// The page's answer to a filter it ran ({requestId, status, value, …}).
@@ -220,6 +221,13 @@ class TavernCanvasCalls {
   /// with no script of its own on it (a preset's SPreset functions run
   /// here). One that fails to open is opened again by the next call.
   void pageReady() {
+    // 酒馆助手's generations across the engine's pages, for the page's own
+    // synchronous stopGenerationById answer.
+    if (_bridge case final TavernHelperGenerationControl control when _helperWatch == null) {
+      _helperWatch = control.watchHelperGenerations().listen(
+        (state) => deliver?.call({'kind': 'helperState', 'activeIds': state.activeIds}),
+      );
+    }
     if (_context != null) return;
     final opening = _context = _open();
     opening.then<void>(
@@ -244,8 +252,12 @@ class TavernCanvasCalls {
     if (_registered case final id?) pages?.drop(id);
   }
 
+  StreamSubscription<TavernHelperGenerationControlState>? _helperWatch;
+
   /// The page is gone: its contexts go with it.
   Future<void> close() async {
+    await _helperWatch?.cancel();
+    _helperWatch = null;
     final context = _context;
     final scripts = [..._scriptContexts.values];
     _scriptContexts.clear();

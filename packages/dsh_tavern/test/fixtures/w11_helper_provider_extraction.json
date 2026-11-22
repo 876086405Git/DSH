@@ -1,0 +1,366 @@
+{
+  "sources": {
+    "st": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+    "helper": "29331c36fb9b2e880d4d488ff919317e1bc95684"
+  },
+  "origin": "Synthetic values executed against pinned upstream extraction functions; source probe stays in research/reviews, not in the product.",
+  "rows": [
+    {
+      "source": "openai",
+      "name": "both fields",
+      "input": {
+        "content": "T",
+        "reasoning": "R",
+        "reasoning_content": "C"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": ""
+      },
+      "nonstream": ""
+    },
+    {
+      "source": "openai",
+      "name": "empty reasoning alias",
+      "input": {
+        "content": "T",
+        "reasoning": "",
+        "reasoning_content": "C"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": ""
+      },
+      "nonstream": ""
+    },
+    {
+      "source": "openai",
+      "name": "empty reasoning_content",
+      "input": {
+        "content": "T",
+        "reasoning": "R",
+        "reasoning_content": ""
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": ""
+      },
+      "nonstream": ""
+    },
+    {
+      "source": "openai",
+      "name": "alias only",
+      "input": {
+        "content": "T",
+        "reasoning": "R"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": ""
+      },
+      "nonstream": ""
+    },
+    {
+      "source": "openai",
+      "name": "message envelope in stream",
+      "input": {
+        "choices": [
+          {
+            "message": {
+              "content": "message fallback",
+              "reasoning": "MR",
+              "reasoning_content": "MC"
+            }
+          }
+        ]
+      },
+      "streaming": {
+        "text": "message fallback",
+        "reasoning": ""
+      }
+    },
+    {
+      "source": "custom",
+      "name": "both fields",
+      "input": {
+        "content": "T",
+        "reasoning": "R",
+        "reasoning_content": "C"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": "C"
+      },
+      "nonstream": "C"
+    },
+    {
+      "source": "custom",
+      "name": "empty reasoning alias",
+      "input": {
+        "content": "T",
+        "reasoning": "",
+        "reasoning_content": "C"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": "C"
+      },
+      "nonstream": "C"
+    },
+    {
+      "source": "custom",
+      "name": "empty reasoning_content",
+      "input": {
+        "content": "T",
+        "reasoning": "R",
+        "reasoning_content": ""
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": "R"
+      },
+      "nonstream": ""
+    },
+    {
+      "source": "custom",
+      "name": "alias only",
+      "input": {
+        "content": "T",
+        "reasoning": "R"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": "R"
+      },
+      "nonstream": "R"
+    },
+    {
+      "source": "custom",
+      "name": "message envelope in stream",
+      "input": {
+        "choices": [
+          {
+            "message": {
+              "content": "message fallback",
+              "reasoning": "MR",
+              "reasoning_content": "MC"
+            }
+          }
+        ]
+      },
+      "streaming": {
+        "text": "message fallback",
+        "reasoning": ""
+      }
+    },
+    {
+      "source": "deepseek",
+      "name": "both fields",
+      "input": {
+        "content": "T",
+        "reasoning": "R",
+        "reasoning_content": "C"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": "C"
+      },
+      "nonstream": "C"
+    },
+    {
+      "source": "deepseek",
+      "name": "empty reasoning alias",
+      "input": {
+        "content": "T",
+        "reasoning": "",
+        "reasoning_content": "C"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": "C"
+      },
+      "nonstream": "C"
+    },
+    {
+      "source": "deepseek",
+      "name": "empty reasoning_content",
+      "input": {
+        "content": "T",
+        "reasoning": "R",
+        "reasoning_content": ""
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": ""
+      },
+      "nonstream": ""
+    },
+    {
+      "source": "deepseek",
+      "name": "alias only",
+      "input": {
+        "content": "T",
+        "reasoning": "R"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": ""
+      },
+      "nonstream": ""
+    },
+    {
+      "source": "deepseek",
+      "name": "message envelope in stream",
+      "input": {
+        "choices": [
+          {
+            "message": {
+              "content": "message fallback",
+              "reasoning": "MR",
+              "reasoning_content": "MC"
+            }
+          }
+        ]
+      },
+      "streaming": {
+        "text": "",
+        "reasoning": ""
+      }
+    },
+    {
+      "source": "openrouter",
+      "name": "both fields",
+      "input": {
+        "content": "T",
+        "reasoning": "R",
+        "reasoning_content": "C"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": "R"
+      },
+      "nonstream": "R"
+    },
+    {
+      "source": "openrouter",
+      "name": "empty reasoning alias",
+      "input": {
+        "content": "T",
+        "reasoning": "",
+        "reasoning_content": "C"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": "C"
+      },
+      "nonstream": ""
+    },
+    {
+      "source": "openrouter",
+      "name": "empty reasoning_content",
+      "input": {
+        "content": "T",
+        "reasoning": "R",
+        "reasoning_content": ""
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": "R"
+      },
+      "nonstream": "R"
+    },
+    {
+      "source": "openrouter",
+      "name": "alias only",
+      "input": {
+        "content": "T",
+        "reasoning": "R"
+      },
+      "streaming": {
+        "text": "T",
+        "reasoning": "R"
+      },
+      "nonstream": "R"
+    },
+    {
+      "source": "openrouter",
+      "name": "message envelope in stream",
+      "input": {
+        "choices": [
+          {
+            "message": {
+              "content": "message fallback",
+              "reasoning": "MR",
+              "reasoning_content": "MC"
+            }
+          }
+        ]
+      },
+      "streaming": {
+        "text": "message fallback",
+        "reasoning": "MR"
+      }
+    }
+  ],
+  "contentCases": [
+    {
+      "name": "structured content is retained",
+      "input": {
+        "choices": [
+          {
+            "message": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "A"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "result": [
+        {
+          "type": "text",
+          "text": "A"
+        }
+      ],
+      "resultType": "array"
+    },
+    {
+      "name": "choice text fallback",
+      "input": {
+        "choices": [
+          {
+            "text": "choice text"
+          }
+        ]
+      },
+      "result": "choice text",
+      "resultType": "string"
+    },
+    {
+      "name": "top-level text fallback",
+      "input": {
+        "text": "top text"
+      },
+      "result": "top text",
+      "resultType": "string"
+    },
+    {
+      "name": "null content permits choice text",
+      "input": {
+        "choices": [
+          {
+            "message": {
+              "content": null
+            },
+            "text": "fallback"
+          }
+        ]
+      },
+      "result": "fallback",
+      "resultType": "string"
+    }
+  ]
+}

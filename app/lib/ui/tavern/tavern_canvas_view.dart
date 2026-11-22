@@ -8,7 +8,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:dsh_tavern/dsh_tavern.dart' show TavernPersona;
+import 'package:dsh_tavern/dsh_tavern.dart' show TavernPersona, TavernSPresetPageLifecycle;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -103,6 +103,10 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
   @override
   void initState() {
     super.initState();
+    _lifecycle = switch (ref.read(tavernProvider)) {
+      final TavernSPresetPageLifecycle page => page,
+      _ => null,
+    };
     widget.streaming.addListener(_onStream);
     widget.calls?.deliver = _deliver;
     _audioLifecycle = TavernCanvasAudioLifecycle(_suspendAudio);
@@ -251,7 +255,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     _loaded = key;
     // What the old page was running (events, filters, SPreset functions)
     // will not be answered by the new one.
-    widget.calls?.pageLost();
+    _pageGone();
     _document++;
     _ready = false;
     _rendered = null;
@@ -333,10 +337,21 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       _syncDark();
       // Whatever came up meanwhile (a page still loading when _open ran) is
       // replaced now: what it was given is settled.
-      widget.calls?.pageLost();
+      _pageGone();
       await controller.loadHtmlString(document, baseUrl: tavernFrameBaseUrl).catchError((_) {});
     }());
   }
+
+  /// The page (or document) is gone: what it was running is settled, and
+  /// the engine forgets the chat's page state (SPreset entry decisions,
+  /// PromptManager collections) before a new document comes.
+  void _pageGone() {
+    widget.calls?.pageLost();
+    if (widget.calls?.chatId case final chat?) _lifecycle?.resetSPresetPage(chat);
+  }
+
+  /// The engine's page lifecycle, read once (dispose cannot read providers).
+  TavernSPresetPageLifecycle? _lifecycle;
 
   static final _random = Random.secure();
   static String _nonce() => List.generate(16, (_) => _random.nextInt(36).toRadixString(36)).join();
@@ -536,7 +551,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     ScaffoldMessenger.maybeOf(context)?.showBriefNotice(context.l10n.tavernCanvasReloaded);
     // The handlers the lost page was running will not answer; its music
     // stopped with it.
-    widget.calls?.pageLost();
+    _pageGone();
     // Its script buttons too, even while the new page waits for what it loads.
     widget.calls?.hostButtons.value = const [];
     _audio?.report(null);
@@ -553,7 +568,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
   void dispose() {
     if (widget.calls?.deliver == _deliver) {
       widget.calls?.deliver = null;
-      widget.calls?.pageLost();
+      _pageGone();
     }
     if (_audio case final audio?) {
       final send = _sendAudio;

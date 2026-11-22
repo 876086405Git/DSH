@@ -1,0 +1,1699 @@
+{
+  "scope": "catalog portion only; common gates use their own engine tests",
+  "cases": [
+    {
+      "id": "fallback/openai",
+      "source": "openai",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/claude",
+      "source": "claude",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/openrouter",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/ai21",
+      "source": "ai21",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/makersuite",
+      "source": "makersuite",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/vertexai",
+      "source": "vertexai",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/mistralai",
+      "source": "mistralai",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/custom",
+      "source": "custom",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/cohere",
+      "source": "cohere",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/perplexity",
+      "source": "perplexity",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/groq",
+      "source": "groq",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/electronhub",
+      "source": "electronhub",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/chutes",
+      "source": "chutes",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/nanogpt",
+      "source": "nanogpt",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/deepseek",
+      "source": "deepseek",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/aimlapi",
+      "source": "aimlapi",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/xai",
+      "source": "xai",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/pollinations",
+      "source": "pollinations",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/moonshot",
+      "source": "moonshot",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/fireworks",
+      "source": "fireworks",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/cometapi",
+      "source": "cometapi",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/azure_openai",
+      "source": "azure_openai",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/zai",
+      "source": "zai",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/siliconflow",
+      "source": "siliconflow",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/workers_ai",
+      "source": "workers_ai",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/minimax",
+      "source": "minimax",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "fallback/unknown-provider",
+      "source": "unknown-provider",
+      "model": "fixture",
+      "catalog": [],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "nonarray/null",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": null,
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "nonarray/{}",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": {},
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "nonarray/\"not-an-array\"",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": "not-an-array",
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "nonarray/0",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": 0,
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "no-match/other-model",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "other",
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "no-match/case-sensitive",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "FIXTURE",
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "no-match/numeric-id",
+      "source": "openrouter",
+      "model": "7",
+      "catalog": [
+        {
+          "id": 7,
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "first-match/false-before-true",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_parameters": []
+        },
+        {
+          "id": "fixture",
+          "supported_parameters": [
+            "tools"
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_parameters": []
+        }
+      }
+    },
+    {
+      "id": "first-match/true-before-false",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_parameters": [
+            "tools"
+          ]
+        },
+        {
+          "id": "fixture",
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_parameters": [
+            "tools"
+          ]
+        }
+      }
+    },
+    {
+      "id": "matched/pollinations/yes",
+      "source": "pollinations",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "tools": true
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "tools": true
+        }
+      }
+    },
+    {
+      "id": "matched/pollinations/no",
+      "source": "pollinations",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "tools": false
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "tools": false
+        }
+      }
+    },
+    {
+      "id": "matched/pollinations/missing",
+      "source": "pollinations",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture"
+        }
+      }
+    },
+    {
+      "id": "unmatched/pollinations/no",
+      "source": "pollinations",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "other",
+          "tools": false
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "matched/fireworks/yes",
+      "source": "fireworks",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supports_tools": true
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supports_tools": true
+        }
+      }
+    },
+    {
+      "id": "matched/fireworks/no",
+      "source": "fireworks",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supports_tools": false
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supports_tools": false
+        }
+      }
+    },
+    {
+      "id": "matched/fireworks/missing",
+      "source": "fireworks",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture"
+        }
+      }
+    },
+    {
+      "id": "unmatched/fireworks/no",
+      "source": "fireworks",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "other",
+          "supports_tools": false
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "matched/openrouter/yes",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_parameters": [
+            "tools"
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_parameters": [
+            "tools"
+          ]
+        }
+      }
+    },
+    {
+      "id": "matched/openrouter/no",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_parameters": []
+        }
+      }
+    },
+    {
+      "id": "matched/openrouter/missing",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture"
+        }
+      }
+    },
+    {
+      "id": "unmatched/openrouter/no",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "other",
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "matched/mistralai/yes",
+      "source": "mistralai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "capabilities": {
+            "function_calling": true
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "capabilities": {
+            "function_calling": true
+          }
+        }
+      }
+    },
+    {
+      "id": "matched/mistralai/no",
+      "source": "mistralai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "capabilities": {
+            "function_calling": false
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "capabilities": {
+            "function_calling": false
+          }
+        }
+      }
+    },
+    {
+      "id": "matched/mistralai/missing",
+      "source": "mistralai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture"
+        }
+      }
+    },
+    {
+      "id": "unmatched/mistralai/no",
+      "source": "mistralai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "other",
+          "capabilities": {
+            "function_calling": false
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "matched/aimlapi/yes",
+      "source": "aimlapi",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "features": [
+            "openai/chat-completion.function"
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "features": [
+            "openai/chat-completion.function"
+          ]
+        }
+      }
+    },
+    {
+      "id": "matched/aimlapi/no",
+      "source": "aimlapi",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "features": []
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "features": []
+        }
+      }
+    },
+    {
+      "id": "matched/aimlapi/missing",
+      "source": "aimlapi",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture"
+        }
+      }
+    },
+    {
+      "id": "unmatched/aimlapi/no",
+      "source": "aimlapi",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "other",
+          "features": []
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "matched/chutes/yes",
+      "source": "chutes",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_features": [
+            "tools"
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_features": [
+            "tools"
+          ]
+        }
+      }
+    },
+    {
+      "id": "matched/chutes/no",
+      "source": "chutes",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_features": []
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_features": []
+        }
+      }
+    },
+    {
+      "id": "matched/chutes/missing",
+      "source": "chutes",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture"
+        }
+      }
+    },
+    {
+      "id": "unmatched/chutes/no",
+      "source": "chutes",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "other",
+          "supported_features": []
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "matched/electronhub/yes",
+      "source": "electronhub",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "metadata": {
+            "function_call": true
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "metadata": {
+            "function_call": true
+          }
+        }
+      }
+    },
+    {
+      "id": "matched/electronhub/no",
+      "source": "electronhub",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "metadata": {
+            "function_call": false
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "metadata": {
+            "function_call": false
+          }
+        }
+      }
+    },
+    {
+      "id": "matched/electronhub/missing",
+      "source": "electronhub",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture"
+        }
+      }
+    },
+    {
+      "id": "unmatched/electronhub/no",
+      "source": "electronhub",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "other",
+          "metadata": {
+            "function_call": false
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "matched/workers_ai/yes",
+      "source": "workers_ai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "function_calling",
+              "value": "true"
+            }
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "function_calling",
+              "value": "true"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "matched/workers_ai/no",
+      "source": "workers_ai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "function_calling",
+              "value": "false"
+            }
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "function_calling",
+              "value": "false"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "matched/workers_ai/missing",
+      "source": "workers_ai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture"
+        }
+      }
+    },
+    {
+      "id": "unmatched/workers_ai/no",
+      "source": "workers_ai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "other",
+          "properties": [
+            {
+              "property_id": "function_calling",
+              "value": "false"
+            }
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "matched/openai/irrelevant-tools",
+      "source": "openai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "tools": false,
+          "supports_tools": false,
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "tools": false,
+          "supports_tools": false,
+          "supported_parameters": []
+        }
+      }
+    },
+    {
+      "id": "matched/azure_openai/irrelevant-tools",
+      "source": "azure_openai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "tools": false,
+          "supports_tools": false,
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "tools": false,
+          "supports_tools": false,
+          "supported_parameters": []
+        }
+      }
+    },
+    {
+      "id": "matched/deepseek/irrelevant-tools",
+      "source": "deepseek",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "tools": false,
+          "supports_tools": false,
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "tools": false,
+          "supports_tools": false,
+          "supported_parameters": []
+        }
+      }
+    },
+    {
+      "id": "matched/custom/irrelevant-tools",
+      "source": "custom",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "tools": false,
+          "supports_tools": false,
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "tools": false,
+          "supports_tools": false,
+          "supported_parameters": []
+        }
+      }
+    },
+    {
+      "id": "matched/perplexity/irrelevant-tools",
+      "source": "perplexity",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "tools": false,
+          "supports_tools": false,
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "tools": false,
+          "supports_tools": false,
+          "supported_parameters": []
+        }
+      }
+    },
+    {
+      "id": "matched/unknown-provider/irrelevant-tools",
+      "source": "unknown-provider",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "tools": false,
+          "supports_tools": false,
+          "supported_parameters": []
+        }
+      ],
+      "lookup": {
+        "kind": "noMatch"
+      }
+    },
+    {
+      "id": "openrouter/value/null",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_parameters": null
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_parameters": null
+        }
+      }
+    },
+    {
+      "id": "openrouter/value/unrelated",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_parameters": [
+            "temperature"
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_parameters": [
+            "temperature"
+          ]
+        }
+      }
+    },
+    {
+      "id": "openrouter/value/case-sensitive",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_parameters": [
+            "Tools"
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_parameters": [
+            "Tools"
+          ]
+        }
+      }
+    },
+    {
+      "id": "openrouter/value/substring-string",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_parameters": "my-tools-mode"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_parameters": "my-tools-mode"
+        }
+      }
+    },
+    {
+      "id": "openrouter/value/nonmatching-string",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_parameters": "function"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_parameters": "function"
+        }
+      }
+    },
+    {
+      "id": "openrouter/value/number",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_parameters": 3
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_parameters": 3
+        }
+      }
+    },
+    {
+      "id": "openrouter/value/object",
+      "source": "openrouter",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_parameters": {}
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_parameters": {}
+        }
+      }
+    },
+    {
+      "id": "aimlapi/substring-string",
+      "source": "aimlapi",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "features": "prefix-openai/chat-completion.function-suffix"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "features": "prefix-openai/chat-completion.function-suffix"
+        }
+      }
+    },
+    {
+      "id": "aimlapi/number",
+      "source": "aimlapi",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "features": 3
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "features": 3
+        }
+      }
+    },
+    {
+      "id": "chutes/substring-string",
+      "source": "chutes",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_features": "prefix-tools-suffix"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_features": "prefix-tools-suffix"
+        }
+      }
+    },
+    {
+      "id": "chutes/number",
+      "source": "chutes",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supported_features": 3
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supported_features": 3
+        }
+      }
+    },
+    {
+      "id": "pollinations/raw/string-false",
+      "source": "pollinations",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "tools": "false"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "tools": "false"
+        }
+      }
+    },
+    {
+      "id": "pollinations/raw/zero",
+      "source": "pollinations",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "tools": 0
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "tools": 0
+        }
+      }
+    },
+    {
+      "id": "pollinations/raw/null",
+      "source": "pollinations",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "tools": null
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "tools": null
+        }
+      }
+    },
+    {
+      "id": "fireworks/raw/string-false",
+      "source": "fireworks",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supports_tools": "false"
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supports_tools": "false"
+        }
+      }
+    },
+    {
+      "id": "fireworks/raw/zero",
+      "source": "fireworks",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supports_tools": 0
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supports_tools": 0
+        }
+      }
+    },
+    {
+      "id": "fireworks/raw/null",
+      "source": "fireworks",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "supports_tools": null
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "supports_tools": null
+        }
+      }
+    },
+    {
+      "id": "mistralai/raw/string-false",
+      "source": "mistralai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "capabilities": {
+            "function_calling": "false"
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "capabilities": {
+            "function_calling": "false"
+          }
+        }
+      }
+    },
+    {
+      "id": "mistralai/raw/zero",
+      "source": "mistralai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "capabilities": {
+            "function_calling": 0
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "capabilities": {
+            "function_calling": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "mistralai/raw/null",
+      "source": "mistralai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "capabilities": {
+            "function_calling": null
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "capabilities": {
+            "function_calling": null
+          }
+        }
+      }
+    },
+    {
+      "id": "electronhub/raw/string-false",
+      "source": "electronhub",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "metadata": {
+            "function_call": "false"
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "metadata": {
+            "function_call": "false"
+          }
+        }
+      }
+    },
+    {
+      "id": "electronhub/raw/zero",
+      "source": "electronhub",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "metadata": {
+            "function_call": 0
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "metadata": {
+            "function_call": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "electronhub/raw/null",
+      "source": "electronhub",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "metadata": {
+            "function_call": null
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "metadata": {
+            "function_call": null
+          }
+        }
+      }
+    },
+    {
+      "id": "workers_ai/boolean-true",
+      "source": "workers_ai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "function_calling",
+              "value": true
+            }
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "function_calling",
+              "value": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "workers_ai/wrong-case",
+      "source": "workers_ai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "function_calling",
+              "value": "True"
+            }
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "function_calling",
+              "value": "True"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "workers_ai/wrong-property",
+      "source": "workers_ai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "tools",
+              "value": "true"
+            }
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "tools",
+              "value": "true"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "workers_ai/not-array",
+      "source": "workers_ai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "properties": {
+            "property_id": "function_calling",
+            "value": "true"
+          }
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "properties": {
+            "property_id": "function_calling",
+            "value": "true"
+          }
+        }
+      }
+    },
+    {
+      "id": "workers_ai/later-match",
+      "source": "workers_ai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "function_calling",
+              "value": false
+            },
+            {
+              "property_id": "function_calling",
+              "value": "true"
+            }
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "properties": [
+            {
+              "property_id": "function_calling",
+              "value": false
+            },
+            {
+              "property_id": "function_calling",
+              "value": "true"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "workers_ai/null-property",
+      "source": "workers_ai",
+      "model": "fixture",
+      "catalog": [
+        {
+          "id": "fixture",
+          "properties": [
+            null
+          ]
+        }
+      ],
+      "lookup": {
+        "kind": "matched",
+        "row": {
+          "id": "fixture",
+          "properties": [
+            null
+          ]
+        }
+      }
+    }
+  ]
+}

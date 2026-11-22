@@ -36,7 +36,7 @@ entries 容器内部的无效条目也保留原编译诊断，不借此扩大静
 node tool/st_differential/spreset-conditional-tag-oracle.cjs /path/to/pinned/regex_bind/inject.js
 ```
 
-源 SHA256 为 `d0766c830f3bfd4a69c63bba60423d7a797276fbd4695420adb8f17ea330037b`，oracle 输出须与 `test/fixtures/w11_spreset_conditional_source.json` 逐字节一致。
+ADDENDUM-10 已纠正整文件 pin：固定提交的原始文件为 290243 字节，Git blob 为 `efb49a4c8e7a713ada65116f8959183f7d1dd7a5`。源 SHA256 为 `4858bcb57530e3ff6ef68f0c94a4d291e2914c766c274f888e9a2fdf8d0efb59`，oracle 输出须与 `test/fixtures/w11_spreset_conditional_source.json` 逐字节一致。旧本地副本比 Git 原件多一个末尾 LF；这次只改源身份与复现入口，没有改产品逻辑或五个向量。取源、另外三个 oracle 与历史边界见 [SPreset 原始源 pin](../tool/st_differential/SPRESET-SOURCE-PIN.md)。
 
 ## 门禁边界
 

@@ -83,6 +83,29 @@ class _RetryableModelException implements Exception {
   final TavernModelException cause;
 }
 
+/// Owned consumer failures retain their original identity and stack. They are
+/// not HTTP/JSON failures and must never enter transport retry classification.
+class _ResponseFrameFailure implements Exception {
+  const _ResponseFrameFailure(this.error, this.stack);
+  final Object error;
+  final StackTrace stack;
+}
+
+({String text, String reasoning})? _projectResponseText(
+  ModelCancellation cancellation,
+  bool streaming,
+  Map<String, Object?> frame,
+) {
+  if (cancellation is! ModelRequestContext || cancellation.projectResponseText == null) return null;
+  try {
+    // The projection must not change evidence subsequently collected from the
+    // original parsed frame, including tool structure and usage diagnostics.
+    return cancellation.projectResponseText!(streaming, jsonDecode(jsonEncode(frame)) as Map<String, Object?>);
+  } catch (error, stack) {
+    throw _ResponseFrameFailure(error, stack);
+  }
+}
+
 /// One cancellation per generation, including time spent obtaining the key.
 class ModelCancellation {
   final _cancelled = Completer<void>();
@@ -116,13 +139,22 @@ class ModelRequestContext extends ModelCancellation {
     required ModelCancellation cancellation,
     required void Function(ModelUsageReport) onUsageReport,
     this.preparedBody = false,
+    this.allowEmptyKey = false,
+    this.endpointOverride,
     this.onResponseStarted,
     this.onResponseBytes,
     this.onResponseSecret,
+    this.projectResponseText,
+    this.onResponseFrame,
   }) : _cancellation = cancellation,
        _onUsageReport = onUsageReport;
 
   final bool preparedBody;
+  final bool allowEmptyKey;
+
+  /// An explicit per-request endpoint; omitted by native callers. Helper proxy
+  /// URLs preserve their selected path without the native DeepSeek beta suffix.
+  final Uri? endpointOverride;
 
   /// Optional raw transport evidence for opt-in SPreset logs. Observers are
   /// synchronous, detached from response ownership and cannot alter retries.
@@ -141,6 +173,19 @@ class ModelRequestContext extends ModelCancellation {
     }
   }
 
+  /// Optional synchronous text extraction over a detached parsed response.
+  /// A compatibility consumer may select provider-specific text/reasoning
+  /// before either channel is yielded. The original response remains the
+  /// collector/usage/tool evidence. Omitted by native and quiet callers.
+  final ({String text, String reasoning}) Function(bool streaming, Map<String, Object?> frame)? projectResponseText;
+
+  /// Optional consumer work after all deltas of a decoded response frame. This
+  /// is an owned operation, unlike the observation-only callbacks above. A
+  /// Helper progress update may persist macro effects and must be drained.
+  /// Native callers omit it and incur no new asynchronous boundary.
+  /// A synchronous metadata consumer returns null; only real owned work adds
+  /// an await. Nonstream delivers its complete parsed response before finish.
+  final Future<void>? Function(int attempt, bool streaming, Map<String, Object?> frame)? onResponseFrame;
   void observeResponseStarted(int attempt, int status, Map<String, String> headers) {
     if (_observationsClosed) return;
     try {
@@ -237,14 +282,18 @@ class TavernModelClient {
       if (key != null && key.isNotEmpty && cancellation is ModelRequestContext) {
         cancellation.observeResponseSecret(key);
       }
-      if (config.deepseek && (key == null || key.isEmpty)) {
+      if (config.deepseek &&
+          (key == null || key.isEmpty) &&
+          !(cancellation is ModelRequestContext && cancellation.allowEmptyKey)) {
         throw const TavernModelException(TavernFailure.noKey, 'no_api_key');
       }
       final payload = cancellation is ModelRequestContext && cancellation.preparedBody
           ? body
           : prepareModelRequestBody(config, body);
       final encodedBody = jsonEncode(payload);
-      final uri = endpoint(config);
+      final uri = cancellation is ModelRequestContext && cancellation.endpointOverride != null
+          ? cancellation.endpointOverride!
+          : endpoint(config);
       for (var attempt = 0; ; attempt++) {
         try {
           await for (final delta in _generateAttempt(
@@ -267,6 +316,8 @@ class TavernModelClient {
           await cancellation.wait(Future<void>.delayed(Duration(milliseconds: 250 * (1 << attempt))));
         }
       }
+    } on _ResponseFrameFailure catch (failure) {
+      Error.throwWithStackTrace(failure.error, failure.stack);
     } on TavernModelException {
       rethrow;
     } on http.RequestAbortedException {
@@ -385,12 +436,14 @@ class TavernModelClient {
           usageReport = _providerUsageReport(null, present: false, transport: 'nonstream', observationIndex: 0);
           _observeUsage(cancellation, usageReport);
         }
+        final projection = _projectResponseText(cancellation, false, result);
         final assistant = _AssistantCollector('nonstream_message')..add(message, streaming: false);
-        if (_reasoningText(message) case final String reasoning when reasoning.isNotEmpty) {
+        if ((projection?.reasoning ?? _reasoningText(message)) case final String reasoning when reasoning.isNotEmpty) {
           cancellation.check();
           yield ModelReasoning(reasoning);
         }
-        if (message['content'] case final String content when content.isNotEmpty) {
+        if ((projection == null ? message['content'] : projection.text) case final String content
+            when content.isNotEmpty) {
           cancellation.check();
           yield ModelText(content);
         }
@@ -402,12 +455,25 @@ class TavernModelClient {
           cancellation.check();
           yield ModelUsage(_usage(usage, result['model'] as String? ?? config.model), report: usageReport);
         }
-        if (choice.isEmpty || message.isEmpty) {
+        if (projection == null && (choice.isEmpty || message.isEmpty)) {
           throw const TavernModelException(TavernFailure.server, 'invalid_completion_response');
         }
         final reason = choice['finish_reason'] as String?;
         _checkFinish(reason);
         cancellation.check();
+        if (cancellation is ModelRequestContext && cancellation.onResponseFrame != null) {
+          try {
+            final work = cancellation.onResponseFrame!(
+              attempt,
+              false,
+              jsonDecode(jsonEncode(result)) as Map<String, Object?>,
+            );
+            if (work != null) await work;
+          } catch (error, stack) {
+            throw _ResponseFrameFailure(error, stack);
+          }
+          cancellation.check();
+        }
         finished = true;
         yield ModelFinished(reason, assistantSnapshot: assistant.finish(), finalUsageReport: usageReport);
         return;
@@ -448,12 +514,14 @@ class TavernModelClient {
         if (data['error'] != null) throw _apiError(200, event, key, headers.values);
         final choice = _firstChoice(data);
         final delta = _object(choice['delta']);
+        final projection = _projectResponseText(cancellation, true, data);
         assistant.add(delta, streaming: true);
-        if (_reasoningText(delta) case final String reasoning when reasoning.isNotEmpty) {
+        if ((projection?.reasoning ?? _reasoningText(delta)) case final String reasoning when reasoning.isNotEmpty) {
           cancellation.check();
           yield ModelReasoning(reasoning);
         }
-        if (delta['content'] case final String content when content.isNotEmpty) {
+        if ((projection == null ? delta['content'] : projection.text) case final String content
+            when content.isNotEmpty) {
           cancellation.check();
           yield ModelText(content);
         }
@@ -470,6 +538,19 @@ class TavernModelClient {
         if (data['usage'] case final Map<String, dynamic> usage) {
           cancellation.check();
           yield ModelUsage(_usage(usage, data['model'] as String? ?? config.model), report: usageReport);
+        }
+        if (cancellation is ModelRequestContext && cancellation.onResponseFrame != null) {
+          try {
+            final work = cancellation.onResponseFrame!(
+              attempt,
+              true,
+              jsonDecode(jsonEncode(data)) as Map<String, Object?>,
+            );
+            if (work != null) await work;
+          } catch (error, stack) {
+            throw _ResponseFrameFailure(error, stack);
+          }
+          cancellation.check();
         }
       }
       if (sawFinish && usageReport == null) {

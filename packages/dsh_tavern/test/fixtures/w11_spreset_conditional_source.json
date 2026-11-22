@@ -1,6 +1,6 @@
 {
   "sourceCommit": "53bd585da14248ba10baaede7fc7ed0cebe1eeeb",
-  "sourceSha256": "d0766c830f3bfd4a69c63bba60423d7a797276fbd4695420adb8f17ea330037b",
+  "sourceSha256": "4858bcb57530e3ff6ef68f0c94a4d291e2914c766c274f888e9a2fdf8d0efb59",
   "extracted": [
     {
       "name": "handleChatCompletionPromptReady",

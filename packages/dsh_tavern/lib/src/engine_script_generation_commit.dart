@@ -205,7 +205,8 @@ extension _ScriptGenerationCommit on _ScriptCoordinator {
         needs.card ||
         needs.worldInfo ||
         request is! TavernScriptRawRequest ||
-        request.presetId != null;
+        request.presetId != null ||
+        _helperOptions(request) != null;
     final persona = resourcesNeeded ? engine._personas.resolve(personaId: chat?.personaId) : null;
     final settings = resourcesNeeded
         ? _runtimeCopy(_personaSettings(engine._effectiveSettings(chat, metadata), persona!))
@@ -217,7 +218,7 @@ extension _ScriptGenerationCommit on _ScriptCoordinator {
     ChatPreset? promptPreset;
     if (request.presetId != null) {
       promptPreset = ChatPreset(engine._requirePreset(request.presetId!).raw);
-    } else if (request is! TavernScriptRawRequest) {
+    } else if (request is! TavernScriptRawRequest || _helperOptions(request) != null) {
       promptPreset = contextPresetRaw.isEmpty ? ChatPreset.stDefault() : ChatPreset(contextPresetRaw);
     }
     final actorId =
@@ -283,6 +284,7 @@ extension _ScriptGenerationCommit on _ScriptCoordinator {
       promptPreset: promptPreset,
       capturedChatState: stateNeeded && chat != null,
       gameplayCapture: gameplayCapture,
+      helper: record.helper,
     );
   }
 

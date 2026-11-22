@@ -1,0 +1,318 @@
+{
+  "sourcePins": {
+    "utils": [
+      "research/helper/src/function/generate/utils.ts",
+      "9aace591938c207d8c3e81a5619ed39ccc6a1d53a1d3e84190243ca6c69ca3ff"
+    ],
+    "raw": [
+      "research/helper/src/function/generate/generateRaw.ts",
+      "2bcb8b91a0657b6788c32899ec0b8256749cf00c83d1f4a22d7d1e3fca694a57"
+    ],
+    "normal": [
+      "research/helper/src/function/generate/generate.ts",
+      "bcfb14c6dea0dc4e525f72c6d82300b2fd10420ac06338534d427d3e52c1f6fa"
+    ],
+    "st": [
+      "research/st/public/scripts/openai.js",
+      "0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604"
+    ]
+  },
+  "scope": "Synthetic inputs and actual fixed-source expectations only; no upstream implementation bodies. Catalog host is an explicit boundary. Non-chat-completion source input is not exercised by this chat-completion-only engine.",
+  "paths": [
+    {
+      "mode": "normal",
+      "image": "url",
+      "name": "normal single URL ignored after resolution",
+      "media": true,
+      "resolverCalls": 1,
+      "sentImages": 0
+    },
+    {
+      "mode": "normal",
+      "image": "data",
+      "name": "normal single data URI ignored without network",
+      "media": false,
+      "resolverCalls": 0,
+      "sentImages": 0
+    },
+    {
+      "mode": "normal",
+      "historyImage": true,
+      "name": "normal history image is not resolved",
+      "media": true,
+      "resolverCalls": 0,
+      "sentImages": 0
+    },
+    {
+      "mode": "raw",
+      "order": [
+        "user_input"
+      ],
+      "image": "url",
+      "name": "raw user slot single bypasses gate",
+      "media": false,
+      "resolverCalls": 1,
+      "sentImages": 1
+    },
+    {
+      "mode": "raw",
+      "order": [
+        "chat_history"
+      ],
+      "image": "url",
+      "name": "raw history single resolves before false gate",
+      "media": false,
+      "resolverCalls": 1,
+      "sentImages": 0
+    },
+    {
+      "mode": "raw",
+      "order": [
+        "chat_history"
+      ],
+      "image": "url",
+      "name": "raw history single resolves before true gate",
+      "media": true,
+      "resolverCalls": 1,
+      "sentImages": 1
+    },
+    {
+      "mode": "raw",
+      "order": [],
+      "image": "url",
+      "name": "raw no slots single is not resolved",
+      "media": false,
+      "resolverCalls": 0,
+      "sentImages": 0
+    },
+    {
+      "mode": "raw",
+      "order": [
+        "chat_history"
+      ],
+      "filtered": true,
+      "image": "url",
+      "name": "raw filtered history single is not resolved",
+      "media": true,
+      "resolverCalls": 0,
+      "sentImages": 0
+    },
+    {
+      "mode": "raw",
+      "order": [
+        "chat_history",
+        "user_input"
+      ],
+      "historyImage": true,
+      "name": "raw override history false gate skips resolution",
+      "media": false,
+      "resolverCalls": 0,
+      "sentImages": 0
+    },
+    {
+      "mode": "raw",
+      "order": [
+        "chat_history",
+        "user_input"
+      ],
+      "historyImage": true,
+      "name": "raw override history true gate resolves",
+      "media": true,
+      "resolverCalls": 1,
+      "sentImages": 1
+    },
+    {
+      "mode": "raw",
+      "order": [],
+      "image": "array",
+      "name": "raw array no slots resolves then drops",
+      "media": false,
+      "resolverCalls": 1,
+      "sentImages": 0
+    },
+    {
+      "mode": "raw",
+      "order": [
+        "chat_history"
+      ],
+      "image": "array",
+      "name": "raw array history String coercion drops parts",
+      "media": false,
+      "resolverCalls": 1,
+      "sentImages": 0,
+      "sourceCorrection": "Actual substituteParams, helper-history-array-coercion-oracle.cjs --media-off-control; the earlier probe used an identity macro boundary."
+    }
+  ],
+  "gates": [
+    {
+      "name": "non-chat-completion API",
+      "source": "custom",
+      "mainApi": "textgenerationwebui",
+      "media": true,
+      "expected": false,
+      "actual": false,
+      "rawType": "boolean",
+      "rawValue": false
+    },
+    {
+      "name": "custom media off",
+      "source": "custom",
+      "media": false,
+      "expected": false,
+      "actual": false,
+      "rawType": "boolean",
+      "rawValue": false
+    },
+    {
+      "name": "custom media on",
+      "source": "custom",
+      "media": true,
+      "expected": true,
+      "actual": true,
+      "rawType": "boolean",
+      "rawValue": true
+    },
+    {
+      "name": "OpenAI known vision",
+      "source": "openai",
+      "model": "gpt-4o",
+      "media": true,
+      "expected": true,
+      "actual": true,
+      "rawType": "boolean",
+      "rawValue": true
+    },
+    {
+      "name": "OpenAI unknown",
+      "source": "openai",
+      "model": "fixture-unknown",
+      "media": true,
+      "expected": false,
+      "actual": false,
+      "rawType": "boolean",
+      "rawValue": false
+    },
+    {
+      "name": "OpenAI original some exclusion",
+      "source": "openai",
+      "model": "gpt-4-turbo-preview",
+      "media": true,
+      "expected": true,
+      "actual": true,
+      "rawType": "boolean",
+      "rawValue": true
+    },
+    {
+      "name": "OpenAI known vision but media off",
+      "source": "openai",
+      "model": "gpt-4o",
+      "media": false,
+      "expected": false,
+      "actual": false,
+      "rawType": "boolean",
+      "rawValue": false
+    },
+    {
+      "name": "DeepSeek vision",
+      "source": "deepseek",
+      "model": "deepseek-v4-flash-vision-exp",
+      "media": true,
+      "expected": true,
+      "actual": true,
+      "rawType": "boolean",
+      "rawValue": true
+    },
+    {
+      "name": "DeepSeek chat",
+      "source": "deepseek",
+      "model": "deepseek-chat",
+      "media": true,
+      "expected": false,
+      "actual": false,
+      "rawType": "boolean",
+      "rawValue": false
+    },
+    {
+      "name": "OpenRouter catalog image",
+      "source": "openrouter",
+      "model": "fixture/model",
+      "media": true,
+      "catalog": [
+        {
+          "id": "fixture/model",
+          "architecture": {
+            "input_modalities": [
+              "text",
+              "image"
+            ]
+          }
+        }
+      ],
+      "expected": true,
+      "actual": true,
+      "rawType": "boolean",
+      "rawValue": true
+    },
+    {
+      "name": "OpenRouter catalog text only",
+      "source": "openrouter",
+      "model": "fixture/model",
+      "media": true,
+      "catalog": [
+        {
+          "id": "fixture/model",
+          "architecture": {
+            "input_modalities": [
+              "text"
+            ]
+          }
+        }
+      ],
+      "expected": false,
+      "actual": false,
+      "rawType": "boolean",
+      "rawValue": false
+    },
+    {
+      "name": "OpenRouter catalog missing entry",
+      "source": "openrouter",
+      "model": "fixture/model",
+      "media": true,
+      "catalog": [],
+      "expected": false,
+      "rawType": "undefined",
+      "actual": false,
+      "rawValue": "undefined"
+    },
+    {
+      "name": "OpenRouter catalog absent",
+      "source": "openrouter",
+      "model": "fixture/model",
+      "media": true,
+      "expected": false,
+      "actual": false,
+      "rawType": "boolean",
+      "rawValue": false
+    },
+    {
+      "name": "OpenRouter catalog image but media off",
+      "source": "openrouter",
+      "model": "fixture/model",
+      "media": false,
+      "catalog": [
+        {
+          "id": "fixture/model",
+          "architecture": {
+            "input_modalities": [
+              "image"
+            ]
+          }
+        }
+      ],
+      "expected": false,
+      "actual": false,
+      "rawType": "boolean",
+      "rawValue": false
+    }
+  ]
+}

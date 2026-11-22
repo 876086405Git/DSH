@@ -1,0 +1,3560 @@
+{
+  "commit": "7e8663cd9c184a550b37238218bdd32c6efc68e9",
+  "pins": {
+    "openai": [
+      "research/st/public/scripts/openai.js",
+      "0b77c30282825540265d5a09e681e5ccacf6760b05111ec880ffe237a9250604"
+    ],
+    "prompt": [
+      "research/st/PromptManager.js",
+      "b0054793b763d92b265f5f487645b68b4eca0867cb5ad6b5deb1034004b2c1cc"
+    ],
+    "reasoning": [
+      "research/st/public/scripts/reasoning.js",
+      "c489812f2598d1a4879b1a7287abde092741adafdf67f5b15cf18f2dd71d82d1"
+    ]
+  },
+  "extracted": [
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "export const tool_reasoning_modes = {",
+      "sha256": "b633fde97e175b01e27523dcb1e00b7df60cf89b81e9434af7fc7250ee3047fe"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "const interleaved_reasoning_providers = [",
+      "sha256": "93ecc111ef31f2fe6d83c9f5140424379c0db6927fb186ad01450c1462a3c717"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "const character_names_behavior = {",
+      "sha256": "99ec795ba50d51a71b0e9c7dce899c03272ca6f617ea12990996ffc61c7756eb"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "function getToolReasoningMode(",
+      "sha256": "ed90b6213ba3340c9b177601d0ca0d34384e446f0c23a1b77615a68b4f6c30d1"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "function getEffectiveToolReasoningMode(",
+      "sha256": "1faaa1fb2c8473491e1ee17dc67c1fa04a12bd0052aec35145228dd9fbe8a37d"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "export function isReasoningSignatureSupported(",
+      "sha256": "c1ef87ce54747354bf708c4c87d77779f1560f847372860f241733bb90e9e5ae"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "function setOpenAIMessages(",
+      "sha256": "4fd65609e4029ccce3a837efe571632fa396e2154960fdf8ede429875ead8afd"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "async function populateChatHistory(",
+      "sha256": "a0358bd0bf18f3c0ee10b8eed63c9f85fae0c286381d1bd989adf81a5cd3bf83"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class IdentifierNotFoundError ",
+      "sha256": "a73819cf67dccc1c7a8b3f3ffd1d90dce2bc03ffe7e37359d41f5227c21cc8fc"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class TokenBudgetExceededError ",
+      "sha256": "d7587846aea2d1cda33f0a2dffa5d2a46f0e946c8e1fd8a0326bfd8ae0ce6fda"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class InvalidCharacterNameError ",
+      "sha256": "982ff86499c4d570b968bf312f4d83bd40142e479cbcf4256b896c22b00b7cfe"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class Message {",
+      "sha256": "ed3d871c7e0f7b56d2d006158651c167b3a927d06dbd75c67aab0243a514c091"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "class MessageCollection {",
+      "sha256": "3e4920967f2ea8b6ce56eef9246048fb6e3862d5dee41495e76a8c6c50d0a41c"
+    },
+    {
+      "file": "research/st/public/scripts/openai.js",
+      "marker": "export class ChatCompletion {",
+      "sha256": "87cd603263f4f3219a63d810941364686f68eb898312bab55cb9f82aade1b651"
+    },
+    {
+      "file": "research/st/PromptManager.js",
+      "marker": "class Prompt {",
+      "sha256": "ccbf6fbc7aee36cff0898e92f3b2efd295afc82eecb87c9c89430364be099f69"
+    },
+    {
+      "file": "research/st/PromptManager.js",
+      "marker": "export class PromptCollection {",
+      "sha256": "50a4a0a8b65839914246eae9aee1d1d76e36209e62503dd397ca5a9003a74c8d"
+    },
+    {
+      "file": "research/st/public/scripts/reasoning.js",
+      "marker": "export class PromptReasoning {",
+      "sha256": "4b4d1642f1f15115c8531c57a01072fd14abf47bdda58f26883e482f25eb36fd"
+    }
+  ],
+  "boundaries": [
+    "Actual populateChatHistory/getToolReasoningMode/getEffectiveToolReasoningMode/Message/MessageCollection/ChatCompletion/Prompt/PromptCollection/setOpenAIMessages/PromptReasoning.",
+    "Tool support is an explicit true/false boundary, not a revalidation of the 103 catalog vectors; all images disabled.",
+    "preparePrompt and substituteParams are identity boundaries for these macro-free fixtures; token counter returns JSON length, not tokenizer/cost evidence.",
+    "No stream decoder, tool execution, browser/App or current Dart product is executed; upstream stream/nonstream invocation recording is separately source-read.",
+    "The actual Message.setToolCalls is wrapped only to record its invocation arguments, then invoked unchanged.",
+    "P1 consumes selector/provenance outputs only. The four PromptReasoning cases are unchanged ordinary-content controls, not a new PromptReasoning implementation.",
+    "The first 25 history, first four provenance and all four ordinary cases retain the prior 33-vector audit; four history, four provenance and two direct missing/null show controls are appended."
+  ],
+  "history": [
+    {
+      "id": "missing-default",
+      "source": "openrouter",
+      "mode": null,
+      "effectiveMode": "disabled",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": false
+        }
+      ]
+    },
+    {
+      "id": "invalid-default",
+      "source": "openrouter",
+      "mode": "typo",
+      "effectiveMode": "disabled",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": false
+        }
+      ]
+    },
+    {
+      "id": "disabled-own-reasoning-removed",
+      "source": "openrouter",
+      "mode": "disabled",
+      "effectiveMode": "disabled",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": false
+        }
+      ]
+    },
+    {
+      "id": "show-off",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "disabled",
+      "show": false,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": false
+        }
+      ]
+    },
+    {
+      "id": "openai-provider",
+      "source": "openai",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": false
+        }
+      ]
+    },
+    {
+      "id": "deepseek-provider",
+      "source": "deepseek",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": false
+        }
+      ]
+    },
+    {
+      "id": "custom-provider",
+      "source": "custom",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "OWN"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "OWN"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "OWN"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "tools-not-supported",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": false,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        }
+      ],
+      "toolMessageReasoning": [],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": []
+    },
+    {
+      "id": "active-adjacent-fallback",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "R"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "R"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "R"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "since-adjacent-fallback",
+      "source": "openrouter",
+      "mode": "since_last_user",
+      "effectiveMode": "since_last_user",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "R"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "R"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "R"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "active-own-wins",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "OWN"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "OWN"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "OWN"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "active-chain-skips-tool-and-invocations",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "first",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "prior tool"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "second",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "first",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "R"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "first"
+        },
+        {
+          "role": "tool",
+          "content": "prior tool",
+          "tool_call_id": "chatHistory-4"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "second",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "R"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "second"
+        }
+      ],
+      "toolMessageReasoning": [
+        "R",
+        "R"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"second\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "R"
+        },
+        {
+          "role": "tool",
+          "content": "prior tool"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"first\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "second",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "R"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        },
+        {
+          "invocations": [
+            {
+              "id": "first",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "R"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "active-empty-invocations-array-is-skipped",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "interim",
+          "invocations": []
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": []
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "R"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null,
+        "R"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "interim"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[]"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "R"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        },
+        {
+          "invocations": [],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "active-empty-assistant-stops",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning": "EMPTY"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "since-empty-assistant-skipped",
+      "source": "openrouter",
+      "mode": "since_last_user",
+      "effectiveMode": "since_last_user",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning": "EMPTY"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "R"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "R"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "R"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "active-text-without-reasoning-stops",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "B",
+          "reasoning": ""
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "content": "B"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "assistant",
+          "content": "B"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "since-text-without-reasoning-skipped",
+      "source": "openrouter",
+      "mode": "since_last_user",
+      "effectiveMode": "since_last_user",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "B",
+          "reasoning": ""
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "content": "B"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "R"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "R"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "B"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "R"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "active-system-stops",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "system",
+          "content": "boundary"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "system",
+          "content": "boundary"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "system",
+          "content": "boundary"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "since-system-skipped",
+      "source": "openrouter",
+      "mode": "since_last_user",
+      "effectiveMode": "since_last_user",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "system",
+          "content": "boundary"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "system",
+          "content": "boundary"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "R"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "R"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "R"
+        },
+        {
+          "role": "system",
+          "content": "boundary"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "R"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "active-array-assistant-stops",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "B"
+            }
+          ],
+          "reasoning": "ARRAY"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "B"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "last-user-boundary",
+      "source": "openrouter",
+      "mode": "since_last_user",
+      "effectiveMode": "since_last_user",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "old",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OLD"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "user",
+          "content": "U2"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "new",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "old",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "old"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U2"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "new",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "new"
+        }
+      ],
+      "toolMessageReasoning": [
+        null,
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"new\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "user",
+          "content": "U2"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"old\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "new",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        },
+        {
+          "invocations": [
+            {
+              "id": "old",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "no-user-boundary",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "R"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "R"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "R"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "first-nonempty-invocation-reasoning",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "a",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": ""
+            },
+            {
+              "id": "b",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "B"
+            },
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "C"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "a",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            },
+            {
+              "id": "b",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            },
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "B"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "a"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "b"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "B"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}},{\"id\":\"b\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}},{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "B"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "a",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": ""
+            },
+            {
+              "id": "b",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "B"
+            },
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "C"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "js-string-mode-coercion",
+      "source": "openrouter",
+      "mode": [
+        "active_chain"
+      ],
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "OWN"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "OWN"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "OWN"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "js-truthy-show-string",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": "false",
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "OWN"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "OWN"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "OWN"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "js-trim-keeps-nel-boundary",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "",
+          "reasoning": "NEL"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "NEL"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "NEL"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "NEL"
+        },
+        {
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "NEL"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "truthy-nonstring-own-blocks-fallback",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": 3
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        null
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": 3
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "falsey-number-own-uses-fallback",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": 0
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": "R"
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        "R"
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": "R"
+        },
+        {
+          "role": "assistant",
+          "content": "A"
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "R"
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    },
+    {
+      "id": "own-whitespace-is-nonempty",
+      "source": "openrouter",
+      "mode": "active_chain",
+      "effectiveMode": "active_chain",
+      "show": true,
+      "toolsSupported": true,
+      "input": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "content": "tool transcript",
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": " "
+            }
+          ]
+        }
+      ],
+      "wire": [
+        {
+          "role": "user",
+          "content": "U"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "c",
+              "type": "function",
+              "function": {
+                "arguments": "{}",
+                "name": "echo"
+              }
+            }
+          ],
+          "reasoning": " "
+        },
+        {
+          "role": "tool",
+          "content": "ok",
+          "tool_call_id": "c"
+        }
+      ],
+      "toolMessageReasoning": [
+        " "
+      ],
+      "countCalls": [
+        {
+          "role": "assistant",
+          "content": "tool transcript"
+        },
+        {
+          "role": "tool",
+          "content": "ok"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": "[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\",\"name\":\"echo\"}}]",
+          "reasoning": " "
+        },
+        {
+          "role": "user",
+          "content": "U"
+        }
+      ],
+      "toolProjections": [
+        {
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": " "
+            }
+          ],
+          "includeSignature": false,
+          "includeReasoning": true
+        }
+      ]
+    }
+  ],
+  "provenance": [
+    {
+      "id": "same-api-model",
+      "source": "openrouter",
+      "model": "fixture-model",
+      "group": false,
+      "characterName": "Guide",
+      "input": [
+        {
+          "is_user": false,
+          "mes": "A",
+          "name": "Guide",
+          "extra": {
+            "api": "openrouter",
+            "model": "fixture-model",
+            "reasoning": "R",
+            "tool_invocations": [
+              {
+                "id": "c",
+                "name": "echo",
+                "parameters": "{}",
+                "result": "ok",
+                "reasoning": "OWN"
+              }
+            ]
+          }
+        }
+      ],
+      "result": [
+        {
+          "role": "assistant",
+          "content": "A",
+          "name": "Guide",
+          "mediaDisplay": null,
+          "mediaIndex": null,
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ],
+          "reasoning": "R"
+        }
+      ]
+    },
+    {
+      "id": "different-api",
+      "source": "openrouter",
+      "model": "fixture-model",
+      "group": false,
+      "characterName": "Guide",
+      "input": [
+        {
+          "is_user": false,
+          "mes": "A",
+          "name": "Guide",
+          "extra": {
+            "api": "custom",
+            "model": "fixture-model",
+            "reasoning": "R",
+            "tool_invocations": [
+              {
+                "id": "c",
+                "name": "echo",
+                "parameters": "{}",
+                "result": "ok",
+                "reasoning": "OWN"
+              }
+            ]
+          }
+        }
+      ],
+      "result": [
+        {
+          "role": "assistant",
+          "content": "A",
+          "name": "Guide",
+          "mediaDisplay": null,
+          "mediaIndex": null,
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "signature": null,
+          "reasoning": ""
+        }
+      ]
+    },
+    {
+      "id": "different-model",
+      "source": "openrouter",
+      "model": "fixture-model",
+      "group": false,
+      "characterName": "Guide",
+      "input": [
+        {
+          "is_user": false,
+          "mes": "A",
+          "name": "Guide",
+          "extra": {
+            "api": "openrouter",
+            "model": "other",
+            "reasoning": "R",
+            "tool_invocations": [
+              {
+                "id": "c",
+                "name": "echo",
+                "parameters": "{}",
+                "result": "ok",
+                "reasoning": "OWN"
+              }
+            ]
+          }
+        }
+      ],
+      "result": [
+        {
+          "role": "assistant",
+          "content": "A",
+          "name": "Guide",
+          "mediaDisplay": null,
+          "mediaIndex": null,
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "signature": null,
+          "reasoning": ""
+        }
+      ]
+    },
+    {
+      "id": "other-group-member",
+      "source": "openrouter",
+      "model": "fixture-model",
+      "group": true,
+      "characterName": "Guide",
+      "input": [
+        {
+          "is_user": false,
+          "mes": "A",
+          "name": "Other",
+          "extra": {
+            "api": "openrouter",
+            "model": "fixture-model",
+            "reasoning": "R",
+            "tool_invocations": [
+              {
+                "id": "c",
+                "name": "echo",
+                "parameters": "{}",
+                "result": "ok",
+                "reasoning": "OWN"
+              }
+            ]
+          }
+        }
+      ],
+      "result": [
+        {
+          "role": "assistant",
+          "content": "A",
+          "name": "Other",
+          "mediaDisplay": null,
+          "mediaIndex": null,
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN"
+            }
+          ],
+          "signature": null,
+          "reasoning": ""
+        }
+      ]
+    },
+    {
+      "id": "different-model-keeps-both-falsey-metadata",
+      "source": "openrouter",
+      "model": "fixture-model",
+      "group": false,
+      "characterName": "Guide",
+      "input": [
+        {
+          "is_user": false,
+          "mes": "A",
+          "name": "Guide",
+          "extra": {
+            "api": "openrouter",
+            "model": "other",
+            "reasoning": "R",
+            "tool_invocations": [
+              {
+                "id": "c",
+                "name": "echo",
+                "parameters": "{}",
+                "result": "ok",
+                "reasoning": false,
+                "signature": 0
+              }
+            ]
+          }
+        }
+      ],
+      "result": [
+        {
+          "role": "assistant",
+          "content": "A",
+          "name": "Guide",
+          "mediaDisplay": null,
+          "mediaIndex": null,
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": false,
+              "signature": 0
+            }
+          ],
+          "signature": null,
+          "reasoning": ""
+        }
+      ]
+    },
+    {
+      "id": "different-model-truthy-signature-removes-both",
+      "source": "openrouter",
+      "model": "fixture-model",
+      "group": false,
+      "characterName": "Guide",
+      "input": [
+        {
+          "is_user": false,
+          "mes": "A",
+          "name": "Guide",
+          "extra": {
+            "api": "openrouter",
+            "model": "other",
+            "reasoning": "R",
+            "tool_invocations": [
+              {
+                "id": "c",
+                "name": "echo",
+                "parameters": "{}",
+                "result": "ok",
+                "reasoning": false,
+                "signature": "SIG"
+              }
+            ]
+          }
+        }
+      ],
+      "result": [
+        {
+          "role": "assistant",
+          "content": "A",
+          "name": "Guide",
+          "mediaDisplay": null,
+          "mediaIndex": null,
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "signature": null,
+          "reasoning": ""
+        }
+      ]
+    },
+    {
+      "id": "different-model-truthy-reasoning-removes-both",
+      "source": "openrouter",
+      "model": "fixture-model",
+      "group": false,
+      "characterName": "Guide",
+      "input": [
+        {
+          "is_user": false,
+          "mes": "A",
+          "name": "Guide",
+          "extra": {
+            "api": "openrouter",
+            "model": "other",
+            "reasoning": "R",
+            "tool_invocations": [
+              {
+                "id": "c",
+                "name": "echo",
+                "parameters": "{}",
+                "result": "ok",
+                "reasoning": "OWN",
+                "signature": false
+              }
+            ]
+          }
+        }
+      ],
+      "result": [
+        {
+          "role": "assistant",
+          "content": "A",
+          "name": "Guide",
+          "mediaDisplay": null,
+          "mediaIndex": null,
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok"
+            }
+          ],
+          "signature": null,
+          "reasoning": ""
+        }
+      ]
+    },
+    {
+      "id": "other-group-keeps-invocation-signature",
+      "source": "openrouter",
+      "model": "fixture-model",
+      "group": true,
+      "characterName": "Guide",
+      "input": [
+        {
+          "is_user": false,
+          "mes": "A",
+          "name": "Other",
+          "extra": {
+            "api": "openrouter",
+            "model": "fixture-model",
+            "reasoning": "R",
+            "tool_invocations": [
+              {
+                "id": "c",
+                "name": "echo",
+                "parameters": "{}",
+                "result": "ok",
+                "reasoning": "OWN",
+                "signature": "SIG"
+              }
+            ]
+          }
+        }
+      ],
+      "result": [
+        {
+          "role": "assistant",
+          "content": "A",
+          "name": "Other",
+          "mediaDisplay": null,
+          "mediaIndex": null,
+          "invocations": [
+            {
+              "id": "c",
+              "name": "echo",
+              "parameters": "{}",
+              "result": "ok",
+              "reasoning": "OWN",
+              "signature": "SIG"
+            }
+          ],
+          "signature": null,
+          "reasoning": ""
+        }
+      ]
+    }
+  ],
+  "modeSettings": [
+    {
+      "id": "missing-show-is-falsey",
+      "settings": {
+        "tool_reasoning_mode": "active_chain"
+      },
+      "expectedMode": "disabled"
+    },
+    {
+      "id": "null-show-is-falsey",
+      "settings": {
+        "tool_reasoning_mode": "active_chain",
+        "show_thoughts": null
+      },
+      "expectedMode": "disabled"
+    }
+  ],
+  "ordinaryReasoning": [
+    {
+      "mode": "disabled",
+      "addToPrompts": false,
+      "result": "BODY"
+    },
+    {
+      "mode": "disabled",
+      "addToPrompts": true,
+      "result": "<think>ORDINARY</think>\nBODY"
+    },
+    {
+      "mode": "active_chain",
+      "addToPrompts": false,
+      "result": "BODY"
+    },
+    {
+      "mode": "active_chain",
+      "addToPrompts": true,
+      "result": "<think>ORDINARY</think>\nBODY"
+    }
+  ]
+}

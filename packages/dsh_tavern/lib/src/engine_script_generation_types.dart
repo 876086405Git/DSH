@@ -84,6 +84,7 @@ class _ScriptGenerationCapture {
     this.promptPreset,
     this.capturedChatState = false,
     this.gameplayCapture,
+    this.helper,
   });
   final String generationId;
   final _ScriptContextState context;
@@ -102,6 +103,7 @@ class _ScriptGenerationCapture {
   final List<_ScriptInjectionCandidate> injectionCandidates;
   final bool capturedChatState;
   final _GameplayResourceCapture? gameplayCapture;
+  final _HelperRequestRuntime? helper;
   TavernScriptGenerationOrigin get origin => TavernScriptGenerationOrigin(
     contextId: context.value.id,
     instanceId: context.value.instanceId,
@@ -120,6 +122,7 @@ class _ScriptPreparedGeneration {
     required this.capture,
     required Map<String, Object?> body,
     required this.budgetSource,
+    this.validateFinalBody,
     required this.injectionUses,
     Map<String, Object?> stateUpdates = const {},
     this.stChatIdHash,
@@ -132,6 +135,7 @@ class _ScriptPreparedGeneration {
   final _ScriptGenerationCapture capture;
   final Map<String, Object?> body;
   final String budgetSource;
+  final void Function(Map<String, Object?>)? validateFinalBody;
   final _ScriptInjectionUseSet injectionUses;
   final Map<String, Object?> stateUpdates;
   final state_core.StatePackWorldInfoDelta? packWorldInfo;

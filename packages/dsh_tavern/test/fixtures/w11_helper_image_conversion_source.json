@@ -1,0 +1,167 @@
+{
+  "source": {
+    "repository": "N0VI028/JS-Slash-Runner",
+    "commit": "29331c36fb9b2e880d4d488ff919317e1bc95684",
+    "file": "src/function/generate/utils.ts",
+    "sha256": "9aace591938c207d8c3e81a5619ed39ccc6a1d53a1d3e84190243ca6c69ca3ff"
+  },
+  "scope": "Actual fixed conversion and array functions; network/base64 outcomes, timers and event host are explicit controls. No compression, tokenizer, browser or full prompt assembly.",
+  "count": 10,
+  "results": [
+    {
+      "name": "single-download-failure",
+      "defined": false,
+      "calls": [
+        "https://fixture.invalid/0.png"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "single-base64-failure",
+      "defined": false,
+      "calls": [
+        "https://fixture.invalid/0.png"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "single-data-uri",
+      "defined": true,
+      "content": "data:image/png;base64,AQ==",
+      "calls": [],
+      "warnings": []
+    },
+    {
+      "name": "raw-array-mixed",
+      "defined": true,
+      "content": [
+        {
+          "type": "text",
+          "text": "Q"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,AQ==",
+            "detail": "low"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,Ag==",
+            "detail": "low"
+          }
+        }
+      ],
+      "calls": [
+        "https://fixture.invalid/0.png",
+        "https://fixture.invalid/1.png",
+        "https://fixture.invalid/2.png",
+        "https://fixture.invalid/3.png"
+      ],
+      "warnings": [
+        "[TavernHelper][Generate:图片数组处理] 图片处理失败，跳过该图片",
+        "[TavernHelper][Generate:图片数组处理] 图片处理失败，跳过该图片"
+      ]
+    },
+    {
+      "name": "normal-array-mixed",
+      "defined": true,
+      "content": [
+        {
+          "type": "text",
+          "text": "Q"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,AQ==",
+            "detail": "low"
+          }
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,Ag==",
+            "detail": "low"
+          }
+        }
+      ],
+      "calls": [
+        "https://fixture.invalid/0.png",
+        "https://fixture.invalid/1.png",
+        "https://fixture.invalid/2.png",
+        "https://fixture.invalid/3.png"
+      ],
+      "warnings": [
+        "[TavernHelper][Generate:图片数组处理] 图片处理失败，跳过该图片",
+        "[TavernHelper][Generate:图片数组处理] 图片处理失败，跳过该图片"
+      ]
+    },
+    {
+      "name": "raw-array-all-failed",
+      "defined": true,
+      "content": [
+        {
+          "type": "text",
+          "text": ""
+        }
+      ],
+      "calls": [
+        "https://fixture.invalid/0.png"
+      ],
+      "warnings": [
+        "[TavernHelper][Generate:图片数组处理] 图片处理失败，跳过该图片"
+      ]
+    },
+    {
+      "name": "normal-array-all-failed",
+      "defined": true,
+      "content": [
+        {
+          "type": "text",
+          "text": ""
+        }
+      ],
+      "calls": [
+        "https://fixture.invalid/0.png"
+      ],
+      "warnings": [
+        "[TavernHelper][Generate:图片数组处理] 图片处理失败，跳过该图片"
+      ]
+    },
+    {
+      "name": "normal-array-missing",
+      "defined": true,
+      "content": "NO MARKER",
+      "calls": [],
+      "warnings": [
+        "[TavernHelper][Generate:图片数组处理] 未找到包含图片标记的用户消息"
+      ]
+    },
+    {
+      "name": "normal-array-assistant",
+      "defined": true,
+      "content": "Q__IMG_ARRAY_MARKER_",
+      "calls": [],
+      "warnings": [
+        "[TavernHelper][Generate:图片数组处理] 未找到包含图片标记的用户消息"
+      ]
+    },
+    {
+      "name": "normal-array-parts",
+      "defined": true,
+      "content": [
+        {
+          "type": "text",
+          "text": "Q__IMG_ARRAY_MARKER_"
+        }
+      ],
+      "calls": [],
+      "warnings": [
+        "[TavernHelper][Generate:图片数组处理] 未找到包含图片标记的用户消息"
+      ]
+    }
+  ]
+}

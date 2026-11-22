@@ -9,6 +9,7 @@
   const evaluations = new Map();
   const registrations = new Map();
   let activeIdentifiers = new Set();
+  let registryTail = Promise.resolve();
   // This independent public surface mirrors ST's registration receiver. User
   // callbacks must see a registration instance, not the returned definition
   // object or the page global. Private storage leaves own script fields free.
@@ -171,7 +172,16 @@
     if (uuid) definitions.set(uuid, retained);
     return retained;
   }
-  async function evaluate(request, signal) {
+  function evaluate(request, signal) {
+    if (request.kind !== 'toolRegistry') return evaluateNow(request, signal);
+    // shouldRegister awaits the receiver. Keep sync/read/refresh in invocation
+    // order so another registry RPC cannot replace its active set or entries
+    // halfway through enumeration. Other script evaluation is independent.
+    const result = registryTail.then(() => evaluateNow(request, signal));
+    registryTail = result.then(() => {}, () => {});
+    return result;
+  }
+  async function evaluateNow(request, signal) {
     check(signal);
     const args = copy(request.arguments ?? []);
     const capture = {enabled: request.captureLogs === true, logs: [], chars: 0, dropped: 0, truncatedValues: 0};
@@ -183,49 +193,57 @@
       value = true;
     } else if (request.kind === 'toolRegistry') {
       const input = args[0] ?? {};
+      const registryMode = input.registryMode ?? 'sync';
+      if (!['sync', 'read', 'refresh'].includes(registryMode)) {
+        throw new TypeError(`Unsupported tool registry mode: ${registryMode}`);
+      }
       activeIdentifiers = new Set(input.activeIdentifiers ?? []);
-      const desired = new Map();
-      const used = new Set();
       const diagnostics = [];
-      for (const binding of input.bindings ?? []) {
-        const { identifier, code, uuid } = binding;
-        try {
-          const retained = retainDefinition(code, identifier, uuid, sink);
-          if (uuid) used.add(uuid);
-          const name = retained.definition.name;
-          if (desired.has(name)) {
-            diagnostics.push({ identifier, message: `Duplicate tool name: ${name}` });
-            continue;
+      if (registryMode !== 'read') {
+        const desired = new Map();
+        const used = new Set();
+        for (const binding of input.bindings ?? []) {
+          const { identifier, code, uuid } = binding;
+          try {
+            const retained = retainDefinition(code, identifier, uuid, sink);
+            if (uuid) used.add(uuid);
+            const name = retained.definition.name;
+            if (desired.has(name)) {
+              diagnostics.push({ identifier, message: `Duplicate tool name: ${name}` });
+              continue;
+            }
+            desired.set(name, { retained, identifier, uuid, code });
+          } catch (error) {
+            diagnostics.push({ identifier, message: error.message || String(error) });
           }
-          desired.set(name, { retained, identifier, uuid, code });
-        } catch (error) {
-          diagnostics.push({ identifier, message: error.message || String(error) });
         }
-      }
-      for (const uuid of definitions.keys()) if (!used.has(uuid)) definitions.delete(uuid);
-      for (const [name, registered] of registrations) {
-        if (!desired.has(name) || desired.get(name).uuid !== registered.uuid) registrations.delete(name);
-      }
-      for (const [name, current] of desired) {
-        // The original registry does not replace an existing same-name,
-        // same-UUID registration, even when its evaluated code changed.
-        if (!registrations.has(name)) {
-          const definition = current.retained.definition;
-          const receiver = new ToolDefinition(name, definition.displayName || name, definition.description,
-            definition.parameters, definition.action, definition.formatMessage,
-            () => activeIdentifiers.has(current.identifier), definition.stealth ?? false);
-          registrations.set(name, {...current, receiver});
+        for (const uuid of definitions.keys()) if (!used.has(uuid)) definitions.delete(uuid);
+        for (const [name, registered] of registrations) {
+          if (!desired.has(name) || desired.get(name).uuid !== registered.uuid) registrations.delete(name);
+        }
+        for (const [name, current] of desired) {
+          // The original registry does not replace an existing same-name,
+          // same-UUID registration, even when its evaluated code changed.
+          if (!registrations.has(name)) {
+            const definition = current.retained.definition;
+            const receiver = new ToolDefinition(name, definition.displayName || name, definition.description,
+              definition.parameters, definition.action, definition.formatMessage,
+              () => activeIdentifiers.has(current.identifier), definition.stealth ?? false);
+            registrations.set(name, {...current, receiver});
+          }
         }
       }
       const tools = [];
-      for (const [name, registered] of registrations) {
-        if (!await registered.receiver.shouldRegister()) continue;
-        const sessionId = `tool:${name}`;
-        sessions.set(`${request.generationId}:${sessionId}`, registered);
-        tools.push({ identifier: registered.identifier, code: registered.code,
-          sessionId, definition: describe(registered.receiver) });
+      if (registryMode !== 'refresh') {
+        for (const [name, registered] of registrations) {
+          if (!await registered.receiver.shouldRegister()) continue;
+          const sessionId = `tool:${name}`;
+          sessions.set(`${request.sessionScope ?? request.generationId}:${sessionId}`, registered);
+          tools.push({ identifier: registered.identifier, code: registered.code,
+            sessionId, definition: describe(registered.receiver) });
+        }
       }
-      value = { tools, diagnostics };
+      value = { tools, diagnostics, registryMode, registryModes: ['sync', 'read', 'refresh'] };
     } else if (request.kind === 'toolDefinition') {
       if (!request.cacheKey) throw new TypeError('ToolBindings requires a stable cacheKey.');
       const retained = retainDefinition(String(request.source ?? ''), request.identifier, request.cacheKey, sink);

@@ -1,0 +1,609 @@
+{
+  "source": {
+    "commit": "53bd585da14248ba10baaede7fc7ed0cebe1eeeb",
+    "sha256": "4858bcb57530e3ff6ef68f0c94a4d291e2914c766c274f888e9a2fdf8d0efb59"
+  },
+  "vectors": [
+    {
+      "name": "empty primary aliases (openai)",
+      "provider": {
+        "adapter": "openai",
+        "source": "openai",
+        "model": "fixture"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": "call",
+            "name": "",
+            "function": {
+              "name": "lookup",
+              "arguments": "{\"q\":1}"
+            }
+          }
+        ],
+        "toolResults": [
+          {
+            "toolCallId": "",
+            "tool_call_id": "call",
+            "content": {
+              "ok": true
+            }
+          }
+        ]
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": true,
+      "expected": [
+        {
+          "role": "assistant",
+          "content": "fixture",
+          "tool_calls": [
+            {
+              "id": "call",
+              "type": "function",
+              "function": {
+                "name": "lookup",
+                "arguments": "{\"q\":1}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "call",
+          "content": "{\"ok\":true}"
+        }
+      ]
+    },
+    {
+      "name": "empty primary aliases (deepseek)",
+      "provider": {
+        "adapter": "deepseek",
+        "source": "deepseek",
+        "model": "fixture"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": "call",
+            "name": "",
+            "function": {
+              "name": "lookup",
+              "arguments": "{\"q\":1}"
+            }
+          }
+        ],
+        "toolResults": [
+          {
+            "toolCallId": "",
+            "tool_call_id": "call",
+            "content": {
+              "ok": true
+            }
+          }
+        ]
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": true,
+      "expected": [
+        {
+          "role": "assistant",
+          "content": "fixture",
+          "tool_calls": [
+            {
+              "id": "call",
+              "type": "function",
+              "function": {
+                "name": "lookup",
+                "arguments": "{\"q\":1}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "call",
+          "content": "{\"ok\":true}"
+        }
+      ]
+    },
+    {
+      "name": "empty primary aliases (openrouter)",
+      "provider": {
+        "adapter": "openrouter",
+        "source": "openrouter",
+        "model": "fixture"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": "call",
+            "name": "",
+            "function": {
+              "name": "lookup",
+              "arguments": "{\"q\":1}"
+            }
+          }
+        ],
+        "toolResults": [
+          {
+            "toolCallId": "",
+            "tool_call_id": "call",
+            "content": {
+              "ok": true
+            }
+          }
+        ]
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": true,
+      "expected": [
+        {
+          "role": "assistant",
+          "content": "fixture",
+          "tool_calls": [
+            {
+              "id": "call",
+              "type": "function",
+              "function": {
+                "name": "lookup",
+                "arguments": "{\"q\":1}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "call",
+          "content": "{\"ok\":true}"
+        }
+      ]
+    },
+    {
+      "name": "empty primary aliases (gemini)",
+      "provider": {
+        "adapter": "gemini",
+        "source": "makersuite",
+        "model": "fixture"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": "call",
+            "name": "",
+            "function": {
+              "name": "lookup",
+              "arguments": "{\"q\":1}"
+            }
+          }
+        ],
+        "toolResults": [
+          {
+            "toolCallId": "",
+            "tool_call_id": "call",
+            "content": {
+              "ok": true
+            }
+          }
+        ]
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": true,
+      "expected": [
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "fixture"
+            },
+            {
+              "type": "tool_calls",
+              "tool_calls": [
+                {
+                  "id": "call",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup",
+                    "arguments": "{\"q\":1}"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "call",
+          "content": "{\"ok\":true}"
+        }
+      ]
+    },
+    {
+      "name": "empty primary aliases (claude)",
+      "provider": {
+        "adapter": "claude",
+        "source": "claude",
+        "model": "fixture"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": "call",
+            "name": "",
+            "function": {
+              "name": "lookup",
+              "arguments": "{\"q\":1}"
+            }
+          }
+        ],
+        "toolResults": [
+          {
+            "toolCallId": "",
+            "tool_call_id": "call",
+            "content": {
+              "ok": true
+            }
+          }
+        ]
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": true,
+      "expected": [
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "fixture"
+            },
+            {
+              "type": "tool_use",
+              "id": "call",
+              "name": "lookup",
+              "input": {
+                "q": 1
+              }
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "call",
+              "content": "{\"ok\":true}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "falsy name/result aliases false",
+      "provider": {
+        "adapter": "openai"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": "call",
+            "name": false,
+            "function": {
+              "name": "lookup"
+            }
+          }
+        ],
+        "toolResults": [
+          {
+            "toolCallId": false,
+            "tool_call_id": "call"
+          }
+        ]
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": true,
+      "expected": [
+        {
+          "role": "assistant",
+          "content": "fixture",
+          "tool_calls": [
+            {
+              "id": "call",
+              "type": "function",
+              "function": {
+                "name": "lookup",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "call",
+          "content": ""
+        }
+      ]
+    },
+    {
+      "name": "falsy name/result aliases 0",
+      "provider": {
+        "adapter": "openai"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": "call",
+            "name": 0,
+            "function": {
+              "name": "lookup"
+            }
+          }
+        ],
+        "toolResults": [
+          {
+            "toolCallId": 0,
+            "tool_call_id": "call"
+          }
+        ]
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": true,
+      "expected": [
+        {
+          "role": "assistant",
+          "content": "fixture",
+          "tool_calls": [
+            {
+              "id": "call",
+              "type": "function",
+              "function": {
+                "name": "lookup",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "call",
+          "content": ""
+        }
+      ]
+    },
+    {
+      "name": "invalid falsy call id false",
+      "provider": {
+        "adapter": "openai"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": false,
+            "name": "lookup"
+          }
+        ],
+        "toolResults": []
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": false,
+      "expected": null
+    },
+    {
+      "name": "invalid falsy call id 0",
+      "provider": {
+        "adapter": "openai"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": 0,
+            "name": "lookup"
+          }
+        ],
+        "toolResults": []
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": false,
+      "expected": null
+    },
+    {
+      "name": "invalid falsy call id \"\"",
+      "provider": {
+        "adapter": "openai"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": "",
+            "name": "lookup"
+          }
+        ],
+        "toolResults": []
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": false,
+      "expected": null
+    },
+    {
+      "name": "invalid falsy call id null",
+      "provider": {
+        "adapter": "openai"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": null,
+            "name": "lookup"
+          }
+        ],
+        "toolResults": []
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": false,
+      "expected": null
+    },
+    {
+      "name": "both name aliases falsy",
+      "provider": {
+        "adapter": "openai"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": "call",
+            "name": false,
+            "function": {
+              "name": 0
+            }
+          }
+        ],
+        "toolResults": []
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": false,
+      "expected": null
+    },
+    {
+      "name": "both result id aliases falsy",
+      "provider": {
+        "adapter": "openai"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": "call",
+            "name": "lookup"
+          }
+        ],
+        "toolResults": [
+          {
+            "toolCallId": false,
+            "tool_call_id": 0
+          }
+        ]
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": false,
+      "expected": null
+    },
+    {
+      "name": "truthy non-string id follows source String",
+      "provider": {
+        "adapter": "openai"
+      },
+      "binding": {
+        "enabled": true,
+        "reasoning": "",
+        "signature": "",
+        "toolCalls": [
+          {
+            "id": true,
+            "name": "lookup"
+          }
+        ],
+        "toolResults": []
+      },
+      "base": {
+        "role": "system",
+        "content": "fixture"
+      },
+      "valid": true,
+      "expected": [
+        {
+          "role": "assistant",
+          "content": "fixture",
+          "tool_calls": [
+            {
+              "id": "true",
+              "type": "function",
+              "function": {
+                "name": "lookup",
+                "arguments": "{}"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

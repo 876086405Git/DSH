@@ -17,14 +17,20 @@
 // - slash lookups are refused as unsupported (the app keeps no script
 //   library), never answered with an empty success.
 // - refresh: the chat page redraws from its own watch of the path.
+// - 酒馆助手 generations: an image given by URL is fetched here and handed
+//   on as a data URI (a failed fetch is that image skipped, said so); a
+//   named proxy is looked up in the app's proxies — it has none, so none is
+//   found, said so by the engine.
 // - SPreset: a preset's SPreset function (its output step, a tool…) is
 //   evaluated by the page of the chat it is for, where the preset's scripts
 //   and their storage live; the page's own answer settles it, also after a
 //   cancel (told to the page), or as unknown when the page goes.
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dsh_tavern/dsh_tavern.dart';
+import 'package:http/http.dart' as http;
 
 import 'tavern_interact.dart';
 import 'tavern_script_wire.dart';
@@ -41,7 +47,17 @@ typedef TavernScriptInteractor = Future<TavernInteractAnswer> Function(
   required Future<void> withdraw,
 });
 
-class TavernScriptPages implements TavernScriptHost, TavernSPresetScriptHost {
+class TavernScriptPages
+    implements TavernScriptHost, TavernSPresetScriptHost, TavernHelperImageHost, TavernHelperProxyHost {
+  TavernScriptPages({http.Client Function()? client, bool Function()? offline})
+    : _client = client ?? http.Client.new,
+      _offline = offline ?? (() => false);
+
+  final http.Client Function() _client;
+
+  /// 酒馆设置 › 安全's 离线 choice: then no image is fetched for a script.
+  final bool Function() _offline;
+
   final _pages = <String, TavernScriptPage>{};
 
   /// Each context's chat, for the SPreset evaluations of that chat.
@@ -387,6 +403,49 @@ class TavernScriptPages implements TavernScriptHost, TavernSPresetScriptHost {
     }
     waiting.answer.complete(TavernSPresetEvaluationResult.fromJson(answer.cast<String, Object?>()));
   }
+
+  /// A 酒馆助手 image given by URL, as a data URI. Only a failed download
+  /// or encoding is the failure the engine skips an image for; a cancel
+  /// stays a cancel.
+  @override
+  Future<String> resolveHelperImage(String source, TavernScriptCancellation cancellation) async {
+    if (_offline()) {
+      throw TavernScriptException(
+        code: TavernScriptErrorCode.unsupportedCapability,
+        operation: 'resolveHelperImage',
+        message: "Offline is on in 酒馆设置 › 安全: a script's image is not fetched from the web.",
+      );
+    }
+    final client = _client();
+    unawaited(cancellation.whenCancelled.then((_) => client.close()));
+    final http.Response response;
+    try {
+      response = await client.get(Uri.parse(source));
+    } on Object catch (e) {
+      if (cancellation.isCancelled) rethrow;
+      throw TavernHelperImageConversionFailure(stage: TavernHelperImageConversionStage.download, message: '$e');
+    } finally {
+      client.close();
+    }
+    if (response.statusCode != 200) {
+      throw TavernHelperImageConversionFailure(
+        stage: TavernHelperImageConversionStage.download,
+        message: 'HTTP ${response.statusCode}',
+      );
+    }
+    final type = response.headers['content-type']?.split(';').first.trim();
+    if (type == null || !type.startsWith('image/') || response.bodyBytes.isEmpty) {
+      throw TavernHelperImageConversionFailure(
+        stage: TavernHelperImageConversionStage.base64,
+        message: 'Not an image (${type ?? 'no type'}).',
+      );
+    }
+    return 'data:$type;base64,${base64Encode(response.bodyBytes)}';
+  }
+
+  /// The app keeps no ST-style named proxies: none by that name.
+  @override
+  Future<TavernHelperProxy?> resolveHelperProxy(String name, TavernScriptCancellation cancellation) async => null;
 
   /// A finished generation's SPreset session: its functions go from the
   /// pages that kept them.
