@@ -11,6 +11,7 @@ import 'dart:math';
 import 'package:dsh_tavern/dsh_tavern.dart' show TavernPersona;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -294,6 +295,18 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       lowPower: lowPower,
       perf: tavernPerfLog,
     );
+    // A controller made here (its libraries came later than the first
+    // build) needs a build to be shown: now, or after this frame when this
+    // runs while building.
+    if (_controller == null) {
+      if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      } else {
+        setState(() {});
+      }
+    }
     final controller = _controller ??= WebViewController();
     final textZoom = MediaQuery.textScalerOf(context).scale(100).round().clamp(50, 300);
     final dark = theme.brightness == Brightness.dark;
