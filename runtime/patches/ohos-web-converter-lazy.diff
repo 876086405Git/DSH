@@ -84,12 +84,12 @@
 +	});
 +	/** Render one GFM table cell without interpreting HTML span counts. */
 +	function renderTableCell(content, index) {
-+		return `${index === 0 ? "| " : " "}${content.trim().replace(/\n\r/g, "<br>").replace(/\n/g, "<br>").replace(/\|+/g, "\\|").padEnd(3, " ")} |`;
++		return `${index === 0 ? "| " : " "}${content.trim().replace(/\n\r/g, "<br>").replace(/\n/g, "<br>").replace(/\|/g, "\\|").padEnd(3, " ")} |`;
  	}
 -});
 -/** Render one GFM table cell without interpreting HTML span counts. */
 -function renderTableCell(content, index) {
--	return `${index === 0 ? "| " : " "}${content.trim().replace(/\n\r/g, "<br>").replace(/\n/g, "<br>").replace(/\|+/g, "\\|").padEnd(3, " ")} |`;
+-	return `${index === 0 ? "| " : " "}${content.trim().replace(/\n\r/g, "<br>").replace(/\n/g, "<br>").replace(/\|/g, "\\|").padEnd(3, " ")} |`;
 -}
 -/** Whether a row is the table's Markdown heading row. */
 -function isTableHeadingRow(row) {

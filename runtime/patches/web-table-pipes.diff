@@ -1,0 +1,5 @@
+--- a/node_modules/@deepseek-ai/dsh-tool-web/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tool-web/lib/index.js
+@@ -396 +396 @@
+-	return `${index === 0 ? "| " : " "}${content.trim().replace(/\n\r/g, "<br>").replace(/\n/g, "<br>").replace(/\|+/g, "\\|").padEnd(3, " ")} |`;
++	return `${index === 0 ? "| " : " "}${content.trim().replace(/\n\r/g, "<br>").replace(/\n/g, "<br>").replace(/\|/g, "\\|").padEnd(3, " ")} |`;
