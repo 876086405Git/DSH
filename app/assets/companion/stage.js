@@ -575,7 +575,6 @@
     tick(dt, animate) {
       const core = this._model;
       core.loadParameters();
-      core.saveParameters();
       animate.before(this, dt);
       // One of its own motions, while it plays, takes over from the pose she
       // keeps herself; expressions and physics still come after.
@@ -1876,7 +1875,7 @@
     model.tick(dt, animate);
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     model.draw(projection(), [0, 0, canvas.width, canvas.height]);
@@ -1957,7 +1956,7 @@
       model.tick(dt, animate);
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       model.draw(projection(), [0, 0, canvas.width, canvas.height]);
@@ -2271,7 +2270,8 @@
       // MSAA costs a lot of fill on a phone (13 → 24 fps on an old one) and
       // shows little on a dense screen, where the canvas is drawn at 2×.
       const antialias = query.get('antialias') === '1' || (query.get('antialias') !== '0' && (window.devicePixelRatio || 1) < 1.5);
-      const options = { alpha: true, premultipliedAlpha: true, antialias, preserveDrawingBuffer: query.get('capture') === '1' };
+      // Cubism never depth-tests, so no depth buffer.
+      const options = { alpha: true, depth: false, premultipliedAlpha: true, antialias, preserveDrawingBuffer: query.get('capture') === '1' };
       gl = canvas.getContext('webgl2', options) || canvas.getContext('webgl', options);
       if (!gl || (FLOAT && !gl.getContextAttributes()?.alpha)) throw new Error('webgl');
       canvas.width = canvas.height = 0;
