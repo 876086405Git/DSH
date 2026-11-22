@@ -7,7 +7,6 @@ import android.os.Build
 import android.os.Handler
 import io.github.ccch1mneyyy.dsh_app.nativemedia.SpeechGate
 import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
@@ -136,7 +135,7 @@ class PcmStream(
         var failed: String? = null
         try {
             while (!stopped) {
-                val chunk = queue.poll(200, TimeUnit.MILLISECONDS) ?: continue
+                val chunk = queue.take()
                 if (chunk === END) break
                 waiting.addAndGet(-chunk.size.toLong())
                 // Samples are two bytes; an odd chunk leaves its last byte for the next.
