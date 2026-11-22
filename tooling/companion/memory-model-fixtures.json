@@ -28,7 +28,7 @@
     },
     {
       "path": "app/test/companion/companion_memory_control_replay_test.dart",
-      "sha256": "9a44d95eddc4b8c2468a0909753b3d74ce0b294d98a6c6cf33e29b9d07742485"
+      "sha256": "c2d7acf592f77c80c11222ec6b0382bba96f35ac016a155389a830ad2567670a"
     },
     {
       "path": "app/test/companion/companion_memory_dates_replay_test.dart",
