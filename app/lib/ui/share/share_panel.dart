@@ -442,7 +442,7 @@ class SharePanelModel extends ChangeNotifier {
         if (keys.contains(item.key)) item,
     ];
     final whole = _scope == ShareScope.whole;
-    final turns = {for (final reply in picked.whereType<AssistantChatItem>()) ?turnOf(state.turns, reply.seq)};
+    late final turns = {for (final reply in picked.whereType<AssistantChatItem>()) ?turnOf(state.turns, reply.seq)};
     var tools = 0;
     if (_privacy.tools) {
       for (final item in state.items) {

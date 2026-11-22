@@ -336,7 +336,7 @@ class _SearchBody extends ConsumerWidget {
     }
     if (sessions.value == null) return _Notice(icon: AppIcons.loading, title: l10n.shellLoadingChatsEllipsis);
 
-    final archived = ref.read(sessionsProvider.notifier).archivedSessions;
+    late final archived = ref.read(sessionsProvider.notifier).archivedSessions;
     final results = !archivedOnly
         ? view.results
         : SessionSearchResults(
@@ -377,17 +377,21 @@ class _SearchBody extends ConsumerWidget {
       onTap: () => r.archived ? _openArchived(context, ref, r.session) : onPick(r.session.sessionId),
     );
     final side = SessionSearchPage.sideFor(MediaQuery.sizeOf(context).width);
-    return ListView(
+    final activeCount = results.active.length;
+    final footerIndex = results.length + (results.archived.isEmpty ? 0 : 1);
+    return ListView.builder(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: EdgeInsets.fromLTRB(side, 4, side, MediaQuery.paddingOf(context).bottom + 24),
-      children: [
-        // The first page of hits rises in; later keystrokes just update.
-        ...FadeInList.wrap([
-          for (final r in results.active) tile(r),
-          if (results.archived.isNotEmpty) ...[_Eyebrow(l10n.shellArchived), for (final r in results.archived) tile(r)],
-        ]),
-        _ContentFooter(view: view),
-      ],
+      itemCount: footerIndex + 1,
+      itemBuilder: (context, i) {
+        if (i == footerIndex) return _ContentFooter(view: view);
+        final row = i < activeCount
+            ? tile(results.active[i])
+            : i == activeCount
+            ? _Eyebrow(l10n.shellArchived)
+            : tile(results.archived[i - activeCount - 1]);
+        return FadeSlideIn(index: i, child: row);
+      },
     );
   }
 

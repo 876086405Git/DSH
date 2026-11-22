@@ -46,9 +46,12 @@ class ReplayFrames {
 
   final ConversationShare share;
   final ReplayTimeline timeline;
+  final _wideRunes = <(int, bool), List<int>>{};
 
   final Map<int, ChatItem> _done = {};
+  final Map<int, TurnTrace> _open = {};
   final Map<int, TurnTrace> _closed = {};
+  final Map<int, ToolChatItem> _runningTools = {};
 
   /// The sequence number entry [i] gets (turns start just before their
   /// prompt; room for a turn's end after its last part).
@@ -64,7 +67,7 @@ class ReplayFrames {
     final items = <ChatItem>[];
     final commands = <CommandNotice>[];
     final turns = <TurnTrace>[];
-    List<TodoItem>? todos;
+    TodosEntry? todoSource;
     GoalEntry? goal;
     var running = false;
     for (var i = 0; i < visible; i++) {
@@ -73,11 +76,12 @@ class ReplayFrames {
       final done = time >= beat.end;
       switch (entry) {
         case TurnEntry():
-          todos = null;
+          todoSource = null;
           final end = timeline.turnEnds[i];
           final closed = end != null && time >= end;
           if (!closed) running = true;
-          turns.add(closed ? (_closed[i] ??= _trace(i, entry, done: true)) : _trace(i, entry, done: false));
+          final traces = closed ? _closed : _open;
+          turns.add(traces[i] ??= _trace(i, entry, done: closed));
         case UserEntry():
           items.add(_done[i] ??= _user(i, entry));
         case ReplyEntry():
@@ -85,13 +89,15 @@ class ReplayFrames {
             done ? (_done[i] ??= _reply(i, entry, beat, time, done: true)) : _reply(i, entry, beat, time, done: false),
           );
         case ToolEntry():
-          items.add(done ? (_done[i] ??= _tool(i, entry, done: true)) : _tool(i, entry, done: false));
+          items.add(
+            done ? (_done[i] ??= _tool(i, entry, done: true)) : (_runningTools[i] ??= _tool(i, entry, done: false)),
+          );
         case NoticeEntry():
           items.add(_done[i] ??= NoticeChatItem(seq: seqOf(i), kind: entry.kind, text: entry.text));
         case CommandEntry():
           commands.add(_command(i, entry));
         case TodosEntry():
-          todos = [for (final item in entry.items) TodoItem(item.text, item.status)];
+          todoSource = entry;
         case GoalEntry():
           goal = entry.text == null ? null : entry;
       }
@@ -100,12 +106,15 @@ class ReplayFrames {
       items: items,
       turns: turns,
       commands: commands,
-      todos: todos,
+      todos: todoSource == null ? null : [for (final item in todoSource.items) TodoItem(item.text, item.status)],
       goal: goal,
       running: running,
       visible: visible,
     );
   }
+
+  /// Elapsed time in the original conversation, before replay pacing.
+  late final Duration originalSpan = share.span;
 
   /// The whole conversation, everything finished.
   ReplayFrame get end => at(double.infinity);
@@ -135,11 +144,11 @@ class ReplayFrames {
     var text = e.text;
     if (!done) {
       if (time < beat.thinkEnd) {
-        reasoning = _prefix(reasoning, (time - beat.start) / (beat.thinkEnd - beat.start));
+        reasoning = _prefix((i, true), reasoning, (time - beat.start) / (beat.thinkEnd - beat.start));
         text = '';
       } else {
         final span = beat.end - beat.thinkEnd;
-        text = _prefix(text, span <= 0 ? 1 : (time - beat.thinkEnd) / span);
+        text = _prefix((i, false), text, span <= 0 ? 1 : (time - beat.thinkEnd) / span);
       }
     }
     return AssistantChatItem(
@@ -192,9 +201,11 @@ class ReplayFrames {
     final start = _time(i);
     // The turn's parts: up to the next turn.
     var last = i;
-    for (var j = i + 1; j < share.entries.length && share.entries[j] is! TurnEntry; j++) {
-      if (e.d != null && share.entries[j].t > e.t + e.d!) break;
-      last = j;
+    if (done) {
+      for (var j = i + 1; j < share.entries.length && share.entries[j] is! TurnEntry; j++) {
+        if (e.d != null && share.entries[j].t > e.t + e.d!) break;
+        last = j;
+      }
     }
     final steps = e.steps ?? 0;
     return TurnTrace(
@@ -219,11 +230,30 @@ class ReplayFrames {
   }
 
   /// The first [fraction] of [text], by characters (never half a character).
-  static String _prefix(String text, double fraction) {
+  String _prefix((int, bool) part, String text, double fraction) {
     if (fraction >= 1) return text;
     if (fraction <= 0 || text.isEmpty) return '';
-    final runes = text.runes.toList();
-    final n = (runes.length * fraction).floor();
-    return String.fromCharCodes(runes.take(n));
+    final wide = _wideRunes.putIfAbsent(part, () {
+      final positions = <int>[];
+      var index = 0;
+      for (final rune in text.runes) {
+        if (rune > 0xffff) positions.add(index);
+        index++;
+      }
+      return positions;
+    });
+    final n = ((text.length - wide.length) * fraction).floor();
+    // Each two-unit rune before the boundary adds one UTF-16 code unit.
+    var lo = 0;
+    var hi = wide.length;
+    while (lo < hi) {
+      final mid = (lo + hi) ~/ 2;
+      if (wide[mid] < n) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return text.substring(0, n + lo);
   }
 }

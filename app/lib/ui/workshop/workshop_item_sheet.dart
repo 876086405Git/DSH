@@ -144,8 +144,6 @@ class _WorkshopItemSheetState extends ConsumerState<WorkshopItemSheet> {
     final item = ref.watch(workshopItemProvider(widget.identity)) ?? widget.opened;
     final gone = ref.watch(workshopItemProvider(widget.identity)) == null;
     final localKnown = ref.watch(workshopCatalogProvider.select((s) => s.localStateKnown));
-    final install = ref.watch(workshopInstallProvider);
-    final mine = _mine(install);
     final meta = item.entry.metadata;
     final title = workshopTitleOf(meta, locale);
     final installed = item.installed;
@@ -239,17 +237,23 @@ class _WorkshopItemSheetState extends ConsumerState<WorkshopItemSheet> {
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            child: AnimatedSwitcher(
-              duration: AppMotion.of(context, AppMotion.quick),
-              child: mine && install.busy
-                  ? _Progress(key: const ValueKey('progress'), install: install)
-                  : _Action(
-                      key: const ValueKey('action'),
-                      item: item,
-                      gone: gone,
-                      failure: mine && install.phase == WorkshopInstallPhase.failed ? install.error : null,
-                      onInstall: () => unawaited(_install(item.entry)),
-                    ),
+            child: Consumer(
+              builder: (context, ref, _) {
+                final install = ref.watch(workshopInstallProvider);
+                final mine = _mine(install);
+                return AnimatedSwitcher(
+                  duration: AppMotion.of(context, AppMotion.quick),
+                  child: mine && install.busy
+                      ? _Progress(key: const ValueKey('progress'), install: install)
+                      : _Action(
+                          key: const ValueKey('action'),
+                          item: item,
+                          gone: gone,
+                          failure: mine && install.phase == WorkshopInstallPhase.failed ? install.error : null,
+                          onInstall: () => unawaited(_install(item.entry)),
+                        ),
+                );
+              },
             ),
           ),
         ),

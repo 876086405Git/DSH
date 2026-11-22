@@ -6362,6 +6362,25 @@ void main() {
         expect(find.descendant(of: log, matching: find.text('你来啦。')), findsOneWidget);
         expect(find.descendant(of: log, matching: find.textContaining('〔')), findsNothing);
 
+        final memory = await memoryOf(tester);
+        final before = tester.widget<CompanionLog>(log);
+        memory.changed();
+        await tester.pump();
+        final after = tester.widget<CompanionLog>(log);
+        expect(after, isNot(same(before)));
+        expect(after.entries.first, same(before.entries.first));
+
+        final saved = memory.store.messages().firstWhere((row) => row['text'] == '你好');
+        memory.store.editMessage(
+          id: saved['id']! as String,
+          expectedSourceRev: saved['source_rev']! as int,
+          text: '早上好',
+        );
+        memory.changed();
+        await tester.pump();
+        expect(find.descendant(of: log, matching: find.text('早上好')), findsOneWidget);
+        expect(find.descendant(of: log, matching: find.text('你好')), findsNothing);
+
         // Back closes the log, not the room.
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();

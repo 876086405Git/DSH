@@ -243,7 +243,7 @@ class _ReplayPageState extends ConsumerState<ReplayPage> with SingleTickerProvid
                       id: _Slot.header,
                       child: ReplayHeader(
                         title: widget.share.title,
-                        subtitle: _subtitle(widget.share),
+                        subtitle: _subtitle(_frames),
                         position: _position,
                         duration: _duration,
                         playing: _playing,
@@ -332,10 +332,11 @@ class _ReplayPageState extends ConsumerState<ReplayPage> with SingleTickerProvid
   );
 
   /// 「10 月 24 日 · 12 分钟」, or the rounds of a part.
-  static String _subtitle(ConversationShare share) {
+  static String _subtitle(ReplayFrames frames) {
+    final share = frames.share;
     final start = share.start.toLocal();
     final parts = [appL10n.viewReplayDate(start.month.toString(), start.day)];
-    final span = share.span;
+    final span = frames.originalSpan;
     if (span.inSeconds > 0) parts.add(formatReplaySpan(span));
     if (share.range case final r?) {
       parts.add(r.from == r.to ? appL10n.viewShareTurn(r.from) : appL10n.viewReplayTurns(r.from, r.to));

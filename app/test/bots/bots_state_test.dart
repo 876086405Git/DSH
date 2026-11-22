@@ -408,6 +408,9 @@ void main() {
       expect(activeBotMention(at('mail a@b')), isNull);
       expect(activeBotMention(at('@Writer 你好')), isNull);
       expect(activeBotMention(at('@Writer 你好', 4)), (start: 0, query: 'Wri'));
+      final limit = List.filled(20, '😀').join();
+      expect(activeBotMention(at(' @$limit')), (start: 1, query: limit));
+      expect(activeBotMention(at(' @${limit}x')), isNull);
     });
 
     test('the mention picker writes @Name and lists the admin first', () {
