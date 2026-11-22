@@ -54,6 +54,7 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
     }
     private lateinit var appContext: Context
     private lateinit var control: PhoneControl
+    private lateinit var companion: CompanionPhoneBridge
     private var activity: ActivityPluginBinding? = null
     private var sink: ((Map<String, Any?>) -> Unit)? = null
     private val main = Handler(Looper.getMainLooper())
@@ -76,6 +77,7 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
         (appContext as Application).registerActivityLifecycleCallbacks(previewLifecycle)
         promptOwner = Any()
         attached = true
+        companion = CompanionPhoneBridge(control, main, io, controlIo) { attached }
         control.background.restoreKeptChannel()
         methods = MethodChannel(binding.binaryMessenger, "dsh/phone").also { it.setMethodCallHandler(this) }
         events = EventChannel(binding.binaryMessenger, "dsh/phone/events").also { it.setStreamHandler(this) }
@@ -106,6 +108,7 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         control.selfCheck.stop(promptOwner)
         attached = false
+        companion.detach()
         skillSelectionRequest = Any()
         skillInspection = null
         skillClient?.let { control.skillReplaySelections.retireClient(it); control.skillDrafts.retireClient(it) }
@@ -188,6 +191,7 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        if (companion.handle(call, result)) return
         when (call.method) {
             "status" -> control.status { complete(result, it) }
             "androidShellStatus" -> async(result, shortControl = true) { control.shell.status() }
