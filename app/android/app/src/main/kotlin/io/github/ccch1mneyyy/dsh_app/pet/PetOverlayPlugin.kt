@@ -111,6 +111,22 @@ class PetOverlayPlugin : FlutterPlugin, ActivityAware {
                     result.success(PetOverlay.status())
                 else result.error("companion_endpoint_invalid", "companion_endpoint_invalid", null)
             }
+            "companionMode" -> {
+                PetOverlay.companionMode(call.argument<Boolean>("enabled") == true, call.argument<String>("name"))
+                result.success(null)
+            }
+            "companionLine" -> result.success(PetOverlay.companionLine(
+                call.argument<String>("id"), call.argument<String>("text"), call.argument<String>("emotion"),
+                call.argument<Boolean>("speaking") == true))
+            "companionSpeech" -> {
+                PetOverlay.companionSpeech(call.argument<String>("id"),
+                    call.argument<Number>("chars")?.toInt() ?: 0, call.argument<Boolean>("speaking") == true)
+                result.success(null)
+            }
+            "clearCompanion" -> {
+                PetOverlay.clearCompanion()
+                result.success(null)
+            }
             "setEnabled" -> result.success(PetOverlay.setEnabled(call.argument<Boolean>("enabled") == true))
             "setAlwaysShow" -> result.success(PetOverlay.setAlwaysShow(call.argument<Boolean>("on") == true))
             "unsnooze" -> result.success(PetOverlay.unsnooze())

@@ -217,11 +217,68 @@ class PetOverlayChannel {
   final _settings = StreamController<void>.broadcast();
   bool _listening = false;
   Future<Object?> Function(MethodCall)? _actions;
+  Future<Object?> Function(MethodCall)? _companionActions;
   Future<String?> Function(String text)? voiceFallback;
 
   void setActionHandler(Future<Object?> Function(MethodCall)? handler) {
     _actions = handler;
     _listen();
+  }
+
+  void setCompanionActionHandler(Future<Object?> Function(MethodCall)? handler) {
+    _companionActions = handler;
+    _listen();
+  }
+
+  Future<void> companionMode({required bool enabled, required String name}) async {
+    try {
+      await channel.invokeMethod<void>('companionMode', {'enabled': enabled, 'name': name});
+    } on MissingPluginException {
+      /* No Android overlay. */
+    } on PlatformException {
+      /* Actual status still reports the failed overlay. */
+    }
+  }
+
+  Future<bool> presentCompanion({
+    required String id,
+    required String text,
+    String emotion = 'neutral',
+    bool speaking = false,
+  }) async {
+    try {
+      return await channel.invokeMethod<bool>('companionLine', {
+            'id': id,
+            'text': text,
+            'emotion': emotion,
+            'speaking': speaking,
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  Future<void> companionSpeech({required String id, required int chars, required bool speaking}) async {
+    try {
+      await channel.invokeMethod<void>('companionSpeech', {'id': id, 'chars': chars, 'speaking': speaking});
+    } on MissingPluginException {
+      /* No displayed body. */
+    } on PlatformException {
+      /* A late voice event owns no replacement window. */
+    }
+  }
+
+  Future<void> clearCompanion() async {
+    try {
+      await channel.invokeMethod<void>('clearCompanion');
+    } on MissingPluginException {
+      /* No displayed companion body. */
+    } on PlatformException {
+      /* The next actual window evaluation rechecks it. */
+    }
   }
 
   /// Sends [state] to the overlay; nothing happens without the native side.
@@ -312,6 +369,15 @@ class PetOverlayChannel {
     _listening = true;
     channel.setMethodCallHandler((call) async {
       switch (call.method) {
+        case 'companionAskTarget':
+          final target = await _companionActions?.call(call);
+          if (target is! Map) return target;
+          // Reuse the actual existing local speech capability check only.
+          // No ordinary Host ask/submit is called for companion text.
+          final legacy = await _actions?.call(const MethodCall('askTarget', {'fresh': false}));
+          return {...target, 'voice': legacy is Map ? legacy['voice'] : 'off'};
+        case 'companionAsk':
+          return _companionActions?.call(call);
         case 'status':
           final args = call.arguments;
           if (args is Map) _statusEvents.add(PetOverlayStatus.fromMap(args));

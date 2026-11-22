@@ -59,6 +59,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     private val ticker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "dsh-phone-status").apply { isDaemon = true } }
 
     private val taskIds = java.util.concurrent.atomic.AtomicLong()
+    private val companionRunLock = Any()
+    @Volatile private var companionRunEpoch = 0L
     private val cleanupIo = Executors.newSingleThreadExecutor { r -> Thread(r, "dsh-phone-cleanup").apply { isDaemon = true } }
 
     private val taskJournal = PhoneTaskJournal(
@@ -514,6 +516,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     }
 
     private fun stopBridge(stopTransport: Boolean = true) {
+        // The local Flutter channel survives a native launch reset, unlike the
+        // old socket. Retire its captured approvals before resetting admission.
+        synchronized(companionRunLock) { companionRunEpoch++ }
         shell.cancelAll()
         skillReplaySelections.retire()
         selfCheck.stop()
@@ -528,6 +533,67 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     }
 
     val bridgeListening: Boolean get() = bridge.listening
+
+    internal fun companionPhoneEpoch(): Long = companionRunEpoch
+
+    /** Local Agent transport; the original managed admission/Core/Gate stay authoritative. */
+    internal fun companionPhoneCall(caller: PhoneCaller, name: String, args: Map<String, Any?>,
+                                    expectedEpoch: Long, isCurrent: () -> Boolean,
+                                    onStepReady: (String, () -> Unit) -> Unit): PhoneCallWork {
+        val admission = synchronized(companionRunLock) {
+            if (companionRunEpoch != expectedEpoch) return PhoneCallWork({
+                McpServer.result(caller.callId, McpServer.toolResult(ToolOutput(
+                    "手机操控已重新启动，原授权已结束；请重新发起。", isError = true))) // l10n:keep agent error
+            })
+            sessions.admit(caller)
+        }
+        val commit = PhoneReplyCommit()
+        return PhoneCallWork(
+            invoke = {
+                var publish: (() -> Unit)? = null
+                val reply = server.runCall(caller.callId, name, args, caller, { tool, input, _ ->
+                    val output = sessions.run(admission, tool, input)
+                    val task = admission.task
+                    val ticket = displaySelection.ticket()?.takeIf { it.task === task?.tasks }
+                    val words = output.text.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }?.take(160)
+                    if (task != null && ticket != null && words != null &&
+                        task.sessionId == caller.sessionId && task.runId == caller.runId) {
+                        val original = displaySelection.guard(ticket)
+                        // Capture this task, owner and selection now. The UI's
+                        // delayed runnable may never adopt a later selection.
+                        publish = {
+                            prompts.scoped(task.tasks, task.sessionId).status(words) { update ->
+                                synchronized(companionRunLock) {
+                                    if (companionRunEpoch != expectedEpoch || !isCurrent() || admission.expired ||
+                                        task.tasks.admissionEpoch() != admission.scopeEpoch) false
+                                    else original(update)
+                                }
+                            }
+                        }
+                    }
+                    output
+                }, commit)
+                publish?.let { onStepReady(reply, it) }
+                reply
+            },
+            remainingMs = { sessions.remainingMs(admission) },
+            expiredReply = { server.runCall(caller.callId, name, args, caller,
+                { _, _, _ -> sessions.expire(admission) }) },
+            nativeReplyCommit = commit,
+        )
+    }
+
+    /** Seal this exact run now; return its physical cleanup for the control lane. */
+    internal fun endCompanionPhoneRun(sessionId: String, runId: String, stopped: Boolean): () -> Unit {
+        val task = sessions.admitEnd(sessionId, runId, if (stopped) "other" else "unknown")
+        if (task != null && stopped) sessions.stop(task, "companion_stopped")
+        return {
+            if (task != null) {
+                background.sealTask(task.tasks.snapshot().id)
+                sessions.settleEnd(task)
+            }
+        }
+    }
 
     // ── Task ────────────────────────────────────────────────────────────────────────
 

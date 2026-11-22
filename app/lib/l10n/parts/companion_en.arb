@@ -168,6 +168,11 @@
   "companionTaskFailedUntitled": "Your task over there seems to have hit an error. Take a look?",
   "companionTaskOpen": "Take a look",
   "companionMenuSignals": "What she brings up",
+  "companionAlwaysOn": "Stay with me",
+  "companionAlwaysOnHint": "She stays when you leave the room, in a notification you can reply to",
+  "companionAlwaysOnRunning": "She's with you in the notifications",
+  "companionAlwaysOnNoNotify": "Notifications are off; turn them on to reply to her there",
+  "companionAlwaysOnFailed": "She couldn't stay this time; try turning it on again",
   "companionSignalsHint": "These are said only to you, here in her room; nothing goes to the model. How often follows How often she speaks up, shared with invitations, and never late at night. On Quiet she says nothing.",
   "companionSignalState": "Keep track of other conversations",
   "companionSignalStateHint": "She notices when another conversation on this host finishes or fails",
@@ -1014,5 +1019,25 @@
   "companionReceiptAmountUnknown": "The amount or currency could not be confirmed.",
   "companionReceiptKeepOutput": "Keep the original output folder",
   "companionReceiptPriorResult": "The workbook from the earlier agreement was found; the new agreement has not been completed.",
-  "companionLegacyConversation": "Earlier conversation (character not recorded)"
+  "companionLegacyConversation": "Earlier conversation (character not recorded)",
+  "companionScreen": "Watch the screen with me",
+  "companionScreenHint": "She glances at the screen now and then and only speaks up when something is worth saying; nothing she sees is kept",
+  "companionScreenNeedsAccess": "Turn on phone control's accessibility service first, or let her record the screen",
+  "companionScreenAllowProjection": "Allow screen recording",
+  "companionScreenFrequency": "How often she speaks",
+  "companionScreenQuiet": "Quiet",
+  "companionScreenQuietHint": "Rarely, only when it matters",
+  "companionScreenNormal": "Normal",
+  "companionScreenNormalHint": "A word when something catches her eye",
+  "companionScreenChatty": "Chatty",
+  "companionScreenChattyHint": "Talks with you more often",
+  "companionScreenUsageAccess": "Let her know which app you're using",
+  "companionScreenCost": "About ¥{amount} today",
+  "@companionScreenCost": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  }
 }

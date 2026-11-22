@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
     <!-- Only the optional background protection uses approximate location. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -240,6 +242,20 @@
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
 
         <!-- Quick Settings tile 「新对话」 (tile/NewChatTileService.kt). -->
+        <!-- Same cached Flutter engine; explicit default-off companion residency. -->
+        <service
+            android:name=".companion.CompanionAlwaysOnService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-enabled companion conversation and inline replies" />
+        </service>
+        <receiver android:name=".phone.CompanionScreenPauseReceiver" android:exported="false" />
+        <activity android:name=".phone.CompanionScreenProjectionActivity" android:exported="false"
+            android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <service android:name=".phone.CompanionScreenProjectionService" android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
         <service
             android:name=".tile.NewChatTileService"
             android:exported="true"

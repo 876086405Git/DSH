@@ -159,8 +159,14 @@ class _Line {
 /// sentence that can't be fetched or played is read in the phone's own voice
 /// when it has one. Events carry the loudness of fetched WAV audio for her mouth.
 class CompanionSpeaker {
-  CompanionSpeaker(this._voice, this._client, this._folder, [
-    this._deepseek, this._ohosCall, this._ohosOutput, this._ohos = false,
+  CompanionSpeaker(
+    this._voice,
+    this._client,
+    this._folder, [
+    this._deepseek,
+    this._ohosCall,
+    this._ohosOutput,
+    this._ohos = false,
   ]) {
     _native = _voice.events.listen(_heard);
   }
@@ -267,10 +273,10 @@ class CompanionSpeaker {
     final id = 'preview-${++_previews}';
     if (next.source == CompanionVoiceSource.system) {
       final ready = await _voice.ready();
-      if (_ohos && generation != _generation) return 'cancelled';
+      if (generation != _generation) return 'cancelled';
       if (!ready) return 'no-phone-voice';
       final accepted = await _voice.speak(id, text, flush: true);
-      if (_ohos && generation != _generation) return 'cancelled';
+      if (generation != _generation) return 'cancelled';
       return accepted ? null : 'no-phone-voice';
     }
     if (!next.configured) return 'not-set-up';
@@ -278,13 +284,18 @@ class CompanionSpeaker {
     final client = _client();
     try {
       final audio = await fetchCompanionVoice(next, text, client, deepseek: _deepseek);
+      if (generation != _generation) return 'cancelled';
       final file = await _write(id, audio);
       _files[id] = file;
-      return await _voice.play(id, file.path) ? null : 'cannot play ${audio.ext}';
+      if (generation != _generation) return 'cancelled';
+      final accepted = await _voice.play(id, file.path);
+      if (generation != _generation) return 'cancelled';
+      return accepted ? null : 'cannot play ${audio.ext}';
     } on CompanionVoiceError catch (error) {
       return error.reason;
     } finally {
       client.close();
+      if (generation != _generation) _finish(id);
     }
   }
 

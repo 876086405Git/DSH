@@ -5551,6 +5551,21 @@ class L10nZh extends L10n {
   String get companionMenuSignals => '她会提起什么';
 
   @override
+  String get companionAlwaysOn => '她一直在';
+
+  @override
+  String get companionAlwaysOnHint => '离开小屋她也在。通知栏里留着她，可以直接回她一句';
+
+  @override
+  String get companionAlwaysOnRunning => '她在通知栏里陪着你';
+
+  @override
+  String get companionAlwaysOnNoNotify => '通知被关了，打开后才能在通知栏里回她';
+
+  @override
+  String get companionAlwaysOnFailed => '这次没能留下来，再开一次试试';
+
+  @override
   String get companionSignalsHint => '这些只在小屋里说给你听，不会发给模型。说多说少跟着「她多主动」，和邀请共用次数，深夜不说；选「安静」她也不说。';
 
   @override
@@ -7127,6 +7142,47 @@ class L10nZh extends L10n {
 
   @override
   String get companionLegacyConversation => '旧对话（角色未记录）';
+
+  @override
+  String get companionScreen => '陪你看屏幕';
+
+  @override
+  String get companionScreenHint => '隔一会儿看一眼屏幕，有值得说的才开口；看到的不会记下来';
+
+  @override
+  String get companionScreenNeedsAccess => '要先打开手机操控的无障碍，或者允许她录屏';
+
+  @override
+  String get companionScreenAllowProjection => '允许录屏';
+
+  @override
+  String get companionScreenFrequency => '多久开口';
+
+  @override
+  String get companionScreenQuiet => '安静';
+
+  @override
+  String get companionScreenQuietHint => '很少开口，只说要紧的';
+
+  @override
+  String get companionScreenNormal => '正常';
+
+  @override
+  String get companionScreenNormalHint => '看到有意思的会说一句';
+
+  @override
+  String get companionScreenChatty => '话多';
+
+  @override
+  String get companionScreenChattyHint => '多陪你聊几句';
+
+  @override
+  String get companionScreenUsageAccess => '让她知道你在用哪个 App';
+
+  @override
+  String companionScreenCost(String amount) {
+    return '今天大概花了 ¥$amount';
+  }
 
   @override
   String get automaticDiagnosticsRecover => '恢复本地记录';

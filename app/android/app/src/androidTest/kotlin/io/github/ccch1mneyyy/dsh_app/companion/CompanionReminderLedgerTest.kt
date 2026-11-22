@@ -32,6 +32,25 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         assertEquals(1L, f.count("step_key='alarm.register' AND event_kind='returned'"))
         assertEquals(0L, f.count("step_key='notification'"))
         assertNull(f.ledger.current("t")!!.notificationClaim)
+        // A returned notify and an actually observed notification are separate
+        // receipts. A stale system snapshot is not a failed/unknown dispatch.
+        f.now = DUE
+        f.runner().alarm(ReminderKey("t", 1))
+        val claim = f.ledger.current("t")!!.notificationClaim
+        assertNotNull(claim)
+        assertEquals(listOf(ReminderKey("t", 1)), f.effects.notified)
+        assertEquals(1L, f.count("step_key='notification' AND event_kind='returned' AND outcome='succeeded'"))
+        assertEquals(0L, f.count("step_key='notification' AND event_kind='failed'"))
+        assertEquals(0L, f.count("event_kind='active_observed'"))
+        f.reopen()
+        assertTrue(f.runner().resume("t"))
+        assertEquals(listOf(ReminderKey("t", 1)), f.effects.notified)
+        f.effects.active = true
+        f.runner().alarm(ReminderKey("t", 1))
+        assertEquals(claim, f.ledger.current("t")!!.notificationClaim)
+        assertEquals(1L, f.count("event_kind='active_observed'"))
+        assertEquals(1L, f.count("step_key='notification' AND event_kind='returned'"))
+        assertEquals(listOf(ReminderKey("t", 1)), f.effects.notified)
     }
 
     fun testFailedClaimTransactionsCannotCallRegisterOrNotify() {
@@ -291,7 +310,8 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         }
         override fun cancel(key: ReminderKey) { cancelled.add(key) }
         override fun notify(reminder: StoredReminder) { notified.add(reminder.key); afterNotify() }
-        override fun isActive(key: ReminderKey) = false
+        var active = false
+        override fun isActive(key: ReminderKey) = active
     }
 
     private class Fixture(context: Context) : Closeable {

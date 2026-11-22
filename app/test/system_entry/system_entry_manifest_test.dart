@@ -95,11 +95,16 @@ void main() {
     expect(tile, contains('android:label="@string/tile_new_chat"'));
   });
 
-  test('MainActivity registers both plugins', () {
-    final source = File('android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/MainActivity.kt').readAsStringSync();
-    expect(source, contains('engine.plugins.add(SharePlugin())'));
-    expect(source, contains('engine.plugins.add(ShortcutsPlugin())'));
-    expect(source, contains('LauncherIconPlugin()'));
-    expect(source, contains('override fun getMetaData()'));
+  test('the shared engine registers both plugins and MainActivity keeps its metadata', () {
+    // The engine is shared with the resident companion, so plugins are added
+    // where it is created, not in the Activity.
+    final engine = File('android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/DshFlutterEngine.kt')
+        .readAsStringSync();
+    expect(engine, contains('engine.plugins.add(SharePlugin())'));
+    expect(engine, contains('engine.plugins.add(ShortcutsPlugin())'));
+    expect(engine, contains('LauncherIconPlugin()'));
+    final activity = File('android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/MainActivity.kt')
+        .readAsStringSync();
+    expect(activity, contains('override fun getMetaData()'));
   });
 }

@@ -1,6 +1,7 @@
 // Public attachment retry tests. The Agent, Ref, SQLite owner, wire decoder
 // and reminder adapter are real. HTTP/native replies and the room UI port are
 // explicit test boundaries; no Page, model service or native alarm is run.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -194,6 +195,7 @@ class _RoomUi implements CompanionAgentRoomUi, CompanionInitiativeRoom {
   final failures = <({Object error, String? retry})>[];
   final commits = <String>[];
   final acceptedTasks = <MemoryRow>[];
+  final controlChanges = <bool>[];
   @override
   bool mounted = true;
   @override
@@ -222,7 +224,7 @@ class _RoomUi implements CompanionAgentRoomUi, CompanionInitiativeRoom {
   @override
   void detached() => mounted = false;
   @override
-  void controlChanged({required bool own}) {}
+  void controlChanged({required bool own}) => controlChanges.add(own);
   @override
   void connectionChanged() {}
   @override
@@ -247,15 +249,63 @@ class _RoomUi implements CompanionAgentRoomUi, CompanionInitiativeRoom {
   void rest(CompanionInitiativeEffect intent) {}
 }
 
+class _FollowupUi extends _RoomUi {
+  bool visible = false;
+  Completer<CompanionInitiativeDisplay> presented = Completer();
+  final displays = <CompanionInitiativeDisplay>[];
+  final lines = <String>[];
+
+  @override
+  CompanionInitiativeView get initiativeView => CompanionInitiativeView(
+    visible: visible,
+    resumed: true,
+    blocked: false,
+    enabled: true,
+    accessible: false,
+    contextKey: 'followup-affinity-port',
+  );
+
+  @override
+  bool canPresent(CompanionInitiativeTicket ticket) => mounted && visible && ticket.kind == CompanionPromptKind.signal;
+
+  @override
+  bool presentFollowup(CompanionInitiativeDisplay display, String line) {
+    if (!mounted || !visible) return false;
+    displays.add(display);
+    lines.add(line);
+    presented.complete(display);
+    return true;
+  }
+}
+
+class _AmbientUi extends _RoomUi implements CompanionAgentAmbientUi {
+  final presented = <({String id, String text, String emotion, bool speak})>[];
+  Completer<void>? entered;
+  Completer<bool>? acknowledgement;
+  @override
+  bool get presentationAvailable => mounted;
+  @override
+  Future<bool> presentLine({required String id, required String text, required String emotion, required bool speak}) {
+    presented.add((id: id, text: text, emotion: emotion, speak: speak));
+    if (entered case final signal?) {
+      if (!signal.isCompleted) signal.complete();
+    }
+    return acknowledgement?.future ?? Future.value(true);
+  }
+
+  @override
+  void stopSpeech() {}
+}
+
 class _Visit {
-  _Visit(this.root, this.database, this.memory, this.replies);
+  _Visit(this.root, this.database, this.memory, this.replies, {_RoomUi? roomUi}) : ui = roomUi ?? _RoomUi();
   final Directory root;
   final Database database;
   final CompanionMemoryOwner memory;
   final List<http.Response> replies;
   final requests = <Map<String, Object?>>[];
   final native = <MethodCall>[];
-  final ui = _RoomUi();
+  final _RoomUi ui;
   ProviderContainer? _container;
   ProviderSubscription<CompanionAgent>? _keep;
   CompanionAgentAttachment? _attachment;
@@ -268,15 +318,20 @@ class _Visit {
   static Future<_Visit> open(
     List<http.Response> replies, {
     http.Response? Function(http.Request request)? auxiliary,
+    Future<void> Function(Map<String, Object?> body)? beforeReply,
+    _RoomUi? roomUi,
+    CompanionInitiativeClock Function()? clock,
+    CompanionMemoryTransport Function()? memoryTransport,
   }) async {
+    int now() => clock?.call().wallMs ?? _now;
     final root = await Directory.systemTemp.createTemp('agent-public-visit-');
     final database = sqlite3.openInMemory();
     final memory = CompanionMemoryOwner(
-      CompanionMemoryStore(database, nowMilliseconds: () => _now),
-      CompanionLocal.at(root, nowMilliseconds: () => _now),
-      nowMilliseconds: () => _now,
+      CompanionMemoryStore(database, nowMilliseconds: now),
+      CompanionLocal.at(root, nowMilliseconds: now),
+      nowMilliseconds: now,
     );
-    final visit = _Visit(root, database, memory, replies);
+    final visit = _Visit(root, database, memory, replies, roomUi: roomUi);
     addTearDown(visit.close);
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(_reminders, (call) async {
@@ -305,13 +360,14 @@ class _Visit {
     final provider = Provider<CompanionAgent>((ref) {
       final agent = CompanionAgent(
         ref: ref,
-        memoryTransport: () => background,
+        memoryTransport: memoryTransport ?? (() => background),
         host: () => null,
         apiKey: () => 'controlled-test-key',
         client: () => MockClient((request) async {
           if (auxiliary?.call(request) case final response?) return response;
           visit.requests.add(Map<String, Object?>.from(jsonDecode(request.body) as Map));
           final index = visit.requests.length - 1;
+          await beforeReply?.call(visit.requests[index]);
           return index < replies.length ? replies[index] : http.Response('Unexpected extra model request', 503);
         }),
       );
@@ -324,7 +380,7 @@ class _Visit {
         activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
         companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
         companionInitiativeClockProvider.overrideWithValue(
-          () => CompanionInitiativeClock(wallMs: _now, monoMs: 0, offsetMinutes: 480),
+          clock ?? (() => CompanionInitiativeClock(wallMs: _now, monoMs: 0, offsetMinutes: 480)),
         ),
       ],
     );
@@ -378,6 +434,14 @@ void main() {
   );
 
   test('public attachment retries a no-tool failure with the same source clock and open turn', () async {
+    const savedCustom = '我是已保存的星桥旅伴。';
+    const savedCallMe = '阿榛';
+    // Seed storage without reading or warming the lazy persona provider.
+    SharedPreferences.setMockInitialValues({
+      'companion_mode': 'light',
+      'companion_initiative_enabled': false,
+      'companion_persona_v1': jsonEncode({'custom': savedCustom, 'callMe': savedCallMe}),
+    });
     final visit = await _Visit.open([
       http.Response('Temporary model failure', 503),
       _message(tool: true),
@@ -415,6 +479,12 @@ void main() {
       expect(visit.calls('clock'), 1);
       expect(visit.calls('wake'), 1);
       expect(visit.requests, hasLength(3));
+      // Real wire bodies: cold first request, explicit retry and continuation.
+      for (final request in visit.requests) {
+        final system = jsonEncode(request['system']);
+        expect(system, contains(savedCustom));
+        expect(system, contains(savedCallMe));
+      }
       final retryContext = _context(visit.requests[1]);
       expect(retryContext['originalMessage'], {'localTime': '2026-11-22T18:00+08:00', 'zoneId': 'Asia/Shanghai'});
       expect(_context(visit.requests.last)['originalMessage'], retryContext['originalMessage']);
@@ -732,6 +802,197 @@ void main() {
     }
   });
 
+  test(
+    'public followup affinity receipts survive owner rebuild and deduplicate the actual shown opportunity',
+    () async {
+      SharedPreferences.setMockInitialValues({'companion_mode': 'light', 'companion_initiative_enabled': true});
+      var wall = _now, mono = 0;
+      var configured = false;
+      final room = _FollowupUi();
+      final requests = <Map>[];
+      final transport = CompanionLightMemoryTransport(
+        apiKey: () => configured ? 'controlled-test-key' : '',
+        client: () => MockClient((request) async {
+          requests.add(jsonDecode(request.body) as Map);
+          return _message(words: jsonEncode({'action': 'line', 'text': '后来怎么样了？'}));
+        }),
+      );
+      final visit = await _Visit.open(
+        const [],
+        roomUi: room,
+        clock: () => CompanionInitiativeClock(wallMs: wall, monoMs: mono),
+        memoryTransport: () => transport,
+      );
+      try {
+        final store = visit.memory.store;
+        final opportunities = <String>[];
+        final presentations = <String>[];
+        CompanionInitiative? previousOwner;
+        String? firstRole;
+        for (var round = 0; round < 2; round++) {
+          if (round != 0) {
+            configured = false;
+            room.visible = false;
+            visit.attachment.detach();
+            // Rebuild the real initiative owner from the same durable ledger.
+            // Its UI counter restarts; the actual shown receipts must survive.
+            visit.container.invalidate(companionInitiativeProvider);
+            wall += const Duration(days: 2).inMilliseconds;
+            mono += const Duration(days: 2).inMilliseconds;
+            room
+              ..mounted = true
+              ..presented = Completer();
+            visit._attachment = visit.agent.attach(
+              root: Future.value(visit.root),
+              character: const CompanionCharacter(name: '伙伴'),
+              moves: const CompanionMoves(),
+              ui: room,
+              mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+            );
+            await visit.attachment.openMemory();
+          }
+          visit.attachment.updateCharacter(
+            const CompanionCharacter(name: '伙伴'),
+            const CompanionMoves(),
+            sourceKey: 'local:followup-affinity-test',
+          );
+          final owner = visit.container.read(companionInitiativeProvider);
+          if (previousOwner != null) expect(identical(owner, previousOwner), isFalse);
+          previousOwner = owner;
+          final role = visit.attachment.characterId!;
+          firstRole ??= role;
+          expect(role, firstRole);
+
+          final source = store.submitMessage(
+            id: 'followup-source-$round',
+            sessionId: store.lightSessionId,
+            text: round == 0 ? '我打算修琴，之后再问我。' : '我打算修画，之后再问我。',
+            saidAtUtc: wall,
+            offsetMinutes: 0,
+            characterId: role,
+          );
+          final turn =
+              store.beginAgentTurn(
+                    messageId: source['id']! as String,
+                    expectedSourceRev: source['source_rev']! as int,
+                    shownCardRevisions: const {},
+                  )['id']!
+                  as String;
+          final remembered = store.applyAgentMemoryTool(
+            turnId: turn,
+            callId: 'card-$round',
+            toolName: 'remember',
+            input: {'text': round == 0 ? '打算修琴' : '打算修画'},
+          );
+          expect(remembered.applied, isTrue);
+          final later = store.applyAgentMemoryTool(
+            turnId: turn,
+            callId: 'later-$round',
+            toolName: 'ask_later',
+            input: {'card': remembered.targetId, 'whenMs': wall},
+          );
+          expect(later.applied, isTrue);
+          final opportunity = later.targetId!;
+          opportunities.add(opportunity);
+          store.closeAgentTurn(turn);
+          visit.memory.changed();
+          expect(visit.memory.working, isFalse);
+
+          configured = true;
+          room.visible = true;
+          visit.attachment.observe(room.initiativeView);
+          // Advance both injected clocks, then give the real owner a fresh
+          // observation using the existing clock seam, without a wall-time sleep.
+          wall += 46000;
+          mono += 46000;
+          visit.attachment.observe(room.initiativeView);
+          await room.presented.future.timeout(const Duration(seconds: 5));
+          // Visit deliberately records only after synchronous shown settlement.
+          await Future<void>.microtask(() {});
+          final shown = store.followups().singleWhere((row) => row['id'] == opportunity);
+          expect(shown['state'], 'asked');
+          expect(shown['presented_at_ms'], wall);
+          final spends = visit.database.select('SELECT state FROM memory_initiative_spends WHERE opportunity_id=?', [
+            opportunity,
+          ]);
+          expect(spends.map((row) => row['state']), ['shown']);
+          if (round == 1) {
+            expect(room.displays, hasLength(2));
+            expect(int.tryParse(room.displays.first.ticket.id), isNotNull);
+            expect(
+              room.displays.last.ticket.id,
+              room.displays.first.ticket.id,
+              reason: 'both actual owner instances reused the same transient numeric UI ticket',
+            );
+          }
+          final tickets = visit.database.select('SELECT * FROM memory_affinity_presentations WHERE opportunity_id=?', [
+            opportunity,
+          ]);
+          expect(tickets, hasLength(1));
+          final presentation = tickets.single['id']! as String;
+          presentations.add(presentation);
+          expect(tickets.single['character_id'], role);
+          expect(requests, hasLength(round + 1));
+          expect(requests.last['system'], companionMemoryFollowupPrompt);
+
+          // Re-reporting this same actual receipt and answering source cannot
+          // create a second presentation or an extra semantic interaction.
+          store.recordCompanionPresentation(
+            characterId: role,
+            presentationId: presentation,
+            kind: 'followup',
+            presentedAtMs: shown['presented_at_ms']! as int,
+            opportunityId: opportunity,
+          );
+          final answer = store.submitMessage(
+            id: 'answer-$round',
+            sessionId: store.lightSessionId,
+            text: '刚做完了，谢谢你问起。',
+            saidAtUtc: wall,
+            offsetMinutes: 0,
+            characterId: role,
+          );
+          for (final suffix in ['first', 'repeated']) {
+            store.recordCompanionInteraction(
+              characterId: role,
+              eventId: 'answer-$round-$suffix',
+              kind: 'answered_followup',
+              atMs: wall,
+              offsetMinutes: 0,
+              sourceId: answer['id']! as String,
+              presentationId: presentation,
+            );
+          }
+          expect(
+            visit.database.select("SELECT * FROM memory_affinity_events WHERE kind='answered_followup'"),
+            hasLength(round + 1),
+          );
+        }
+        expect(opportunities.toSet(), hasLength(2));
+        expect(room.displays, hasLength(2));
+        expect(room.lines, ['后来怎么样了？', '后来怎么样了？']);
+        expect(presentations.toSet(), hasLength(2));
+        expect(presentations, [for (final id in opportunities) 'followup:$id']);
+        expect(visit.database.select('SELECT * FROM memory_affinity_presentations'), hasLength(2));
+        expect(
+          visit.database
+              .select('SELECT followup_count FROM memory_affinity_days')
+              .fold<int>(0, (total, row) => total + (row['followup_count']! as int)),
+          2,
+        );
+        expect(store.requests(), hasLength(2));
+        expect(
+          store.requests().every(
+            (row) => row['category'] == 'followup' && row['state'] == 'finished' && row['terminal'] == 'complete',
+          ),
+          isTrue,
+        );
+      } finally {
+        await visit.close();
+      }
+    },
+  );
+
   test('two nearby public submissions each send their actual date time offset and zone', () async {
     final visit = await _Visit.open([_message(words: '我在。'), _message(words: '明天是二十三日。')]);
     try {
@@ -748,6 +1009,230 @@ void main() {
       expect(sources.map((row) => row['said_at_utc']), [_now, _now + 300000]);
       expect(sources.map((row) => row['text']), ['今天你好。', '明天是哪一天？']);
     } finally {
+      await visit.close();
+    }
+  });
+
+  test('resident lease preserves the original turn across window detach and reattachment', () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    final visit = await _Visit.open(
+      [_message(words: '我还在这儿。')],
+      beforeReply: (_) async {
+        if (!entered.isCompleted) entered.complete();
+        await release.future;
+      },
+    );
+    const character = CompanionCharacter(name: '伙伴');
+    const sourceKey = 'builtin:companion/whale-girl';
+    visit.attachment.updateCharacter(character, const CompanionMoves(), sourceKey: sourceKey);
+    final background = _RoomUi();
+    final resident = visit.agent.retainAlwaysOn(
+      root: Future.value(visit.root),
+      character: character,
+      moves: const CompanionMoves(),
+      sourceKey: sourceKey,
+      ui: background,
+      mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+    );
+    CompanionAgentAttachment? reopened;
+    Future<void>? work;
+    try {
+      work = resident.submit('我先把页面收起来。');
+      await entered.future;
+      final source = visit.userSource;
+      final turn = visit.turn;
+      final role = resident.characterId;
+      expect(role, isNotNull);
+      expect(source['character_id'], role);
+      visit.attachment.detach();
+      expect(visit.attachment.isAttached, isFalse);
+      expect(resident.active, isTrue);
+      expect(visit.agent.running, isTrue);
+      release.complete();
+      await work;
+      expect(visit.requests, hasLength(1));
+      expect(visit.calls('clock'), 1);
+      expect(visit.userSource, source);
+      expect(visit.turn['id'], turn['id']);
+      expect(visit.turn['closed'], 1);
+      expect(visit.memory.store.requests().single['terminal'], 'complete');
+      expect(resident.recentMessages.map((row) => row['text']), ['我先把页面收起来。', '我还在这儿。']);
+      expect(resident.recentMessages.every((row) => row['character_id'] == role), isTrue);
+      reopened = visit.agent.attach(
+        root: Future.value(visit.root),
+        character: character,
+        moves: const CompanionMoves(),
+        ui: _RoomUi(),
+        mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+      );
+      expect(await reopened.openMemory(), same(visit.memory));
+      expect(reopened.characterId, role);
+      expect(reopened.text, '我还在这儿。');
+      await visit.attachment.submit('旧窗口迟到的提交。');
+      expect(visit.requests, hasLength(1));
+      expect(visit.userSource, source);
+      final previousSession = visit.memory.store.lightSessionId;
+      final history = visit.memory.store.messages();
+      final controlsBeforeRestart = background.controlChanges.length;
+      await reopened.restart();
+      expect(visit.memory.store.lightSessionId, isNot(previousSession));
+      expect(resident.recentMessages, isEmpty);
+      expect(reopened.text, isEmpty);
+      expect(background.controlChanges, hasLength(controlsBeforeRestart + 1));
+      expect(background.controlChanges.last, isFalse);
+      expect(visit.memory.store.messages(), history);
+      expect(visit.requests, hasLength(1));
+      expect(visit.calls('clock'), 1);
+    } finally {
+      if (!release.isCompleted) release.complete();
+      await work;
+      reopened?.detach();
+      resident.close();
+      await visit.close();
+    }
+  });
+
+  test('a newer resident input cancels a held request and a late reply cannot replace the new source', () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    var physical = 0;
+    final visit = await _Visit.open(
+      [_message(words: '迟到的旧回答。'), _message(words: '我听见新的话了。')],
+      beforeReply: (_) async {
+        if (++physical == 1) {
+          entered.complete();
+          await release.future;
+        }
+      },
+    );
+    const character = CompanionCharacter(name: '伙伴');
+    const sourceKey = 'builtin:companion/whale-girl';
+    visit.attachment.updateCharacter(character, const CompanionMoves(), sourceKey: sourceKey);
+    final resident = visit.agent.retainAlwaysOn(
+      root: Future.value(visit.root),
+      character: character,
+      moves: const CompanionMoves(),
+      sourceKey: sourceKey,
+      ui: _RoomUi(),
+      mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+    );
+    Future<void>? old;
+    try {
+      old = resident.submit('第一句话。');
+      await entered.future;
+      final firstSource = visit.userSource;
+      await resident.submit('停一下，听这一句。');
+      final newSourceId = visit.agent.sourceId;
+      final newReplyId = visit.agent.replyId;
+      expect(newSourceId, isNot(firstSource['id']));
+      expect(visit.agent.text, '我听见新的话了。');
+      expect(visit.requests, hasLength(2));
+      release.complete();
+      await old;
+      expect(visit.agent.sourceId, newSourceId);
+      expect(visit.agent.replyId, newReplyId);
+      expect(visit.agent.text, '我听见新的话了。');
+      expect(visit.requests, hasLength(2));
+      expect(visit.calls('clock'), 2);
+      final history = visit.memory.store.messages();
+      expect(history.where((row) => row['role'] == 'user').map((row) => row['text']), ['第一句话。', '停一下，听这一句。']);
+      expect(history.where((row) => row['role'] == 'assistant').map((row) => row['text']), ['我听见新的话了。']);
+      expect(visit.memory.store.requests().map((row) => row['terminal']), containsAll(['cancelled', 'complete']));
+      expect(visit.memory.store.tasks(), isEmpty);
+      expect(visit.database.select('SELECT * FROM memory_agent_calls'), isEmpty);
+    } finally {
+      if (!release.isCompleted) release.complete();
+      await old;
+      resident.close();
+      await visit.close();
+    }
+  });
+
+  test('screen observation revalidates after the model and awaits the actual presentation acknowledgement', () async {
+    final visit = await _Visit.open([_message(words: '第一句观察。'), _message(words: '第二句观察。')]);
+    const character = CompanionCharacter(name: '伙伴');
+    const sourceKey = 'builtin:companion/whale-girl';
+    visit.attachment.updateCharacter(character, const CompanionMoves(), sourceKey: sourceKey);
+    final ambient = _AmbientUi();
+    final resident = visit.agent.retainAlwaysOn(
+      root: Future.value(visit.root),
+      character: character,
+      moves: const CompanionMoves(),
+      sourceKey: sourceKey,
+      ui: ambient,
+      mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+    );
+    final validationTerminals = <Object?>[];
+    Future<bool>? pending;
+    final context = <String, Object?>{
+      'type': 'screen_observation',
+      'observed_at_ms': _now,
+      'package_name': 'example.reader',
+      'window_title': '阅读',
+      'capture_method': 'tree',
+      'text': '一段屏幕文字。',
+      'emotion': 'neutral',
+    };
+    try {
+      expect(await resident.openMemory(), same(visit.memory));
+      expect(resident.characterId, isNotNull);
+      final rejected = await visit.agent.observeScreen(
+        context: context,
+        isCurrentObservation: () async {
+          validationTerminals.add(visit.memory.store.requests().single['terminal']);
+          return false;
+        },
+      );
+      expect(rejected, isFalse);
+      expect(visit.requests, hasLength(1));
+      expect(validationTerminals, ['complete']);
+      expect(ambient.presented, isEmpty);
+      expect(visit.agent.running, isFalse);
+      final rejectedReceipt = visit.memory.store.requests().single;
+      expect(rejectedReceipt['terminal'], 'complete');
+      expect(visit.memory.store.messages(), isEmpty);
+      expect(visit.memory.store.tasks(), isEmpty);
+
+      ambient.entered = Completer<void>();
+      ambient.acknowledgement = Completer<bool>();
+      pending = visit.agent.observeScreen(
+        context: context,
+        isCurrentObservation: () async {
+          final receipts = visit.memory.store.requests();
+          validationTerminals.add(receipts.singleWhere((row) => row['id'] != rejectedReceipt['id'])['terminal']);
+          return true;
+        },
+      );
+      // Also finish this wait if the actual Agent exits before presentation,
+      // so a regression fails the assertions instead of stranding teardown.
+      await Future.any<void>([ambient.entered!.future, pending.then((_) {})]);
+      expect(visit.requests, hasLength(2));
+      expect(validationTerminals, ['complete', 'complete']);
+      expect(ambient.presented, hasLength(1));
+      expect(ambient.presented.single.text, '第二句观察。');
+      expect(ambient.presented.single.emotion, 'neutral');
+      expect(ambient.presented.single.speak, isTrue);
+      expect(visit.agent.running, isTrue);
+      final receipts = visit.memory.store.requests();
+      expect(receipts, hasLength(2));
+      expect(receipts.every((row) => row['terminal'] == 'complete'), isTrue);
+      final shownReceipt = receipts.singleWhere((row) => row['id'] != rejectedReceipt['id']);
+      expect(ambient.presented.single.id, 'screen-aside:${shownReceipt['id']}');
+      ambient.acknowledgement!.complete(true);
+      expect(await pending, isTrue);
+      expect(visit.agent.running, isFalse);
+      expect(visit.memory.store.messages(), isEmpty);
+      expect(visit.memory.store.tasks(), isEmpty);
+      for (final body in visit.requests) {
+        expect(body.containsKey('tools'), isFalse);
+        expect(_context(body)['screenObservation'], context);
+      }
+    } finally {
+      final acknowledgement = ambient.acknowledgement;
+      if (acknowledgement != null && !acknowledgement.isCompleted) acknowledgement.complete(true);
+      await pending;
+      resident.close();
       await visit.close();
     }
   });

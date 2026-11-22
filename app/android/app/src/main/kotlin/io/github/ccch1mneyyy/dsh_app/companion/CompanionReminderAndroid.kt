@@ -34,6 +34,13 @@ internal class CompanionReminderAndroid(private val context: Context) : Companio
     )
 
     override fun notify(reminder: StoredReminder) {
+        val resident = CompanionAlwaysOnState.read(context)
+        // A false result is a refusal before notify, so the original reminder
+        // path remains available when only the companion channel is blocked.
+        // An exception after dispatch stays unknown; it must not send again.
+        if (resident.enabled && CompanionConversationNotification.update(context, resident.epoch,
+                reminder.key.notificationTag, reminder.text.orEmpty(), "", false, false,
+                reminder.key.uri("open").toString())) return
         val open = PendingIntent.getActivity(context, 0,
             Intent(context, EntryActivity::class.java).setAction(EntryActivity.ACTION_COMPANION_TASK)
                 .setData(reminder.key.uri("open")),
@@ -54,5 +61,5 @@ internal class CompanionReminderAndroid(private val context: Context) : Companio
 
     override fun isActive(key: ReminderKey): Boolean = notifications.activeNotifications.any {
         it.tag == key.notificationTag && it.id == 0
-    }
+    } || CompanionConversationNotification.contains(context, key.notificationTag)
 }

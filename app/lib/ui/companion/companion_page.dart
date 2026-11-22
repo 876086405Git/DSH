@@ -15,9 +15,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../companion/companion_residency.dart';
 import '../../companion/companion_adapt.dart';
 import '../../companion/companion_agent.dart';
 import '../../companion/companion_agent_task_ui.dart';
+import '../../companion/companion_always_on.dart' show companionAlwaysOnOwnerProvider;
 import '../../state/companion_agent_state.dart';
 import '../../companion/companion_initiative.dart';
 import '../../companion/companion_initiative_owner.dart';
@@ -2296,6 +2298,94 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     );
   }
 
+  /// 陪你看屏幕: the resident observer's settings. Native state is the authority;
+  /// the sheet only mirrors it and sends changes back.
+  void _openScreen() {
+    final screen = ref.read(companionAlwaysOnOwnerProvider).screen;
+    unawaited(screen.refresh());
+    unawaited(
+      showAppSheet<void>(
+        context,
+        builder: (sheet) => ValueListenableBuilder<Map<String, Object?>>(
+          valueListenable: screen.state,
+          builder: (sheet, state, _) {
+            final l10n = sheet.l10n;
+            final enabled = state['enabled'] == true;
+            final canSee = state['accessibility'] == true || state['projection_active'] == true;
+            final frequency = state['frequency'] as String? ?? 'normal';
+            final cost = (state['today_estimated_cny'] as num?)?.toDouble() ?? 0;
+            final caption = Theme.of(sheet).textTheme.bodySmall;
+            // A channel failure leaves the mirrored state as it was.
+            void send(Future<void> change) => unawaited(change.catchError((Object _) {}));
+            return SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SheetTitleBar(l10n.companionScreen),
+                    SheetGroup(
+                      margin: const EdgeInsets.fromLTRB(SheetTitleBar.inset, 0, SheetTitleBar.inset, 12),
+                      children: [
+                        SettingsSwitchTile(
+                          tinted: false,
+                          title: l10n.companionScreen,
+                          subtitle: enabled && !canSee ? l10n.companionScreenNeedsAccess : l10n.companionScreenHint,
+                          value: enabled,
+                          onChanged: (on) => send(screen.configure(enabled: on)),
+                        ),
+                        if (enabled && !canSee)
+                          SettingsTile(
+                            tinted: false,
+                            title: l10n.companionScreenAllowProjection,
+                            onTap: () => send(screen.requestProjection()),
+                          ),
+                        if (state['usage_access'] == false)
+                          SettingsTile(
+                            tinted: false,
+                            title: l10n.companionScreenUsageAccess,
+                            onTap: () => send(screen.requestUsageAccess()),
+                          ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(SheetTitleBar.inset + 8, 0, SheetTitleBar.inset + 8, 8),
+                      child: Text(l10n.companionScreenFrequency, style: caption),
+                    ),
+                    SheetGroup(
+                      margin: const EdgeInsets.fromLTRB(SheetTitleBar.inset, 0, SheetTitleBar.inset, 12),
+                      children: [
+                        for (final (value, title, hint) in [
+                          ('quiet', l10n.companionScreenQuiet, l10n.companionScreenQuietHint),
+                          ('normal', l10n.companionScreenNormal, l10n.companionScreenNormalHint),
+                          ('chatty', l10n.companionScreenChatty, l10n.companionScreenChattyHint),
+                        ])
+                          SettingsTile(
+                            tinted: false,
+                            title: title,
+                            subtitle: hint,
+                            chevron: false,
+                            trailing: value == frequency ? const Icon(AppIcons.selected, size: 20) : null,
+                            onTap: value == frequency ? null : () => send(screen.configure(frequency: value)),
+                          ),
+                      ],
+                    ),
+                    if (cost > 0)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(SheetTitleBar.inset + 8, 0, SheetTitleBar.inset + 8, 16),
+                        child: Text(l10n.companionScreenCost(cost.toStringAsFixed(2)), style: caption),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   void _openMenu() {
     _acted();
     final l10n = context.l10n;
@@ -2450,6 +2540,41 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                           _choosePace();
                         },
                       ),
+                    ),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final status = ref.watch(companionResidencyProvider);
+                        if (!status.available) return const SizedBox.shrink();
+                        return SettingsSwitchTile(
+                          icon: AppIcons.pet,
+                          tinted: false,
+                          title: l10n.companionAlwaysOn,
+                          subtitle: switch (status) {
+                            CompanionAlwaysOnStatus(failure: _?) => l10n.companionAlwaysOnFailed,
+                            CompanionAlwaysOnStatus(enabled: true, notificationAvailable: false) =>
+                              l10n.companionAlwaysOnNoNotify,
+                            CompanionAlwaysOnStatus(enabled: true, running: true) => l10n.companionAlwaysOnRunning,
+                            _ => l10n.companionAlwaysOnHint,
+                          },
+                          value: status.enabled,
+                          onChanged: (on) => unawaited(ref.read(companionResidencyProvider.notifier).setEnabled(on)),
+                        );
+                      },
+                    ),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final status = ref.watch(companionResidencyProvider);
+                        if (!status.available || !status.enabled || !status.running) return const SizedBox.shrink();
+                        return SettingsTile(
+                          icon: AppIcons.preview,
+                          tinted: false,
+                          title: l10n.companionScreen,
+                          onTap: () {
+                            Navigator.of(sheet).pop();
+                            _openScreen();
+                          },
+                        );
+                      },
                     ),
                     SettingsTile(
                       icon: AppIcons.notifications,

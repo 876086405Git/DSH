@@ -14,6 +14,7 @@ import '../l10n/l10n.dart';
 import '../pets/overlay_channel.dart';
 import '../pets/pet_prefs.dart';
 import 'companion_pack.dart';
+import 'companion_residency.dart';
 import 'companion_server.dart';
 
 @immutable
@@ -304,14 +305,15 @@ class CompanionFloatController extends Notifier<CompanionFloatState> {
         if (!ref.mounted) return;
         final prefs = ref.read(petPrefsProvider);
         final overlay = ref.read(petOverlayProvider);
+        final resident = ref.read(companionResidencyProvider).enabled;
         unawaited(
           session.select(
             CompanionFloatOptions(
               enabled:
                   !overlay.ios &&
                   prefs.loaded &&
-                  prefs.enabled &&
-                  prefs.overlayRenderer == PetOverlayRenderer.companion &&
+                  (resident || prefs.enabled) &&
+                  (resident || prefs.overlayRenderer == PetOverlayRenderer.companion) &&
                   overlay.working,
               zoom: prefs.floatZoom,
               y: prefs.floatY,
@@ -322,6 +324,7 @@ class CompanionFloatController extends Notifier<CompanionFloatState> {
     }
 
     ref.listen(petPrefsProvider, (_, _) => update());
+    ref.listen(companionResidencyProvider.select((value) => value.enabled), (_, _) => update());
     ref.listen(petOverlayProvider.select((value) => value.working), (_, _) => update());
     update();
     return const CompanionFloatState();
