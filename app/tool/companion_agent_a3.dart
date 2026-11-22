@@ -1,5 +1,5 @@
 // Manual Android entry point. Not a test and never registered in CI.
-// The launcher writes one private configuration over adb stdin; no compiled key.
+// Only a one-use token goes to the private bootstrap; the key stays in memory.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -41,6 +41,7 @@ class _ReplayPage extends StatefulWidget {
 class _ReplayPageState extends State<_ReplayPage> {
   String status = 'Preparing the manual replay…';
   _Replay? replay;
+  HttpClient? configurationClient;
   bool cancelled = false;
   @override
   void initState() {
@@ -69,20 +70,63 @@ class _ReplayPageState extends State<_ReplayPage> {
         if (await file.exists()) await file.delete();
       }
       if (!mounted || cancelled) return;
+      config['key'] = await takeKey(config);
+      if (!mounted || cancelled) return;
       replay = _Replay(config, (value) {
         if (mounted) setState(() => status = value);
       });
       await replay!.run();
     } on Object {
+      if (!mounted || cancelled) return;
       if (mounted) setState(() => status = 'ENV_UNAVAILABLE: manual configuration or device capability');
       // Configuration, key, response body and request headers never reach stdout.
       debugPrint('A3_ENV_UNAVAILABLE');
     }
   }
 
+  Future<String> takeKey(Map<String, Object?> config) async {
+    final handoff = Map<String, Object?>.from(config.remove('keyHandoff')! as Map);
+    final port = handoff['port'];
+    final token = handoff['token'];
+    if (port is! int || port < 1 || port > 65535 || token is! String || token.isEmpty) {
+      throw StateError('Invalid local key handoff');
+    }
+    final client = HttpClient()
+      ..findProxy = (_) => 'DIRECT'
+      ..connectionTimeout = const Duration(seconds: 5);
+    configurationClient = client;
+    try {
+      return await (() async {
+        if (!mounted || cancelled) throw StateError('Manual configuration stopped');
+        final request = await client.postUrl(Uri(
+          scheme: 'http', host: '127.0.0.1', port: port, path: '/a3-key',
+        ));
+        request.followRedirects = false;
+        request.contentLength = 0;
+        request.headers.set('X-DSH-A3-Token', token);
+        if (!mounted || cancelled) throw StateError('Manual configuration stopped');
+        final response = await request.close();
+        if (response.statusCode != HttpStatus.ok) throw StateError('Local key handoff failed');
+        final data = Map<String, Object?>.from(jsonDecode(await response.transform(utf8.decoder).join()) as Map);
+        final key = data['key'];
+        if (!mounted || cancelled || data['runId'] != config['runId'] || key is! String || key.trim().isEmpty) {
+          throw StateError('Local key handoff was not current');
+        }
+        return key;
+      })().timeout(const Duration(seconds: 15), onTimeout: () {
+        client.close(force: true);
+        throw TimeoutException('Local key handoff expired');
+      });
+    } finally {
+      client.close(force: true);
+      if (identical(configurationClient, client)) configurationClient = null;
+    }
+  }
+
   @override
   void dispose() {
     cancelled = true;
+    configurationClient?.close(force: true);
     if (replay == null) debugPrint('A3_STOPPED_BEFORE_START');
     replay?.stop();
     super.dispose();
@@ -103,6 +147,7 @@ class _ReplayPageState extends State<_ReplayPage> {
           FilledButton(
             onPressed: () {
               cancelled = true;
+              configurationClient?.close(force: true);
               if (replay == null) {
                 debugPrint('A3_STOPPED_BEFORE_START');
                 setState(() => status = 'Stopped before model replay started.');
