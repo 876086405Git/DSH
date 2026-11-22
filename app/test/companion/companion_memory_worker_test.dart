@@ -424,8 +424,7 @@ void main() {
     expect(captured, hasLength(2));
     final bodies = [for (final request in captured) jsonDecode(request.body) as Map];
     final contexts = [
-      for (final body in bodies)
-        jsonDecode(((body['messages'] as List).first as Map)['content'] as String) as Map,
+      for (final body in bodies) jsonDecode(((body['messages'] as List).first as Map)['content'] as String) as Map,
     ];
     for (final request in captured) {
       expect(request.receipt['category'], 'extract');
@@ -436,8 +435,19 @@ void main() {
     expect(
       (bodies.first['tools'] as List).map((tool) => (tool as Map)['name']),
       unorderedEquals([
-        'remember', 'forget', 'revise', 'related', 'merge', 'person', 'impression',
-        'relationship', 'quiet', 'cancel', 'postpone', 'ask_later', 'recall',
+        'remember',
+        'forget',
+        'revise',
+        'related',
+        'merge',
+        'person',
+        'impression',
+        'relationship',
+        'quiet',
+        'cancel',
+        'postpone',
+        'ask_later',
+        'recall',
       ]),
       reason: 'compaction does not silently remove a maintenance capability',
     );
@@ -448,7 +458,15 @@ void main() {
       expect(sources, hasLength(2));
       for (final original in originals) {
         final source = sources.singleWhere((row) => row['id'] == original['id']);
-        for (final field in ['id', 'first_seq', 'source_rev', 'text', 'said_at_utc', 'offset_minutes', 'character_id']) {
+        for (final field in [
+          'id',
+          'first_seq',
+          'source_rev',
+          'text',
+          'said_at_utc',
+          'offset_minutes',
+          'character_id',
+        ]) {
           expect(source[field], original[field], reason: field);
         }
       }

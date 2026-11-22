@@ -455,9 +455,7 @@ class CompanionMemoryWorker {
     // transcript. Compare complete wire bodies with the same current prefix;
     // do not add estimates of fragments or subtract an obsolete context.
     // The physical request still reserves its full input cost below.
-    final budgetTokens = messages.length == 1
-        ? inputTokens
-        : inputTokens - _inputTokens([messages.first], definitions);
+    final budgetTokens = messages.length == 1 ? inputTokens : inputTokens - _inputTokens([messages.first], definitions);
     if (budgetTokens > memoryBatchInputTokens) throw const _MemoryRequestBudget();
     final id = store.reserveAgentMaintenanceRequest(
       turnId: turnId,

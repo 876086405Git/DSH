@@ -137,8 +137,7 @@ class CompanionAgentMemoryTools {
 
   static Map<String, Object?> _maintenanceSchema(Map<String, Object?> schema) => {
     for (final entry in schema.entries)
-      if (entry.key != 'description' || entry.value is! String)
-        entry.key: _maintenanceSchemaValue(entry.value),
+      if (entry.key != 'description' || entry.value is! String) entry.key: _maintenanceSchemaValue(entry.value),
   };
 
   static Object? _maintenanceSchemaValue(Object? value) {
@@ -148,7 +147,8 @@ class CompanionAgentMemoryTools {
   }
 
   static const _maintenanceDescriptions = <String, String>{
-    'remember': 'Save or update a fact, preference or episode. about_you is shared; our_story belongs to this character.',
+    'remember':
+        'Save or update a fact, preference or episode. about_you is shared; our_story belongs to this character.',
     'forget': 'Forget a card or complete changes group. Preserve independent clauses; original chat stays. Report successful deletion.',
     'revise': 'Correct a card or complete changes group. Keep its ID and preserve independent clauses.',
     'related': 'Read and grant same-source candidates and required effects for a card; without card, return only stale cleanup IDs.',
@@ -157,9 +157,11 @@ class CompanionAgentMemoryTools {
     'diary': 'Write this completed-day diary from actual user sources. Supply its existing card to update; older diaries use revise or forget.',
     'impression': 'Update this character\'s concise impression, supplying its existing card and only this domain\'s sources or references.',
     'relationship': 'Classify real questions, confiding or answers using supplied original source/display IDs. Never invent events or scores.',
-    'quiet': 'Set a memory topic to less or never proactive. All affected cards must be supplied and fit the shared budget.',
+    'quiet':
+        'Set a memory topic to less or never proactive. All affected cards must be supplied and fit the shared budget.',
     'cancel': 'Cancel a supplied memory plan and retire its followup; not a reminder or computer task.',
-    'postpone': 'Postpone a memory plan without a new time and retire its followup. Use ask_later when the time is known.',
+    'postpone':
+        'Postpone a memory plan without a new time and retire its followup. Use ask_later when the time is known.',
     'ask_later': 'Schedule a real invitation\'s followup on a supplied card at whenMs (UTC milliseconds), within presentation limits.',
     'recall': 'Read bounded current eligible memories; only returned IDs are granted.',
   };
