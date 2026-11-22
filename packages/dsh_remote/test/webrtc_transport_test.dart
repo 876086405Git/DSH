@@ -683,6 +683,23 @@ void main() {
       expect(fallbacks, isEmpty);
     });
 
+    test('when the fresh TURN attempt negotiates Relay only, it attaches once', () async {
+      server.relayAttach = true;
+      server.iceServersForRequest = (_) async {
+        server.webrtcTransports = const ['p2p'];
+        return [];
+      };
+      network.outcome = FakeRtcOutcome.fail;
+      final client = await connect();
+      expect(await client.listSessions(), isEmpty);
+      expect(client.remoteCarrier!.state!.transport, 'relay');
+      expect(host.rtcOffers, hasLength(1));
+      expect(types().where((t) => t == 'connect.request'), hasLength(2));
+      expect(types().where((t) => t == 'transport.selected'), hasLength(1));
+      expect(server.relayAttaches, hasLength(2));
+      expect(host.handshakes, [server.links.keys.single]);
+    });
+
     test('failed direct and TURN attempts reach Relay with exactly one Noise handshake', () async {
       server.iceServers = [
         {

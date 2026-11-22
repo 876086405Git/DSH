@@ -1534,6 +1534,7 @@ class RemoteAccount {
             preferred: const [RemoteTransportMode.turn, RemoteTransportMode.relay],
             isCancelled: isCancelled,
           );
+          if (control.directTransports.isEmpty) return _TransportSelection(control, reason);
         }
         try {
           final rtc = await WebRtcTransport.negotiate(
