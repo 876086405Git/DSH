@@ -872,6 +872,8 @@ def dsh_drop_reason(rel, abi, prune_dev):
             return "dev-metadata"
         if low.endswith((".js.map", ".mjs.map", ".cjs.map", ".ts.map", ".css.map")):
             return "dev-metadata"
+        if rel == "node_modules/@mixmark-io/domino/.yarn/plugins/@yarnpkg/plugin-version.cjs":
+            return "package-build-tool"
     return None
 
 
