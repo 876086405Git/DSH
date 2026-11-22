@@ -62,12 +62,14 @@ export class CompanionTaskStore {
   checkStore(id) {
     if (id !== this.hostStoreId) throw taskError(409, 'store-mismatch', 'This request belongs to another task store');
   }
-  read(id) {
+  stored(id) {
     const record = this.table.get(id);
     if (!record) throw taskError(404, 'not-found', 'Task is not present in this store');
-    return clone(record);
+    return record;
   }
-  snapshot(id) { return this.project(this.read(id)); }
+  read(id) { return clone(this.stored(id)); }
+  // project() copies only the public fields, so the stored record is not cloned first.
+  snapshot(id) { return this.project(this.stored(id)); }
   observe(id, listener) {
     const listeners = this.observers.get(id) ?? new Set();
     listeners.add(listener); this.observers.set(id, listeners);
