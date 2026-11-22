@@ -412,6 +412,8 @@ void main() {
     final parentBefore = actualCard(parent);
     final childBefore = actualCard(child);
     expect(childBefore['current_basis_seq'], greaterThan(parentBefore['current_basis_seq']! as int));
+    expect(parentBefore['source_at_ms'], old['said_at_utc']);
+    expect(childBefore['source_at_ms'], detail['said_at_utc']);
     now += 3600000;
     final fresh = say('group-parent-new', '面试改到周五，材料也按周五安排。');
     expect(fresh['first_seq'], greaterThan(childBefore['current_basis_seq']! as int));
@@ -465,6 +467,8 @@ void main() {
     expect(childAfter['row_rev'], (childBefore['row_rev']! as int) + 1);
     expect(parentAfter['current_basis_seq'], fresh['first_seq']);
     expect(childAfter['current_basis_seq'], fresh['first_seq']);
+    expect(parentAfter['source_at_ms'], fresh['said_at_utc']);
+    expect(childAfter['source_at_ms'], fresh['said_at_utc']);
     expect(
       database.select('SELECT parent_card_id,parent_row_rev FROM memory_card_references WHERE card_id=?', [child]),
       [
@@ -477,6 +481,8 @@ void main() {
     reopen();
     expect(actualCard(parent)['current_basis_seq'], fresh['first_seq']);
     expect(actualCard(child)['current_basis_seq'], fresh['first_seq']);
+    expect(actualCard(parent)['source_at_ms'], fresh['said_at_utc']);
+    expect(actualCard(child)['source_at_ms'], fresh['said_at_utc']);
     expect(store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']), containsAll([parent, child]));
   });
 
@@ -650,8 +656,14 @@ void main() {
     final original = say('original-group', '我住杭州，也喜欢红茶。');
     final creating = begin(original);
     final home = call(creating, 'home', 'remember', {'text': '我住杭州。'}).targetId!;
-    final tea = call(creating, 'tea', 'remember', {'text': '我喜欢红茶。'}).targetId!;
-    final combined = call(creating, 'both', 'remember', {'text': '我住杭州，也喜欢红茶。'}).targetId!;
+    final tea = call(creating, 'tea', 'remember', {
+      'text': '我喜欢红茶。',
+      'keywords': ['红茶', '饮品'],
+    }).targetId!;
+    final combined = call(creating, 'both', 'remember', {
+      'text': '我住杭州，也喜欢红茶。',
+      'keywords': ['我住杭州，也喜欢红茶。', '红茶'],
+    }).targetId!;
     store.closeAgentTurn(creating);
     final turn = begin(say('forget-address', '住址不要保留，红茶那部分留着。'), [actualCard(home)]);
     final related = call(turn, 'related', 'related', {'card': home});
@@ -687,6 +699,7 @@ void main() {
     expect(applied.changedCardIds, unorderedEquals([home, combined]));
     expect(store.cards().map((row) => row['id']), unorderedEquals([tea, combined]));
     expect(actualCard(tea), before.singleWhere((row) => row['id'] == tea));
+    expect(actualCard(combined)['keywords'], ['红茶']);
     final retainedProof = (actualCard(combined)['evidence'] as List).cast<MemoryRow>();
     expect(retainedProof.single['message_id'], original['id']);
     expect(retainedProof.single['quote'], original['text']);
@@ -779,7 +792,9 @@ void main() {
     }).targetId!;
     store.closeAgentTurn(dependentTurn);
     expect(actualCard(dependent)['current_basis_seq'], greaterThan(actualCard(target)['current_basis_seq']! as int));
+    now += 3600000;
     final third = say('proof-three', '我的居住地是杭州。');
+    expect(third['said_at_utc'], greaterThan(actualCard(target)['source_at_ms']! as int));
     final otherTurn = begin(third);
     final from = call(otherTurn, 'one-proof', 'remember', {'text': '我的居住地是杭州。'}).targetId!;
     store.closeAgentTurn(otherTurn);
@@ -815,6 +830,8 @@ void main() {
     expect(merged.changedCardIds, unorderedEquals([target, from, dependent]));
     expect(actualCard(target)['current_basis_seq'], third['first_seq']);
     expect(actualCard(dependent)['current_basis_seq'], third['first_seq']);
+    expect(actualCard(target)['source_at_ms'], third['said_at_utc']);
+    expect(actualCard(dependent)['source_at_ms'], third['said_at_utc']);
     expect(
       database.select('SELECT parent_row_rev FROM memory_card_references WHERE card_id=?', [
         dependent,
@@ -1313,6 +1330,7 @@ void main() {
         'source': original['id'],
       }).targetId!;
       expect(actualCard(diary)['local_day'], '2026-10-01');
+      expect(actualCard(diary)['keywords'], ['住在杭州，也喜欢红茶。']);
       store.finishAgentMaintenance(turnId: turn['id']! as String, complete: true);
       final control = say('later-control', '不要记住我的住处，喜欢红茶这件事保留。');
       now += 86400000;
@@ -1335,6 +1353,7 @@ void main() {
       );
       final retained = actualCard(diary);
       expect(retained['text'], '喜欢红茶。');
+      expect(retained['keywords'], ['喜欢红茶。']);
       expect(retained['local_day'], '2026-10-01');
       expect(retained['day_zone_id'], 'offset:0');
       expect((retained['evidence'] as List).map((proof) => (proof as MemoryRow)['message_id']), [original['id']]);
@@ -1351,6 +1370,8 @@ void main() {
       expect(visible['id'], diary);
       expect(visible['row_rev'], retained['row_rev']);
       expect(visible['text'], '喜欢红茶。');
+      expect(visible['keywords'], ['喜欢红茶。']);
+      expect(jsonEncode(fresh), isNot(contains('杭州')));
       expect(visible['local_day'], retained['local_day']);
       expect(visible['evidence'], isEmpty, reason: 'the retained local proof still contains the forgotten address');
       grantMaintenance(fresh);
