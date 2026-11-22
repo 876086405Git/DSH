@@ -46,8 +46,23 @@ String dndSummary(PhoneBackgroundStatus bg) {
   };
 }
 
-/// Group spacing: 24 between consecutive cards.
-const _groupMargin = EdgeInsets.fromLTRB(16, 12, 16, 12);
+/// The page's rhythm: 24 before a section (its titled card, or a fold of its
+/// own), 12 between the untitled cards of one section, 8 between the status
+/// card and the notes under it.
+const _sectionGap = SizedBox(height: 24);
+const _cardGap = SizedBox(height: 12);
+const _noteGap = SizedBox(height: 8);
+
+/// Notes line up with the cards; the gaps above set the space between them.
+const _noteMargin = EdgeInsets.symmetric(horizontal: 16);
+
+/// [items] with [gap] between them.
+List<Widget> _spaced(List<Widget> items, Widget gap) => [
+  for (final (i, item) in items.indexed) ...[if (i > 0) gap, item],
+];
+
+/// Root and Sui: under 更多连接方式, folded until asked for.
+bool _rare(PhonePrivilegedMode mode) => mode == PhonePrivilegedMode.root || mode == PhonePrivilegedMode.sui;
 
 /// The Shizuku app (or a binder it serves), not Sui speaking its interface.
 bool _shizukuInstalled(ShizukuStatus s) => s.provider == 'shizuku' || (s.appInstalled ?? s.installed);
@@ -228,179 +243,193 @@ class _PhoneDndPageState extends ConsumerState<PhoneDndPage> {
     final using = bg.effectiveMode;
     final waiting = using == PhonePrivilegedMode.root && bg.root.starting;
     final open = _open ?? (bg.effectiveReady ? PhonePrivilegedMode.off : using);
-    final choices = <Widget>[
-      ListPageCard(
-        margin: _groupMargin,
-        children: [
-          for (final mode in bg.supportedModes)
-            if (mode != PhonePrivilegedMode.off &&
-                mode != using &&
-                mode != PhonePrivilegedMode.root &&
-                mode != PhonePrivilegedMode.sui)
-              ..._channel(mode, bg, open),
-        ],
-      ),
-      if (bg.supportedModes.any(
-        (mode) => mode != using && (mode == PhonePrivilegedMode.root || mode == PhonePrivilegedMode.sui),
-      ))
-        PhoneOptionsFold(
-          key: const ValueKey('phone-dnd-more-channels'),
-          title: l10n.phoneDndMoreChannels,
-          children: [
-            ListPageCard(
-              margin: _groupMargin,
-              children: [
-                for (final mode in bg.supportedModes)
-                  if (mode != using && (mode == PhonePrivilegedMode.root || mode == PhonePrivilegedMode.sui))
-                    ..._channel(mode, bg, open),
+    final others = [
+      for (final mode in bg.supportedModes)
+        if (mode != PhonePrivilegedMode.off && mode != using) mode,
+    ];
+    final common = others.where((mode) => !_rare(mode)).toList();
+    final more = others.where(_rare).toList();
+    // The channels not in use, in one card; Root and Sui fold in as its last rows.
+    final choices = common.isEmpty && more.isEmpty
+        ? null
+        : ListPageCard(
+            title: using == PhonePrivilegedMode.off ? l10n.phoneDndChannels : null,
+            children: [
+              for (final mode in common) ..._channel(mode, bg, open),
+              if (more.isNotEmpty) ...[
+                if (common.isNotEmpty) const Divider(indent: 16, endIndent: 16),
+                PhoneOptionsFold(
+                  key: const ValueKey('phone-dnd-more-channels'),
+                  title: l10n.phoneDndMoreChannels,
+                  card: false,
+                  children: [for (final mode in more) ..._channel(mode, bg, open)],
+                ),
               ],
+            ],
+          );
+
+    // What is in use and what is wrong: first, and never folded away.
+    final head = <Widget>[
+      if (!bg.androidOk) PhoneNote(tone: NoteTone.warn, text: l10n.phoneDndUnsupported, margin: _noteMargin),
+      if (using != PhonePrivilegedMode.off) ...[
+        ListPageCard(
+          children: [
+            ListPageRow(
+              icon: AppIcons.dndMode,
+              iconColor: Theme.of(context).colorScheme.primary,
+              title: l10n.phoneDndUsing(using.label(l10n)),
+              titleMaxLines: 2,
+              subtitle: bg.effectiveReady ? l10n.phoneReady : (waiting ? bg.effectiveReason : null),
+              trailing: TextButton(onPressed: _ready ? _close : null, child: Text(l10n.commonClose)),
             ),
+            if (bg.previewVersion == 1) ...[
+              ListPageRow(
+                leading: const SizedBox(),
+                title: l10n.phonePreviewTitle,
+                subtitle: l10n.phonePreviewDescription,
+                subtitleMaxLines: 4,
+                trailing: Switch(
+                  value: bg.previewEnabled,
+                  onChanged: !_ready || _busy
+                      ? null
+                      : (enabled) =>
+                            unawaited(_run(() async => PhoneResult(await _phone.setBackgroundPreview(enabled)))),
+                ),
+              ),
+              if (bg.previewEnabled)
+                for (final candidate in previewTasks)
+                  ListPageRow(
+                    key: ValueKey('phone-preview-task-${candidate.id}'),
+                    leading: const SizedBox(),
+                    title: !hasSlotMetadata ? l10n.phonePreviewOpen : l10n.phonePreviewTask(candidate.id!.toString()),
+                    subtitle: candidate.app,
+                    onTap: _ready ? () => unawaited(_showPreview(candidate.id!)) : null,
+                  ),
+            ],
           ],
         ),
+        // The channel's own reason, whole: a failure never quietly becomes another channel.
+        if (!bg.effectiveReady && !waiting)
+          PhoneNote(tone: NoteTone.warn, text: bg.effectiveReason ?? l10n.phoneNotReadyYet, margin: _noteMargin),
+      ],
+      if (_error case final error? when error != bg.effectiveReason)
+        PhoneNote(tone: NoteTone.warn, text: error, margin: _noteMargin),
+      if (bg.keep.enabled && _keepStatus(bg.keep).$1 != null)
+        PhoneNote(
+          tone: bg.keep.phase == PhoneKeepPhase.failed ? NoteTone.warn : NoteTone.info,
+          text: _keepStatus(bg.keep).$1!,
+          margin: _noteMargin,
+        ),
+    ];
+
+    // 连接方式: the channel in use with the others folded under 更换连接方式, or the choices themselves.
+    final connection = <Widget>[
+      if (using != PhonePrivilegedMode.off) ...[
+        ListPageCard(title: l10n.phoneDndChannels, children: _channel(using, bg, open)),
+        _cardGap,
+        PhoneOptionsFold(
+          key: const ValueKey('phone-dnd-channels'),
+          title: l10n.phoneDndChangeChannel,
+          children: [
+            if (choices != null) ...[_cardGap, choices],
+          ],
+        ),
+      ] else
+        ?choices,
+    ];
+
+    // 更多设置: each group a card of its own, 24 apart where a title leads it.
+    final options = <ListPageCard>[
+      if (using != PhonePrivilegedMode.off && bg.privileged != null) ListPageCard(children: [_keepRow(using, bg.keep)]),
+      if (bg.parallelism case final capacity? when status.ready)
+        ListPageCard(
+          title: l10n.phoneBackgroundParallelTitle,
+          children: [
+            ListPageRow(
+              title: l10n.phoneBackgroundParallelStatus(
+                capacity.configuredLimit,
+                capacity.effectiveLimit,
+                capacity.heldSlots,
+              ),
+              titleMaxLines: 4,
+              subtitle: switch (capacity.reason) {
+                'off' => l10n.phoneBackgroundParallelOff,
+                'unsupported' => l10n.phoneBackgroundParallelUnsupported,
+                'connectionRequired' => l10n.phoneBackgroundParallelConnection,
+                'busy' => l10n.phoneBackgroundParallelBusy,
+                'transportSerial' => l10n.phoneBackgroundParallelSerial,
+                _ => l10n.phoneBackgroundParallelDescription,
+              },
+              subtitleMaxLines: 5,
+            ),
+            for (final limit in const [1, 2, 3])
+              Semantics(
+                selected: capacity.configuredLimit == limit,
+                inMutuallyExclusiveGroup: true,
+                child: ListPageRow(
+                  key: ValueKey('phone-background-limit-$limit'),
+                  leading: Icon(capacity.configuredLimit == limit ? AppIcons.radioOn : AppIcons.radioOff),
+                  title: l10n.phoneBackgroundParallelChoice(limit),
+                  onTap: !_ready || _busy || capacity.configuredLimit == limit
+                      ? null
+                      : () => unawaited(_run(() => _phone.setBackgroundParallelLimit(limit))),
+                ),
+              ),
+          ],
+        ),
+      if (bg.viewport case final viewport? when bg.androidOk)
+        ListPageCard(
+          title: l10n.phoneViewportTitle,
+          children: [
+            ListPageRow(leading: const SizedBox(), title: l10n.phoneViewportDescription, titleMaxLines: 10),
+            for (final preset in PhoneBackgroundViewport.values)
+              Semantics(
+                selected: viewport == preset,
+                inMutuallyExclusiveGroup: true,
+                child: ListPageRow(
+                  key: ValueKey('phone-viewport-${preset.name}'),
+                  leading: Icon(viewport == preset ? AppIcons.radioOn : AppIcons.radioOff),
+                  title: preset == PhoneBackgroundViewport.portrait
+                      ? l10n.phoneViewportPortrait
+                      : l10n.phoneViewportLandscape,
+                  onTap: !_ready || _busy || viewport == preset
+                      ? null
+                      : () => unawaited(_run(() => _phone.setBackgroundViewport(preset))),
+                ),
+              ),
+          ],
+        ),
+      ListPageCard(
+        title: l10n.phoneDndRequirements,
+        children: [
+          BulletLines([
+            l10n.phoneDndKeepUnlocked,
+            if (!bg.keep.enabled) l10n.phoneDndReactivate,
+            if (using == PhonePrivilegedMode.off ||
+                using == PhonePrivilegedMode.shizuku ||
+                using == PhonePrivilegedMode.adb)
+              l10n.phoneDndKeepDebugging,
+          ]),
+        ],
+      ),
     ];
 
     return AppPage.list(
       title: l10n.phoneDndTitle,
       subtitle: Text(l10n.phoneDndSubtitle),
       children: [
-        if (!bg.androidOk) PhoneNote(tone: NoteTone.warn, text: l10n.phoneDndUnsupported),
-        if (using != PhonePrivilegedMode.off) ...[
-          ListPageCard(
-            margin: _groupMargin,
-            children: [
-              ListPageRow(
-                icon: AppIcons.dndMode,
-                iconColor: Theme.of(context).colorScheme.primary,
-                title: l10n.phoneDndUsing(using.label(l10n)),
-                titleMaxLines: 2,
-                subtitle: bg.effectiveReady ? l10n.phoneReady : (waiting ? bg.effectiveReason : null),
-                trailing: TextButton(onPressed: _ready ? _close : null, child: Text(l10n.commonClose)),
-              ),
-              if (bg.previewVersion == 1) ...[
-                ListPageRow(
-                  leading: const SizedBox(),
-                  title: l10n.phonePreviewTitle,
-                  subtitle: l10n.phonePreviewDescription,
-                  subtitleMaxLines: 4,
-                  trailing: Switch(
-                    value: bg.previewEnabled,
-                    onChanged: !_ready || _busy
-                        ? null
-                        : (enabled) =>
-                              unawaited(_run(() async => PhoneResult(await _phone.setBackgroundPreview(enabled)))),
-                  ),
-                ),
-                if (bg.previewEnabled)
-                  for (final candidate in previewTasks)
-                    ListPageRow(
-                      key: ValueKey('phone-preview-task-${candidate.id}'),
-                      leading: const SizedBox(),
-                      title: !hasSlotMetadata ? l10n.phonePreviewOpen : l10n.phonePreviewTask(candidate.id!.toString()),
-                      subtitle: candidate.app,
-                      onTap: _ready ? () => unawaited(_showPreview(candidate.id!)) : null,
-                    ),
-              ],
-            ],
-          ),
-          // The channel's own reason, whole: a failure never quietly becomes another channel.
-          if (!bg.effectiveReady && !waiting)
-            PhoneNote(tone: NoteTone.warn, text: bg.effectiveReason ?? l10n.phoneNotReadyYet),
-        ],
-        if (_error case final error? when error != bg.effectiveReason) PhoneNote(tone: NoteTone.warn, text: error),
-        if (bg.keep.enabled && _keepStatus(bg.keep).$1 != null)
-          PhoneNote(
-            tone: bg.keep.phase == PhoneKeepPhase.failed ? NoteTone.warn : NoteTone.info,
-            text: _keepStatus(bg.keep).$1!,
-          ),
-        if (using != PhonePrivilegedMode.off) ListPageCard(margin: _groupMargin, children: _channel(using, bg, open)),
-        if (using == PhonePrivilegedMode.off)
-          ...choices
-        else
-          PhoneOptionsFold(
-            key: const ValueKey('phone-dnd-channels'),
-            title: l10n.phoneDndChangeChannel,
-            children: choices,
-          ),
+        ..._spaced(head, _noteGap),
+        if (head.isNotEmpty && connection.isNotEmpty) _sectionGap,
+        ...connection,
+        if (head.isNotEmpty || connection.isNotEmpty) _sectionGap,
         PhoneOptionsFold(
           key: const ValueKey('phone-dnd-options'),
           title: l10n.phoneControlAdvanced,
           children: [
-            if (using != PhonePrivilegedMode.off && bg.privileged != null)
-              ListPageCard(margin: _groupMargin, children: [_keepRow(using, bg.keep)]),
-            if (bg.parallelism case final capacity? when status.ready)
-              ListPageCard(
-                margin: _groupMargin,
-                title: l10n.phoneBackgroundParallelTitle,
-                children: [
-                  ListPageRow(
-                    title: l10n.phoneBackgroundParallelStatus(
-                      capacity.configuredLimit,
-                      capacity.effectiveLimit,
-                      capacity.heldSlots,
-                    ),
-                    titleMaxLines: 4,
-                    subtitle: switch (capacity.reason) {
-                      'off' => l10n.phoneBackgroundParallelOff,
-                      'unsupported' => l10n.phoneBackgroundParallelUnsupported,
-                      'connectionRequired' => l10n.phoneBackgroundParallelConnection,
-                      'busy' => l10n.phoneBackgroundParallelBusy,
-                      'transportSerial' => l10n.phoneBackgroundParallelSerial,
-                      _ => l10n.phoneBackgroundParallelDescription,
-                    },
-                    subtitleMaxLines: 5,
-                  ),
-                  for (final limit in const [1, 2, 3])
-                    Semantics(
-                      selected: capacity.configuredLimit == limit,
-                      inMutuallyExclusiveGroup: true,
-                      child: ListPageRow(
-                        key: ValueKey('phone-background-limit-$limit'),
-                        leading: Icon(capacity.configuredLimit == limit ? AppIcons.radioOn : AppIcons.radioOff),
-                        title: l10n.phoneBackgroundParallelChoice(limit),
-                        onTap: !_ready || _busy || capacity.configuredLimit == limit
-                            ? null
-                            : () => unawaited(_run(() => _phone.setBackgroundParallelLimit(limit))),
-                      ),
-                    ),
-                ],
-              ),
-            if (bg.viewport case final viewport? when bg.androidOk)
-              ListPageCard(
-                margin: _groupMargin,
-                title: l10n.phoneViewportTitle,
-                children: [
-                  ListPageRow(leading: const SizedBox(), title: l10n.phoneViewportDescription, titleMaxLines: 10),
-                  for (final preset in PhoneBackgroundViewport.values)
-                    Semantics(
-                      selected: viewport == preset,
-                      inMutuallyExclusiveGroup: true,
-                      child: ListPageRow(
-                        key: ValueKey('phone-viewport-${preset.name}'),
-                        leading: Icon(viewport == preset ? AppIcons.radioOn : AppIcons.radioOff),
-                        title: preset == PhoneBackgroundViewport.portrait
-                            ? l10n.phoneViewportPortrait
-                            : l10n.phoneViewportLandscape,
-                        onTap: !_ready || _busy || viewport == preset
-                            ? null
-                            : () => unawaited(_run(() => _phone.setBackgroundViewport(preset))),
-                      ),
-                    ),
-                ],
-              ),
-            ListPageCard(
-              margin: _groupMargin,
-              title: l10n.phoneDndRequirements,
-              children: [
-                BulletLines([
-                  l10n.phoneDndKeepUnlocked,
-                  if (!bg.keep.enabled) l10n.phoneDndReactivate,
-                  if (using == PhonePrivilegedMode.off ||
-                      using == PhonePrivilegedMode.shizuku ||
-                      using == PhonePrivilegedMode.adb)
-                    l10n.phoneDndKeepDebugging,
-                ]),
-              ],
-            ),
+            for (final (i, group) in options.indexed) ...[
+              if (i == 0 || group.title == null) _cardGap else _sectionGap,
+              group,
+            ],
           ],
         ),
       ],

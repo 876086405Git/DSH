@@ -12,11 +12,21 @@ enum NoteTone { info, warn, danger }
 
 /// Low-frequency settings stay discoverable without crowding the main page.
 class PhoneOptionsFold extends StatefulWidget {
-  const PhoneOptionsFold({super.key, required this.title, required this.children, this.initiallyOpen = false});
+  const PhoneOptionsFold({
+    super.key,
+    required this.title,
+    required this.children,
+    this.initiallyOpen = false,
+    this.card = true,
+  });
 
   final String title;
   final List<Widget> children;
   final bool initiallyOpen;
+
+  /// The header row in a card of its own; false for a fold that ends a card
+  /// around it (its row and what it reveals are that card's last rows).
+  final bool card;
 
   @override
   State<PhoneOptionsFold> createState() => _PhoneOptionsFoldState();
@@ -26,28 +36,27 @@ class _PhoneOptionsFoldState extends State<PhoneOptionsFold> {
   late bool _open = widget.initiallyOpen;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      ListPageCard(
-        children: [
-          Semantics(
-            expanded: _open,
-            child: ListPageRow(
-              title: widget.title,
-              titleMaxLines: 3,
-              trailing: RowExpandArrow(open: _open),
-              onTap: () => setState(() => _open = !_open),
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    final header = Semantics(
+      expanded: _open,
+      child: ListPageRow(
+        title: widget.title,
+        titleMaxLines: 3,
+        trailing: RowExpandArrow(open: _open),
+        onTap: () => setState(() => _open = !_open),
       ),
-      ExpandReveal(
-        open: _open,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: widget.children),
-      ),
-    ],
-  );
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.card) ListPageCard(children: [header]) else header,
+        ExpandReveal(
+          open: _open,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: widget.children),
+        ),
+      ],
+    );
+  }
 }
 
 /// A tinted callout: why something can't work, or what to know first.
