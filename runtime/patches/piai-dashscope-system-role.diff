@@ -1,0 +1,17 @@
+--- a/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
+@@ -1236,1 +1236,2 @@
+-    let isMistralNative = false;
++    let isMistralNative = false;
++    let isDashScopeOpenAI = false;
+@@ -1244,1 +1245,6 @@
+-            (url.pathname === "/v1" || url.pathname === "/v1/");
++            (url.pathname === "/v1" || url.pathname === "/v1/");
++        // DashScope Chat uses system instructions, including on reasoning models.
++        isDashScopeOpenAI = url.protocol === "https:" && url.port === "" &&
++            (url.hostname === "dashscope.aliyuncs.com" || url.hostname === "dashscope-intl.aliyuncs.com" ||
++                /^[^.]+\.[^.]+\.maas\.aliyuncs\.com$/.test(url.hostname)) &&
++            (url.pathname === "/compatible-mode/v1" || url.pathname === "/compatible-mode/v1/");
+@@ -1276,1 +1282,1 @@
+-        supportsDeveloperRole: isOpenRouterDeveloperRoleModel || (!isNonStandard && !isOpenRouter),
++        supportsDeveloperRole: !isDashScopeOpenAI && (isOpenRouterDeveloperRoleModel || (!isNonStandard && !isOpenRouter)),
