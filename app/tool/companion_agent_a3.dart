@@ -309,8 +309,12 @@ class _Replay {
     final affinity = item['affinityReplay'] as Map?;
     if (affinity != null) {
       final local = DateTime.fromMillisecondsSinceEpoch(initial.utcMs + offset * 60000, isUtc: true);
-      final firstNoon = DateTime.utc(local.year, local.month, local.day, 12)
-          .subtract(Duration(days: affinity['completeDays']! as int));
+      final firstNoon = DateTime.utc(
+        local.year,
+        local.month,
+        local.day,
+        12,
+      ).subtract(Duration(days: affinity['completeDays']! as int));
       historicalNow = firstNoon.millisecondsSinceEpoch - offset * 60000;
     }
     final database = sqlite3.openInMemory();
@@ -523,11 +527,13 @@ class _Replay {
                   definition: binding.definition,
                   execute: (call) async {
                     final requestedEvent = rows
-                        .where((row) =>
-                            (row['seq']! as int) > startEvent &&
-                            row['kind'] == 'model_tool_request' &&
-                            row['id'] == call.id &&
-                            row['name'] == call.name)
+                        .where(
+                          (row) =>
+                              (row['seq']! as int) > startEvent &&
+                              row['kind'] == 'model_tool_request' &&
+                              row['id'] == call.id &&
+                              row['name'] == call.name,
+                        )
                         .lastOrNull;
                     record('tool_dispatch', {
                       'id': call.id,
@@ -559,9 +565,11 @@ class _Replay {
           tools.close();
         }
         final after = memory.store.cards(includeInactive: true);
-        final agentReceipts = memory.store.requests()
-            .where((row) =>
-                row['origin'] == 'local' && row['category'] == 'chat' && !priorRequestIds.contains(row['id']))
+        final agentReceipts = memory.store
+            .requests()
+            .where(
+              (row) => row['origin'] == 'local' && row['category'] == 'chat' && !priorRequestIds.contains(row['id']),
+            )
             .toList();
         final agentComplete = agentReceipts.isNotEmpty && agentReceipts.every((row) => row['terminal'] == 'complete');
         record('turn_end', {
@@ -650,10 +658,14 @@ class _Replay {
         };
         final webRequestEvent = web['requestedEvent'] as int?;
         if (webRequestEvent != null) {
-          isolationAttempts.addAll(requested.where((row) =>
-              (row['seq']! as int) > webRequestEvent &&
-              (destructive.contains(row['name']) ||
-                  row['name'] == 'remember' && row['input'] is Map && (row['input'] as Map)['card'] != null)));
+          isolationAttempts.addAll(
+            requested.where(
+              (row) =>
+                  (row['seq']! as int) > webRequestEvent &&
+                  (destructive.contains(row['name']) ||
+                      row['name'] == 'remember' && row['input'] is Map && (row['input'] as Map)['card'] != null),
+            ),
+          );
         }
         pathNotExercised = isolationAttempts.isEmpty;
         // These are actual Agent outcomes sent in the next physical request.
@@ -661,18 +673,27 @@ class _Replay {
         // observed before lookup returned, but execute after its actual report.
         final deniedAfter = <String, int>{};
         for (final event in events) {
-          if (event['kind'] != 'http_request' || event['agentRequest'] != true ||
-              (event['seq']! as int) <= (web['seq']! as int)) continue;
+          if (event['kind'] != 'http_request' ||
+              event['agentRequest'] != true ||
+              (event['seq']! as int) <= (web['seq']! as int)) {
+            continue;
+          }
           final body = event['body'];
           if (body is! Map || body['messages'] is! List) continue;
           for (final message in body['messages'] as List) {
             if (message is! Map || message['role'] != 'user' || message['content'] is! List) continue;
             for (final block in message['content'] as List) {
-              if (block is! Map || block['type'] != 'tool_result' ||
-                  block['is_error'] != true || block['content'] is! String) continue;
+              if (block is! Map ||
+                  block['type'] != 'tool_result' ||
+                  block['is_error'] != true ||
+                  block['content'] is! String) {
+                continue;
+              }
               final result = decode(block['content'] as String);
-              if (result is Map && result['code'] == 'memory_change_after_web' &&
-                  result['applied'] == false && block['tool_use_id'] is String) {
+              if (result is Map &&
+                  result['code'] == 'memory_change_after_web' &&
+                  result['applied'] == false &&
+                  block['tool_use_id'] is String) {
                 deniedAfter[block['tool_use_id'] as String] = event['seq']! as int;
               }
             }

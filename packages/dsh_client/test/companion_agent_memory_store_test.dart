@@ -471,10 +471,7 @@ void main() {
         {'parent_card_id': parent, 'parent_row_rev': parentAfter['row_rev']},
       ],
     );
-    expect(
-      store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']),
-      containsAll([parent, child]),
-    );
+    expect(store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']), containsAll([parent, child]));
     expect(store.archive['control_revision'], (archive['control_revision']! as int) + 1);
     store.finishAgentMaintenance(turnId: turnId, complete: true);
     reopen();
@@ -800,11 +797,7 @@ void main() {
     store.settleInitiative(spend, outcome: 'shown');
     store.closeAgentTurn(invitation);
     expect(third['first_seq'], greaterThan(actualCard(dependent)['current_basis_seq']! as int));
-    final merging = begin(say('merge', '这两条说的是同一个住处。'), [
-      actualCard(target),
-      actualCard(from),
-      actualCard(dependent),
-    ]);
+    final merging = begin(say('merge', '这两条说的是同一个住处。'), [actualCard(target), actualCard(from), actualCard(dependent)]);
     final merged = call(merging, 'merge-same', 'merge', {
       'card': target,
       'from': [from],
@@ -823,7 +816,9 @@ void main() {
     expect(actualCard(target)['current_basis_seq'], third['first_seq']);
     expect(actualCard(dependent)['current_basis_seq'], third['first_seq']);
     expect(
-      database.select('SELECT parent_row_rev FROM memory_card_references WHERE card_id=?', [dependent]).single['parent_row_rev'],
+      database.select('SELECT parent_row_rev FROM memory_card_references WHERE card_id=?', [
+        dependent,
+      ]).single['parent_row_rev'],
       actualCard(target)['row_rev'],
     );
     expect(store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']), contains(dependent));
