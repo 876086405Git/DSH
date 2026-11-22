@@ -13,8 +13,13 @@
     <string name="overlay_expand">Show details</string>
     <string name="overlay_fold">Shrink to a ball</string>
     <string name="overlay_fold_row">Shrink to a ball</string>
-    <string name="overlay_hold_hint">Hold the ball for a second to stop</string>
+    <string name="overlay_hold_hint">Hold pause or the ball for a second to stop</string>
     <string name="overlay_stop_description">Stop DSH’s actions</string>
+    <string name="overlay_back_description">Back to DSH Go</string>
+    <string name="overlay_stop_row">Stop</string>
+    <string name="overlay_step">Step %1$d</string>
+    <string name="overlay_dsh_working">DSH at work</string>
+    <string name="overlay_screen_view">Background screen, view only. Tap to resize</string>
     <string name="overlay_paused_short">Paused</string>
     <string name="overlay_waiting">Waiting for you below</string>
     <string name="overlay_waived">No approval needed</string>

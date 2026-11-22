@@ -6,6 +6,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.roundToInt
+import io.github.ccch1mneyyy.dsh_app.pet.Side
+import io.github.ccch1mneyyy.dsh_app.pet.SafeArea
 
 class OverlayModelTest {
     // The core's own formats (values-zh/i18n_strings.xml, values/i18n_strings.xml).
@@ -67,15 +70,66 @@ class OverlayModelTest {
         assertEquals(emptyList<String>(), h.before(null, 3))
     }
 
-    // ---- 头部：停止永远在同一个位置，一步可达 ---------------------------------------------------------
+    // ---- 头部：暂停（按住停止）和回到 DSH Go，位置不变 -------------------------------------------------
 
-    @Test fun stopIsAlwaysTheLastKeyWithPauseBesideIt() {
+    @Test fun pauseAndBackAreTheKeysAndNeverMove() {
         val running = CapsuleMetrics.slots(stopped = false)
-        assertEquals(listOf(Slot.MARK, Slot.LINE, Slot.PAUSE, Slot.STOP), running)
-        // 停止 at the right end: the same place in the capsule and the card, never behind a menu.
-        assertEquals(Slot.STOP, running.last())
-        // Once stopped there is nothing left to stop.
-        assertFalse(Slot.STOP in CapsuleMetrics.slots(stopped = true))
+        assertEquals(listOf(Slot.MARK, Slot.LINE, Slot.PAUSE, Slot.BACK), running)
+        // 回到 DSH Go at the right end, 暂停 (held a second: 停止) beside it, the same in the capsule and the card.
+        assertEquals(Slot.BACK, running.last())
+        // Once stopped there is nothing left to pause or go back from here.
+        assertEquals(listOf(Slot.MARK, Slot.LINE), CapsuleMetrics.slots(stopped = true))
+    }
+
+    @Test fun stepsAreCountedPastWhatIsKept() {
+        val h = StepHistory()
+        for (i in 1..5) h.add(StatusLine("点「$i」", acting = true, waived = false))
+        // Only the last few are kept for the card, but the island counts them all.
+        assertEquals(5, h.count)
+        h.add(StatusLine("点「5」", acting = true, waived = false))
+        assertEquals(5, h.count) // the same line again is the same step
+        h.add(StatusLine("正在看屏幕", acting = false, waived = false))
+        assertEquals(5, h.count) // looking isn't a step
+        h.clear()
+        assertEquals(0, h.count)
+    }
+
+    @Test fun elapsedReadsLikeAClock() {
+        assertEquals("0:00", Elapsed.format(0))
+        assertEquals("0:42", Elapsed.format(42_900))
+        assertEquals("12:05", Elapsed.format((12 * 60 + 5) * 1000L))
+        assertEquals("1:02:03", Elapsed.format((3600 + 2 * 60 + 3) * 1000L))
+        assertEquals("0:00", Elapsed.format(-5))
+        assertTrue(Elapsed.WIDEST.length >= Elapsed.format(59 * 60_000L + 59_000).length)
+    }
+
+    // ---- 后台屏小窗 ---------------------------------------------------------------------------------
+
+    @Test fun theScreenWindowFollowsTheBackgroundScreensShape() {
+        assertEquals(240, ScreenWindow.viewHeight(120, 2f, 1000))
+        // Unknown or nonsense shapes fall back to a 9 : 20 phone.
+        assertEquals((120 * 20f / 9f).roundToInt(), ScreenWindow.viewHeight(120, Float.NaN, 1000))
+        assertEquals((120 * 20f / 9f).roundToInt(), ScreenWindow.viewHeight(120, 10f, 1000))
+        // Never taller than the room, never flatter than half its width.
+        assertEquals(200, ScreenWindow.viewHeight(120, 2.2f, 200))
+        assertEquals(60, ScreenWindow.viewHeight(120, 2.2f, 10))
+        assertTrue(ScreenWindow.LARGE_DP > ScreenWindow.SMALL_DP)
+    }
+
+    @Test fun theScreenWindowRestsAgainstASideInsideTheSafeArea() {
+        val a = SafeArea(1080, 2400, 0, 96, 0, 63)
+        assertEquals(30, ScreenWindow.left(Side.LEFT, a, 400, 30))
+        assertEquals(1080 - 30 - 400, ScreenWindow.left(Side.RIGHT, a, 400, 30))
+        val top = ScreenWindow.top(0.4f, a, 800, 30)
+        assertEquals(0.4f, ScreenWindow.fractionFor(top, a, 800), 0.01f)
+        // Clamped clear of the bars.
+        assertEquals(96 + 30, ScreenWindow.top(0f, a, 800, 30))
+        assertEquals(2400 - 63 - 30 - 800, ScreenWindow.top(1f, a, 800, 30))
+        // Dropped: the nearer side, unless flung.
+        assertEquals(Side.LEFT, ScreenWindow.sideFor(100, 400, 1080, 0f))
+        assertEquals(Side.RIGHT, ScreenWindow.sideFor(600, 400, 1080, 0f))
+        assertEquals(Side.RIGHT, ScreenWindow.sideFor(100, 400, 1080, 2000f))
+        assertEquals(Side.LEFT, ScreenWindow.sideFor(600, 400, 1080, -2000f))
     }
 
     @Test fun everyKeyIsABigEnoughTarget() {

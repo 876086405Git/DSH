@@ -167,7 +167,8 @@ internal class OverlayBall(
     }
 
     /** What the mark says, the screen reader's line, and whether a lifted limit badges it. */
-    fun setLook(look: MarkLook, description: CharSequence, badge: Boolean, stopLabel: CharSequence?) {
+    fun setLook(look: MarkLook, description: CharSequence, badge: Boolean, stopLabel: CharSequence?, icon: android.graphics.drawable.Drawable? = null) {
+        ball.icon = icon
         ball.look = look
         ball.badge = badge
         ball.contentDescription = description
@@ -412,6 +413,11 @@ internal class OverlayBall(
     private inner class BallView(context: Context) : View(context) {
         private val painter = MarkPainter(context)
         private val surface = SurfacePainter(context)
+        private val iconPainter = IconPainter()
+
+        /** The app DSH works in, the state as a badge on it (the capsule's mark column, as a ball). */
+        var icon: android.graphics.drawable.Drawable? = null
+            set(value) { if (field !== value) { field = value; invalidate() } }
         private val circle = RectF()
         private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
         private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -500,12 +506,26 @@ internal class OverlayBall(
             surface.draw(canvas, circle, width / 2f, palette)
             val cx = width / 2f
             val cy = height / 2f
-            painter.draw(canvas, cx, cy, look, palette, phase, markAlpha)
+            val app = icon
+            if (app != null) {
+                val s = context.dpf(MarkView.ICON_DP)
+                iconPainter.draw(canvas, app, cx, cy, s, markAlpha)
+                painter.drawBadge(canvas, cx + s / 2 - context.dpf(2f), cy + s / 2 - context.dpf(2f), look, palette, phase, markAlpha)
+                if (look == MarkLook.RUNNING && markAlpha > 0f) {
+                    // A thin breathing ring round the icon: still at work.
+                    ringPaint.color = palette.accent
+                    ringPaint.alpha = (255 * markAlpha * (0.25f + 0.5f * phase)).roundToInt()
+                    ringPaint.strokeWidth = context.dpf(1.5f)
+                    val rr = width / 2f - context.dpf(3f)
+                    canvas.drawCircle(cx, cy, rr, ringPaint)
+                }
+            } else painter.draw(canvas, cx, cy, look, palette, phase, markAlpha)
             if (hold > 0f) {
                 // Over the mark's ring, from twelve o'clock, in the stop colour.
                 ringPaint.color = palette.danger
+                ringPaint.alpha = 255
                 ringPaint.strokeWidth = context.dpf(2.5f)
-                val r = context.dpf(10f)
+                val r = if (icon != null) width / 2f - context.dpf(3f) else context.dpf(10f)
                 canvas.drawArc(cx - r, cy - r, cx + r, cy + r, -90f, 360f * hold, false, ringPaint)
             }
             if (badge && markAlpha > 0f) {

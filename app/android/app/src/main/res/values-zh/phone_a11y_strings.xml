@@ -13,8 +13,13 @@
     <string name="overlay_expand">展开详情</string>
     <string name="overlay_fold">收成小球</string>
     <string name="overlay_fold_row">收成小球</string>
-    <string name="overlay_hold_hint">按住小球 1 秒可直接停止</string>
+    <string name="overlay_hold_hint">按住暂停键或小球 1 秒可直接停止</string>
     <string name="overlay_stop_description">停止 DSH 的操作</string>
+    <string name="overlay_back_description">回到 DSH Go</string>
+    <string name="overlay_stop_row">停止</string>
+    <string name="overlay_step">第 %1$d 步</string>
+    <string name="overlay_dsh_working">DSH 正在操作</string>
+    <string name="overlay_screen_view">后台屏画面，仅供查看。点按切换大小</string>
     <string name="overlay_move_left">移到左侧</string>
     <string name="overlay_move_centre">移到中间</string>
     <string name="overlay_move_right">移到右侧</string>

@@ -57,16 +57,23 @@ internal data class CapsuleState(
     val meta: String?,
     /** The steps before this one, newest first. */
     val steps: List<String>,
+    /** The second line under it: 「微信 · 第 6 步」 (the time is added and kept ticking here). Null: one line. */
+    val sub: String? = null,
+    /** When the task started (uptime ms), for the time on the second line; null: no time. */
+    val startedAt: Long? = null,
+    /** The app DSH works in, in the mark's place; null: the mark. */
+    val icon: android.graphics.drawable.Drawable? = null,
 )
 
 /**
- * The control's open window (TYPE_ACCESSIBILITY_OVERLAY): one solid surface that is a capsule —
- * the default, the line and 暂停 / 停止 — or the card that grows out of it, and shrinks to a circle
- * when it folds into the ball. The surface is one view drawing one rounded rect that the morphs
+ * The control's open window (TYPE_ACCESSIBILITY_OVERLAY): one dark island surface that is a capsule
+ * — the default: the app DSH works in, what it does now over 「微信 · 第 6 步 · 0:42」, 暂停 (held a
+ * second: 停止) and 回到 DSH Go — or the card that grows out of it, and shrinks to a circle when it
+ * folds into the ball. While DSH works a beam runs round its edge. The surface is one view drawing one rounded rect that the morphs
  * animate ([OverlaySurface]); the rows inside never re-flow during a fold, they are cut by the
- * outline and fade. The header row is the same in both forms, so 停止 stays at the right end. The
+ * outline and fade. The header row is the same in both forms, so its keys never move. The
  * capsule sits on its [anchor]'s side of the card and grows from it. The header can be dragged
- * (anywhere but 暂停 / 停止, which stay taps); the owner moves the window.
+ * (anywhere but 暂停 / 回到 DSH Go, which stay taps and holds); the owner moves the window.
  *
  * Main thread only. The owner ([ControlOverlay]) adds and removes the window, decides the form and
  * runs the ball; this class draws, lays out and morphs.
@@ -81,10 +88,10 @@ internal class OverlayCapsule(
 ) {
     class Strings(
         val fold: String, val expand: String, val collapse: String,
-        val pause: String, val resume: String, val stop: String,
+        val pause: String, val resume: String, val stop: String, val back: String, val stopRow: String,
         val steerHint: String, val send: String,
         val unlocksDescription: String, val review: String,
-        val foldRow: String, val holdHint: String,
+        val foldRow: String, val holdHint: String, val separator: String,
         val moveLeft: String, val moveCentre: String, val moveRight: String,
     )
 
@@ -104,7 +111,12 @@ internal class OverlayCapsule(
         fun mark()
         fun line()
         fun pause()
+
+        /** 暂停 held a second, the card's 停止, or the screen reader's stop. */
         fun stop()
+
+        /** 回到 DSH Go. */
+        fun back()
         fun unlocks()
         fun steer()
         fun send()
@@ -137,13 +149,34 @@ internal class OverlayCapsule(
     }
 
     val text = TextView(ctx).apply {
-        textSize = 14f
+        textSize = 14.5f
         setTextColor(c.ink)
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
         includeFontPadding = false
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+
+    /** 「微信 · 第 6 步 · 0:42」 under the line; the time ticks every second while it shows. */
+    private val sub = TextView(ctx).apply {
+        textSize = 11.5f
+        setTextColor(c.faint)
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        includeFontPadding = false
+        fontFeatureSettings = "tnum"
+        visibility = View.GONE
+        setPadding(0, ctx.dp(3), 0, 0)
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+
+    /** The line over its second line. */
+    private val lines = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(text, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        addView(sub, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
     }
 
     private val chevron = GlyphView(ctx, Glyph.CHEVRON, CapsuleMetrics.CHEVRON_DP.toFloat()).apply {
@@ -161,7 +194,7 @@ internal class OverlayCapsule(
         foreground = RippleDrawable(ColorStateList.valueOf(c.ripple), null,
             InsetDrawable(GradientDrawable().apply { cornerRadius = ctx.dpf(18f); setColor(Color.WHITE) }, 0, ctx.dp(6), 0, ctx.dp(6)))
         addView(lock, LinearLayout.LayoutParams(ctx.dp(CapsuleMetrics.LOCK_DP), ctx.dp(CapsuleMetrics.LOCK_DP)).apply { marginEnd = ctx.dp(CapsuleMetrics.LOCK_GAP_DP) })
-        addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        addView(lines, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         addView(chevron, LinearLayout.LayoutParams(ctx.dp(CapsuleMetrics.CHEVRON_DP), ctx.dp(CapsuleMetrics.CHEVRON_DP)).apply { marginStart = ctx.dp(CapsuleMetrics.CHEVRON_GAP_DP) })
         setOnClickListener { actions.line() }
         // A screen reader can't drag: the line moves the capsule to an anchor or folds it, as actions.
@@ -189,21 +222,25 @@ internal class OverlayCapsule(
         Triple(CapsuleAnchor.RIGHT, R.id.overlay_action_right, strings.moveRight),
     )
 
+    /** 暂停 / 继续; held a second it stops the task (a ring fills round it first). */
     val pause = RoundKey(ctx, CapsuleMetrics.DISC_DP, 18).apply {
         disc = c.tonal
         ink = c.ink
+        holdColor = c.danger
         setRipple(c.ripple)
         contentDescription = strings.pause
         setOnClickListener { actions.pause() }
+        holdToStop({ if (state?.stopped == true) null else strings.stop }) { actions.stop() }
     }
 
-    val stop = RoundKey(ctx, CapsuleMetrics.DISC_DP, 16).apply {
-        disc = c.dangerSoft
-        ink = c.danger
-        setGlyph(Glyph.STOP, animated = false)
+    /** 回到 DSH Go: the chat this task belongs to. */
+    val back = RoundKey(ctx, CapsuleMetrics.DISC_DP, 18).apply {
+        disc = c.tonal
+        ink = c.ink
+        setGlyph(Glyph.BACK, animated = false)
         setRipple(c.ripple)
-        contentDescription = strings.stop
-        setOnClickListener { actions.stop() }
+        contentDescription = strings.back
+        setOnClickListener { actions.back() }
     }
 
     private val keyGap = View(ctx)
@@ -216,7 +253,7 @@ internal class OverlayCapsule(
         addView(lineKey, LinearLayout.LayoutParams(0, key, 1f))
         addView(pause, LinearLayout.LayoutParams(key, key))
         addView(keyGap, LinearLayout.LayoutParams(ctx.dp(CapsuleMetrics.KEY_GAP_DP), 1))
-        addView(stop, LinearLayout.LayoutParams(key, key))
+        addView(back, LinearLayout.LayoutParams(key, key))
     }
 
     // ---- card body ----------------------------------------------------------------------------------
@@ -325,6 +362,22 @@ internal class OverlayCapsule(
         addView(send, LinearLayout.LayoutParams(ctx.dp(40), ctx.dp(40)))
     }
 
+    /** The card's 停止: a plain tap here (the card is a deliberate place), a hold on 暂停 elsewhere. */
+    private val stopRow = TextView(ctx).apply {
+        text = strings.stopRow
+        textSize = 13f
+        setTextColor(c.danger)
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        gravity = Gravity.CENTER
+        setPadding(ctx.dp(14), 0, ctx.dp(14), 0)
+        isClickable = true
+        isFocusable = true
+        background = GradientDrawable().apply { cornerRadius = ctx.dpf(18f); setColor(c.dangerSoft) }
+        foreground = RippleDrawable(ColorStateList.valueOf(c.ripple), null, GradientDrawable().apply { cornerRadius = ctx.dpf(18f); setColor(Color.WHITE) })
+        contentDescription = strings.stop
+        setOnClickListener { actions.stop() }
+    }
+
     private val footer = LinearLayout(ctx).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -340,7 +393,8 @@ internal class OverlayCapsule(
             orientation = LinearLayout.VERTICAL
             addView(TextView(ctx).apply { text = strings.foldRow; textSize = 13f; setTextColor(c.muted) })
             addView(TextView(ctx).apply { text = strings.holdHint; textSize = 11f; setTextColor(c.faint); setPadding(0, ctx.dp(1), 0, 0) })
-        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = ctx.dp(16) })
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = ctx.dp(8) })
+        addView(stopRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, ctx.dp(36)).apply { marginEnd = ctx.dp(BODY_INSET_DP) })
         setOnClickListener { actions.mark() }
     }
 
@@ -486,7 +540,7 @@ internal class OverlayCapsule(
     private var downX = 0f
     private var downY = 0f
 
-    /** The finger came down on the header, not on 暂停 / 停止 (they are always taps), and nobody is typing. */
+    /** The finger came down on the header, not on 暂停 / 回到 DSH Go (always taps or holds), and nobody is typing. */
     private var dragFrom = false
     private var tracker: VelocityTracker? = null
 
@@ -501,7 +555,7 @@ internal class OverlayCapsule(
                 downX = e.rawX
                 downY = e.rawY
                 dragging = false
-                dragFrom = !editing && on(header, e) && !on(pause, e) && !on(stop, e)
+                dragFrom = !editing && on(header, e) && !on(pause, e) && !on(back, e)
                 tracker?.recycle()
                 tracker = if (dragFrom) VelocityTracker.obtain().also { track(it, e) } else null
             }
@@ -607,8 +661,14 @@ internal class OverlayCapsule(
         state = s
         val anim = animated && OverlayMotion.on()
         setLine(s.line, anim && old != null)
-        lineKey.contentDescription = s.line
+        subBase = s.sub
+        startedAt = s.startedAt
+        sub.visibility = if (s.sub == null) View.GONE else View.VISIBLE
+        tickSub()
+        lineKey.contentDescription = listOfNotNull(s.line, s.sub).joinToString(". ")
+        mark.icon = s.icon
         mark.setLook(s.look, anim)
+        surface.beam.running = s.look == MarkLook.RUNNING
         lock.visibility = if (s.unlocked && !s.stopped) View.VISIBLE else View.GONE
         // The open card keeps its chevron (it closes it); a capsule that can't open hides it.
         chevron.visibility = if (s.expandable || shape == Shape.CARD) View.VISIBLE else View.GONE
@@ -616,7 +676,7 @@ internal class OverlayCapsule(
         val keys = if (s.stopped) View.GONE else View.VISIBLE
         pause.visibility = keys
         keyGap.visibility = keys
-        stop.visibility = keys
+        back.visibility = keys
         pause.setGlyph(if (s.paused) Glyph.PLAY else Glyph.PAUSE, anim)
         pause.disc = if (s.paused) c.accentSoft else c.tonal
         pause.ink = if (s.paused) c.accent else c.ink
@@ -626,7 +686,8 @@ internal class OverlayCapsule(
         bindBody(s)
         // The width: a state change (stopped) at once; a new line grows now, shrinks later.
         val wanted = wantedWidth(s)
-        val changed = if (old == null || old.stopped != s.stopped || old.unlocked != s.unlocked || old.expandable != s.expandable) width.force(wanted)
+        val changed = if (old == null || old.stopped != s.stopped || old.unlocked != s.unlocked || old.expandable != s.expandable ||
+            (old.sub == null) != (s.sub == null)) width.force(wanted)
         else width.offer(wanted, now)
         if (shape == Shape.CAPSULE && changed && morph == null) resize(anim)
         if (shape == Shape.CARD && morph == null) refitCard(anim)
@@ -637,23 +698,57 @@ internal class OverlayCapsule(
 
     private fun wantedWidth(s: CapsuleState): Int {
         val density = ctx.resources.displayMetrics.density
-        val textPx = text.paint.measureText(s.line)
+        // The wider of the line and its second line, measured with the widest time it will show for a while.
+        val subPx = s.sub?.let { sub.paint.measureText(subText(it, Elapsed.WIDEST)) } ?: 0f
+        val textPx = maxOf(text.paint.measureText(s.line), subPx)
         val content = CapsuleMetrics.contentDp(textPx / density, s.unlocked && !s.stopped, s.stopped, s.expandable || shape == Shape.CARD) * density
         return CapsuleMetrics.widthPx(content, screenW, density)
     }
 
+    /**
+     * A new line rolls in: the old one slides up and fades (70 ms), the new one comes up from below
+     * into its place (220 ms, glide) — the island's text change.
+     */
     private fun setLine(line: String, animated: Boolean) {
         if (text.text?.toString() == line) return
         text.animate().cancel()
         if (!animated) {
             text.text = line
             text.alpha = 1f
+            text.translationY = 0f
             return
         }
-        text.animate().alpha(0f).setDuration(70).setInterpolator(OverlayMotion.emphasized).withEndAction {
+        val rise = ctx.dpf(6f)
+        text.animate().alpha(0f).translationY(-rise).setDuration(70).setInterpolator(OverlayMotion.emphasized).withEndAction {
             text.text = line
-            text.animate().alpha(1f).setDuration(OverlayMotion.QUICK_MS).setInterpolator(OverlayMotion.emphasized).start()
+            text.translationY = rise
+            text.animate().alpha(1f).translationY(0f).setDuration(220).setInterpolator(OverlayMotion.glide).start()
         }.start()
+    }
+
+    private var subBase: String? = null
+    private var startedAt: Long? = null
+
+    private fun subText(base: String, time: String?): String =
+        if (time == null) base else base + strings.separator + time
+
+    /** The second line now; while it shows with a time, again in a second. */
+    private val subTick = Runnable { tickSub() }
+
+    private fun tickSub() {
+        sub.removeCallbacks(subTick)
+        val base = subBase ?: return
+        val from = startedAt
+        val now = android.os.SystemClock.uptimeMillis()
+        sub.text = subText(base, from?.let { Elapsed.format(now - it) })
+        if (from != null && sub.isAttachedToWindow) sub.postDelayed(subTick, 1_000 - (now - from) % 1_000)
+    }
+
+    init {
+        sub.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) = tickSub()
+            override fun onViewDetachedFromWindow(v: View) { sub.removeCallbacks(subTick) }
+        })
     }
 
     private fun bindBody(s: CapsuleState) {
@@ -940,6 +1035,9 @@ internal class OverlayCapsule(
 internal class OverlaySurface(context: Context, private val c: OverlayPalette, private val header: View, private val body: View) : ViewGroup(context) {
     private val painter = SurfacePainter(context)
     private val radius = context.dpf(CapsuleMetrics.RADIUS_DP.toFloat())
+
+    /** The beam round the edge while DSH works. */
+    val beam = IslandBeam(this)
     private val headerH = context.dp(CapsuleMetrics.HEIGHT_DP)
 
     /** The body ends this far down into the header's upper margin: its last line reads as the line's own. */
@@ -1060,7 +1158,23 @@ internal class OverlaySurface(context: Context, private val c: OverlayPalette, p
         }
     }
 
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        beam.visible(isVisible && isAttachedToWindow)
+    }
+
+    override fun onDetachedFromWindow() {
+        beam.visible(false)
+        super.onDetachedFromWindow()
+    }
+
     override fun onDraw(canvas: Canvas) {
         painter.draw(canvas, rect, radius, c)
+    }
+
+    /** Over the rows: the beam runs round the edge on top of everything inside. */
+    override fun dispatchDraw(canvas: Canvas) {
+        super.dispatchDraw(canvas)
+        painter.drawBeam(canvas, rect, radius, c, beam.turn, beam.alpha)
     }
 }
