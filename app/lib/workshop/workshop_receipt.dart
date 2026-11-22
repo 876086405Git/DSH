@@ -9,7 +9,7 @@ const workshopReceiptName = '.workshop-source.json';
 class WorkshopReceipt {
   WorkshopReceipt({required this.kind, required this.id, required this.version, required this.sha256, required Uri origin})
     : origin = workshopOrigin(origin) {
-    if (!const {'pet', 'companion'}.contains(kind) || !workshopId(id) || WorkshopVersion.tryParse(version) == null || !workshopHash(sha256)) {
+    if (!const {'pet', 'companion', 'theme'}.contains(kind) || !workshopId(id) || WorkshopVersion.tryParse(version) == null || !workshopHash(sha256)) {
       workshopInvalid('workshop_install_record');
     }
   }

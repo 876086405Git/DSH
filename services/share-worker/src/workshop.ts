@@ -167,7 +167,7 @@ async function serveBlob(request: Request, env: Env, ctx: Ctx, meta: SubmissionM
   response.headers.set('Content-Type', 'application/zip'); return response;
 }
 async function publicRoute(request: Request, env: Env, ctx: Ctx, url: URL): Promise<Response> {
-  const picture = /^\/market\/workshop\/(pet|companion)\/[^/]+\/[^/]+\/[a-f0-9]{64}\/preview\/[a-f0-9]{64}\.png$/.test(url.pathname);
+  const picture = /^\/market\/workshop\/(pet|companion|theme)\/[^/]+\/[^/]+\/[a-f0-9]{64}\/preview\/[a-f0-9]{64}\.png$/.test(url.pathname);
   method(request, 'GET', 'HEAD'); await limitBurst(request, env, false, picture ? 'workshop-preview' : 'workshop');
   const flags = features(env), companions = url.pathname === '/market/companions.json';
   if (companions || url.pathname.startsWith('/market/workshop/companion/')) need(flags.companion, 'companion_disabled', 503);
@@ -187,7 +187,7 @@ async function publicRoute(request: Request, env: Env, ctx: Ctx, url: URL): Prom
       !state.withdrawn.some(w => releaseId(w) === key), 'not_found', 404);
     return servePreview(request, env, submission.preview);
   }
-  const match = /^\/market\/workshop\/(pet|companion)\/([^/]+)\/([^/]+)\/([a-f0-9]{64})\.zip$/.exec(url.pathname);
+  const match = /^\/market\/workshop\/(pet|companion|theme)\/([^/]+)\/([^/]+)\/([a-f0-9]{64})\.zip$/.exec(url.pathname);
   need(match, 'not_found', 404);
   const s = snapshot.state.current.map(sid => find(snapshot.state, sid)).find(s => assetUrl(s.metadata) === url.pathname);
   need(s, 'not_found', 404);

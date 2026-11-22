@@ -6,11 +6,11 @@ export const UPLOAD_CAP = 50 * 1024 * 1024;
 export const LEGACY_UPLOAD_CAP = 20 * 1024 * 1024;
 export const EXPANDED_CAP = 256 * 1024 * 1024;
 export const MEMBER_CAP = 32 * 1024 * 1024;
-export const PREVIEW_CONTRACT = { schema: 1, sources: ['pet-idle', 'companion-preview'], format: 'png',
+export const PREVIEW_CONTRACT = { schema: 1, sources: ['pet-idle', 'companion-preview', 'theme-preview'], format: 'png',
   maxWidth: 512, maxHeight: 512, maxPixels: 262144, maxBytes: 2097152 } as const;
 export type PreviewSource = typeof PREVIEW_CONTRACT.sources[number];
 export interface PublicPreview { path: string; sha256: string; size: number; width: number; height: number }
-export const KINDS = ['pet', 'companion'] as const;
+export const KINDS = ['pet', 'companion', 'theme'] as const;
 export type WorkshopKind = typeof KINDS[number];
 export const LICENSES = ['CC0-1.0', 'CC-BY-4.0', 'CC-BY-SA-4.0', 'MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'LicenseRef-Author-Permission'] as const;
 export class WorkshopError extends Error {
@@ -22,7 +22,7 @@ export function requireWorkshop(condition: unknown, code: string, status = 400):
 export const encoder = new TextEncoder();
 export const hash = (value: unknown): value is string => typeof value === 'string' && value.length === 64 && /^[a-f0-9]{64}$/.test(value);
 export const validVersion = (value: unknown): value is string => catalogVersion(value) && !/[\r\n]/.test(value);
-export const kind = (value: unknown): value is WorkshopKind => value === 'pet' || value === 'companion';
+export const kind = (value: unknown): value is WorkshopKind => value === 'pet' || value === 'companion' || value === 'theme';
 export const id = (value: unknown): value is string => typeof value === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length <= 40 && value.trim() === value;
 // Dart VM String.trim also treats NEXT LINE as whitespace. This predicate
 // checks nonblankness only; metadata and reasons retain their original text.
@@ -46,7 +46,7 @@ export function validMeta(value: unknown): value is SubmissionMeta {
     !text(value.author, 256) || typeof value.license !== 'string' || !LICENSES.includes(value.license as typeof LICENSES[number]) ||
     !text(value.source, 2048) || !hash(value.sha256) || !whole(value.size, 1, UPLOAD_CAP) || value.rightsConfirmed !== true ||
     value.description !== undefined && value.description !== '' && !text(value.description, 512) ||
-    value.previewSource !== undefined && value.previewSource !== (value.kind === 'pet' ? 'pet-idle' : 'companion-preview') ||
+    value.previewSource !== undefined && value.previewSource !== (value.kind === 'pet' ? 'pet-idle' : value.kind === 'theme' ? 'theme-preview' : 'companion-preview') ||
     value.tags !== undefined && (!Array.isArray(value.tags) || value.tags.length > 8 ||
       !value.tags.every(tag => text(tag, 32)) || new Set(value.tags).size !== value.tags.length)) return false;
   try {

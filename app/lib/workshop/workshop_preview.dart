@@ -16,7 +16,10 @@ final class WorkshopPreviewInput {
   WorkshopPreviewInput._companion(this._png, this.width, this.height)
       : source = 'companion-preview';
 
-  factory WorkshopPreviewInput.companionPng(Uint8List bytes) {
+  WorkshopPreviewInput._theme(this._png, this.width, this.height)
+      : source = 'theme-preview';
+
+  static (Uint8List, int, int) _validateCoverPng(Uint8List bytes) {
     if (bytes.isEmpty || bytes.length > workshopPreviewBytes) {
       workshopInvalid('workshop_preview_size');
     }
@@ -34,7 +37,17 @@ final class WorkshopPreviewInput {
     if (!pngIntact(snapshot)) {
       workshopInvalid('workshop_preview_png');
     }
+    return (snapshot, width, height);
+  }
+
+  factory WorkshopPreviewInput.companionPng(Uint8List bytes) {
+    final (snapshot, width, height) = _validateCoverPng(bytes);
     return WorkshopPreviewInput._companion(snapshot, width, height);
+  }
+
+  factory WorkshopPreviewInput.themePng(Uint8List bytes) {
+    final (snapshot, width, height) = _validateCoverPng(bytes);
+    return WorkshopPreviewInput._theme(snapshot, width, height);
   }
 
   final String source;
@@ -84,6 +97,34 @@ Uint8List workshopCompanionPreviewZip((Uint8List, WorkshopPreviewInput) input) {
     expanded += member.size;
   }
   if (archive.files.length >= 1000 || expanded > workshopExpandedBytes) {
+    workshopInvalid('workshop_body_too_large');
+  }
+  archive.add(ArchiveFile.bytes(name, png));
+  final encoded = ZipEncoder().encode(archive);
+  if (encoded.length > workshopArchiveBytes) {
+    workshopInvalid('workshop_body_too_large');
+  }
+  return Uint8List.fromList(encoded);
+}
+
+Uint8List workshopThemePreviewZip((Uint8List, WorkshopPreviewInput) input) {
+  final (bytes, preview) = input;
+  if (preview.source != 'theme-preview') {
+    workshopInvalid('workshop_bad_metadata');
+  }
+  final png = preview._png!;
+  final archive = ZipDecoder().decodeBytes(bytes);
+  const name = 'preview.png';
+  final alias = petNameAlias(name);
+  var expanded = png.length;
+  for (final member in archive.files) {
+    final existing = petNameAlias(member.name);
+    if (existing == alias || existing.startsWith('$alias/')) {
+      workshopInvalid('workshop_preview_conflict');
+    }
+    expanded += member.size;
+  }
+  if (archive.files.length >= 256 || expanded > workshopExpandedBytes) {
     workshopInvalid('workshop_body_too_large');
   }
   archive.add(ArchiveFile.bytes(name, png));

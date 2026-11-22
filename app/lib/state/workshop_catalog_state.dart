@@ -7,7 +7,7 @@ import '../workshop/workshop_models.dart';
 import '../workshop/workshop_repository.dart';
 import 'workshop_dependencies.dart';
 
-enum WorkshopKindFilter { all, pet, companion }
+enum WorkshopKindFilter { all, pet, companion, theme }
 
 const _unchanged = Object();
 

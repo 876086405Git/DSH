@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../l10n/l10n.dart';
+import '../../themes/theme_pack.dart';
 import 'oklch.dart';
 import 'palette.dart';
 
@@ -269,6 +270,64 @@ class AppAccent {
       if (p.id == id) return p;
     }
     return mist;
+  }
+
+  /// 由 [ThemePack] 构造配色:支持细粒度主色、气泡色、光晕与中性色相覆盖。
+  factory AppAccent.fromThemePack(ThemePack pack, {String? label}) {
+    final displayLabel = label ?? pack.displayName(AppLocale.isEnglish ? 'en' : 'zh');
+    if (pack.id == 'paper' || pack.publicId == 'paper') {
+      return AppAccent(
+        id: pack.id,
+        label: displayLabel,
+        seed: Color(pack.palette.seed),
+        pressed: const Color(0xFF873927),
+        container: Color(pack.palette.light.primaryContainer ?? 0xFFF5E4DA),
+        onContainer: Color(pack.palette.light.onPrimaryContainer ?? 0xFF52271D),
+        bubble: Color(pack.palette.light.userBubble ?? 0xFFECE8E2),
+        glow: Color(pack.palette.light.glowPrimary ?? 0xFFD7A790),
+        seedDark: Color(pack.palette.seedDark ?? 0xFFE4A58C),
+        pressedDark: const Color(0xFFD39178),
+        onSeedDark: const Color(0xFF321C16),
+        containerDark: Color(pack.palette.dark.primaryContainer ?? 0xFF4F352C),
+        onContainerDark: Color(pack.palette.dark.onPrimaryContainer ?? 0xFFF1DFD5),
+        bubbleDark: Color(pack.palette.dark.userBubble ?? 0xFF36322E),
+        glowDark: Color(pack.palette.dark.glowPrimary ?? 0xFF845442),
+        tintHue: pack.palette.tintHue ?? 74,
+        tintChroma: pack.palette.tintChroma,
+        haze: Color(pack.palette.light.glowSecondary ?? 0xFFECD4A9),
+        hazeDark: Color(pack.palette.dark.glowSecondary ?? 0xFF624939),
+      );
+    }
+    final derived = AppAccent.derive(
+      Color(pack.palette.seed),
+      id: pack.id,
+      label: displayLabel,
+    );
+    final p = pack.palette;
+    return AppAccent(
+      id: pack.id,
+      label: displayLabel,
+      seed: p.light.primary != null ? Color(p.light.primary!) : derived.seed,
+      pressed: derived.pressed,
+      container: p.light.primaryContainer != null ? Color(p.light.primaryContainer!) : derived.container,
+      onContainer: p.light.onPrimaryContainer != null ? Color(p.light.onPrimaryContainer!) : derived.onContainer,
+      bubble: p.light.userBubble != null ? Color(p.light.userBubble!) : derived.bubble,
+      glow: p.light.glowPrimary != null ? Color(p.light.glowPrimary!) : derived.glow,
+      seedDark: p.dark.primary != null
+          ? Color(p.dark.primary!)
+          : (p.seedDark != null ? Color(p.seedDark!) : derived.seedDark),
+      pressedDark: derived.pressedDark,
+      onSeedDark: p.dark.onPrimary != null ? Color(p.dark.onPrimary!) : derived.onSeedDark,
+      containerDark: p.dark.primaryContainer != null ? Color(p.dark.primaryContainer!) : derived.containerDark,
+      onContainerDark:
+          p.dark.onPrimaryContainer != null ? Color(p.dark.onPrimaryContainer!) : derived.onContainerDark,
+      bubbleDark: p.dark.userBubble != null ? Color(p.dark.userBubble!) : derived.bubbleDark,
+      glowDark: p.dark.glowPrimary != null ? Color(p.dark.glowPrimary!) : derived.glowDark,
+      tintHue: p.tintHue ?? derived.tintHue,
+      tintChroma: p.tintChroma,
+      haze: p.light.glowSecondary != null ? Color(p.light.glowSecondary!) : derived.haze,
+      hazeDark: p.dark.glowSecondary != null ? Color(p.dark.glowSecondary!) : derived.hazeDark,
+    );
   }
 
   // ══ 现推:自定义、跟随壁纸 ═══════════════════════════════════════════

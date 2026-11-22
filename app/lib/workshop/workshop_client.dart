@@ -328,7 +328,7 @@ class WorkshopClient {
   }
 
   Future<String> report({required String kind, required String id, required String version, required String reason, required WorkshopCredential credential}) async {
-    if (!const {'pet', 'companion'}.contains(kind) || !workshopId(id) || WorkshopVersion.tryParse(version) == null) workshopInvalid('workshop_bad_request');
+    if (!const {'pet', 'companion', 'theme'}.contains(kind) || !workshopId(id) || WorkshopVersion.tryParse(version) == null) workshopInvalid('workshop_bad_request');
     if (!workshopText(reason, 2000)) workshopInvalid('workshop_bad_reason');
     final result = await _json('POST', '/api/workshop/v1/reports', headers: await _identity(credential),
       body: {'kind': kind, 'id': id, 'version': version, 'reason': reason});

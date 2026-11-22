@@ -8,6 +8,8 @@ import 'package:path_provider/path_provider.dart';
 import '../companion/companion_float.dart' show companionFloatStoreProvider;
 import '../companion/companion_pack.dart';
 import '../pets/pet_library.dart';
+import '../themes/theme_library.dart';
+import '../themes/theme_pack.dart';
 import '../workshop/workshop_models.dart';
 import '../workshop/workshop_preview.dart';
 import '../workshop/workshop_repository.dart';
@@ -17,28 +19,33 @@ import 'workshop_publication.dart';
 
 class WorkshopPublishSource {
   const WorkshopPublishSource({required this.kind, required this.localId,
-    this.name, this.author, this.license, this.source, this.preview, this.library, this.store});
+    this.name, this.author, this.license, this.source, this.preview, this.library, this.store, this.themeLibrary});
   final String kind, localId;
   final String? name, author, license, source;
   final WorkshopPreviewInput? preview;
   String? get previewSource => preview?.source;
 
   /// A picked file, unpacked on its own ([workshopFileStagerProvider]): the
-  /// pet is packed from [library], the companion from [store], instead of
-  /// the person's own.
+  /// pet is packed from [library], the companion from [store], or the theme
+  /// from [themeLibrary], instead of the person's own.
   final PetLibrary? library;
   final CompanionPackStore? store;
-  bool get fromFile => library != null || store != null;
+  final ThemeLibrary? themeLibrary;
+  bool get fromFile => library != null || store != null || themeLibrary != null;
 
   WorkshopPublishSource withPreview(WorkshopPreviewInput? value) => WorkshopPublishSource(
     kind: kind, localId: localId, name: name, author: author, license: license, source: source, preview: value,
-    library: library, store: store);
+    library: library, store: store, themeLibrary: themeLibrary);
 
   WorkshopPublicationInput initialInput() {
-    final candidate = kind == 'pet' && localId.startsWith(userPetPrefix)
-        ? localId.substring(userPetPrefix.length) : '';
+    final candidate = switch (kind) {
+      'pet' when localId.startsWith(userPetPrefix) => localId.substring(userPetPrefix.length),
+      'theme' => publicThemeIdFor(localId),
+      _ => '',
+    };
+    final prefillTitle = kind == 'pet' || kind == 'theme';
     return WorkshopPublicationInput(id: workshopId(candidate) ? candidate : '',
-      titleZh: kind == 'pet' ? name ?? '' : '', titleEn: kind == 'pet' ? name ?? '' : '',
+      titleZh: prefillTitle ? name ?? '' : '', titleEn: prefillTitle ? name ?? '' : '',
       author: author ?? '', license: license ?? '', source: source ?? '');
   }
 }
@@ -55,6 +62,7 @@ class WorkshopPublishSources {
 
 final workshopSourcesLoaderProvider = Provider<Future<WorkshopPublishSources> Function()>((ref) {
   final pets = ref.watch(petLibraryProvider);
+  final themes = ref.watch(themeLibraryProvider);
   final companion = ref.watch(companionFloatStoreProvider);
   return () async {
     final values = <WorkshopPublishSource>[], issues = <String, WorkshopException>{};
@@ -77,6 +85,14 @@ final workshopSourcesLoaderProvider = Provider<Future<WorkshopPublishSources> Fu
       }
     } on Object catch (error) {
       issues['companion'] = workshopLocalError(error);
+    }
+    try {
+      for (final theme in await themes.list()) {
+        values.add(WorkshopPublishSource(kind: 'theme', localId: theme.id, name: theme.name,
+          author: theme.author, license: theme.license, source: theme.source));
+      }
+    } on Object catch (error) {
+      issues['theme'] = workshopLocalError(error);
     }
     return WorkshopPublishSources(values: values, issues: issues);
   };
@@ -173,6 +189,13 @@ final workshopFileStagerProvider = Provider<WorkshopFileStager>((ref) {
         return WorkshopPublishSource(kind: 'companion', localId: 'file', name: character.name,
           author: character.author, license: character.license, source: character.source, store: store);
       }
+      if (await _hasThemeManifest(zip)) {
+        final themeLib = ThemeLibrary(() async => Directory('${root.path}/themes'));
+        final installed = await themeLib.install(zip);
+        final pack = await themeLib.load(installed.id);
+        return WorkshopPublishSource(kind: 'theme', localId: installed.id, name: pack.name,
+          author: pack.author, license: pack.license, source: pack.source, themeLibrary: themeLib);
+      }
       final library = PetLibrary(() async => Directory('${root.path}/pets'));
       final installed = await library.install(zip);
       final pack = await library.load(installed.id);
@@ -191,6 +214,19 @@ Future<bool> _hasLive2DModel(File zip) async {
     return ZipDecoder().decodeStream(input).files.any((f) => f.name.toLowerCase().endsWith('.model3.json'));
   } on Object {
     return false; // Not a zip: the pet import says so in its own words.
+  } finally {
+    await input.close();
+  }
+}
+
+Future<bool> _hasThemeManifest(File zip) async {
+  final input = InputFileStream(zip.path);
+  try {
+    return ZipDecoder().decodeStream(input).files.any(
+      (f) => RegExp(r'^(?:[^/]+/)?theme\.json$').hasMatch(f.name),
+    );
+  } on Object {
+    return false;
   } finally {
     await input.close();
   }
@@ -218,6 +254,7 @@ final workshopPrepareDraftProvider = Provider<WorkshopPrepareDraft>((ref) {
   // early factory failure now; invoking the function still reports that error.
   unawaited(repository.then<void>((_) {}, onError: (Object error, StackTrace stack) {}));
   final pets = ref.watch(petLibraryProvider);
+  final themes = ref.watch(themeLibraryProvider);
   final companion = ref.watch(companionFloatStoreProvider);
   final directory = ref.watch(workshopDirectoryProvider);
   return (source, publication) async {
@@ -236,6 +273,14 @@ final workshopPrepareDraftProvider = Provider<WorkshopPrepareDraft>((ref) {
       final WorkshopPreparedUpload upload;
       if (source.kind == 'pet') {
         upload = await repo.preparePet(source.library ?? pets, source.localId, file, publication);
+      } else if (source.kind == 'theme') {
+        upload = await repo.prepareTheme(
+          source.themeLibrary ?? themes,
+          source.localId,
+          file,
+          publication,
+          preview: source.preview,
+        );
       } else if (source.kind == 'companion' && (source.localId == 'companion' || source.store != null)) {
         // No personal name, persona, runtime, or private preference is passed.
         upload = await repo.prepareCompanion(source.store ?? await companion(), file, publication, preview: source.preview);

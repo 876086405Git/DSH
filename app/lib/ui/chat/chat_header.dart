@@ -129,6 +129,29 @@ class _ChatHeaderState extends ConsumerState<ChatHeader> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final dsh = DshColors.of(context);
+    final themeStyle = DshThemeStyle.of(context);
+    final GlassStyle? headerButtonStyle = switch (themeStyle.components.headerStyle) {
+      ThemeHeaderStyle.glass => null,
+      ThemeHeaderStyle.ghost => const GlassStyle(
+        fill: Colors.transparent,
+        fallbackFill: Colors.transparent,
+        hairline: Colors.transparent,
+        rim: Colors.transparent,
+      ),
+      ThemeHeaderStyle.outlined => GlassStyle(
+        fill: Colors.transparent,
+        fallbackFill: Colors.transparent,
+        hairline: colors.outlineVariant,
+        hairlineWidth: 1.0,
+        rim: Colors.transparent,
+      ),
+      ThemeHeaderStyle.minimal => GlassStyle(
+        fill: colors.surfaceContainerLow.withValues(alpha: 0.72),
+        fallbackFill: colors.surfaceContainerLow,
+        hairline: Colors.transparent,
+        rim: Colors.transparent,
+      ),
+    };
     final top = MediaQuery.paddingOf(context).top;
     final barHeight = ChatHeader.barHeightOf(context);
     final pillHeight = ChatHeader.pillHeightOf(context);
@@ -178,6 +201,7 @@ class _ChatHeaderState extends ConsumerState<ChatHeader> {
                             dimension: 44,
                             child: GlassSurface(
                               tier: GlassTier.chrome,
+                              style: headerButtonStyle,
                               circle: true,
                               grouped: true,
                               onTap: widget.onOpenDrawer,
@@ -193,6 +217,7 @@ class _ChatHeaderState extends ConsumerState<ChatHeader> {
                     hint: widget.onTitleTap == null ? null : l10n.chatViewChatDetails,
                     child: GlassSurface(
                       tier: GlassTier.chrome,
+                      style: headerButtonStyle,
                       stadium: true,
                       grouped: true,
                       onTap: widget.onTitleTap,
@@ -285,6 +310,7 @@ class _ChatHeaderState extends ConsumerState<ChatHeader> {
                             dimension: 44,
                             child: GlassSurface(
                               tier: GlassTier.chrome,
+                              style: headerButtonStyle,
                               circle: true,
                               grouped: true,
                               onTap: onCall,
@@ -306,6 +332,7 @@ class _ChatHeaderState extends ConsumerState<ChatHeader> {
                                   dimension: 44,
                                   child: GlassSurface(
                                     tier: GlassTier.chrome,
+                                    style: headerButtonStyle,
                                     circle: true,
                                     grouped: true,
                                     onTap: widget.onNewChat,

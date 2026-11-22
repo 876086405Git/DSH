@@ -300,9 +300,49 @@ class SuggestionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dsh = DshColors.of(context);
+    final scheme = theme.colorScheme;
+    final themeStyle = DshThemeStyle.of(context);
+    final cardVariant = themeStyle.components.suggestionCardStyle;
     final tint = suggestionTintColor(context, suggestion.tint);
     final detail = suggestion.detail;
-    final shape = AppShape.outlined(quietCardRim(theme), radius: AppShape.lg, width: 0.5);
+    final shape = themeStyle.pack == null
+        ? AppShape.outlined(quietCardRim(theme), radius: AppShape.lg, width: 0.5)
+        : switch (cardVariant) {
+            ThemeSuggestionCardStyle.glass => AppShape.outlined(
+              quietCardRim(theme),
+              radius: themeStyle.scaleRadius(AppShape.lg),
+              width: 0.5,
+            ),
+            ThemeSuggestionCardStyle.paper => AppShape.outlined(
+              scheme.outlineVariant,
+              radius: themeStyle.scaleRadius(AppShape.md),
+              width: themeStyle.borderWidth.clamp(0.5, 2.0),
+            ),
+            ThemeSuggestionCardStyle.outlined => AppShape.outlined(
+              scheme.outline,
+              radius: themeStyle.scaleRadius(AppShape.md),
+              width: themeStyle.borderWidth.clamp(1.0, 2.0),
+            ),
+            ThemeSuggestionCardStyle.minimal => AppShape.outlined(
+              Colors.transparent,
+              radius: themeStyle.scaleRadius(AppShape.sm),
+              width: 0,
+            ),
+          };
+    final cardFill = switch (cardVariant) {
+      ThemeSuggestionCardStyle.glass => quietChipFill(theme),
+      ThemeSuggestionCardStyle.paper => scheme.surfaceContainerLow,
+      ThemeSuggestionCardStyle.outlined => Colors.transparent,
+      ThemeSuggestionCardStyle.minimal => Colors.transparent,
+    };
+    final badgeFill = switch (cardVariant) {
+      ThemeSuggestionCardStyle.paper || ThemeSuggestionCardStyle.outlined => Colors.transparent,
+      _ => tint.withValues(alpha: 0.14),
+    };
+    final iconColor = switch (cardVariant) {
+      ThemeSuggestionCardStyle.paper => scheme.primary,
+      _ => tint,
+    };
     final tap = enabled ? onTap : null;
     return Semantics(
       button: true,
@@ -313,7 +353,7 @@ class SuggestionCard extends StatelessWidget {
       child: Pressable(
         enabled: tap != null,
         child: Material(
-          color: quietChipFill(theme),
+          color: cardFill,
           shape: shape,
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -328,12 +368,12 @@ class SuggestionCard extends StatelessWidget {
                 children: [
                   DecoratedBox(
                     decoration: ShapeDecoration(
-                      color: tint.withValues(alpha: 0.14),
+                      color: badgeFill,
                       shape: const SquircleBorder(borderRadius: AppShape.radiusSm),
                     ),
                     child: SizedBox.square(
                       dimension: SuggestionCardMetrics.badge,
-                      child: Icon(suggestion.icon, size: SuggestionCardMetrics.glyph, color: tint),
+                      child: Icon(suggestion.icon, size: SuggestionCardMetrics.glyph, color: iconColor),
                     ),
                   ),
                   const SizedBox(width: SuggestionCardMetrics.badgeGap),
@@ -397,8 +437,10 @@ class SuggestionCards extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = SuggestionCardMetrics.gap;
+        final preferGrid = DshThemeStyle.of(context).emptyState.suggestionsDisplay == ThemeSuggestionsDisplay.grid;
+        final minCell = preferGrid ? 128.0 : SuggestionCardMetrics.minCell;
         final cell = (constraints.maxWidth - gap) / 2;
-        final columns = cell >= SuggestionCardMetrics.minCell ? 2 : 1;
+        final columns = cell >= minCell ? 2 : 1;
         // The room beside the badge; every detail on one line, or none.
         final textWidth =
             (columns == 2 ? cell : constraints.maxWidth) -
