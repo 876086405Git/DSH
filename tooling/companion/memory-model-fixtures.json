@@ -20,7 +20,7 @@
     },
     {
       "path": "app/test/companion/companion_invite_test.dart",
-      "sha256": "07f4eee7ceab3af908303b0b3674e8fe44af97c7ff0b641f3cca3e14c665bab1"
+      "sha256": "1f7aa9bb0947a988a7519d377f9bf011ddc740401a541619e8608c2820e53f7d"
     },
     {
       "path": "app/test/companion/companion_light_test.dart",

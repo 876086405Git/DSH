@@ -305,8 +305,13 @@ class _Room {
     }
   }
 
+  /// Fake seconds, each preceded by one real event-loop turn. Leaving an
+  /// `await for` early (the light reply returns at message_stop) awaits a
+  /// subscription cancel whose completed future lives in the root zone, so its
+  /// continuation is a real microtask that fake pumps alone never run.
   Future<void> wait(Duration time) async {
     for (var left = time; left > Duration.zero; left -= const Duration(seconds: 1)) {
+      await tester.runAsync(() async {});
       await tester.pump(const Duration(seconds: 1));
     }
   }
@@ -881,6 +886,9 @@ void main() {
     await room.wait(const Duration(seconds: 6));
     expect(find.text(_followup), findsNothing);
     final stops = calls.where((call) => call.method == 'stop').length;
+    // The framework only accepts the real path from resumed to paused.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
     expect(calls.where((call) => call.method == 'stop').length, greaterThan(stops));
