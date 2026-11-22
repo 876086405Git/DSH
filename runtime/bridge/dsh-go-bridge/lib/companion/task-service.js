@@ -20,9 +20,9 @@ export function mountCompanionTasks(ctx) {
         ...(receipts?['host.receipts_to_sheet']:[])], receiptFormats: receipts ? receiptInputFormats() : [],
         foreground:(id,rev,signal)=>runner.foreground(id,rev,signal),
         foregroundActive:(id,rev)=>runner.foregroundActive(id,rev),
-        wake:id=>store.read(id).kind==='host.find_draft'?find?.wake(id):
-          store.read(id).kind==='host.compare_drafts'?compare?.wake(id):
-            store.read(id).kind==='host.receipts_to_sheet'?receipts?.wake(id):runner.wake(id),
+        // Dispatch only needs the kind; the runners read the task themselves.
+        wake:id=>{const {kind}=store.stored(id);return kind==='host.find_draft'?find?.wake(id):
+          kind==='host.compare_drafts'?compare?.wake(id):kind==='host.receipts_to_sheet'?receipts?.wake(id):runner.wake(id);},
         stop:async()=>{await Promise.all([runner.stop(),find?.stop(),compare?.stop(),receipts?.stop()]);await execution.close();}});
       taskCtx.effect(()=>()=>store.close(),'dsh-go-bridge: durable companion tasks');
       taskCtx.provide('dshGoCompanionTasks',store);
