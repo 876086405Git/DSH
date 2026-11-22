@@ -13,6 +13,7 @@ import 'performance/refresh_rate.dart';
 import 'state/app_info.dart';
 import 'state/appearance_state.dart';
 import 'state/locale_state.dart';
+import 'state/notify_state.dart' show notifyChannelProvider;
 import 'state/star_prompt.dart' show starPromptGateProvider, starPromptProvider;
 import 'state/tile_style_state.dart';
 import 'ui/chat/dsh_ui/dsh_ui_model.dart' show DshUiAppAccent;
@@ -95,7 +96,10 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
   /// 跟随系统: the system language changed while the app was open.
   @override
   void didChangeLocales(List<Locale>? locales) {
-    if (ref.read(appLanguageProvider) == AppLanguage.system) setState(() {});
+    if (ref.read(appLanguageProvider) != AppLanguage.system) return;
+    setState(() {});
+    // Android re-registers the notification channels under the new language.
+    unawaited(ref.read(notifyChannelProvider).status());
   }
 
   /// The system's remove-animations setting changed while the app was open: page
