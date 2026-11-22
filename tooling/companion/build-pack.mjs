@@ -57,7 +57,8 @@ try {
 
   // Character: model data only. The app refuses scripts in this folder.
   const character = join(work, 'character');
-  cpSync(args.character, character, { recursive: true });
+  const output = resolve(args.out);
+  cpSync(args.character, character, { recursive: true, filter: (source) => resolve(source) !== output });
   cpSync(args.config, join(character, 'character.json'));
 
   const files = walk(work).sort();
