@@ -131,6 +131,27 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('toggling one selection keeps the list and other row inputs', (tester) async {
+    final sessions = List.generate(1347, _Session.new);
+    final container = await _pump(tester, sessions);
+    container.read(drawerSelectionProvider.notifier).start('s0');
+    await tester.pump();
+    final listFinder = find.descendant(of: find.byType(DrawerConversationList), matching: find.byType(ListView));
+    final list = tester.widget<ListView>(listFinder);
+    for (final s in sessions) {
+      s.titleReads = 0;
+    }
+
+    container.read(drawerSelectionProvider.notifier).toggle('s1');
+    await tester.pump();
+    expect(tester.widget<ListView>(listFinder), same(list));
+    expect(sessions.every((s) => s.titleReads == 0), isTrue);
+    final tile = tester.widget<SessionTile>(find.descendant(of: _tile('s1'), matching: find.byType(SessionTile)));
+    expect(tile.selected, isTrue);
+    expect(container.read(drawerSelectionProvider), {'s0', 's1'});
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('selection keeps the scroll offset and the row callbacks target the current session', (tester) async {
     final opened = <String>[];
     final held = <String>[];
