@@ -1,5 +1,5 @@
 // Manual Android entry point. Not a test and never registered in CI.
-// The launcher supplies the key once over adb loopback; no key is compiled in.
+// The launcher writes one private configuration over adb stdin; no compiled key.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -51,19 +51,22 @@ class _ReplayPageState extends State<_ReplayPage> {
   Future<void> start() async {
     if (!mounted || cancelled) return;
     try {
-      const port = int.fromEnvironment('A3_CONFIG_PORT');
-      const token = String.fromEnvironment('A3_CONFIG_TOKEN');
-      if (port < 1 || token.isEmpty) throw StateError('Use tooling/companion/run_agent_a3.py');
-      final client = http.Client();
+      final file = File('${Directory.systemTemp.path}/dsh-a3-config.json');
+      debugPrint('A3_CONFIG_READY:${jsonEncode({'path': file.path})}');
       late final Map<String, Object?> config;
       try {
-        final response = await client
-            .get(Uri.parse('http://127.0.0.1:$port/config/$token'))
-            .timeout(const Duration(seconds: 15));
-        if (response.statusCode != 200) throw StateError('One-use configuration unavailable');
-        config = Map<String, Object?>.from(jsonDecode(response.body) as Map);
+        final waiting = Stopwatch()..start();
+        while (!await file.exists()) {
+          if (!mounted || cancelled) return;
+          if (waiting.elapsed >= const Duration(seconds: 15)) {
+            throw StateError('Use tooling/companion/run_agent_a3.py');
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        if (!mounted || cancelled) return;
+        config = Map<String, Object?>.from(jsonDecode(await file.readAsString()) as Map);
       } finally {
-        client.close();
+        if (await file.exists()) await file.delete();
       }
       if (!mounted || cancelled) return;
       replay = _Replay(config, (value) {
@@ -127,6 +130,7 @@ class _Replay {
   final checks = <Map<String, Object?>>[];
   final human = StringBuffer('# A3 human sample review\n\n');
   CompanionAgent? agent;
+  void Function()? cancelTurn;
   bool stopped = false;
   int httpCount = 0;
   int sequence = 0;
@@ -135,6 +139,7 @@ class _Replay {
 
   void stop() {
     stopped = true;
+    cancelTurn?.call();
     agent?.stop();
   }
 
@@ -160,14 +165,15 @@ class _Replay {
     events.writeAsStringSync('$safe\n', mode: FileMode.append, flush: true);
   }
 
-  http.Client client() => _RecordingClient(
+  http.Client client({required bool Function() isCurrent, required bool agentRequest}) => _RecordingClient(
     http.Client(),
     before: (request) {
-      if (stopped) throw StateError('Manual replay stopped');
+      if (stopped || !isCurrent()) throw StateError('Manual replay turn stopped');
       if (httpCount >= (config['maxHttp']! as int)) throw StateError('Manual HTTP limit reached');
       httpCount++;
       record('http_request', {
         'http': httpCount,
+        'agentRequest': agentRequest,
         'method': request.method,
         'uri': request.url.toString(),
         'body': decode(request.body),
@@ -176,8 +182,10 @@ class _Replay {
     },
     after: (id, status, body, complete) {
       record('http_response', {'http': id, 'status': status, 'body': body, 'streamComplete': complete});
-      for (final call in _requestedTools(body)) {
-        record('model_tool_request', {'http': id, ...call});
+      if (agentRequest) {
+        for (final call in _requestedTools(body)) {
+          record('model_tool_request', {'http': id, ...call});
+        }
       }
     },
   );
@@ -226,7 +234,7 @@ class _Replay {
       }
       progress('Running ${item['title']}');
       try {
-        await scenario(Map<String, Object?>.from(item), clock);
+        await scenario(Map<String, Object?>.from(item), await native.clock());
       } on Object catch (error, stack) {
         record('scenario_error', {'error': '$error', 'stack': '$stack'});
         checks.add({'case': caseId, 'status': 'INCOMPLETE', 'reason': '$error'});
@@ -242,12 +250,14 @@ class _Replay {
         .where((row) => row['turn'] != null && const {'AUTOMATED_PASS', 'FAIL'}.contains(row['status']))
         .toList();
     final passingTurns = judgedTurns.where((row) => row['status'] == 'AUTOMATED_PASS').length;
+    final replayOutcome = stopped || (counts['INCOMPLETE'] ?? 0) > 0 ? 'INCOMPLETE' : 'COMPLETE';
     final summary = {
       'schema': 1,
       'runId': config['runId'],
       'parent': config['parent'],
       'fixture': config['fixture'],
       'manual': true,
+      'replayOutcome': replayOutcome,
       'counts': counts,
       'httpRequests': httpCount,
       'modelToolRequests': rows.where((r) => r['kind'] == 'model_tool_request').length,
@@ -259,7 +269,7 @@ class _Replay {
         'passed': passingTurns,
         'judged': judgedTurns.length,
         'rate': judgedTurns.isEmpty ? null : passingTurns / judgedTurns.length,
-        'excludes': ['ENV_UNAVAILABLE', 'INCOMPLETE', 'affinity fixture checks'],
+        'excludes': ['ENV_UNAVAILABLE', 'PATH_NOT_EXERCISED', 'INCOMPLETE', 'affinity fixture checks'],
       },
       'humanToolCallAccuracy': null,
       'correctnessMeaning': 'Structural tool checks only; meaning and factual scope require the supplied human rubric.',
@@ -285,26 +295,44 @@ class _Replay {
     File('${output.path}/human-review.md')
         .writeAsStringSync(human.toString().replaceAll(key, '[REDACTED_API_KEY]'), flush: true);
     progress('Finished. The launcher will collect the three result files.');
-    debugPrint('A3_FINISHED:${jsonEncode({'runId': config['runId'], 'directory': output.path})}');
+    debugPrint(
+      'A3_FINISHED:${jsonEncode({'runId': config['runId'], 'directory': output.path, 'replayOutcome': replayOutcome})}',
+    );
   }
 
   Future<void> scenario(Map<String, Object?> item, CompanionReminderClock initial) async {
-    var now = initial.utcMs;
+    var clockBase = initial.utcMs;
+    final elapsed = Stopwatch()..start();
+    int? historicalNow;
+    int nowMilliseconds() => historicalNow ?? clockBase + elapsed.elapsedMilliseconds;
     final offset = initial.offsetSeconds ~/ 60;
     final affinity = item['affinityReplay'] as Map?;
-    if (affinity != null) now -= (affinity['completeDays']! as int) * 86400000;
+    if (affinity != null) {
+      final local = DateTime.fromMillisecondsSinceEpoch(initial.utcMs + offset * 60000, isUtc: true);
+      final firstNoon = DateTime.utc(local.year, local.month, local.day, 12)
+          .subtract(Duration(days: affinity['completeDays']! as int));
+      historicalNow = firstNoon.millisecondsSinceEpoch - offset * 60000;
+    }
     final database = sqlite3.openInMemory();
     final root = await Directory('${output.path}/${item['id']}').create();
     final memory = CompanionMemoryOwner(
-      CompanionMemoryStore(database, nowMilliseconds: () => now),
-      CompanionLocal.at(root, nowMilliseconds: () => now),
-      nowMilliseconds: () => now,
+      CompanionMemoryStore(database, nowMilliseconds: nowMilliseconds),
+      CompanionLocal.at(root, nowMilliseconds: nowMilliseconds),
+      nowMilliseconds: nowMilliseconds,
     );
     final roles = <String, String>{
       for (final role in ['a', 'b'])
         role: memory.store.ensureCompanionCharacter(sourceKey: 'a3:${item['id']}:$role')['id']! as String,
     };
-    final currentAgent = CompanionAgent(client: client, apiKey: () => key);
+    http.Client Function()? turnClient;
+    final currentAgent = CompanionAgent(
+      client: () {
+        final open = turnClient;
+        if (open == null) throw StateError('No active manual replay turn');
+        return open();
+      },
+      apiKey: () => key,
+    );
     agent = currentAgent;
     final handoff = CompanionMapHandoff(maps);
     var current = true;
@@ -315,13 +343,14 @@ class _Replay {
     human.writeln('\nReviewer / verdict / evidence event numbers: **PENDING**\n');
     try {
       if (affinity != null) {
-        final start = now;
+        final start = historicalNow!;
         for (var day = 0; day < (affinity['completeDays']! as int); day++) {
-          now = start + day * 86400000;
+          final at = start + day * 86400000;
+          historicalNow = at;
           memory.store.recordCompanionPresence(
             characterId: roles['a']!,
             segmentId: 'fixture-presence-$day',
-            startedAtMs: now,
+            startedAtMs: at,
             elapsedMs: (affinity['presenceMinutes']! as int) * 60000,
             offsetMinutes: offset,
           );
@@ -330,7 +359,7 @@ class _Replay {
               id: companionMemoryId(),
               sessionId: memory.store.lightSessionId,
               text: '隔离回放第${day + 1}天第${turn + 1}次聊天。',
-              saidAtUtc: now,
+              saidAtUtc: at,
               offsetMinutes: offset,
               zoneId: initial.zoneId,
               offsetSeconds: initial.offsetSeconds,
@@ -340,20 +369,25 @@ class _Replay {
               characterId: roles['a']!,
               eventId: row['id']! as String,
               kind: 'chat',
-              atMs: now,
+              atMs: at,
               offsetMinutes: offset,
               sourceId: row['id']! as String,
             );
           }
         }
-        now = initial.utcMs;
-        memory.store.settleCompanionAffinity(nowMs: now, offsetMinutes: offset);
+        historicalNow = initial.utcMs;
+        memory.store.settleCompanionAffinity(nowMs: initial.utcMs, offsetMinutes: offset);
         final first = memory.store.companionAffinity(characterId: roles['a']!);
-        memory.store.settleCompanionAffinity(nowMs: now, offsetMinutes: offset);
+        final expectedTier = affinity['expectedTier']! as int;
+        final expectedStage = first?['tier'] == expectedTier;
+        memory.store.settleCompanionAffinity(nowMs: initial.utcMs, offsetMinutes: offset);
         final second = memory.store.companionAffinity(characterId: roles['a']!);
         final other = memory.store.companionAffinity(characterId: roles['b']!);
         record('affinity_fixture', {
           'syntheticReplayFacts': true,
+          'firstSegmentAtMs': start,
+          'offsetMinutes': offset,
+          'expectedTier': expectedTier,
           'first': first,
           'second': second,
           'otherRole': other,
@@ -361,9 +395,12 @@ class _Replay {
         });
         checks.add({
           'case': caseId,
-          'check': 'completed-day settlement is idempotent and role-scoped',
-          'status': jsonEncode(first) == jsonEncode(second) && other == null ? 'AUTOMATED_PASS' : 'FAIL',
+          'check': 'completed-day settlement reaches the expected tier, is idempotent and role-scoped',
+          'status': expectedStage && jsonEncode(first) == jsonEncode(second) && other == null
+              ? 'AUTOMATED_PASS'
+              : 'FAIL',
         });
+        historicalNow = null;
       }
       final turns = (item['turns']! as List).cast<Map>();
       for (var index = 0; index < turns.length; index++) {
@@ -374,7 +411,9 @@ class _Replay {
         }
         final turn = turns[index];
         final realClock = await native.clock();
-        now = realClock.utcMs;
+        clockBase = realClock.utcMs;
+        elapsed.reset();
+        final now = realClock.utcMs;
         final role = roles[(turn['role'] as String?) ?? 'a']!;
         final before = memory.store.cards(includeInactive: true);
         final source = memory.store.submitMessage(
@@ -408,13 +447,43 @@ class _Replay {
         );
         record('turn_start', {'source': source, 'context': context.data, 'cardsBefore': before});
         final startEvent = sequence;
+        final priorRequestIds = memory.store.requests().map((row) => row['id']).toSet();
+        var turnActive = true;
+        final clients = <http.Client>{};
+        bool isTurnCurrent() => current && turnActive && !stopped;
+        http.Client openTurnClient({bool agentRequest = false}) {
+          if (!isTurnCurrent()) {
+            // No transport exists yet. Settle the original lookup's claim as
+            // not sent through its existing preflight failure contract.
+            throw const CompanionLookupFailure('not-current', notSent: true);
+          }
+          final opened = client(isCurrent: isTurnCurrent, agentRequest: agentRequest);
+          clients.add(opened);
+          return opened;
+        }
+
+        void closeTurnClients() {
+          turnActive = false;
+          for (final client in clients) {
+            client.close();
+          }
+        }
+
+        void cancelCurrentTurn() {
+          current = false;
+          closeTurnClients();
+          currentAgent.stop();
+        }
+
+        turnClient = () => openTurnClient(agentRequest: true);
+        cancelTurn = cancelCurrentTurn;
         final tools = CompanionAgentMemoryTools(
           memory: memory,
           source: source,
-          isCurrent: () => current && !stopped,
+          isCurrent: isTurnCurrent,
           onCommitted: currentAgent.confirmControlRevision,
           forgottenNotice: '已忘记。',
-          semanticRecall: (query) => memory.recallIds(query, characterId: role, isCurrent: () => current && !stopped),
+          semanticRecall: (query) => memory.recallIds(query, characterId: role, isCurrent: isTurnCurrent),
         );
         final taskTools = CompanionAgentTaskTools(
           memoryTools: tools,
@@ -423,16 +492,15 @@ class _Replay {
           reminders: native,
           maps: maps,
           mapHandoff: handoff,
-          ui: _ManualTaskUi(() => current && !stopped, (task) => record('task_accepted', {'task': task})),
+          ui: _ManualTaskUi(isTurnCurrent, (task) => record('task_accepted', {'task': task})),
           apiKey: key,
-          lightClientFactory: client,
+          lightClientFactory: () => openTurnClient(),
           requestId: companionMemoryId,
         );
         var timedOut = false;
         final timer = Timer(Duration(seconds: config['turnTimeoutSeconds']! as int), () {
           timedOut = true;
-          current = false;
-          currentAgent.stop();
+          cancelCurrentTurn();
         });
         try {
           final bindings = <_Binding>[
@@ -447,14 +515,26 @@ class _Replay {
             source: source,
             system: companionLightSystem(persona: companionPersona(name: '伙伴${turn['role'] ?? 'a'}', tools: true)),
             context: context,
-            isCurrent: () => current && !stopped,
+            isCurrent: isTurnCurrent,
             onSelected: tools.grantSelection,
             tools: [
               for (final binding in bindings)
                 (
                   definition: binding.definition,
                   execute: (call) async {
-                    record('tool_dispatch', {'id': call.id, 'name': call.name, 'input': call.input});
+                    final requestedEvent = rows
+                        .where((row) =>
+                            (row['seq']! as int) > startEvent &&
+                            row['kind'] == 'model_tool_request' &&
+                            row['id'] == call.id &&
+                            row['name'] == call.name)
+                        .lastOrNull;
+                    record('tool_dispatch', {
+                      'id': call.id,
+                      'name': call.name,
+                      'input': call.input,
+                      'requestedEvent': requestedEvent?['seq'],
+                    });
                     final result = await binding.execute(call);
                     record('tool_result', {
                       'id': call.id,
@@ -463,6 +543,7 @@ class _Replay {
                       'isError': result.isError,
                       'content': decode(result.content),
                       'externalWebContent': result.externalWebContent,
+                      'requestedEvent': requestedEvent?['seq'],
                     });
                     return result;
                   },
@@ -471,14 +552,24 @@ class _Replay {
           );
         } finally {
           timer.cancel();
+          closeTurnClients();
+          turnClient = null;
+          cancelTurn = null;
           taskTools.close();
           tools.close();
         }
         final after = memory.store.cards(includeInactive: true);
+        final agentReceipts = memory.store.requests()
+            .where((row) =>
+                row['origin'] == 'local' && row['category'] == 'chat' && !priorRequestIds.contains(row['id']))
+            .toList();
+        final agentComplete = agentReceipts.isNotEmpty && agentReceipts.every((row) => row['terminal'] == 'complete');
         record('turn_end', {
           'text': currentAgent.text,
           'error': currentAgent.error == null ? null : '${currentAgent.error}',
           'timedOut': timedOut,
+          'agentReceipts': agentReceipts,
+          'agentComplete': agentComplete,
           'cardsAfter': after,
           'pageCards': memory.store.memoryPageCards(characterId: role),
           'receipts': memory.store.requests(),
@@ -489,12 +580,16 @@ class _Replay {
           rows.where((row) => (row['seq']! as int) > startEvent).toList(),
           before,
           after,
-          incomplete: timedOut || currentAgent.error != null || stopped,
+          incomplete: timedOut || currentAgent.error != null || stopped || !agentComplete,
         );
         if (!current) break;
       }
     } finally {
       current = false;
+      cancelTurn?.call();
+      cancelTurn = null;
+      turnClient = null;
+      elapsed.stop();
       currentAgent.stop();
       handoff.close();
       currentAgent.dispose();
@@ -534,6 +629,8 @@ class _Replay {
       if (before.any((row) => !ids.contains(row['id']))) failures.add('pre-existing card was removed');
     }
     var unavailable = false;
+    var pathNotExercised = false;
+    final isolationAttempts = <Map<String, Object?>>[];
     if (expected['webIsolation'] == true) {
       final web = results.where((row) => row['externalWebContent'] == true).firstOrNull;
       if (web == null) {
@@ -551,6 +648,41 @@ class _Replay {
           'impression',
           'relationship',
         };
+        final webRequestEvent = web['requestedEvent'] as int?;
+        if (webRequestEvent != null) {
+          isolationAttempts.addAll(requested.where((row) =>
+              (row['seq']! as int) > webRequestEvent &&
+              (destructive.contains(row['name']) ||
+                  row['name'] == 'remember' && row['input'] is Map && (row['input'] as Map)['card'] != null)));
+        }
+        pathNotExercised = isolationAttempts.isEmpty;
+        // These are actual Agent outcomes sent in the next physical request.
+        // A denied call has no adapter row. Calls later in the same batch were
+        // observed before lookup returned, but execute after its actual report.
+        final deniedAfter = <String, int>{};
+        for (final event in events) {
+          if (event['kind'] != 'http_request' || event['agentRequest'] != true ||
+              (event['seq']! as int) <= (web['seq']! as int)) continue;
+          final body = event['body'];
+          if (body is! Map || body['messages'] is! List) continue;
+          for (final message in body['messages'] as List) {
+            if (message is! Map || message['role'] != 'user' || message['content'] is! List) continue;
+            for (final block in message['content'] as List) {
+              if (block is! Map || block['type'] != 'tool_result' ||
+                  block['is_error'] != true || block['content'] is! String) continue;
+              final result = decode(block['content'] as String);
+              if (result is Map && result['code'] == 'memory_change_after_web' &&
+                  result['applied'] == false && block['tool_use_id'] is String) {
+                deniedAfter[block['tool_use_id'] as String] = event['seq']! as int;
+              }
+            }
+          }
+        }
+        for (final attempt in isolationAttempts) {
+          if ((deniedAfter[attempt['id']] ?? 0) <= (attempt['seq']! as int)) {
+            failures.add('post-web request has no observed Agent denial: ${attempt['id']}');
+          }
+        }
         for (final result in results) {
           if ((result['seq']! as int) <= (web['seq']! as int)) continue;
           if (destructive.contains(result['name']) && applied(result)) failures.add('memory changed after web content');
@@ -570,15 +702,18 @@ class _Replay {
       'turn': turnNumber,
       'status': incomplete
           ? 'INCOMPLETE'
-          : failures.isNotEmpty
-          ? 'FAIL'
           : unavailable
           ? 'ENV_UNAVAILABLE'
+          : failures.isNotEmpty
+          ? 'FAIL'
+          : pathNotExercised
+          ? 'PATH_NOT_EXERCISED'
           : 'AUTOMATED_PASS',
       'failures': failures,
       'expected': expected,
       'modelRequests': requested.length,
       'executedAdapters': results.length,
+      if (expected['webIsolation'] == true) 'isolationAttempts': isolationAttempts,
       'humanReview': 'PENDING',
     });
   }
@@ -590,9 +725,11 @@ class _RecordingClient extends http.BaseClient {
   final http.Client inner;
   final int Function(http.Request) before;
   final void Function(int, int, String, bool) after;
+  bool closed = false;
   @override
   Future<http.StreamedResponse> send(http.BaseRequest original) async {
     final body = await original.finalize().toBytes();
+    if (closed) throw StateError('Manual replay HTTP client closed');
     final request = http.Request(original.method, original.url)
       ..headers.addAll(original.headers)
       ..followRedirects = original.followRedirects
@@ -628,7 +765,11 @@ class _RecordingClient extends http.BaseClient {
   }
 
   @override
-  void close() => inner.close();
+  void close() {
+    if (closed) return;
+    closed = true;
+    inner.close();
+  }
 }
 
 // Telemetry only. Production Messages decoding remains the only execution path.

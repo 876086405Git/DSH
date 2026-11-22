@@ -395,6 +395,94 @@ void main() {
     },
   );
 
+  test('ADD53 grouped corrections use the planned parent basis without accepting genuinely older evidence', () {
+    now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
+    final old = say('group-parent-old', '面试安排在周四。');
+    final creating = begin(old);
+    final parent = call(creating, 'parent', 'remember', {'text': '面试安排在周四。'}).targetId!;
+    store.closeAgentTurn(creating);
+    now += 3600000;
+    final detail = say('group-child-old', '面试前要把材料准备好。');
+    final linking = begin(detail, [actualCard(parent)]);
+    final child = call(linking, 'child', 'remember', {
+      'text': '周四面试前要准备好材料。',
+      'references': [parent],
+    }).targetId!;
+    store.closeAgentTurn(linking);
+    final parentBefore = actualCard(parent);
+    final childBefore = actualCard(child);
+    expect(childBefore['current_basis_seq'], greaterThan(parentBefore['current_basis_seq']! as int));
+    now += 3600000;
+    final fresh = say('group-parent-new', '面试改到周五，材料也按周五安排。');
+    expect(fresh['first_seq'], greaterThan(childBefore['current_basis_seq']! as int));
+    now += 86400000;
+    final claim = store.nextAgentMaintenance(
+      kind: 'organize',
+      offsetMinutes: 0,
+      estimateTokens: (text) => text.length,
+    )!;
+    final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+    final turnId = turn['id']! as String;
+    grantMaintenance(turn);
+    expect((turn['sources'] as List).map((row) => (row as MemoryRow)['id']), containsAll([old['id'], fresh['id']]));
+    expect((turn['cards'] as List).map((row) => (row as MemoryRow)['id']), containsAll([parent, child]));
+    final archive = store.archive;
+    final rejected = call(turnId, 'old-group', 'revise', {
+      'changes': [
+        {
+          'card': child,
+          'text': '周四面试前要准备好材料。',
+          'sources': <String>[],
+          'references': [parent],
+        },
+        {'card': parent, 'source': old['id'], 'text': '面试还是安排在周四。'},
+      ],
+    });
+    expect(rejected.code, 'older_than_current');
+    expect(rejected.applied, isFalse);
+    expect(actualCard(parent), parentBefore);
+    expect(actualCard(child), childBefore);
+    expect(store.archive, archive);
+    expect(store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String)['changed_cards'], isEmpty);
+    final accepted = call(turnId, 'fresh-group', 'revise', {
+      'changes': [
+        {
+          'card': child,
+          'text': '周五面试前要准备好材料。',
+          'sources': <String>[],
+          'references': [parent],
+        },
+        {'card': parent, 'source': fresh['id'], 'text': '面试安排在周五。'},
+      ],
+    });
+    expect(accepted.applied, isTrue, reason: 'the child precedes its freshly revised parent in the same plan');
+    expect(accepted.changedCardIds, unorderedEquals([parent, child]));
+    final parentAfter = actualCard(parent);
+    final childAfter = actualCard(child);
+    expect(parentAfter['text'], '面试安排在周五。');
+    expect(childAfter['text'], '周五面试前要准备好材料。');
+    expect(parentAfter['row_rev'], (parentBefore['row_rev']! as int) + 1);
+    expect(childAfter['row_rev'], (childBefore['row_rev']! as int) + 1);
+    expect(parentAfter['current_basis_seq'], fresh['first_seq']);
+    expect(childAfter['current_basis_seq'], fresh['first_seq']);
+    expect(
+      database.select('SELECT parent_card_id,parent_row_rev FROM memory_card_references WHERE card_id=?', [child]),
+      [
+        {'parent_card_id': parent, 'parent_row_rev': parentAfter['row_rev']},
+      ],
+    );
+    expect(
+      store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']),
+      containsAll([parent, child]),
+    );
+    expect(store.archive['control_revision'], (archive['control_revision']! as int) + 1);
+    store.finishAgentMaintenance(turnId: turnId, complete: true);
+    reopen();
+    expect(actualCard(parent)['current_basis_seq'], fresh['first_seq']);
+    expect(actualCard(child)['current_basis_seq'], fresh['first_seq']);
+    expect(store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']), containsAll([parent, child]));
+  });
+
   test('an external control invalidates a turn after recall grants only its actual returned IDs', () {
     final card = seed('我喜欢蓝色', keywords: ['蓝色']);
     final other = seed('另一个独立事实');
@@ -686,6 +774,14 @@ void main() {
       'sources': [first['id'], second['id']],
     }).targetId!;
     store.finishAgentMaintenance(turnId: turn, complete: true);
+    final detail = say('proof-dependent', '住处也是我们聊过的话题。');
+    final dependentTurn = begin(detail, [actualCard(target)]);
+    final dependent = call(dependentTurn, 'dependent', 'remember', {
+      'text': '我们聊过用户在杭州的住处。',
+      'references': [target],
+    }).targetId!;
+    store.closeAgentTurn(dependentTurn);
+    expect(actualCard(dependent)['current_basis_seq'], greaterThan(actualCard(target)['current_basis_seq']! as int));
     final third = say('proof-three', '我的居住地是杭州。');
     final otherTurn = begin(third);
     final from = call(otherTurn, 'one-proof', 'remember', {'text': '我的居住地是杭州。'}).targetId!;
@@ -703,13 +799,34 @@ void main() {
     final spend = store.reserveInitiative(kind: 'followup', nowMs: now, maxPerDay: 2, gapMs: 0, followupId: ticket)!;
     store.settleInitiative(spend, outcome: 'shown');
     store.closeAgentTurn(invitation);
-    final merging = begin(say('merge', '这两条说的是同一个住处。'), [actualCard(target), actualCard(from)]);
+    expect(third['first_seq'], greaterThan(actualCard(dependent)['current_basis_seq']! as int));
+    final merging = begin(say('merge', '这两条说的是同一个住处。'), [
+      actualCard(target),
+      actualCard(from),
+      actualCard(dependent),
+    ]);
     final merged = call(merging, 'merge-same', 'merge', {
       'card': target,
       'from': [from],
       'text': '我住杭州。',
+      'updates': [
+        {
+          'card': dependent,
+          'text': '我们聊过用户在杭州的同一个住处。',
+          'sources': <String>[],
+          'references': [target],
+        },
+      ],
     });
     expect(merged.applied, isTrue);
+    expect(merged.changedCardIds, unorderedEquals([target, from, dependent]));
+    expect(actualCard(target)['current_basis_seq'], third['first_seq']);
+    expect(actualCard(dependent)['current_basis_seq'], third['first_seq']);
+    expect(
+      database.select('SELECT parent_row_rev FROM memory_card_references WHERE card_id=?', [dependent]).single['parent_row_rev'],
+      actualCard(target)['row_rev'],
+    );
+    expect(store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']), contains(dependent));
     final proofs = (actualCard(target)['evidence'] as List).cast<MemoryRow>();
     final groups = <String, Set<Object?>>{};
     for (final proof in proofs) {
@@ -722,7 +839,7 @@ void main() {
         {third['id']},
       ]),
     );
-    expect(store.cards().map((row) => row['id']), [target]);
+    expect(store.cards().map((row) => row['id']), unorderedEquals([target, dependent]));
     final consumed = store.followups().singleWhere((row) => row['id'] == ticket);
     expect(consumed['state'], 'asked');
     expect(consumed['card_id'], target);
