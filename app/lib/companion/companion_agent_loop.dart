@@ -246,6 +246,7 @@ Future<CompanionAgentMessage?> runCompanionAgentLoop({
             results[i] = _retiredToolResult(results[i]);
           }
         } else {
+          if (_controlRetiresText(call, result)) retireArguments = true;
           // Maintenance keeps its existing result-retirement contract.
           for (final previous in results) {
             previous['content'] =
