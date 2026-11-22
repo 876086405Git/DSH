@@ -16,9 +16,10 @@ is needed. The JSON has a developer-report format, not the App adapter format.
 ## Exact code and input provenance
 
 The default stage is `app/assets/companion/stage.js`, pinned to the reviewed
-SHA-256 `30a5d1fc830a8ab8a38c992c89cbc4c4ae8555403164897215c22ba7244c690d`
+SHA-256 `298b4fda879242c21220e653af74857b209bec7160eb51c3fab86ff019d41927`
 (the companion performance pass: render rate, the water's motion and the float
-window's bounds, plus removal of the redundant parameter snapshot in `tick`;
+window's bounds; then dropping the redundant parameter snapshot in `tick` and the
+unused depth buffer;
 the replayed `STANDARD`…`encodePath` slice differs from C906's stage
 `157acf7397e604e53184ee93fa217af11909b91ed29c102b9b4571d6fed56f67` only by that
 `saveParameters` removal. Complete rule-alias facts, numeric probe precision
