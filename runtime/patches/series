@@ -70,6 +70,7 @@ zzzzzzzzz-subprocess-utf8-cursor.diff
 zzzzzzzzz-subprocess-zsingle-read.diff
 zzzzzzzzz-subprocess-zzspill-write-all.diff
 zzzzzzzzz-subprocess-zzzero-tail.diff
+subprocess-latest-chunk.diff
 zzzzzzzzz-terminal-tail.diff
 zzzzzzzzz-tool-history-lookup.diff
 zzzzzzzzz-workspace-domain-close.diff
