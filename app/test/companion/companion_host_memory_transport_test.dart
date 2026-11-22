@@ -434,6 +434,40 @@ class _Probe {
   }
 }
 
+MemoryRow _pendingFollowup(CompanionMemoryStore store) {
+  const raw = '今天去修琴，今天可以问我琴修好没。';
+  store.submitMessage(id: 'full-invite', sessionId: 'full-session', text: raw, saidAtUtc: _time, offsetMinutes: 0);
+  final batch = store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+  final proposal = parseExtractionProposal(
+    jsonEncode({
+      'schema_version': 2,
+      'batch_id': batch.id,
+      'covered_message_ids': ['full-invite'],
+      'completion': 'complete',
+      'operations': [
+        {
+          'op': 'create',
+          'kind': 'episode',
+          'text': '今天去修琴',
+          'keywords': ['修琴'],
+          'evidence': [
+            {'message_id': 'full-invite', 'quote': raw},
+          ],
+          'followup': {
+            'local_date': DateTime.fromMillisecondsSinceEpoch(_time, isUtc: true).toIso8601String().substring(0, 10),
+            'precision': 'day',
+            'wording': '今天可以问我琴修好没',
+            'basis': 'explicit_invitation',
+          },
+        },
+      ],
+    }),
+    batch,
+  );
+  expect(store.commitExtraction(batch, proposal), isTrue);
+  return store.nextFollowup(nowMs: _time)!;
+}
+
 void main() {
   for (final rejected in [false, true]) {
     test(
@@ -709,30 +743,30 @@ void main() {
           await worker.stop();
           store.close();
         });
-        store.submitMessage(
-          id: 'u1',
-          sessionId: 'full-session',
-          text: '我的咖啡不加糖。',
-          saidAtUtc: _time,
-          offsetMinutes: 480,
-        );
+        // A2 phone maintenance uses Messages tools. This still-supported Host
+        // followup path exercises the actual auxiliary dispatch and ledger.
+        final captured = _pendingFollowup(store);
+        final eventsBefore = db
+            .select('SELECT * FROM memory_events')
+            .map((row) => Map<String, Object?>.from(row))
+            .toList();
+        final cursorBefore = store.archive['cursor_seq'];
         host.onPost = () {
           final request = store.requests().single;
+          expect(host.posts.single['kind'], 'followup');
+          expect(host.posts.single['maxTokens'], 128);
+          expect(request['category'], 'followup');
           expect(request['uncertain_at_ms'], _time, reason: 'durable before HTTP reaches the Host');
           expect(request['state'], 'interrupted');
           expect(request['sent_at_ms'], isNull);
         };
-        final configuration = const {
-          'forbidden',
-          'requestUnknown',
-          'sessionUnavailable',
-          'modelUnavailable',
-        }.contains(name);
         expect(
-          await worker.extract(forceTail: true),
-          configuration ? CompanionMemoryWork.configuration : CompanionMemoryWork.waiting,
+          await worker.followup(captured, persona: '鲸鱼娘，说话自然简短。', offsetMinutes: 0, isCurrent: () => true),
+          isNull,
         );
         final receipt = store.requests().single;
+        expect(receipt['category'], 'followup');
+        expect(receipt['reserved_output'], 128);
         expect(receipt['state'], uncertain ? 'interrupted' : 'released');
         expect(receipt['terminal'], uncertain ? 'dispatch_unknown' : 'not_sent');
         expect(receipt['sent_at_ms'], isNull);
@@ -741,14 +775,15 @@ void main() {
         expect(raw['host_dispatch_at_ms'], isNull);
         expect(raw['output_tokens'], isNull, reason: 'a nested prior-ID receipt is not this attempt');
         expect(raw['complete'], isFalse);
-        final source = db.select('SELECT state,reason,format_failures FROM memory_events').single;
-        expect(source['state'], 'pending');
-        expect(source['reason'], configuration ? 'configuration' : 'network');
-        expect(source['format_failures'], 0);
-        expect(store.archive['cursor_seq'], 0);
+        expect(
+          db.select('SELECT * FROM memory_events').map((row) => Map<String, Object?>.from(row)).toList(),
+          eventsBefore,
+        );
+        expect(store.archive['cursor_seq'], cursorBefore);
+        expect(store.followups().single['state'], 'pending', reason: 'a rejected request is not a shown question');
         expect(host.posts, hasLength(1), reason: 'no replay or automatic fallback');
         // Exactly 3000 new output tokens fit only if the prior preflight is
-        // proven unsent. An uncertain attempt retains its 800-token hold.
+        // proven unsent. An uncertain followup retains its 128-token hold.
         final next = store.reserveRequest(
           category: 'extract',
           provider: route.provider,

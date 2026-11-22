@@ -1,7 +1,7 @@
 {
   "fixture_version": 1,
   "ruleset": "09e-r2+r2.1",
-  "scope": "固定15组、编译进真实产品测试的合成提案和API夹具；不是原52段通用步骤DSL或任意模型回包注入器。",
+  "scope": "固定15组、编译进真实产品测试的合成提案和API夹具；不是原52段通用步骤DSL或任意模型回包注入器。 A2保留15组和52来源，更新Worker真实展开名、已迁移夹具及owner4974的真实phone/route机制说明；版本门不改。映射与哈希不等于执行，owner显式skip仍按原runner为NOT_RUN。",
   "suites": {
     "sdk": {
       "cwd": "packages/dsh_client",
@@ -163,19 +163,22 @@
           "id": "outbound-sdk-envelope",
           "suite": "app",
           "name": "test/companion/companion_memory_input_test.dart escaped input fits the actual SDK envelope and preserves the original clock and text",
-          "file": "app/test/companion/companion_memory_input_test.dart"
+          "file": "app/test/companion/companion_memory_input_test.dart",
+          "scope": "真实 phone Messages 完整 UTF-8 body（system/messages/tools/转义）与原 estimator/reservation，source 原文/原时刻保持；正例 escaped 重复128，超长 whitespace/emoji 原规模不变且零请求。稳定名称中的 SDK 字样不表示仍测旧 Host JSON operations 协议；NOT_RUN。"
         },
         {
           "id": "owner-reopen",
           "suite": "app",
           "name": "test/companion/companion_memory_lifecycle_test.dart one path gives one owner across visits, and an ordinary container restart reopens its archive",
-          "file": "app/test/companion/companion_memory_lifecycle_test.dart"
+          "file": "app/test/companion/companion_memory_lifecycle_test.dart",
+          "scope": "原 owner/container 重开正文与名称保留，真实 SQLite 路径和唯一 owner；同文件前两维护例另迁 actual Light/Owner/Worker，未执行。"
         },
         {
           "id": "dispose-keeps-late-receipt",
           "suite": "app",
           "name": "test/companion/companion_memory_lifecycle_test.dart ordinary light chat drains its real SSE finally receipt before owner disposal closes SQLite",
-          "file": "app/test/companion/companion_memory_lifecycle_test.dart"
+          "file": "app/test/companion/companion_memory_lifecycle_test.dart",
+          "scope": "原普通 light chat 真实 SSE finally/owner disposal 断言保持。新维护取消例只保存已见 usage，未见 final 不伪造；未监听 controller 的 teardown 显式消费后关闭，全部 NOT_RUN。"
         },
         {
           "id": "page-save-failure-no-post-2",
@@ -196,31 +199,34 @@
           "suite": "app",
           "name": "test/companion/companion_memory_dates_replay_test.dart fixture 2 original time crosses midnight in actual extraction POST and usage receipt",
           "file": "app/test/companion/companion_memory_dates_replay_test.dart",
-          "scope": "Real SQLite store + production CompanionMemoryWorker + CompanionLightMemoryTransport + HTTP request captured by MockClient + real SSE parsing + raw usage ledger. Frozen proposals; no live provider/model, OS offline scheduling, notification service or model date-understanding claim."
+          "scope": "真实 SQLite/Owner/Worker 与 maintenance tools、实际 phone Messages body/每 HTTP receipt；event_time 结构由原校验器校验，首 source 的 said_at_utc/offset_minutes/原 wording 与 processed_at_utc 分开断言。编辑保原时、独立新源另定日期；固定回包不证明模型会理解日期，未运行时区/native/后台调度。"
         },
         {
           "id": "monday-edit-vs-wednesday-new-statement-2",
           "suite": "app",
           "name": "test/companion/companion_memory_dates_replay_test.dart fixture 2 editing Monday text keeps Tuesday while a new Wednesday source stores Thursday",
           "file": "app/test/companion/companion_memory_dates_replay_test.dart",
-          "scope": "Real SQLite store + production CompanionMemoryWorker + CompanionLightMemoryTransport + HTTP request captured by MockClient + real SSE parsing + raw usage ledger. Frozen proposals; no live provider/model, OS offline scheduling, notification service or model date-understanding claim."
-        },
-        {
-          "id": "ui-merged-lines-stable-source-ids-1",
-          "suite": "app",
-          "name": "test/companion/companion_page_test.dart page light mode fixture 2 grouped Log names keep two submitted originals after reopening SQLite",
-          "file": "app/test/companion/companion_page_test.dart",
-          "scope": "Two actual failed chat HTTP attempts, real Log renders two originals with one speaker name, exact SQLite IDs/first_seq/original times survive reopen and actual background extraction. No invented merged UI source or successful chat."
+          "scope": "真实 SQLite/Owner/Worker 与 maintenance tools、实际 phone Messages body/每 HTTP receipt；event_time 结构由原校验器校验，首 source 的 said_at_utc/offset_minutes/原 wording 与 processed_at_utc 分开断言。编辑保原时、独立新源另定日期；固定回包不证明模型会理解日期，未运行时区/native/后台调度。"
         }
       ],
       "limits": [
         "当前Log真实行为是连续同说话人只显示一次名字，正文仍为独立行；不声称产品有另一种拼成单行的UI功能。"
       ],
-      "required_gaps": []
+      "required_gaps": [],
+      "deferred_checks": [
+        {
+          "id": "ui-merged-lines-stable-source-ids-1",
+          "suite": "app",
+          "name": "test/companion/companion_page_test.dart page light mode fixture 2 grouped Log names keep two submitted originals after reopening SQLite",
+          "file": "app/test/companion/companion_page_test.dart",
+          "scope": "Two actual failed chat HTTP attempts, real Log renders two originals with one speaker name, exact SQLite IDs/first_seq/original times survive reopen and actual background extraction. No invented merged UI source or successful chat.",
+          "deferred_reason": "A2 maintenance continuation exceeds memoryBatchInputTokens (tool definitions); restore after Pro fix (ADDENDUM-46/47)"
+        }
+      ]
     },
     {
       "id": 3,
-      "title": "门槛、完整空集、有限重试和超长放行",
+      "title": "门槛、完整无工具结果、有限失败收尾和超长放行",
       "original_ids": [
         "07-38",
         "07-39",
@@ -248,14 +254,16 @@
         {
           "id": "complete-empty-worker",
           "suite": "app",
-          "name": "test/companion/companion_memory_worker_test.dart complete empty result commits the exact saved source and raw final receipt",
-          "file": "app/test/companion/companion_memory_worker_test.dart"
+          "name": "test/companion/companion_memory_worker_test.dart A2 a complete no-tool answer processes the exact original sources and preserves provider usage",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "A2 Messages 完整无工具 end_turn：实际原话/原时刻、整 body reservation、event done、原始 start/final usage；不造维护聊天。不是旧 JSON operations 包装。"
         },
         {
           "id": "two-invalid-stable-batch",
           "suite": "app",
-          "name": "test/companion/companion_memory_worker_test.dart two complete malformed replies skip only their stable batch despite a newer input",
-          "file": "app/test/companion/companion_memory_worker_test.dart"
+          "name": "test/companion/companion_memory_worker_test.dart A2 a failed held extract retires only its captured event while a newer source gets a distinct request",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "真实 held extract 捕获 u1 后提交 u2；一次损坏 tool 参数仅使 u1 的相同 source_rev/event_seq skipped/maintenance_incomplete，u2 pending 后由独立 parent/receipt 完成；不是两次 JSON 格式重试，也不是 Page 新提交取消集成。"
         },
         {
           "id": "wait-does-not-spend-format",
@@ -266,8 +274,9 @@
         {
           "id": "missing-stop-keeps-pending",
           "suite": "app",
-          "name": "test/companion/companion_memory_worker_test.dart missing message_stop preserves usage and leaves the batch waiting",
-          "file": "app/test/companion/companion_memory_worker_test.dart"
+          "name": "test/companion/companion_memory_worker_test.dart A2 incomplete keeps its actual usage and cannot complete source processing",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "精确 incomplete 展开：已发非完整维护不能标 done；原事件 skipped/maintenance_incomplete、format_failures=0、下一机会无新请求。该展开未单独逐字比较 raw_usage；实际 raw 对象由 complete-empty-worker/sse-to-stored-raw 的真实分支核。"
         },
         {
           "id": "same-complete-reply-once",
@@ -295,7 +304,8 @@
         }
       ],
       "limits": [
-        "推进模拟时钟只提供运行机会；没有操作系统两分钟准时后台调度或一期长文分片承诺。"
+        "推进模拟时钟只提供运行机会；没有操作系统两分钟准时后台调度或一期长文分片承诺。",
+        "原低层SDK格式/队列兼容检查不代表A2 Worker仍执行两次格式重试；A2的已派发不完整终态见各active check scope。"
       ],
       "required_gaps": []
     },
@@ -375,7 +385,7 @@
           "suite": "app",
           "name": "test/companion/companion_stream_state_test.dart fixture 4 a composer correction retires a late full reply before speech and last-line writes",
           "file": "app/test/companion/companion_stream_state_test.dart",
-          "scope": "Actual Page/ChatController/SQLite/voice-widget channel boundary with controlled HostEvent frames; no actual engine/provider or Android native execution."
+          "scope": "新 owner 的实际 Page/phone Agent/SQLite/voice-widget channel 边界，固定 Messages/模型 revise 工具与迟到回复；保原名称，不能仍称旧 Host ChatController 帧机制。无 provider/native 执行证明。"
         },
         {
           "id": "writing-group-vs-explicit-preference-change-1",
@@ -481,21 +491,7 @@
           "suite": "app",
           "name": "test/companion/companion_memory_control_replay_test.dart fixture 5 never survives editing old mixed source across reopen and all three actual request paths",
           "file": "app/test/companion/companion_memory_control_replay_test.dart",
-          "scope": "Page passes control-only metadata (source wiring, not UI-executed); real SQLite/worker/light transport/MockClient extraction and organize POST, then real owner selection + light chat POST and callback receipts; fixed model responses. Not Page, pinned engine or natural-language-answer semantics."
-        },
-        {
-          "id": "never-old-mixed-edit-all-three-outbounds-2",
-          "suite": "app",
-          "name": "test/companion/companion_memory_control_replay_test.dart fixture 5 forget keeps the edited old source out but admits a new source across all three actual request paths",
-          "file": "app/test/companion/companion_memory_control_replay_test.dart",
-          "scope": "Page passes control-only metadata (source wiring, not UI-executed); real SQLite/worker/light transport/MockClient extraction and organize POST, then real owner selection + light chat POST and callback receipts; fixed model responses. Not Page, pinned engine or natural-language-answer semantics."
-        },
-        {
-          "id": "never-old-mixed-edit-all-three-outbounds-3",
-          "suite": "app",
-          "name": "test/companion/companion_memory_control_replay_test.dart fixture 5 natural normal command releases the saved control before new source extraction and actual chat",
-          "file": "app/test/companion/companion_memory_control_replay_test.dart",
-          "scope": "Page passes control-only metadata (source wiring, not UI-executed); real SQLite/worker/light transport/MockClient extraction and organize POST, then real owner selection + light chat POST and callback receipts; fixed model responses. Not Page, pinned engine or natural-language-answer semantics."
+          "scope": "真实 SQLite/Owner/Worker/CompanionAgentMemoryTools.maintenance 与 Messages tool_use/tool_result 续轮、原 light chat/usage；持续 never、显式公开 normal 解除、旧源 cutoff/重开/独立证明断言保留。卡写通过真实工具；本卡正文只匹配 exact character 域。固定模型回包，不是 Page 的控制意图识别或自然语义运行证明。"
         },
         {
           "id": "control-anchor-lifecycle-1",
@@ -839,17 +835,36 @@
           "name": "test/companion_memory_delete_lineage_test.dart editing another AND member marks an unchanged source even when it already has a separate Y role",
           "file": "packages/dsh_client/test/companion_memory_delete_lineage_test.dart",
           "scope": "新v10有限关系闭包已独立源码推导；真实存储/重开/迁移/AND-OR/manual测试仍须执行，旧丢失历史不得猜恢复。"
+        }
+      ],
+      "limits": [],
+      "required_gaps": [],
+      "deferred_checks": [
+        {
+          "id": "never-old-mixed-edit-all-three-outbounds-2",
+          "suite": "app",
+          "name": "test/companion/companion_memory_control_replay_test.dart fixture 5 forget keeps the edited old source out but admits a new source across all three actual request paths",
+          "file": "app/test/companion/companion_memory_control_replay_test.dart",
+          "scope": "真实 SQLite/Owner/Worker/CompanionAgentMemoryTools.maintenance 与 Messages tool_use/tool_result 续轮、原 light chat/usage；持续 never、显式公开 normal 解除、旧源 cutoff/重开/独立证明断言保留。卡写通过真实工具；本卡正文只匹配 exact character 域。固定模型回包，不是 Page 的控制意图识别或自然语义运行证明。",
+          "deferred_reason": "A2 maintenance continuation exceeds memoryBatchInputTokens (tool definitions); restore after Pro fix (ADDENDUM-46/47)"
+        },
+        {
+          "id": "never-old-mixed-edit-all-three-outbounds-3",
+          "suite": "app",
+          "name": "test/companion/companion_memory_control_replay_test.dart fixture 5 natural normal command releases the saved control before new source extraction and actual chat",
+          "file": "app/test/companion/companion_memory_control_replay_test.dart",
+          "scope": "真实 SQLite/Owner/Worker/CompanionAgentMemoryTools.maintenance 与 Messages tool_use/tool_result 续轮、原 light chat/usage；持续 never、显式公开 normal 解除、旧源 cutoff/重开/独立证明断言保留。卡写通过真实工具；本卡正文只匹配 exact character 域。固定模型回包，不是 Page 的控制意图识别或自然语义运行证明。",
+          "deferred_reason": "A2 maintenance continuation exceeds memoryBatchInputTokens (tool definitions); restore after Pro fix (ADDENDUM-46/47)"
         },
         {
           "id": "edited-source-cleanup-outbounds",
           "suite": "app",
           "name": "test/companion/companion_memory_control_replay_test.dart fixture 16 deleting edited raw source removes withdrawn facts before extraction consolidation and actual chat",
           "file": "app/test/companion/companion_memory_control_replay_test.dart",
-          "scope": "真实worker/parser/transport/receipt与chat HTTP；固定提案不证明真实模型理解。"
+          "scope": "真实 SQLite/Owner/Worker/CompanionAgentMemoryTools.maintenance 与 Messages tool_use/tool_result 续轮、原 light chat/usage；持续 never、显式公开 normal 解除、旧源 cutoff/重开/独立证明断言保留。卡写通过真实工具；本卡正文只匹配 exact character 域。固定模型回包，不是 Page 的控制意图识别或自然语义运行证明。",
+          "deferred_reason": "A2 maintenance continuation exceeds memoryBatchInputTokens (tool definitions); restore after Pro fix (ADDENDUM-46/47)"
         }
-      ],
-      "limits": [],
-      "required_gaps": []
+      ]
     },
     {
       "id": 6,
@@ -1059,21 +1074,21 @@
           "suite": "app",
           "name": "test/companion/companion_host_memory_transport_test.dart B03 full followup uses the real auxiliary HTTP and ledger",
           "file": "app/test/companion/companion_host_memory_transport_test.dart",
-          "scope": "真实worker/owner/Page/transport与收据；仅最终HTTP/系统边界合成，模型口吻和语义须另取证。"
+          "scope": "实际 worker.followup/Host auxiliary HTTP/原 SQLite 收据与原 B03 入口；本文件迁移不把 A2 手机维护伪装为 Host extract。固定网络边界，不是实际 Host/provider/native 或完整 Page 运行成绩。"
         },
         {
           "id": "B03-companion_host_memory_transport_test-2",
           "suite": "app",
           "name": "test/companion/companion_host_memory_transport_test.dart B03 full followup old-host rejection is silent",
           "file": "app/test/companion/companion_host_memory_transport_test.dart",
-          "scope": "真实worker/owner/Page/transport与收据；仅最终HTTP/系统边界合成，模型口吻和语义须另取证。"
+          "scope": "实际 worker.followup/Host auxiliary HTTP/原 SQLite 收据与原 B03 入口；本文件迁移不把 A2 手机维护伪装为 Host extract。固定网络边界，不是实际 Host/provider/native 或完整 Page 运行成绩。"
         },
         {
           "id": "B03-full-page-1",
           "suite": "app",
           "name": "test/companion/companion_stream_state_test.dart full Page drafts its actual followup through the phone memory route, covered=false",
           "file": "app/test/companion/companion_stream_state_test.dart",
-          "scope": "真实full Page→owner→worker→HTTP→SDK收据；审批期间迟到拟文不得显示，明确固定最终HTTP peer。"
+          "scope": "真实 full Page→Owner→Worker→phone Messages followup→SQLite 收据；当前可见房间实际呈现一次，Host discovery/posts 为零。固定 HTTP 回包；不声称仍走旧 Host auxiliary，也不证明模型语义或原生播放。"
         },
         {
           "id": "B03-sdk-transport-1",
@@ -1124,14 +1139,16 @@
         {
           "id": "worker-http401-vs-no-key",
           "suite": "app",
-          "name": "test/companion/companion_memory_worker_test.dart 401 counts a sent request but consumes no format retry; empty key sends nothing",
-          "file": "app/test/companion/companion_memory_worker_test.dart"
+          "name": "test/companion/companion_memory_worker_test.dart A2 HTTP 401 configuration failure settles its sent receipt without a format retry",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "精确 HTTP 401 展开：sent_at/finished、原事件 maintenance_incomplete、无格式重试/无自动新请求；随后空 key 请求总数仍为1。不是未派发零成本。"
         },
         {
           "id": "sse-to-stored-raw",
           "suite": "app",
-          "name": "test/companion/companion_memory_worker_test.dart complete empty result commits the exact saved source and raw final receipt",
-          "file": "app/test/companion/companion_memory_worker_test.dart"
+          "name": "test/companion/companion_memory_worker_test.dart A2 a complete no-tool answer processes the exact original sources and preserves provider usage",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "与 case3 同一真实用例：final_usage 原对象、input_uncached=20、start_usage={input_tokens:900}，不累加。重复引用不算另一测试。"
         },
         {
           "id": "receipt-idempotent",
@@ -1181,7 +1198,8 @@
           "id": "generic-unknown-not-zero",
           "suite": "app",
           "name": "test/companion/companion_host_memory_transport_test.dart selected generic provider can complete with unknown dispatch and raw usage",
-          "file": "app/test/companion/companion_host_memory_transport_test.dart"
+          "file": "app/test/companion/companion_host_memory_transport_test.dart",
+          "scope": "保留实际 Host auxiliary/generic-provider 收据边界。A2维护不再借 Host worker.extract；本文件错误变体转实际 followup，保 uncertain/proven-unsent、raw usage、预算与零自动重试，8个原展开正文保持。不是全模式模型运行证明。"
         },
         {
           "id": "owner-raw-retained",
@@ -1531,14 +1549,14 @@
           "suite": "app",
           "name": "test/companion/companion_stream_state_test.dart fixture 10 a captured followup waits while the tasks page covers the room",
           "file": "app/test/companion/companion_stream_state_test.dart",
-          "scope": "Actual Page + ChatController approval UI / injected production clock + SQLite; available HTTP boundary fixed by B03 peer. No external model or semantic judgment. This tests before generation; B03 tests separately cover approval after the generation request."
+          "scope": "真实 Page 捕获机会后打开实际 CompanionTasksPage；route 持续覆盖期间无 generation HTTP、无 presentation/展示扣额，原机会仍 pending。测试新的任务页覆盖机制，不声称生成了原房内真实 approval 卡；无模型或设备运行证明。"
         },
         {
           "id": "captured-followup-23-page-2",
           "suite": "app",
           "name": "test/companion/companion_stream_state_test.dart fixture 10 a captured followup is not shown after the actual clock reaches 23",
           "file": "app/test/companion/companion_stream_state_test.dart",
-          "scope": "Actual Page + ChatController approval UI / injected production clock + SQLite; available HTTP boundary fixed by B03 peer. No external model or semantic judgment. This tests before generation; B03 tests separately cover approval after the generation request."
+          "scope": "实际 Page、捕获的 followup、注入生产时钟与 SQLite，真实时间越23后不呈现/不扣展示额；不声称该例生成房内 approval 卡。固定边界，NOT_RUN。"
         },
         {
           "id": "B03-companion_signal_owner_test-1",
@@ -1587,7 +1605,7 @@
           "suite": "app",
           "name": "test/companion/companion_stream_state_test.dart full Page drafts its actual followup through the phone memory route, covered=true",
           "file": "app/test/companion/companion_stream_state_test.dart",
-          "scope": "真实full Page→owner→worker→HTTP→SDK收据；审批期间迟到拟文不得显示，明确固定最终HTTP peer。"
+          "scope": "真实 full Page 先发 phone Messages followup，再由普通 Scaffold route 覆盖房间；迟到实际回包保留 receipt 而不显示/扣展示额。不是房内真实 approval 卡，也不是 Host auxiliary；固定 HTTP，NOT_RUN。"
         }
       ],
       "limits": [],
@@ -1811,7 +1829,7 @@
     },
     {
       "id": 14,
-      "title": "删后旧维护不复活、故事不成现实",
+      "title": "删后旧维护不复活、酒馆故事不成现实",
       "original_ids": [
         "07-17",
         "07-18",
@@ -1829,8 +1847,9 @@
         {
           "id": "cancelled-late-worker-merge",
           "suite": "app",
-          "name": "test/companion/companion_memory_worker_test.dart extract and consolidate share the active request and a cancelled late merge only settles its receipt",
-          "file": "app/test/companion/companion_memory_worker_test.dart"
+          "name": "test/companion/companion_memory_worker_test.dart A2 extract and organize share the lane and cancellation preserves the original receipt",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "真实 Worker/SQLite/MockClient：held organize 时其它维护 idle；stop 加真实删原话后释放旧 merge，stale 且不回填，已发 receipt 收尾；不是 Page 取消集成。"
         },
         {
           "id": "story-excluded-from-merge-evidence",
@@ -1853,7 +1872,7 @@
         }
       ],
       "limits": [
-        "无日记产品入口的独立日记删除分支属于原长期能力，本期不为测试新增。"
+        "酒馆scope=story的旧隔离合同仍保留；A2的真实our_story和diary另有产品入口，其角色/证明/删除机制由独立A2用例验收，不冒称本组旧15案例已经覆盖。"
       ],
       "required_gaps": []
     },
@@ -1874,27 +1893,30 @@
         {
           "id": "exact-local-no-cloud",
           "suite": "app",
-          "name": "test/companion/companion_memory_worker_test.dart exact local consolidation works without credentials and sends no request",
-          "file": "app/test/companion/companion_memory_worker_test.dart"
+          "name": "test/companion/companion_memory_worker_test.dart A2 safe exact local consolidation needs no credentials and an oversized model envelope leaves other cards untouched",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "保留原 oracle：真实相同有效 proof 两卡、无 key，经真实 Worker/Store 本地合一对，0 HTTP/0 cloud claim。另一独立非 exact 两卡遇真实完整 envelope 超额，保持两卡/0请求/0claim；不把不同文本直接并掉。"
         },
         {
           "id": "no-self-trigger-after-24h",
           "suite": "app",
-          "name": "test/companion/companion_memory_worker_test.dart consolidation sends the exact prompt and retains raw usage without triggering itself again",
+          "name": "test/companion/companion_memory_worker_test.dart A2 organize does not trigger itself across an unchanged day but accepts a later day with real new sources",
           "file": "app/test/companion/companion_memory_worker_test.dart",
-          "scope": "已整理一遍，推进24小时后真实worker再给机会仍idle/调用总数1。"
+          "scope": "首轮覆盖已完整日后，模型 merge+续轮有2物理HTTP/1parent；无外部来源/卡变化再过86400001ms仍idle/仍2HTTP，含自己写入不自触发。随后真实新当日原话先idle、次日完整才增1HTTP/新parent。保留零云原oracle，不误把新完整日材料视为日期自触发。"
         },
         {
           "id": "new-change-still-one-per-window",
           "suite": "app",
-          "name": "test/companion/companion_memory_worker_test.dart a new change waits for the same rolling organize allowance rather than opening another model request",
-          "file": "app/test/companion/companion_memory_worker_test.dart"
+          "name": "test/companion/companion_memory_worker_test.dart A2 organize uses completed tool results, one parent, and one receipt for each physical request",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "实际前一完整日源：merge+tool_result续轮2张不同receipt同1parent；pin外部变化不能在24h内领第二parent，跨86400001ms后才第3HTTP。A2日上限单位是实际parent机会，每物理HTTP独立收费，不冒称一天只能1HTTP。"
         },
         {
           "id": "bad-complete-no-auto-retry",
           "suite": "app",
-          "name": "test/companion/companion_memory_worker_test.dart a complete invalid consolidation is examined once and does not become an automatic format retry",
-          "file": "app/test/companion/companion_memory_worker_test.dart"
+          "name": "test/companion/companion_memory_worker_test.dart A2 a sent malformed tool turn closes without an automatic format retry or mutation",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "实际完整工具帧而参数JSON损坏：waiting、两卡不变、child关闭、无自动格式重试；新原话仍pending/format0，不能把旧完整JSON提案协议当现执行入口。"
         },
         {
           "id": "common-token-reservation-chat-independent",
@@ -1907,21 +1929,22 @@
           "id": "organize-wire-kind",
           "suite": "app",
           "name": "test/companion/companion_host_memory_transport_test.dart the organize ledger category uses the actual consolidate host wire kind",
-          "file": "app/test/companion/companion_host_memory_transport_test.dart"
+          "file": "app/test/companion/companion_host_memory_transport_test.dart",
+          "scope": "保留原公开 Host transport 的 organize→consolidate wire-kind/ledger 检查；这是兼容 transport 边界，不声称 A2 当前 extract/organize Worker 走 Host。NOT_RUN。"
         },
         {
           "id": "empty-archive-24h-no-cloud-1",
           "suite": "app",
           "name": "test/companion/companion_memory_idle_replay_test.dart fixture 15 empty archive makes no auxiliary HTTP request across 24 hours of opportunities",
           "file": "app/test/companion/companion_memory_idle_replay_test.dart",
-          "scope": "25 predefined opportunities including hour 0 and hour 24; production worker extraction/consolidation and real light HTTP/SSE adapter via MockClient; empty archive or unchanged examined card versions; no OS scheduling or model semantics claim. Actual Page ordinary chat after organize allowance is separate."
+          "scope": "真实 Owner/Worker/maintenance tools/phone Messages。空库25机会（含0与24h）零 HTTP/receipt；非空先公开 Store 工具准备两卡，完成真实 extract 与完整日日 organize 各一 receipt，再跨24h25机会零新增。保零云原 oracle，不把尚未完成日材料混成无变化；固定 HTTP，NOT_RUN。"
         },
         {
           "id": "empty-archive-24h-no-cloud-2",
           "suite": "app",
           "name": "test/companion/companion_memory_idle_replay_test.dart fixture 15 an examined unchanged archive makes no auxiliary HTTP request across 24 hours",
           "file": "app/test/companion/companion_memory_idle_replay_test.dart",
-          "scope": "25 predefined opportunities including hour 0 and hour 24; production worker extraction/consolidation and real light HTTP/SSE adapter via MockClient; empty archive or unchanged examined card versions; no OS scheduling or model semantics claim. Actual Page ordinary chat after organize allowance is separate."
+          "scope": "真实 Owner/Worker/maintenance tools/phone Messages。空库25机会（含0与24h）零 HTTP/receipt；非空先公开 Store 工具准备两卡，完成真实 extract 与完整日日 organize 各一 receipt，再跨24h25机会零新增。保零云原 oracle，不把尚未完成日材料混成无变化；固定 HTTP，NOT_RUN。"
         },
         {
           "id": "ordinary-chat-after-organize-limit-1",
@@ -1956,7 +1979,7 @@
           "suite": "app",
           "name": "test/companion/companion_invite_test.dart B03 actual auxiliary usage exhausting the shared output budget suppresses the Page wording POST",
           "file": "app/test/companion/companion_invite_test.dart",
-          "scope": "真实worker/owner/Page/transport与收据；仅最终HTTP/系统边界合成，模型口吻和语义须另取证。"
+          "scope": "新 owner 单例后继沿真实 Owner/phone Messages maintenance 与实际独立 usage receipts 耗尽共享 output 预算，再真实房间观察 followup POST 被128预留门抑制。原名/预算 oracle 保留；固定回包，非模型/native运行。"
         },
         {
           "id": "B03-sdk-ledger-1",
@@ -1983,7 +2006,9 @@
           "file": "app/test/companion/companion_memory_worker_test.dart"
         }
       ],
-      "limits": [],
+      "limits": [
+        "无变化零云及安全exact本地合并继续有效。parent额度是上限而非每天必发；真实新完整日材料是允许的新任务。模型同义判断、设备后台时机与真实费用仍单独NOT_RUN。"
+      ],
       "required_gaps": []
     }
   ],
@@ -2052,6 +2077,113 @@
       },
       "disposition": "SUPERSEDED_BY_ADDENDUM_04",
       "reason": "owner手记页只保留改一改和忘掉；相应底层控制/收据仍另有真实检查。"
+    },
+    {
+      "case_id": 3,
+      "check": {
+        "id": "complete-empty-worker",
+        "suite": "app",
+        "name": "test/companion/companion_memory_worker_test.dart complete empty result commits the exact saved source and raw final receipt",
+        "file": "app/test/companion/companion_memory_worker_test.dart"
+      },
+      "disposition": "A2_WIRE_ENVELOPE_ONLY_SUPERSEDED",
+      "reason": "旧schema2空operations包装退役；完整无工具结果完成真实源与原始收据的要求由同id active check保留。",
+      "replacement_check_id": "complete-empty-worker",
+      "status": "HISTORICAL_SCOPE_NOT_EXECUTED"
+    },
+    {
+      "case_id": 3,
+      "check": {
+        "id": "two-invalid-stable-batch",
+        "suite": "app",
+        "name": "test/companion/companion_memory_worker_test.dart two complete malformed replies skip only their stable batch despite a newer input",
+        "file": "app/test/companion/companion_memory_worker_test.dart"
+      },
+      "disposition": "A2_TWO_FORMAT_RETRY_POLICY_SUPERSEDED",
+      "reason": "A2不再自动两次JSON格式重试；已发不完整scope保守退休，不吞后提交u2的风险由同id真实held用例承接。",
+      "replacement_check_id": "two-invalid-stable-batch",
+      "status": "HISTORICAL_SCOPE_NOT_EXECUTED"
+    },
+    {
+      "case_id": 3,
+      "check": {
+        "id": "missing-stop-keeps-pending",
+        "suite": "app",
+        "name": "test/companion/companion_memory_worker_test.dart missing message_stop preserves usage and leaves the batch waiting",
+        "file": "app/test/companion/companion_memory_worker_test.dart"
+      },
+      "disposition": "A2_SENT_INCOMPLETE_RETIREMENT_SUPERSEDES_PENDING_RETRY",
+      "reason": "旧已派发缺stop继续pending规则改为维护scope skipped/maintenance_incomplete，不标processed、不自动重规划；实际原话和收据保留。",
+      "replacement_check_id": "missing-stop-keeps-pending",
+      "status": "HISTORICAL_SCOPE_NOT_EXECUTED"
+    },
+    {
+      "case_id": 15,
+      "check": {
+        "id": "new-change-still-one-per-window",
+        "suite": "app",
+        "name": "test/companion/companion_memory_worker_test.dart a new change waits for the same rolling organize allowance rather than opening another model request",
+        "file": "app/test/companion/companion_memory_worker_test.dart"
+      },
+      "disposition": "A2_DAILY_UNIT_IS_PARENT_NOT_ONE_HTTP",
+      "reason": "旧一天一次物理整理请求改为一天一个真实parent工具机会；每HTTP仍独立receipt与总预算，新变化不能买第二parent的原风险保留。",
+      "replacement_check_id": "new-change-still-one-per-window",
+      "status": "HISTORICAL_SCOPE_NOT_EXECUTED"
+    },
+    {
+      "case_id": 15,
+      "check": {
+        "id": "bad-complete-no-auto-retry",
+        "suite": "app",
+        "name": "test/companion/companion_memory_worker_test.dart a complete invalid consolidation is examined once and does not become an automatic format retry",
+        "file": "app/test/companion/companion_memory_worker_test.dart"
+      },
+      "disposition": "A2_JSON_PROPOSAL_ENVELOPE_SUPERSEDED",
+      "reason": "旧完整JSON consolidation包装退役，保留已发坏工具参数不自动重试/不写卡的同id active check。",
+      "replacement_check_id": "bad-complete-no-auto-retry",
+      "status": "HISTORICAL_SCOPE_NOT_EXECUTED"
+    },
+    {
+      "case_id": 7,
+      "check": {
+        "id": "B03-full-page-1",
+        "suite": "app",
+        "name": "test/companion/companion_stream_state_test.dart full Page drafts its actual followup through the selected auxiliary route, approval=false",
+        "file": "app/test/companion/companion_stream_state_test.dart",
+        "scope": "真实full Page→owner→worker→HTTP→SDK收据；审批期间迟到拟文不得显示，明确固定最终HTTP peer。"
+      },
+      "disposition": "OWNER_4974_PHONE_ROUTE_AND_TASKS_PAGE_COVERAGE_REPLACES_OLD_ENTRY",
+      "reason": "Owner moved full-room wording to the phone route and approvals out of the room. Active check keeps its ID and describes actual covered-route assertions; it does not claim the former Host transport or in-room approval-card mechanism.",
+      "replacement_check_id": "B03-full-page-1",
+      "status": "HISTORICAL_SCOPE_NOT_EXECUTED"
+    },
+    {
+      "case_id": 10,
+      "check": {
+        "id": "captured-followup-approval-page-1",
+        "suite": "app",
+        "name": "test/companion/companion_stream_state_test.dart fixture 10 a captured followup waits while a real approval card is open",
+        "file": "app/test/companion/companion_stream_state_test.dart",
+        "scope": "Actual Page + ChatController approval UI / injected production clock + SQLite; available HTTP boundary fixed by B03 peer. No external model or semantic judgment. This tests before generation; B03 tests separately cover approval after the generation request."
+      },
+      "disposition": "OWNER_4974_PHONE_ROUTE_AND_TASKS_PAGE_COVERAGE_REPLACES_OLD_ENTRY",
+      "reason": "Owner moved full-room wording to the phone route and approvals out of the room. Active check keeps its ID and describes actual covered-route assertions; it does not claim the former Host transport or in-room approval-card mechanism.",
+      "replacement_check_id": "captured-followup-approval-page-1",
+      "status": "HISTORICAL_SCOPE_NOT_EXECUTED"
+    },
+    {
+      "case_id": 10,
+      "check": {
+        "id": "B03-full-page-2",
+        "suite": "app",
+        "name": "test/companion/companion_stream_state_test.dart full Page drafts its actual followup through the selected auxiliary route, approval=true",
+        "file": "app/test/companion/companion_stream_state_test.dart",
+        "scope": "真实full Page→owner→worker→HTTP→SDK收据；审批期间迟到拟文不得显示，明确固定最终HTTP peer。"
+      },
+      "disposition": "OWNER_4974_PHONE_ROUTE_AND_TASKS_PAGE_COVERAGE_REPLACES_OLD_ENTRY",
+      "reason": "Owner moved full-room wording to the phone route and approvals out of the room. Active check keeps its ID and describes actual covered-route assertions; it does not claim the former Host transport or in-room approval-card mechanism.",
+      "replacement_check_id": "B03-full-page-2",
+      "status": "HISTORICAL_SCOPE_NOT_EXECUTED"
     }
   ],
   "unresolved_requirements": [
@@ -2158,5 +2290,57 @@
     "runtime/tests/fixtures/companion-recall-engine.mjs",
     "tooling/companion/fixtures/phone-context.json",
     "tooling/companion/offline_http.dart"
-  ]
+  ],
+  "a2_worker_contract": {
+    "status": "SOURCE_MAPPING_ONLY_ALL_NOT_RUN",
+    "parent_commit": "0ba538be94caa148032418555c23cf74e7e74b60",
+    "worker_sha256": "0839d0b147f02a26f58b12f38514f1c3717c5bb9e95852cb34b5326f4595fc5f",
+    "worker_definitions": 15,
+    "worker_expanded_cases": 21,
+    "sdk_successor_patch_sha256": "97205ff0161d25793ceef0a9983fd3b345de8739295f16eab027eaddd252d4aa",
+    "version_policy": "fixture_version=1 and ruleset=09e-r2+r2.1 retained for existing reader; this metadata is non-executing.",
+    "retained_oracles": [
+      "exact-local-no-cloud",
+      "no-self-trigger-after-24h"
+    ],
+    "retired_scope_notes": [
+      {
+        "case_id": 14,
+        "previous_limits": [
+          "无日记产品入口的独立日记删除分支属于原长期能力，本期不为测试新增。"
+        ],
+        "reason": "ADD38 explicitly adds diary and real role-scoped stories; old no-diary-product limit no longer describes A2."
+      }
+    ],
+    "new_a2_suites": "SDK agent-memory/tools and local embedding suites remain separately bound NOT_RUN; fixture_sources stays exactly52."
+  },
+  "known_owner_skips": [
+    {
+      "case_id": 12,
+      "check_id": "page-postponed",
+      "name": "test/companion/companion_invite_test.dart a pending memory question yields to postponed through the real composer",
+      "file": "app/test/companion/companion_invite_test.dart",
+      "source_sha256": "24c509314b4f252cb7d548c59a0bd622d47b53fb0265c8ba26682b26c71da5e2",
+      "condition_literal": "skip: state == 'postponed'",
+      "reason": "Owner explicitly records that current Agent tools have cancel but no postpone. Preserve the original active check and owner skip; do not delete the requirement.",
+      "reporting": "Informational current-source note only. Existing runner maps actual skipped events to NOT_RUN; this does not override future real test results and adds no permanent required_gap."
+    }
+  ],
+  "a2_replay_fixture_contract": {
+    "status": "SOURCE_MAPPING_ONLY_ALL_PRODUCT_NOT_RUN",
+    "parent_commit": "4974fe8bfbc827e045d02331309508a32010c2dd",
+    "owner_four_sources_preserved_except_root_budget_fixture": [
+      "app/test/companion/companion_invite_test.dart",
+      "app/test/companion/companion_page_test.dart",
+      "app/test/companion/companion_recall_room_test.dart",
+      "app/test/companion/companion_stream_state_test.dart"
+    ],
+    "changed_owner_names": 3,
+    "new_source_suites_added_to_fixture_sources": 0,
+    "wire": "Current maintenance is real phone Messages plus persistent tools; old JSON proposal envelopes survive only as explicit legacy fixture setup or compatibility boundaries, not the current maintenance transport.",
+    "receipts": "Each physical tool continuation has its own real request receipt; full logical maintenance is not one HTTP.",
+    "dates_and_controls": "Structured event_time and continuing topic controls have production successors; the control fixture also requires the closure and text-block-index one-line successors.",
+    "owner_skip_policy": "Do not turn the postponed owner skip into PASS or silently remove its active check.",
+    "boundary": "No claims of Dart syntax/analyzer success, model semantics, OS scheduling, native execution or A3 user acceptance."
+  }
 }

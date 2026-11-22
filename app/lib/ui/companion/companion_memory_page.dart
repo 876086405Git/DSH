@@ -21,11 +21,12 @@ import '../theme/semantic_colors.dart';
 
 const _maxLength = 512;
 
-
 class CompanionMemoryPage extends ConsumerStatefulWidget {
-  const CompanionMemoryPage({super.key, required this.memory});
+  const CompanionMemoryPage({super.key, required this.memory, this.characterId});
 
   final CompanionMemoryOwner memory;
+  // A captured character, not a selector for all roles. Null means shared only.
+  final String? characterId;
 
   @override
   ConsumerState<CompanionMemoryPage> createState() => _CompanionMemoryPageState();
@@ -180,7 +181,7 @@ class _CompanionMemoryPageState extends ConsumerState<CompanionMemoryPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final cards = widget.memory.store.cards();
+    final cards = widget.memory.store.memoryPageCards(characterId: widget.characterId);
     final Widget body = cards.isEmpty
         ? EmptyView(
             icon: AppIcons.bookmark,
@@ -197,6 +198,11 @@ class _CompanionMemoryPageState extends ConsumerState<CompanionMemoryPage> {
                   icon: AppIcons.bookmark,
                   tinted: false,
                   title: row['text']! as String,
+                  subtitle: switch (row['layer']) {
+                    'diary' => '${l10n.companionMemoryDiary} · ${row['local_day']}',
+                    'impression' => l10n.companionMemoryImpression,
+                    _ => row['collection'] == 'person' ? l10n.companionMemoryPerson : l10n.companionMemoryCard,
+                  },
                   onTap: _busy ? null : () => _edit(row),
                   trailing: PopupMenuButton<String>(
                     enabled: !_busy,

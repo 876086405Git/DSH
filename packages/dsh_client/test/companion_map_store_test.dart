@@ -520,16 +520,23 @@ void main() {
       isEmpty,
     );
     restart();
-    expect(database.select('PRAGMA user_version').single['user_version'], 15);
+    expect(database.select('PRAGMA user_version').single['user_version'], 16);
     expect(store.task(prior['task_id']! as String), prior);
+    // Tables that existed before the upgrade keep their schema, except the
+    // ones later versions deliberately alter. New tables are not compared.
+    const altered = {'memory_followups', 'memory_cards', 'memory_messages', 'memory_topics'};
+    final before = {for (final row in schema) row['name']};
     expect(
-      database
-          .select(
-            "SELECT name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' "
-            "AND name NOT IN ('companion_map_revisions','companion_map_scopes') AND name NOT LIKE '%memory_agent_%' AND name != 'memory_followups' ORDER BY name",
-          )
-          .map((row) => Map<String, Object?>.from(row)),
-      [for (final row in schema) if (row['name'] != 'memory_followups') row],
+      [
+        for (final row in database.select(
+          "SELECT name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
+        ))
+          if (before.contains(row['name']) && !altered.contains(row['name'])) Map<String, Object?>.from(row),
+      ],
+      [
+        for (final row in schema)
+          if (!altered.contains(row['name'])) row,
+      ],
     );
     expect(database.select('SELECT * FROM companion_map_scopes'), isEmpty);
     expect(database.select('PRAGMA foreign_key_check'), isEmpty);

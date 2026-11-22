@@ -5279,6 +5279,39 @@ class L10nZh extends L10n {
   String get companionMemoryTitle => '她记得的事';
 
   @override
+  String get companionMemoryCard => '卡片';
+
+  @override
+  String get companionMemoryPerson => '人物档案';
+
+  @override
+  String get companionMemoryDiary => '日记';
+
+  @override
+  String get companionMemoryImpression => '她对你的印象';
+
+  @override
+  String get companionMemorySearchTitle => '记忆检索';
+
+  @override
+  String get companionMemorySearchDescription => '下载约24 MB的模型，用手机本地查找意思相近的记忆。';
+
+  @override
+  String get companionMemorySearchDownload => '下载模型';
+
+  @override
+  String get companionMemorySearchReady => '本地模型已就绪';
+
+  @override
+  String get companionMemorySearchDownloading => '正在下载…';
+
+  @override
+  String get companionMemorySearchFailed => '暂时无法准备本地模型。可以重试下载。';
+
+  @override
+  String get companionMemorySearchUnavailable => '此设备暂不支持本地记忆检索。';
+
+  @override
   String companionMemoryScope(String host) {
     return '保存在$host，两种模式共用。你可以随时改或忘。';
   }
@@ -5467,16 +5500,22 @@ class L10nZh extends L10n {
   String get companionBondTitle => '你们的关系';
 
   @override
-  String get companionBond0 => '刚认识';
+  String get companionBond0 => '初识';
 
   @override
-  String get companionBond1 => '渐渐熟悉';
+  String get companionBond1 => '熟悉';
 
   @override
-  String get companionBond2 => '熟起来了';
+  String get companionBond2 => '朋友';
 
   @override
-  String get companionBond3 => '很亲近';
+  String get companionBond3 => '亲近';
+
+  @override
+  String get companionBond4 => '很亲';
+
+  @override
+  String get companionBond5 => '离不开';
 
   @override
   String get companionCloser1 => '好像……没那么紧张了。';
@@ -5486,6 +5525,12 @@ class L10nZh extends L10n {
 
   @override
   String get companionCloser3 => '以后也要常来哦，我会想你的。';
+
+  @override
+  String get companionCloser4 => '你在的时候，连安静待着都很开心。';
+
+  @override
+  String get companionCloser5 => '不知不觉，已经很习惯有你在了。';
 
   @override
   String get companionPatClose => '最喜欢被你摸头了。';
@@ -7079,6 +7124,9 @@ class L10nZh extends L10n {
 
   @override
   String get companionReceiptPriorResult => '此前约定写出的表已找到；新的约定尚未完成。';
+
+  @override
+  String get companionLegacyConversation => '旧对话（角色未记录）';
 
   @override
   String get automaticDiagnosticsRecover => '恢复本地记录';

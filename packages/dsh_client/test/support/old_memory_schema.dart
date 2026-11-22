@@ -3,6 +3,77 @@ import 'package:sqlite3/sqlite3.dart';
 /// Reconstruct a real previous schema before exercising the production upgrade.
 /// Changing only user_version would leave new columns and hide migration bugs.
 void restoreOldMemorySchema(Database database, int version) {
+  if (version < 16) {
+    if (database.select('SELECT 1 FROM memory_characters LIMIT 1').isNotEmpty) {
+      throw StateError('A pre-role fixture cannot contain character-scoped data');
+    }
+    database.execute(
+      'CREATE TEMP TABLE fixture_turns15 AS SELECT id,source_message_id,source_rev,'
+      'control_revision,shown_cards,changed_cards,closed FROM memory_agent_turns WHERE origin_kind=\'chat\'',
+    );
+    database.execute(
+      'CREATE TEMP TABLE fixture_calls15 AS SELECT c.* FROM memory_agent_calls c '
+      'JOIN fixture_turns15 t ON t.id=c.turn_id',
+    );
+    database.execute('DROP TABLE memory_agent_maintenance_requests');
+    database.execute('DROP TABLE memory_agent_calls');
+    database.execute('DROP TABLE memory_agent_turns');
+    database.execute('DROP TABLE memory_agent_maintenance_claims');
+    database.execute('''
+CREATE TABLE memory_agent_turns (
+  id TEXT PRIMARY KEY,
+  source_message_id TEXT NOT NULL REFERENCES memory_messages(id) ON DELETE CASCADE,
+  source_rev INTEGER NOT NULL, control_revision INTEGER NOT NULL,
+  shown_cards TEXT NOT NULL, changed_cards TEXT NOT NULL,
+  closed INTEGER NOT NULL DEFAULT 0 CHECK(closed IN (0,1)),
+  UNIQUE(source_message_id,source_rev)
+);
+CREATE TABLE memory_agent_calls (
+  turn_id TEXT NOT NULL REFERENCES memory_agent_turns(id) ON DELETE CASCADE,
+  call_id TEXT NOT NULL, tool_name TEXT NOT NULL, input_sha256 TEXT NOT NULL,
+  item_no INTEGER NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('pending','applied','ignored','accepted')),
+  code TEXT, target_id TEXT, changed_cards TEXT NOT NULL,
+  before_control_revision INTEGER NOT NULL, after_control_revision INTEGER NOT NULL,
+  task_id TEXT, task_rev INTEGER,
+  PRIMARY KEY(turn_id,call_id)
+);
+    ''');
+    database.execute('INSERT INTO memory_agent_turns SELECT * FROM fixture_turns15');
+    database.execute('INSERT INTO memory_agent_calls SELECT * FROM fixture_calls15');
+    database.execute('DROP TABLE fixture_calls15');
+    database.execute('DROP TABLE fixture_turns15');
+    database.execute('DROP TRIGGER memory_embeddings_revision');
+    for (final table in [
+      'memory_embeddings',
+      'memory_person_aliases',
+      'memory_card_references',
+      'memory_affinity_events',
+      'memory_affinity_presentations',
+      'memory_affinity_presence',
+      'memory_affinity_days',
+      'memory_affinity_legacy_sources',
+      'memory_affinity_legacy',
+      'memory_affinity',
+    ]) {
+      database.execute('DROP TABLE $table');
+    }
+    for (final index in [
+      'memory_cards_domain',
+      'memory_messages_character',
+      'memory_diary_day',
+      'memory_impression_character',
+    ]) {
+      database.execute('DROP INDEX $index');
+    }
+    // Drop the columns carrying CHECKs before their referenced collection.
+    for (final column in ['day_zone_id', 'local_day', 'character_id', 'collection']) {
+      database.execute('ALTER TABLE memory_cards DROP COLUMN $column');
+    }
+    database.execute('ALTER TABLE memory_topics DROP COLUMN character_id');
+    database.execute('ALTER TABLE memory_messages DROP COLUMN character_id');
+    database.execute('DROP TABLE memory_characters');
+  }
   if (version < 15) {
     database.execute('DROP TABLE memory_agent_calls');
     database.execute('DROP TABLE memory_agent_turns');

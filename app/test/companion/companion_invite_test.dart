@@ -96,22 +96,29 @@ http.Response _toolUse(String id, String name, Map<String, Object?> input) => ht
   headers: {'content-type': 'text/event-stream; charset=utf-8'},
 );
 
-Future<http.Response> _conversationReply(Map<String, Object?> body) async {
+String _requestKind(Map<String, Object?> body) {
   if (body['system'] == companionMemoryFollowupPrompt) {
-    return _generated(jsonEncode({'action': 'line', 'text': _followup}));
+    return 'followup';
   }
-  if (body['system'] == companionMemoryExtractionPrompt) {
-    // Reopening and the two-minute tail still perform their real extraction.
-    final input = jsonDecode(((body['messages']! as List).single as Map)['content'] as String) as Map;
-    return _generated(
-      jsonEncode({
-        'schema_version': 2,
-        'batch_id': input['batch_id'],
-        'covered_message_ids': [for (final row in (input['source']! as List).cast<Map>()) row['id']],
-        'completion': 'complete',
-        'operations': [],
-      }),
-    );
+  final messages = body['messages']! as List;
+  final content = (messages.first as Map)['content'];
+  if (content is String) {
+    Object? input;
+    try {
+      input = jsonDecode(content);
+    } on FormatException {
+      // Ordinary conversation is not the maintenance JSON envelope.
+    }
+    if (input is Map && input['type'] == 'memory_maintenance_context') {
+      return input['kind']! as String;
+    }
+  }
+  return 'chat';
+}
+
+Future<http.Response> _conversationReply(Map<String, Object?> body) async {
+  if (_requestKind(body) == 'followup') {
+    return _generated(jsonEncode({'action': 'line', 'text': _followup}));
   }
   return _generated('我听到了。');
 }
@@ -223,6 +230,10 @@ class _Room {
   final requests = <Map<String, Object?>>[];
   final defaultRequests = <Map<String, Object?>>[];
   Future<http.Response> Function(Map<String, Object?>)? answer;
+  Future<http.Response> Function(Map<String, Object?>)? maintenanceAnswer;
+
+  Iterable<Map<String, Object?>> get followupRequests => requests.where((body) => _requestKind(body) == 'followup');
+  Iterable<MemoryRow> get followupReceipts => memory.store.requests().where((row) => row['category'] == 'followup');
 
   Iterable<String> get names => commands.map((c) => c.$1);
 
@@ -235,14 +246,7 @@ class _Room {
           for (final key in ['state', 'row_rev', 'card_rev', 'control_revision', 'reason']) key: row[key],
         },
     ],
-    'requests': [
-      for (final body in requests)
-        body['system'] == companionMemoryFollowupPrompt
-            ? 'followup'
-            : body['system'] == companionMemoryExtractionPrompt
-            ? 'extract'
-            : 'chat',
-    ],
+    'requests': [for (final body in requests) _requestKind(body)],
     'receipts': [
       for (final row in memory.store.requests().where((row) => row['category'] == 'followup'))
         {
@@ -288,6 +292,13 @@ class _Room {
             () => MockClient((request) async {
               final body = jsonDecode(request.body) as Map<String, Object?>;
               requests.add(body);
+              final kind = _requestKind(body);
+              if (kind == 'extract' || kind == 'organize') {
+                if (maintenanceAnswer != null) return maintenanceAnswer!(body);
+                // Let the actual maintenance claim finish with a normal
+                // Messages end_turn. It is not a chat or a followup attempt.
+                return _generated('');
+              }
               if (answer != null) {
                 return answer!(body);
               }
@@ -347,6 +358,26 @@ class _Room {
   }
 
   Future<void> close() async {
+    // Check the real maintenance receipts outside the transport callback:
+    // its catch must not turn a fixture assertion into a hidden network error.
+    Iterable<MemoryRow> maintenanceReceipts() =>
+        memory.store.requests().where((row) => row['category'] == 'extract' || row['category'] == 'organize');
+    for (var i = 0; i < 100 && memory.working; i++) {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+    }
+    if (maintenanceReceipts().isNotEmpty) {
+      expect(memory.working, isFalse, reason: 'the real maintenance claim drains before the room closes');
+    }
+    for (final kind in ['extract', 'organize']) {
+      final receipts = maintenanceReceipts().where((row) => row['category'] == kind).toList();
+      expect(receipts, hasLength(requests.where((body) => _requestKind(body) == kind).length));
+      for (final receipt in receipts) {
+        expect(receipt['state'], 'finished');
+        expect(receipt['terminal'], 'complete');
+        expect((receipt['raw_usage']! as Map)['complete'], isTrue);
+      }
+    }
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 10));
     // The timer callback records its observation; a guarded test assertion
@@ -362,10 +393,10 @@ class _Room {
   }
 
   Future<void> waitForRequest() async {
-    for (var second = 0; second < 70 && requests.isEmpty; second++) {
+    for (var second = 0; second < 70 && followupRequests.isEmpty; second++) {
       await wait(const Duration(seconds: 1));
     }
-    expect(requests, isNotEmpty);
+    expect(followupRequests, isNotEmpty);
   }
 
   Future<void> sendControl(String text) async {
@@ -473,11 +504,11 @@ void main() {
         }
         // An ordinary cushion invitation in a plan-only branch remains a
         // separate existing feature; only memory questions are counted here.
-        expect(room.requests, hasLength(expected));
-        final requests = room.memory.store.requests();
+        expect(room.followupRequests, hasLength(expected));
+        final requests = room.followupReceipts.toList();
         expect(requests, hasLength(expected));
         if (expected == 1) {
-          final request = room.requests.single;
+          final request = room.followupRequests.single;
           expect(request['system'], companionMemoryFollowupPrompt);
           expect(request['max_tokens'], 128);
           final input = jsonDecode(((request['messages']! as List).single as Map)['content']! as String) as Map;
@@ -512,10 +543,7 @@ void main() {
         expect(opportunity['state'], 'pending');
         expect(find.text(_followup), findsNothing);
         final receipt = await room.sendChat(raw);
-        final chats = room.requests.where(
-          (body) =>
-              body['system'] != companionMemoryExtractionPrompt && body['system'] != companionMemoryFollowupPrompt,
-        );
+        final chats = room.requests.where((body) => _requestKind(body) == 'chat');
         expect(chats, hasLength(1));
         expect(jsonEncode(chats.single), contains(raw));
         expect(room.memory.store.messages().where((row) => row['role'] == 'user' && row['text'] == raw), hasLength(1));
@@ -573,7 +601,7 @@ void main() {
           expect(room.requests.where((body) => body['system'] == companionMemoryFollowupPrompt), hasLength(1));
           expect(chats, hasLength(1));
           expect(
-            room.requests.where((body) => body['system'] == companionMemoryExtractionPrompt),
+            room.requests.where((body) => _requestKind(body) == 'extract'),
             isNotEmpty,
             reason: 'the submitted original receives its real tail opportunity',
           );
@@ -617,9 +645,9 @@ void main() {
     await room.waitForFollowup();
     expect(room.memory.store.followups().single['state'], 'asked');
     expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
-    expect(room.requests, hasLength(1));
-    expect(room.requests.single['system'], companionMemoryFollowupPrompt);
-    expect(room.memory.store.requests().single['category'], 'followup');
+    expect(room.followupRequests, hasLength(1));
+    expect(room.followupRequests.single['system'], companionMemoryFollowupPrompt);
+    expect(room.followupReceipts.single['category'], 'followup');
     await room.close();
   });
 
@@ -636,8 +664,8 @@ void main() {
       ..answer = (body) => body['system'] == companionMemoryFollowupPrompt ? answer.future : _conversationReply(body);
     await room.open(seed: _seedFollowup);
     await room.waitForRequest();
-    expect(room.requests.single['system'], companionMemoryFollowupPrompt);
-    final followupRequest = room.memory.store.requests().single;
+    expect(room.followupRequests.single['system'], companionMemoryFollowupPrompt);
+    final followupRequest = room.followupReceipts.single;
     expect(followupRequest['category'], 'followup');
     expect(followupRequest['sent_at_ms'], isNotNull);
     expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
@@ -676,8 +704,8 @@ void main() {
     expect(find.text(_followup), findsOneWidget, reason: 'its own bubble is not an external busy prompt');
     expect(room.memory.store.followups().single['state'], 'asked');
     expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
-    expect(room.requests, hasLength(1));
-    final request = room.requests.single;
+    expect(room.followupRequests, hasLength(1));
+    final request = room.followupRequests.single;
     expect(request['system'], companionMemoryFollowupPrompt);
     expect(request['max_tokens'], 128);
     expect(request.containsKey('tools'), isFalse);
@@ -695,7 +723,7 @@ void main() {
     });
     expect(input['support'], isEmpty);
     expect(input.containsKey('history'), isFalse);
-    final receipt = room.memory.store.requests().single;
+    final receipt = room.followupReceipts.single;
     expect(receipt['category'], 'followup');
     expect(receipt['state'], 'finished');
     expect((receipt['raw_usage']! as Map)['final_usage'], containsPair('output_tokens', 12));
@@ -706,7 +734,7 @@ void main() {
     expect(find.text(_followup), findsNothing);
     expect(room.memory.store.followups().single['state'], 'asked');
     expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
-    expect(room.requests, hasLength(1), reason: 'asked remains consumed after reopening');
+    expect(room.followupRequests, hasLength(1), reason: 'asked remains consumed after reopening');
     await room.close();
   });
 
@@ -728,13 +756,13 @@ void main() {
       await room.open(seed: _seedFollowup);
       await room.waitForRequest();
       await room.wait(const Duration(minutes: 3));
-      expect(room.requests, hasLength(1));
+      expect(room.followupRequests, hasLength(1));
       expect(find.text(_followup), findsNothing);
       expect(find.text(_genericFollowup), findsNothing);
       expect(room.memory.store.followups().single['state'], 'pending');
       expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
-      expect(room.memory.store.requests().single['category'], 'followup');
-      expect(room.memory.store.requests().single['sent_at_ms'], isNotNull);
+      expect(room.followupReceipts.single['category'], 'followup');
+      expect(room.followupReceipts.single['sent_at_ms'], isNotNull);
       await room.close();
     });
   }
@@ -749,7 +777,7 @@ void main() {
     room.answer = null;
     await room.open();
     await room.waitForFollowup();
-    expect(room.requests, hasLength(2));
+    expect(room.followupRequests, hasLength(2));
     expect(room.memory.store.requests().where((row) => row['category'] == 'followup'), hasLength(2));
     expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
     await room.close();
@@ -771,20 +799,21 @@ void main() {
   testWidgets('B03 actual auxiliary usage exhausting the shared output budget suppresses the Page wording POST', (
     tester,
   ) async {
+    var maintenanceCalls = 0;
     final room = _Room(tester, root)
-      ..answer = (body) async {
+      ..maintenanceAnswer = (body) async {
         final messages = body['messages']! as List;
         final input = jsonDecode((messages.single as Map)['content'] as String) as Map;
-        return _generated(
-          jsonEncode({
-            'schema_version': 2,
-            'batch_id': input['batch_id'],
-            'covered_message_ids': [for (final source in input['source'] as List) (source as Map)['id']],
-            'operations': [],
-            'completion': 'complete',
-          }),
-          outputTokens: 720,
-        );
+        expect(input['type'], 'memory_maintenance_context');
+        expect(input['kind'], 'extract');
+        expect((input['sources'] as List).map((source) => (source as Map)['id']), [
+          'budget-source-${maintenanceCalls++}',
+        ]);
+        expect((body['tools'] as List).map((tool) => (tool as Map)['name']), contains('remember'));
+        expect(body['max_tokens'], 800);
+        // A real complete end_turn with no tool calls finishes this source;
+        // each physical Messages request reports its actual fixed usage.
+        return _generated('这轮没有新增记忆。', outputTokens: 720);
       };
     await room.open(seed: _seedFollowup);
     // The room's worker belongs to its process-level visit, which a test cannot
@@ -804,13 +833,23 @@ void main() {
         saidAtUtc: room.wallStart,
         offsetMinutes: 0,
       );
-      await settleMixed(tester, room.memory.extract(standIn, forceTail: true));
+      await settleMixed(tester, room.memory.extract(standIn, forceTail: true, offsetMinutes: 0));
+      expect(
+        room.memory.store.messages().singleWhere((source) => source['id'] == 'budget-source-$i')['extraction_state'],
+        'done',
+      );
     }
     room.memory.leave(standIn);
     await room.close();
     await room.open();
+    expect(maintenanceCalls, 4);
     expect(room.requests, hasLength(4));
-    expect(room.requests.map((body) => body['system']), everyElement(companionMemoryExtractionPrompt));
+    expect(
+      room.requests.map((body) => body['system']),
+      everyElement(contains('phone memory using the supplied memory tools')),
+    );
+    expect(room.memory.store.requests().map((row) => row['id']).toSet(), hasLength(4));
+    expect(room.memory.store.requests().map((row) => row['state']), everyElement('finished'));
     expect(room.memory.store.requests().map((row) => row['category']), everyElement('extract'));
     expect(room.memory.store.requests().map((row) => (row['raw_usage']! as Map)['output_tokens']), everyElement(720));
     await room.wait(const Duration(minutes: 2));
@@ -867,7 +906,7 @@ void main() {
     expect(find.text(_followup), findsNothing);
     expect(find.text(_genericFollowup), findsNothing);
     expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
-    expect(room.memory.store.requests().single['category'], 'followup');
+    expect(room.followupReceipts.single['category'], 'followup');
     await room.close();
   });
 
@@ -875,13 +914,11 @@ void main() {
     // A plan change is now the model's tool call on the card it was shown,
     // not a phrase the room recognizes itself. The chat turn costs its own
     // receipts; the memory question costs nothing.
-    testWidgets('a pending memory question yields to $state through the real composer', (
-      tester,
-    ) async {
+    testWidgets('a pending memory question yields to $state through the real composer', (tester) async {
       final chats = <Map<String, Object?>>[];
       final room = _Room(tester, root)
         ..answer = (body) async {
-          if (body['system'] == companionMemoryFollowupPrompt || body['system'] == companionMemoryExtractionPrompt) {
+          if (_requestKind(body) == 'followup') {
             return _conversationReply(body);
           }
           chats.add(body);

@@ -43,53 +43,73 @@ class _ClosingStore extends CompanionMemoryStore {
   }
 }
 
-class _DelayedRoute implements CompanionMemoryTransport {
+class _DelayedRoute {
+  _DelayedRoute() {
+    wire = StreamController<List<int>>(
+      onListen: () {
+        wire.add(
+          _frames([
+            {
+              'type': 'message_start',
+              'message': {'usage': _usage['start_usage']},
+            },
+            {
+              'type': 'content_block_delta',
+              'index': 0,
+              'delta': {'type': 'text_delta', 'text': 'Still considering.'},
+            },
+          ]),
+        );
+        started.complete();
+      },
+      onCancel: () {
+        cancelling.complete();
+        return release.future;
+      },
+    );
+    transport = CompanionLightMemoryTransport(
+      apiKey: () => 'fixture',
+      client: () => MockClient.streaming((request, body) async {
+        calls++;
+        final sent = jsonDecode(await utf8.decoder.bind(body).join()) as MemoryRow;
+        expect((sent['tools'] as List).map((tool) => (tool as Map)['name']), contains('remember'));
+        inputs.add(jsonDecode(((sent['messages'] as List).first as Map)['content'] as String) as MemoryRow);
+        return http.StreamedResponse(wire.stream, 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+      }),
+    );
+    addTearDown(() async {
+      if (!release.isCompleted) release.complete();
+      if (!started.isCompleted) unawaited(wire.stream.drain<void>());
+      await wire.close();
+    });
+  }
+
   final started = Completer<void>();
+  final cancelling = Completer<void>();
   final release = Completer<void>();
+  late final StreamController<List<int>> wire;
+  late final CompanionLightMemoryTransport transport;
+  final inputs = <MemoryRow>[];
   int calls = 0;
-  bool cancellationSeen = false;
-  @override
-  String get provider => 'deepseek';
-  @override
-  String get model => 'deepseek-flash';
-  @override
-  bool get configured => true;
-  @override
-  Future<CompanionAuxiliaryReply> call({
-    required String requestId,
-    required String category,
-    required String system,
-    required String input,
-    required int maxTokens,
-    required Future<void> cancelled,
-    required void Function() onDispatchUncertain,
-    required void Function() onSent,
-    required void Function(Map<String, Object?>) onUsage,
-  }) async {
-    calls++;
-    onSent();
-    if (!started.isCompleted) started.complete();
-    unawaited(
-      cancelled.then((_) {
-        cancellationSeen = true;
-      }),
+
+  Future<void> finish() async {
+    release.complete();
+    wire.add(
+      _frames([
+        {
+          'type': 'message_delta',
+          'delta': {'stop_reason': 'end_turn'},
+          'usage': _usage['final_usage'],
+        },
+        {'type': 'message_stop'},
+      ]),
     );
-    await release.future;
-    onUsage(_usage);
-    final batch = jsonDecode(input) as Map;
-    return CompanionAuxiliaryReply(
-      text: jsonEncode({
-        'schema_version': 2,
-        'batch_id': batch['batch_id'],
-        'operations': [],
-        'completion': 'complete',
-        'covered_message_ids': [for (final row in batch['source'] as List) (row as Map)['id']],
-      }),
-      terminal: 'complete',
-      complete: true,
-    );
+    await wire.close();
   }
 }
+
+List<int> _frames(List<MemoryRow> events) =>
+    utf8.encode(events.map((event) => 'data: ${jsonEncode(event)}\n\n').join());
 
 CompanionMemoryOwner _owner(CompanionMemoryStore store) =>
     CompanionMemoryOwner(store, CompanionLocal.at(Directory('/unused-memory-lifecycle')), nowMilliseconds: () => _at);
@@ -109,18 +129,23 @@ void main() {
     final route = _DelayedRoute();
     final room = Object();
     _source(store);
-    owner.enter(room, transport: () => route, estimateTokens: estimateCompanionMemoryTokens);
-    final active = owner.extract(room, forceTail: true);
+    owner.enter(room, transport: () => route.transport, estimateTokens: estimateCompanionMemoryTokens);
+    final active = owner.extract(room, forceTail: true, offsetMinutes: 480);
     await route.started.future;
     owner.dispose();
+    await route.cancelling.future;
     expect(store.closed.isCompleted, isFalse);
+    expect(store.requests().single['state'], 'sent');
     route.release.complete();
     expect(await active, CompanionMemoryWork.stale);
     await store.closed.future;
-    expect(route.cancellationSeen, isTrue);
     expect(store.receiptsAtClose, hasLength(1));
+    expect(store.receiptsAtClose.single['state'], 'finished');
     final raw = store.receiptsAtClose.single['raw_usage']! as Map;
-    expect(raw['final_usage'], _usage['final_usage']);
+    expect(raw['terminal'], 'cancelled');
+    expect(raw['complete'], isFalse);
+    expect(raw['final_usage'], isNull, reason: 'cancelled real SSE does not invent unseen final provider usage');
+    expect(raw['output_tokens'], isNull);
   });
 
   test('changing rooms never starts a second worker until the first has settled', () async {
@@ -129,21 +154,32 @@ void main() {
     final a = _DelayedRoute(), b = _DelayedRoute();
     final roomA = Object(), roomB = Object();
     _source(store);
-    owner.enter(roomA, transport: () => a, estimateTokens: estimateCompanionMemoryTokens);
-    final old = owner.extract(roomA, forceTail: true);
+    owner.enter(roomA, transport: () => a.transport, estimateTokens: estimateCompanionMemoryTokens);
+    final old = owner.extract(roomA, forceTail: true, offsetMinutes: 480);
     await a.started.future;
-    owner.enter(roomB, transport: () => b, estimateTokens: estimateCompanionMemoryTokens);
-    expect(await owner.extract(roomB, forceTail: true), CompanionMemoryWork.idle);
+    owner.enter(roomB, transport: () => b.transport, estimateTokens: estimateCompanionMemoryTokens);
+    await a.cancelling.future;
+    store.submitMessage(
+      id: 'source-two',
+      sessionId: store.lightSessionId,
+      text: '今天还想聊聊练琴。',
+      saidAtUtc: _at,
+      offsetMinutes: 480,
+    );
+    expect(await owner.extract(roomB, forceTail: true, offsetMinutes: 480), CompanionMemoryWork.idle);
     expect(b.calls, 0);
     a.release.complete();
     expect(await old, CompanionMemoryWork.stale);
-    expect(await owner.extract(roomA, forceTail: true), CompanionMemoryWork.idle);
-    final fresh = owner.extract(roomB, forceTail: true);
+    expect(await owner.extract(roomA, forceTail: true, offsetMinutes: 480), CompanionMemoryWork.idle);
+    final fresh = owner.extract(roomB, forceTail: true, offsetMinutes: 480);
     await b.started.future;
-    b.release.complete();
+    expect((b.inputs.single['sources'] as List).map((row) => (row as Map)['id']), ['source-two']);
+    await b.finish();
     expect(await fresh, CompanionMemoryWork.committed);
     expect(store.requests(), hasLength(2));
-    expect(store.messages().single['id'], 'source');
+    expect(store.messages().map((row) => row['id']), ['source', 'source-two']);
+    expect(store.messages().first['extraction_state'], 'skipped');
+    expect(store.messages().last['extraction_state'], 'done');
     expect(store.cards(), isEmpty);
     owner.dispose();
     await store.closed.future;

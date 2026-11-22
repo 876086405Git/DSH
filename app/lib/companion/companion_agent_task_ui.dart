@@ -6,7 +6,8 @@ import 'companion_maps.dart';
 
 typedef CompanionAgentSelectionRoute = void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute);
 
-/// One captured real full-mode connection, not a selected but disconnected Host.
+/// One captured selected Host and its actual connection, if any. A null client
+/// permits only saved-original offline queues, never capability or session IO.
 class CompanionAgentTaskHost {
   const CompanionAgentTaskHost({
     required this.key,
@@ -17,7 +18,7 @@ class CompanionAgentTaskHost {
   });
 
   final String key;
-  final DshClient client;
+  final DshClient? client;
   final bool Function() isCurrent;
   final Future<String> Function() ensureSession;
   final String? sessionId;

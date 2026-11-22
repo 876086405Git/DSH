@@ -12,6 +12,7 @@ import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_host_tasks.dart' show CompanionNotesForegroundCapture;
 import 'package:dsh_app/companion/companion_initiative.dart';
 import 'package:dsh_app/companion/companion_initiative_owner.dart';
+import 'package:dsh_app/companion/companion_keeper.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/companion/companion_widget.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
@@ -40,6 +41,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'companion_test_settle.dart';
 import 'initiative_memory.dart';
+import 'phone_keeper_fake.dart';
 import '../support/companion_notes_peer.dart' show NotesPeer, notesPath, notesAgreement, notesSnapshot, notesCapability;
 
 const _session = 'c438-synthetic-session';
@@ -481,6 +483,20 @@ Future<http.StreamedResponse> _auxiliary(Map<String, Object?> body) async {
   );
 }
 
+/// The maintenance kind of a phone memory request, or null for any other.
+String? _maintenanceKind(Map<String, Object?> body) {
+  final messages = body['messages'];
+  if (messages is! List || messages.isEmpty) return null;
+  final content = (messages.first as Map)['content'];
+  if (content is! String) return null;
+  try {
+    final context = jsonDecode(content);
+    return context is Map && context['type'] == 'memory_maintenance_context' ? context['kind'] as String? : null;
+  } on FormatException {
+    return null;
+  }
+}
+
 void _seedFullFollowup(CompanionMemoryOwner memory) {
   memory.store.submitMessage(
     id: 'full-followup-source',
@@ -528,6 +544,7 @@ class _Room {
   final _Client client;
   final CompanionInitiativeClock Function()? clock;
   final _FollowupObserver? initiative;
+  final phone = FakePhoneKeeper(state: FakePhoneKeeper.snapshotOf());
   late CompanionMemoryOwner memory;
   final commands = <(String, Map<String, Object?>)>[];
   CompanionStageEvents? events;
@@ -666,6 +683,9 @@ class _Room {
           activeConnectionProvider.overrideWithValue(AsyncData(HostConnection(client: client, isLocal: true))),
           settingsProvider.overrideWith(_Settings.new),
           companionLightClientProvider.overrideWithValue(newClient),
+          // A2 reads her vitals through the phone keeper in both room modes;
+          // the real file keeper's I/O never completes on the fake clock.
+          companionPhoneKeeperProvider.overrideWithValue((_) => phone),
         ],
         child: MaterialApp(
           theme: buildDarkTheme(),
@@ -1290,13 +1310,18 @@ void main() {
       expect(companionNightKey(clock().wallMs, clock().offsetMinutes), '2026-11-06');
       expect(observer.presentations, 0);
       expect(room.speech(tester), isNot(_followupLine));
-      expect(room.asked, isEmpty);
+      // A2: the one-minute idle tick runs the maintenance lane, which organizes
+      // the completed source day (2026-11-05) whatever the hour. That is the
+      // only phone request; no followup wording is ever drafted.
+      expect(room.asked.map(_maintenanceKind), ['organize']);
+      expect([for (final body in room.asked) body['system']], isNot(contains(companionMemoryFollowupPrompt)));
       expect(bridge.discovery, 0);
       expect(bridge.posts, isEmpty);
       expect(room.memory.store.followups().single['state'], 'pending');
       expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
       expect(room.memory.store.initiativeRecord()!['inviteAtMs'], isEmpty);
-      expect(room.memory.store.requests(), isEmpty);
+      // The usage journal holds only that maintenance reservation.
+      expect([for (final row in room.memory.store.requests()) row['category']], ['organize']);
     } finally {
       if (!bridge.release.isCompleted) bridge.release.complete();
       await room.close(tester);
@@ -2163,9 +2188,7 @@ void main() {
   // (companion_agent_visit.dart:424-430 and :292-301): a draft that broke off
   // without any tool cannot be answered again, so the shorter successful
   // reply never replaces the failed subtitle and marker.
-  testWidgets('desired contract: successful shorter retry replaces failed attempt subtitle and marker', (
-    tester,
-  ) async {
+  testWidgets('desired contract: successful shorter retry replaces failed attempt subtitle and marker', (tester) async {
     final room = _Room(temporary);
     await room.open(tester);
     try {
