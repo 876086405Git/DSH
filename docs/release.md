@@ -84,6 +84,8 @@ versionCode = (年 - 2026) × 10^8 + MMDDhhmm      时钟固定按 UTC+8
    tooling/build-apk.sh
    ```
 
+   运行时里的 Node 和 Linux ONNX Runtime 装包前把调试信息（DWARF）清零了，文件布局不动。带调试信息的原件和打进 APK 的运行时出自同一次构建：用 Runtime 工作流的产物打包，就取同一次运行的 `runtime-debug-arm64-v8a` artifact（只保留 90 天）；在本机构建，就取 `runtime/out/arm64-v8a/debug/`。两种情况都连同同一次的 `build-report.json`（记着原件和装包件的 SHA-256）一起留存，以后定位引擎崩溃用，不上传到发布线路。
+
    脚本顺带传 `DSH_APP_VERSION=<版本名>+<构建号>`（`app/lib/state/app_info.dart`），作为诊断信息和更新状态的编译期默认版本。设置和关于页读取更新状态中的版本；原生版本读取成功且版本名可解析时，更新状态改用系统提供的 `versionName` / `versionCode`，读取失败或版本名无法解析时保留默认值。
 
    脚本给正式包自动打开求 star 提示（开头一行带 `· star prompt`）：`DSH_STAR_PROMPT=true` 写在 `tooling/star-prompt-on.json` 里，排在 `--` 后面的额外参数前面传给 flutter，所以额外参数里再写 `DSH_STAR_PROMPT`（行内或文件）以额外参数为准。`--beta`、`--side`、`--debug`/`--profile` 的包不加，`--no-star` 可以手动关掉。以前要手动加这个参数，最近的正式包漏了（1.3.0 确认没加，1.1.0、1.2.0 的打包记录里也没有），装这些版本的人一次都没被问过。提示的触发条件见 `docs/design/star-prompt.md`；使用时长从装上这个包算起。
