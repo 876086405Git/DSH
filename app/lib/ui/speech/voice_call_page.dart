@@ -110,6 +110,8 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   final _stage = CompanionStageController();
   bool _stageReady = false;
   bool _stageFailed = false;
+  String? _imageChecked;
+  bool _imageExists = false;
   double _mouthAt = 0;
   bool _mouthOpen = false;
 
@@ -491,10 +493,12 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     // frame too: more than HarmonyOS's renderer, or the light mode, can spare.
     final keyBlur = blur && !performance.lightweight && ref.watch(operatingSystemProvider) != 'ohos';
     final ended = _call.phase == CallPhase.ended;
-    final image =
-        settings.backdrop == CallBackdrop.image && settings.image.isNotEmpty && File(settings.image).existsSync()
-        ? settings.image
-        : null;
+    // Looked up once per picture, not on each of the 25 level updates a second.
+    if (settings.image != _imageChecked) {
+      _imageChecked = settings.image;
+      _imageExists = settings.image.isNotEmpty && File(settings.image).existsSync();
+    }
+    final image = settings.backdrop == CallBackdrop.image && _imageExists ? settings.image : null;
     final her = settings.backdrop == CallBackdrop.companion && !_stageFailed;
     final (status, dots) = _status(l10n);
     final error = _call.error;

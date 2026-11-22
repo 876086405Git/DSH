@@ -109,7 +109,7 @@ const _sandboxUnavailableMarker = 'no sandbox backend is usable';
 /// 全部从 [ToolChatItem] 现算,但 diff(LCS)不便宜,所以惰性 + 由工具行的
 /// State 按输入身份复用([matches])。
 class ToolView {
-  ToolView._(this.item) : args = _decode(item.arguments);
+  ToolView._(this.item);
 
   factory ToolView.of(ToolChatItem item, [ToolView? previous]) =>
       previous != null && previous.matches(item) ? previous : ToolView._(item);
@@ -117,8 +117,9 @@ class ToolView {
   final ToolChatItem item;
   final _locale = AppLocale.current;
 
-  /// 解析后的参数;流式中(JSON 不完整)为 null。
-  final Map<String, Object?>? args;
+  /// 解析后的参数;流式中(JSON 不完整)为 null。用到才解析:活动条每次更新都为上一个工具
+  /// 建视图,只读 [command],不该每次把 write 的整份内容解析一遍。
+  late final Map<String, Object?>? args = _decode(item.arguments);
 
   String get name => item.name;
 
