@@ -1392,16 +1392,16 @@ bool _closes(String line, String fence) {
 String fenceBareDshUiViews(String markdown) {
   if (!markdown.contains('{')) return markdown;
   final lines = markdown.split('\n');
-  final out = <String>[];
+  List<String>? out;
   var i = 0;
   while (i < lines.length) {
     final fence = _openingFence(lines[i]);
     if (fence != null) {
       // 别人的围栏:整块原样保留,里面的裸 JSON 不补。
-      out.add(lines[i]);
+      out?.add(lines[i]);
       i++;
       while (i < lines.length) {
-        out.add(lines[i]);
+        out?.add(lines[i]);
         final closed = _closes(lines[i], fence);
         i++;
         if (closed) break;
@@ -1411,6 +1411,7 @@ String fenceBareDshUiViews(String markdown) {
     if (lines[i].trimLeft().startsWith('{')) {
       final block = _jsonBlockAt(lines, i);
       if (block != null && parseDshUi(block.source) is DshUiParsed) {
+        out ??= lines.take(i).toList();
         out.add('```dsh-ui');
         out.add(block.source);
         out.add('```');
@@ -1418,10 +1419,10 @@ String fenceBareDshUiViews(String markdown) {
         continue;
       }
     }
-    out.add(lines[i]);
+    out?.add(lines[i]);
     i++;
   }
-  return out.join('\n');
+  return out?.join('\n') ?? markdown;
 }
 
 /// 这一行开了一个围栏时返回围栏标记(``` 或 ~~~),否则 null。
