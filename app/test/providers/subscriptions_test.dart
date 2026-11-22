@@ -248,7 +248,7 @@ void main() {
         expect(bridge.calls.where((call) => call.startsWith('begin:')), isEmpty);
         await tester.tap(find.text(button));
         await settle(tester);
-        expect(bridge.calls.where((call) => call.startsWith('begin:')), [if (expected != null) expected]);
+        expect(bridge.calls.where((call) => call.startsWith('begin:')), [?expected]);
         expect(find.byType(SubscriptionLoginSheet), expected == null ? findsNothing : findsOneWidget);
       });
     }
