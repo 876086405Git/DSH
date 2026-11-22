@@ -3,7 +3,6 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:dsh_app/launch/custom_launch.dart';
@@ -164,7 +163,7 @@ void main() {
       final calls = <String>[];
       messenger.setMockMethodCallHandler(channel, (call) async {
         calls.add(call.method);
-        return call.method == 'open' ? {'texture': 42, if (rotation != null) 'rotation': rotation} : null;
+        return call.method == 'open' ? {'texture': 42, 'rotation': ?rotation} : null;
       });
       final media = (await tester.runAsync(() async {
         final opened = await LaunchClip.open(
