@@ -2776,6 +2776,10 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     if (side['boundary'] case final MemoryRow boundary) {
       final before = boundary['beforeParagraph'];
       final after = boundary['afterParagraph'];
+      // The same neighbour on both sides: inside that paragraph.
+      if (before != null && before == after) {
+        return l10n.companionCompareParagraph('$before');
+      }
       if (before != null && after != null) {
         return l10n.companionCompareBetween('$before', '$after');
       }
