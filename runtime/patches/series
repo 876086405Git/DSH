@@ -31,6 +31,7 @@ zzzzzzz-file-query-normalization.diff
 zzzzzzz-file-reference-owner-dispose.diff
 file-reference-hidden-paths.diff
 zzzzzzz-grep-retention-preview.diff
+file-reference-basename-match.diff
 zzzzzzz-input-recovery.diff
 zzzzzzz-job-follow-removal.diff
 zzzzzzz-job-ring-trim.diff

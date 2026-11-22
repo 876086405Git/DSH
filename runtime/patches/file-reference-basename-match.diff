@@ -1,0 +1,12 @@
+--- a/node_modules/@deepseek-ai/dsh-file-reference-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-file-reference-local/lib/index.js
+@@ -262 +262 @@
+-	const name = path.slice(path.lastIndexOf("/") + 1);
++	const nameStart = path.lastIndexOf("/") + 1;
+@@ -264,3 +264,3 @@
+-	if (name === needle) return 1e3 + directoryBonus;
+-	if (name.startsWith(needle)) return 900 + directoryBonus;
+-	if (name.includes(needle)) return 700 + directoryBonus;
++	const match = path.indexOf(needle, nameStart);
++	if (match === nameStart) return (nameStart + needle.length === path.length ? 1e3 : 900) + directoryBonus;
++	if (match !== -1) return 700 + directoryBonus;
