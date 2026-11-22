@@ -1,5 +1,5 @@
-/// Subscription sign-in (ChatGPT, Claude) through dsh-app's engine-side auth
-/// bridge (`@dsh-app/auth`, service `appAuth`).
+/// Subscription sign-in through dsh-app's engine-side auth bridge
+/// (`@dsh-app/auth`, service `appAuth`).
 ///
 /// DSH 0.2.1 already carries both sign-in flows: the built-in `llm-pi-ai`
 /// adapter registers one authorization flow per pi-ai provider that has a
@@ -15,9 +15,9 @@
 /// ```
 ///
 /// Polling (not a stream) so it works the same over every carrier. Once an
-/// attempt is `done`, the bridge has also declared the route
-/// (`llm-pi-ai.providers.<id>`) so its models show up in the catalog;
-/// [DshSubscriptions.signOut] removes both.
+/// attempt is `done`, its route can serve models in the catalog.
+/// The legacy logins use `llm-pi-ai`; official ChatGPT has its own route.
+/// [DshSubscriptions.signOut] revokes access on the host.
 library;
 
 import 'json.dart';
@@ -26,11 +26,12 @@ import 'session_api.dart';
 /// A subscription the bridge can sign in to.
 enum Subscription {
   chatgpt('openai-codex'),
-  claude('anthropic');
+  claude('anthropic'),
+  chatgptOfficial('openai-siwc');
 
   const Subscription(this.wire);
 
-  /// The pi-ai provider id (and `llm-pi-ai` route id).
+  /// The provider id used by both appAuth and the model catalog.
   final String wire;
 
   static Subscription? fromWire(String? wire) {
@@ -43,12 +44,16 @@ enum Subscription {
 
 /// Sign-in state of one subscription.
 class SubscriptionStatus {
-  const SubscriptionStatus({required this.subscription, required this.signedIn, this.account});
+  const SubscriptionStatus({required this.subscription, required this.signedIn, this.account, this.planEnabled});
 
   factory SubscriptionStatus.fromJson(Subscription subscription, Map<String, Object?> json) => SubscriptionStatus(
     subscription: subscription,
     signedIn: json['signedIn'] == true,
     account: asString(json['account']),
+    planEnabled: switch (json['planEnabled']) {
+      final bool value => value,
+      _ => null,
+    },
   );
 
   final Subscription subscription;
@@ -56,6 +61,10 @@ class SubscriptionStatus {
 
   /// Who is signed in (an email or plan name), when the grant says.
   final String? account;
+
+  /// Whether the official ChatGPT grant permits subscription inference.
+  /// Omitted for older bridges and legacy subscriptions.
+  final bool? planEnabled;
 }
 
 /// A provider-reported usage window. Percent is used, not remaining.
@@ -205,6 +214,6 @@ extension DshSubscriptions on DshClient {
   /// `appAuth/cancel`: abandons an attempt (no-op once finished).
   Future<void> cancelLogin(String attemptId) => rpc.call('appAuth/cancel', {'attemptId': attemptId});
 
-  /// `appAuth/signOut`: deletes the grant and the route.
+  /// `appAuth/signOut`: removes the stored authorization on the host.
   Future<void> signOut(Subscription subscription) => rpc.call('appAuth/signOut', {'provider': subscription.wire});
 }

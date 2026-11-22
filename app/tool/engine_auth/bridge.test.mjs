@@ -174,7 +174,7 @@ function deferred() {
   return { promise, resolve, reject }
 }
 
-function setup({ ttlMs, portFree = true, settingsBase, withSettings = true } = {}) {
+function setup({ ttlMs, portFree = true, settingsBase, withSettings = true, siwc } = {}) {
   const credentials = new FakeCredentials()
   const authorization = new FakeAuthorization(credentials)
   const settings = withSettings ? new FakeSettings('llm-pi-ai', settingsBase) : undefined
@@ -183,6 +183,7 @@ function setup({ ttlMs, portFree = true, settingsBase, withSettings = true } = {
   const bridge = new AuthBridge({
     get: (name) => services[name],
     log: (line) => logs.push(line),
+    siwc,
     probePort: async () => portFree,
     ...(ttlMs === undefined ? {} : { ttlMs }),
   })
@@ -476,6 +477,52 @@ test('unknown provider and unknown attempt', async () => {
   await assert.rejects(bridge.begin(undefined), (e) => e.code === 'app-auth/unknown-provider')
   await assert.rejects(bridge.signOut('__proto__'), (e) => e.code === 'app-auth/unknown-provider')
   assert.deepEqual(bridge.poll('missing'), { phase: 'failed', error: ERRORS.expired })
+})
+
+test('official OpenAI is published only with its own adapter and preserves the old routes', async () => {
+  const callback = deferred()
+  const revocation = deferred()
+  let status = { signedIn: false }
+  let invalidations = 0
+  let capability
+  const { bridge, credentials, settings, logs } = setup({ siwc: () => capability })
+  const old = await bridge.list()
+  await assert.rejects(bridge.begin('openai-siwc'), { code: 'app-auth/unknown-provider' })
+
+  capability = {
+    invalidate: () => invalidations++,
+    oauth: {
+      status: async () => status,
+      signIn: async ({ notify }) => {
+        notify('https://auth.openai.com/authorize?state=private-test-state')
+        await callback.promise
+        status = { signedIn: true, planEnabled: false, account: { email: 'openai@example.invalid', subject: 'private-subject' } }
+      },
+      signOut: async () => {
+        status = { signedIn: false }
+        await revocation.promise
+        throw Object.assign(new Error('private-upstream-error'), { code: 'siwc_revocation_unconfirmed' })
+      },
+    },
+  }
+  assert.deepEqual((await bridge.list()).providers, [...old.providers, { id: 'openai-siwc', signedIn: false, planEnabled: false }])
+  const { attemptId } = await bridge.begin('openai-siwc')
+  assert.equal(new URL((await waitFor(bridge, attemptId, phase('open'))).url).origin, 'https://auth.openai.com')
+  callback.resolve()
+  await waitFor(bridge, attemptId, phase('done'))
+  assert.deepEqual((await bridge.list()).providers.at(-1), {
+    id: 'openai-siwc', signedIn: true, planEnabled: false, account: 'openai@example.invalid',
+  })
+  assert.deepEqual(await bridge.usage('openai-siwc'), { provider: 'openai-siwc', status: 'unsupported', windows: [] })
+  assert.equal(credentials.records.size, 0)
+  assert.equal(settings.describe()[0].value.providers?.['openai-siwc'], undefined)
+
+  const signedOut = assert.rejects(bridge.signOut('openai-siwc'), { code: 'app-auth/revocation-unconfirmed' })
+  assert.equal(invalidations, 2)
+  assert.equal((await bridge.list()).providers.at(-1).signedIn, false)
+  revocation.resolve()
+  await signedOut
+  assert.doesNotMatch(logs.join(' '), /private-test-state|private-subject|private-upstream-error/)
 })
 
 test('accountOf: email, then plan, never for an opaque token', () => {

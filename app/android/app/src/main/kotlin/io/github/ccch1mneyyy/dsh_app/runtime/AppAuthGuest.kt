@@ -71,6 +71,25 @@ object AppAuthGuest {
         }
     }
 
+    /** SIWC is optional: a failed copy must not remove the existing auth overlay. */
+    fun writeSiwcFiles(context: Context, rootfs: File): Boolean = try {
+        val modules = context.assets.list("$ASSET_DIR/siwc").orEmpty().filter { it.endsWith(".mjs") }
+        if (!modules.containsAll(listOf("store.mjs", "oauth.mjs", "provider.mjs"))) {
+            throw IOException("SIWC assets are incomplete")
+        }
+        val dir = File(rootfs, "${GUEST_DIR.removePrefix("/")}/siwc")
+        if (!Files.isDirectory(dir.toPath(), LinkOption.NOFOLLOW_LINKS) && !dir.mkdir()) {
+            throw IOException("could not create SIWC asset directory")
+        }
+        for (name in modules) {
+            val bytes = context.assets.open("$ASSET_DIR/siwc/$name").use { it.readBytes() }
+            writeIfChanged(File(dir, name), bytes)
+        }
+        true
+    } catch (_: Exception) {
+        false
+    }
+
     /** Sibling temp file renamed over [target]; only a regular file is compared (never a link or FIFO). */
     private fun writeIfChanged(target: File, bytes: ByteArray) {
         if (Files.isRegularFile(target.toPath(), LinkOption.NOFOLLOW_LINKS) && target.readBytes().contentEquals(bytes)) return

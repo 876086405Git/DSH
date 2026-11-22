@@ -40,6 +40,8 @@ export const PROVIDERS = Object.freeze({
   }),
 })
 
+const SIWC_PROVIDER = 'openai-siwc'
+
 /** Owner scope of pi-ai's credential records (`credentialKey('llm-pi-ai', id)`). */
 const RECORD_SCOPE = 'llm-pi-ai'
 /** Settings namespace (loader entry id) of the llm-pi-ai adapter in the base bundle. */
@@ -238,6 +240,7 @@ export class AuthBridge {
   #probePort
   #settingsNs
   #fetch
+  #siwc
   #usageFlight = new Map()
   #usageLast = new Map()
   #attempts = new Map()
@@ -254,6 +257,7 @@ export class AuthBridge {
     probePort = portIsFree,
     settingsNs = SETTINGS_NS,
     fetch = globalThis.fetch,
+    siwc = () => undefined,
   }) {
     this.#get = get
     this.#log = log
@@ -263,6 +267,7 @@ export class AuthBridge {
     this.#probePort = probePort
     this.#settingsNs = settingsNs
     this.#fetch = fetch
+    this.#siwc = siwc
   }
 
   // ── Remote methods ──────────────────────────────────────────────────────
@@ -275,7 +280,8 @@ export class AuthBridge {
    * or credential writes are performed by this query.
    */
   async usage(provider) {
-    this.#spec(provider)
+    const spec = this.#spec(provider)
+    if (spec.siwc) return { provider, status: 'unsupported', windows: [] }
     const result = (status, reason) => ({ provider, status, windows: [], ...(reason ? { reason } : {}) })
     try {
       const credentials = this.#get('credentials')
@@ -370,7 +376,7 @@ export class AuthBridge {
     }
   }
 
-  /** `appAuth/list`: both subscriptions, signed in or not. */
+  /** `appAuth/list`: available subscription channels, signed in or not. */
   async list() {
     const credentials = this.#get('credentials')
     const providers = []
@@ -397,6 +403,12 @@ export class AuthBridge {
         }
       }
       providers.push(entry)
+    }
+    const siwc = this.#siwc()
+    if (siwc) {
+      const status = await siwc.oauth.status().catch(() => ({ signedIn: false }))
+      const account = status.account?.email
+      providers.push({ id: SIWC_PROVIDER, signedIn: status.signedIn, planEnabled: status.planEnabled === true, ...(account ? { account } : {}) })
     }
     return { providers }
   }
@@ -460,12 +472,26 @@ export class AuthBridge {
 
   /** `appAuth/signOut`: removes the route (when the bridge owns it) and deletes the grant. */
   async signOut(provider) {
-    this.#spec(provider)
+    const spec = this.#spec(provider)
     const live = this.#liveByProvider.get(provider)
     if (live !== undefined) {
       live.cancelRequested = true
       this.#abort(live)
-      await settleWithin(live.done, 5000)
+      if (!spec.siwc) await settleWithin(live.done, 5000)
+    }
+    if (spec.siwc) {
+      // Block new token requests and stop existing streams before waiting on remote revocation.
+      const signOut = spec.siwc.oauth.signOut()
+      spec.siwc.invalidate()
+      try {
+        await signOut
+      } catch (error) {
+        if (error?.code === 'siwc_revocation_unconfirmed') {
+          throw new this.#RemoteError('app-auth/revocation-unconfirmed', '已退出本机。请在 ChatGPT 设置中检查应用授权', {})
+        }
+        throw new this.#RemoteError('app-auth/sign-out-failed', ERRORS.signOut, {})
+      }
+      return {}
     }
     try {
       await this.#serialized(async () => {
@@ -500,6 +526,7 @@ export class AuthBridge {
 
   async #run(attempt, spec, replaced) {
     const { provider } = attempt
+    if (spec.siwc) return this.#runSiwc(attempt, spec.siwc)
     const key = recordKeyFor(provider)
     try {
       const authorization = this.#get('authorization')
@@ -541,6 +568,22 @@ export class AuthBridge {
         this.#log(`${provider}: sign-in failed: ${redact(causes(error).map((e) => `${e?.name ?? ''}${e?.code ? `[${e.code}]` : ''}: ${e?.message ?? e}`).join(' <- '))}`)
         this.#finish(attempt, 'failed', describeFailure(error))
       }
+    }
+  }
+
+  async #runSiwc(attempt, siwc) {
+    try {
+      await siwc.oauth.signIn({
+        signal: attempt.controller.signal,
+        notify: (url) => this.#onNotice(attempt, { url }),
+      })
+      siwc.invalidate()
+      if (attempt.controller.signal.aborted) this.#finishWithdrawn(attempt)
+      else this.#finish(attempt, 'done')
+    } catch (error) {
+      if (attempt.controller.signal.aborted) this.#finishWithdrawn(attempt)
+      else this.#finish(attempt, 'failed', error?.code === 'siwc_access_denied' ? ERRORS.denied
+        : error?.code === 'siwc_network' ? ERRORS.network : ERRORS.generic)
     }
   }
 
@@ -639,6 +682,10 @@ export class AuthBridge {
   }
 
   #spec(provider) {
+    if (provider === SIWC_PROVIDER) {
+      const siwc = this.#siwc()
+      if (siwc) return { siwc }
+    }
     const spec = typeof provider === 'string' && Object.hasOwn(PROVIDERS, provider) ? PROVIDERS[provider] : undefined
     if (spec === undefined) throw new this.#RemoteError('app-auth/unknown-provider', '不支持这个登录方式', {})
     return spec

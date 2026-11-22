@@ -65,13 +65,38 @@ export default class AppAuth extends TypertRemoteService {
   // credentials: grants are read and deleted here. authorization: the flows
   // llm-pi-ai registers. settings is optional and looked up per call.
   static inject = ['credentials', 'authorization']
+  #siwc
 
   /** @param ctx - plugin context. */
   constructor(ctx) {
     super(ctx, 'appAuth')
     for (const mark of markRemoteMethods) mark.call(this)
-    this.bridge = new AuthBridge({ get: (name) => ctx.get(name), RemoteError })
+    this.bridge = new AuthBridge({ get: (name) => ctx.get(name), RemoteError, siwc: () => this.#siwc })
     ctx.effect(() => () => this.bridge.dispose(), 'appAuth: sign-in attempts')
+    ctx.inject(['llm'], async (owner) => {
+      let active = true
+      let registration
+      owner.effect(() => () => {
+        active = false
+        this.#siwc = undefined
+        registration?.dispose()
+      }, 'appAuth: OpenAI channel')
+      try {
+        const { openSiwcStore } = await import('./siwc/store.mjs')
+        const storage = await openSiwcStore()
+        if (!storage || !active) return
+        const [{ createSiwcOAuth }, { registerSiwcProvider }] = await Promise.all([
+          import('./siwc/oauth.mjs'), import('./siwc/provider.mjs'),
+        ])
+        if (!active) return
+        const fetch = globalThis.fetch
+        const oauth = createSiwcOAuth({ ...storage, fetch })
+        registration = registerSiwcProvider({ llm: owner.llm, oauth, fetch })
+        this.#siwc = { oauth, invalidate: registration.invalidate }
+      } catch {
+        if (active) console.error('[dsh-app auth] OpenAI channel initialization failed')
+      }
+    })
   }
 
   list() {

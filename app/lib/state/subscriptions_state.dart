@@ -5,17 +5,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/l10n.dart';
+import 'android_features.dart';
 import 'connection_state.dart';
 import 'engine_error_text.dart';
 import 'models_state.dart';
 import 'providers_state.dart';
 import 'read_list_epoch.dart';
+import 'read_list_identity.dart' show readListLiveConnectionProvider;
 
 export 'package:dsh_client/dsh_client.dart' show LoginPhase, LoginStep, Subscription, SubscriptionStatus;
 
 /// 订阅在界面上的名字。
 String subscriptionLabel(Subscription s) => switch (s) {
-  Subscription.chatgpt => 'ChatGPT',
+  Subscription.chatgpt || Subscription.chatgptOfficial => 'ChatGPT',
   Subscription.claude => 'Claude',
 };
 
@@ -117,6 +119,19 @@ final subscriptionsProvider = FutureProvider.autoDispose<SubscriptionsSnapshot?>
   } catch (_) {
     return const SubscriptionsSnapshot(available: false);
   }
+});
+
+/// The official ChatGPT flow is only exposed on the local Android host, and
+/// only when that host advertises it in appAuth/list.
+final officialChatGptStatusProvider = Provider.autoDispose<SubscriptionStatus?>((ref) {
+  if (ref.watch(readListLiveConnectionProvider)?.isLocal != true ||
+      ref.watch(operatingSystemProvider) != 'android') {
+    return null;
+  }
+  final subscriptions = ref.watch(subscriptionsProvider);
+  final snapshot = subscriptions.value;
+  if (subscriptions.isReloading || snapshot == null || !snapshot.available) return null;
+  return snapshot.of(Subscription.chatgptOfficial);
 });
 
 /// Quota belongs to the active host and is fetched only while the sheet is open.

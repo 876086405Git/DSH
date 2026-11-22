@@ -21,7 +21,7 @@ import '../theme/theme.dart';
 
 /// A subscription's monogram letter (a plain letter, no brand mark).
 String subscriptionLetter(Subscription s) => switch (s) {
-  Subscription.chatgpt => 'G',
+  Subscription.chatgpt || Subscription.chatgptOfficial => 'G',
   Subscription.claude => 'C',
 };
 

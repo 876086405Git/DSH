@@ -8039,6 +8039,15 @@ class L10nZh extends L10n {
   String get engineProvidersOfficial => '官方';
 
   @override
+  String get engineProvidersChatGptOfficial => 'ChatGPT 官方订阅';
+
+  @override
+  String get engineSubscriptionPlanNotEnabled => '此授权无法使用 ChatGPT 订阅模型。';
+
+  @override
+  String get engineSubscriptionRevocationUnconfirmed => '已在本机退出，但没能确认 OpenAI 已撤销授权。';
+
+  @override
   String get engineProvidersSubscription => '订阅';
 
   @override
