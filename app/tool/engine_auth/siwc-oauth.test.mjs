@@ -50,7 +50,7 @@ const rotation = (fields = {}) => Response.json({
   access_token: 'rotated-access', refresh_token: 'rotated-refresh', token_type: 'Bearer', expires_in: 3600, ...fields,
 })
 
-function fixture({ exchange, revoke = () => new Response(null), keys = () => Response.json({ keys: [jwk] }), initial = null, discovery, save } = {}) {
+function fixture({ exchange, revoke = () => new Response(null), keys = () => Response.json({ keys: [jwk] }), initial = null, discovery, save, onGrantLost } = {}) {
   let record = initial
   const saves = [], calls = []
   const store = {
@@ -76,7 +76,7 @@ function fixture({ exchange, revoke = () => new Response(null), keys = () => Res
     assert.equal(url, TOKEN)
     return exchange(form)
   }
-  const open = () => createSiwcOAuth({ fetch, store, getHostId: async () => HOST })
+  const open = () => createSiwcOAuth({ fetch, store, getHostId: async () => HOST, onGrantLost })
   return { oauth: open(), open, calls, saves, record: () => record }
 }
 
@@ -388,8 +388,8 @@ test('sign-out waits for an already-started sign-in save and removes the committ
 })
 
 test('terminal refresh clears credentials; transient refresh and its secret text do not', async () => {
-  let calls = 0
-  const f = fixture({ initial: expired(), exchange: () => {
+  let calls = 0, lost = 0
+  const f = fixture({ initial: expired(), onGrantLost: () => lost++, exchange: () => {
     if (++calls === 1) throw new Error('mock-private-error: old-refresh')
     return Response.json({ error: 'refresh_token_reused', error_description: 'mock-private-error' }, { status: 400 })
   } })
@@ -400,8 +400,10 @@ test('terminal refresh clears credentials; transient refresh and its secret text
   })
   assert.deepEqual(await f.oauth.status(), IN)
   assert.equal(f.record().refreshToken, 'old-refresh')
+  assert.equal(lost, 0)
   await assert.rejects(f.oauth.token(), { code: 'siwc_session_expired' })
   await assert.rejects(f.oauth.token(), { code: 'siwc_sign_in_required' })
+  assert.equal(lost, 1)
   assert.equal(calls, 2)
   assert.deepEqual(f.record(), META)
   await assert.rejects(signInAs(f.open(), (auth) => {

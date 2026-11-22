@@ -285,10 +285,12 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
       names.clear()
       unregister()
     },
-    invalidate() {
+    invalidate({ stopRequests = true } = {}) {
       if (disposed) return
-      account.abort()
-      account = new AbortController()
+      if (stopRequests) {
+        account.abort()
+        account = new AbortController()
+      }
       names.clear()
       unregister.replace([PROVIDER])
     },

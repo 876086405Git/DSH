@@ -189,7 +189,7 @@ const accountStatus = (grant) => grant
   ? { signedIn: true, planEnabled: hasPlanPermission(grant.scopes), account: { subject: grant.subject, email: grant.email } }
   : { signedIn: false, planEnabled: false }
 
-export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId }) {
+export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, onGrantLost = () => {} }) {
   let grant, registration, loading, pendingSave = false
   let tail = Promise.resolve(), signInController, tokenFlight, signingOut, epoch = 0
   let jwks, jwksExpiresAt = 0
@@ -382,8 +382,10 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId }) 
   }
 
   async function clear({ signedOut = false } = {}) {
+    const lost = grant != null && !signedOut
     grant = null
     pendingSave = false
+    if (lost) onGrantLost()
     if (!registration) {
       await storage(() => store.clear())
       return

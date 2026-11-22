@@ -90,7 +90,11 @@ export default class AppAuth extends TypertRemoteService {
         ])
         if (!active) return
         const fetch = globalThis.fetch
-        const oauth = createSiwcOAuth({ ...storage, fetch })
+        const oauth = createSiwcOAuth({
+          ...storage, fetch,
+          // Preserve the useful auth error in the request that discovered expiry.
+          onGrantLost: () => registration.invalidate({ stopRequests: false }),
+        })
         registration = registerSiwcProvider({ llm: owner.llm, oauth, fetch })
         this.#siwc = { oauth, invalidate: registration.invalidate }
       } catch {
