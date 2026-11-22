@@ -507,7 +507,7 @@ internal object PetOverlay {
                     showBubble(bubble)
                     if (returnAsk) {
                         returnAsk = false
-                        main.post { if (!machine.appForeground && alive(petTicket)) showAsk(askFresh) }
+                        main.post { if (!machine.appForeground && alive(petTicket)) showAsk(askFresh, askCompanion) }
                     }
                 }
             }
@@ -1761,6 +1761,9 @@ internal object PetOverlay {
     /** Where the bar sits with the keyboard down. */
     private var askY = 0
     private var askFresh = false
+    // New chat keeps the agent route, even while the companion is resident.
+    // A target switch or a voice round trip must not change that route.
+    private var askCompanion = false
 
     /** Dart's answer to `askTarget`; null until it comes. */
     private var askTarget: AskTarget? = null
@@ -1779,14 +1782,15 @@ internal object PetOverlay {
      * Opens the bar beside the docked pet ([fresh]: on 「新对话」), focused, the keyboard up; asks
      * Dart where a send would go meanwhile.
      */
-    private fun showAsk(fresh: Boolean) {
-        if (capture.inFlight || !interactive()) return
+    private fun showAsk(fresh: Boolean, companion: Boolean = companionResident && !fresh) {
+        if (capture.inFlight || !interactive() || (companion && !companionResident)) return
         removeAsk()
         val ctx = hostContext ?: return
         val pv = petView ?: return
         val f = loaded?.frames ?: return
         val ticket = windows.claim(OverlayWindowOwner.Role.ASK) ?: return
         askFresh = fresh
+        askCompanion = companion
         askTarget = null
         val view = AskBarView(ctx, askListener(ticket))
         view.input.setText(askDraft)
@@ -1830,9 +1834,8 @@ internal object PetOverlay {
         view.post { if (askView === view) view.context.getSystemService(InputMethodManager::class.java)?.showSoftInput(view.input, 0) }
         evaluate()
         val request = ++askRequest
-        val companion = companionResident
         callDart(if (companion) "companionAskTarget" else "askTarget", mapOf("fresh" to fresh)) { raw ->
-            if (request != askRequest || askView !== view || companion != companionResident) return@callDart
+            if (request != askRequest || askView !== view || companion != askCompanion) return@callDart
             // No answer: nothing known to stand in the way; a send hands the text to the app.
             askTarget = AskTarget.fromMap(raw) ?: AskTarget(null, null, null, AskTarget.VOICE_OFF)
             showTarget(view)
@@ -1935,7 +1938,7 @@ internal object PetOverlay {
         view.setState(sending = true)
         view.setStatus(AppStrings.get(app, R.string.pet_ask_sending))
         val request = askRequest
-        val companion = companionResident
+        val companion = askCompanion
         val args = if (companion) mapOf("text" to text) else mapOf("offer" to askTarget?.offer, "text" to text, "fresh" to (chat?.sessionId == null), "sessionId" to chat?.sessionId, "host" to chat?.host)
         callDart(if (companion) "companionAsk" else "ask", args) { raw ->
             val r = raw as? Map<*, *>

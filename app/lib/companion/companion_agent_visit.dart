@@ -799,6 +799,9 @@ class _CompanionAgentVisit {
     lastSpokenAt = null;
     lastClockAt = null;
     run = null;
+    // Retire the old native conversation at the same real session boundary.
+    // This also fences queued resident output; task reminders are independent.
+    residentUi?.controlChanged(own: false);
     changed();
   }
 

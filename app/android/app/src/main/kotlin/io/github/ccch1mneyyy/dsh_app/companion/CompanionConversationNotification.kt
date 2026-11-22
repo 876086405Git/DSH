@@ -14,9 +14,12 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import io.github.ccch1mneyyy.dsh_app.MainActivity
+import io.github.ccch1mneyyy.dsh_app.R
+import io.github.ccch1mneyyy.dsh_app.i18n.AppStrings
 import io.github.ccch1mneyyy.dsh_app.shortcuts.EntryActivity
 import io.github.ccch1mneyyy.dsh_app.phone.CompanionScreenBridge
 import io.github.ccch1mneyyy.dsh_app.phone.CompanionScreenPauseReceiver
+import io.github.ccch1mneyyy.dsh_app.phone.SystemActions
 import java.io.File
 import java.io.RandomAccessFile
 
@@ -50,20 +53,30 @@ internal object CompanionConversationNotification {
         val active = context.getSystemService(NotificationManager::class.java).activeNotifications
             .firstOrNull { it.id == ID && it.tag == null }?.notification ?: return
         val extras = active.extras
-        if (extras.getLong("companionEpoch", -1) != epoch) return
+        val sameConversation = extras.getLong("companionEpoch", -1) == epoch
         name = extras.getString("companionName") ?: name
         for (row in extras.getParcelableArrayList<Bundle>("companionLines").orEmpty()) {
             val id = row.getString("id") ?: continue
             val text = row.getString("text") ?: continue
-            lines.add(Line(id, text, row.getBoolean("user"), row.getLong("at"), row.getString("taskUri")))
+            val taskUri = row.getString("taskUri")
+            if (!sameConversation && taskUri == null) continue
+            lines.add(Line(id, text, row.getBoolean("user"), row.getLong("at"), taskUri))
         }
     }
 
-    fun clear(context: Context) = locked(context) {
-        lines.clear()
+    fun clear(context: Context, stopService: ((keepReminder: Boolean) -> Unit)? = null) = locked(context) {
         CompanionAlwaysOnState.withValue(context) { state ->
+            readDisplay(context, state.epoch)
+            lines.removeAll { it.taskUri == null }
+            // Service shutdown must not subsequently remove the same ID's
+            // task reminders. Keep this decision under the shared display lock.
+            val keepReminder = lines.isNotEmpty()
+            stopService?.invoke(keepReminder)
             val manager = context.getSystemService(NotificationManager::class.java)
-            if (state.enabled) manager.notify(ID, render(context, epoch = state.epoch)) else manager.cancel(ID)
+            val resident = state.enabled && CompanionAlwaysOnService.running && stopService == null
+            if (resident || keepReminder) {
+                manager.notify(ID, render(context, epoch = state.epoch, resident = resident))
+            } else manager.cancel(ID)
         }
     }
 
@@ -79,7 +92,10 @@ internal object CompanionConversationNotification {
             while (lines.size > 8) lines.removeAt(0)
             val manager = context.getSystemService(NotificationManager::class.java)
             manager.notify(ID, render(context, quiet, state.epoch))
-            if (manager.activeNotifications.none { it.id == ID && it.tag == null &&
+            // ReminderRunner records the returned system call and observes
+            // activity separately. A stale snapshot must not rewrite that
+            // returned call as unknown. Ordinary followups still require shown.
+            if (taskUri == null && manager.activeNotifications.none { it.id == ID && it.tag == null &&
                     it.notification.extras.getString("companionMessageId") == id }) {
                 throw IllegalStateException("companion_delivery_unknown")
             }
@@ -99,10 +115,16 @@ internal object CompanionConversationNotification {
     }
 
     @Suppress("DEPRECATION")
-    private fun render(context: Context, quiet: Boolean = true, epoch: Long): Notification {
+    private fun render(context: Context, quiet: Boolean = true, epoch: Long, resident: Boolean = true): Notification {
         val manager = context.getSystemService(NotificationManager::class.java)
+        // The due reminder retains its existing user-controlled sound/vibration
+        // channel even while it shares the resident conversation's display ID.
+        val reminder = lines.lastOrNull()?.taskUri != null
+        val channel = if (reminder) SystemActions.CHANNEL_NOTIFY else CHANNEL
         if (Build.VERSION.SDK_INT >= 26) {
-            manager.createNotificationChannel(NotificationChannel(CHANNEL, "Companion", NotificationManager.IMPORTANCE_LOW))
+            manager.createNotificationChannel(NotificationChannel(channel,
+                if (reminder) AppStrings.get(context, R.string.phone_reminder_channel) else "Companion",
+                if (reminder) NotificationManager.IMPORTANCE_DEFAULT else NotificationManager.IMPORTANCE_LOW))
         }
         val open = PendingIntent.getActivity(context, ID,
             Intent(context, MainActivity::class.java).setAction(Intent.ACTION_VIEW)
@@ -115,23 +137,26 @@ internal object CompanionConversationNotification {
             PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0))
         val action = Notification.Action.Builder(android.R.drawable.ic_menu_send, "Reply", reply)
             .addRemoteInput(RemoteInput.Builder(CompanionAlwaysOnService.INPUT).setLabel("Reply").build()).build()
-        val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(context, CHANNEL) else Notification.Builder(context)
+        val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(context, channel) else Notification.Builder(context)
         builder.setSmallIcon(context.applicationInfo.icon)
             .setContentTitle(name).setContentText(lines.lastOrNull()?.text ?: "Always here")
-            .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(quiet)
-            .setCategory(Notification.CATEGORY_MESSAGE).setVisibility(Notification.VISIBILITY_PRIVATE)
-            .setPriority(Notification.PRIORITY_LOW).addAction(action)
-        if (CompanionScreenBridge.isEnabled(context)) {
+            .setContentIntent(open).setOngoing(resident).setAutoCancel(!resident).setOnlyAlertOnce(quiet)
+            .setCategory(if (reminder) Notification.CATEGORY_REMINDER else Notification.CATEGORY_MESSAGE)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPriority(if (reminder) Notification.PRIORITY_DEFAULT else Notification.PRIORITY_LOW)
+        if (resident) builder.addAction(action)
+        if (resident && CompanionScreenBridge.isEnabled(context)) {
             val pause = PendingIntent.getBroadcast(context, ID,
                 Intent(context, CompanionScreenPauseReceiver::class.java).setAction(CompanionScreenPauseReceiver.ACTION_PAUSE),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             builder.addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause, "Pause screen watching", pause).build())
         }
-        lines.lastOrNull()?.taskUri?.let { uri ->
+        lines.lastOrNull { it.taskUri != null }?.taskUri?.let { uri ->
             val task = PendingIntent.getActivity(context, ID,
                 Intent(context, EntryActivity::class.java).setAction(EntryActivity.ACTION_COMPANION_TASK)
                     .setData(Uri.parse(uri)), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             builder.addAction(Notification.Action.Builder(android.R.drawable.ic_menu_view, "Open task", task).build())
+            if (!resident) builder.setContentIntent(task)
         }
         val locked = context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
         if (Build.VERSION.SDK_INT >= 24 && !locked) {
@@ -141,7 +166,7 @@ internal object CompanionConversationNotification {
         } else if (locked) {
             builder.setContentText("Companion is here")
         }
-        val neutral = (if (Build.VERSION.SDK_INT >= 26) Notification.Builder(context, CHANNEL) else Notification.Builder(context))
+        val neutral = (if (Build.VERSION.SDK_INT >= 26) Notification.Builder(context, channel) else Notification.Builder(context))
             .setSmallIcon(context.applicationInfo.icon).setContentTitle(name).setContentText("Companion is here").build()
         builder.setPublicVersion(neutral)
         builder.setExtras(Bundle().apply {

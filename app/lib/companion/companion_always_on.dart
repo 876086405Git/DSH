@@ -265,13 +265,18 @@ class CompanionAlwaysOnOwner {
   );
 
   void _retireLease() {
+    final resident = _resident;
     _screen.stop();
     _hush();
     ++_outputGeneration;
     unawaited(overlay.clearCompanion());
-    final epoch = _status.epoch;
-    _notificationQueue = _notificationQueue.catchError((Object _) {}).then((_) => channel.clear(epoch));
-    _resident?.close();
+    // Cold synchronization has no old Dart conversation to clear. In
+    // particular, a reminder may already be visible from its native process.
+    if (resident != null) {
+      final epoch = _status.epoch;
+      _notificationQueue = _notificationQueue.catchError((Object _) {}).then((_) => channel.clear(epoch));
+      resident.close();
+    }
     _resident = null;
     _reply = null;
     _sentText = null;

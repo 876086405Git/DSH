@@ -195,6 +195,7 @@ class _RoomUi implements CompanionAgentRoomUi, CompanionInitiativeRoom {
   final failures = <({Object error, String? retry})>[];
   final commits = <String>[];
   final acceptedTasks = <MemoryRow>[];
+  final controlChanges = <bool>[];
   @override
   bool mounted = true;
   @override
@@ -223,7 +224,7 @@ class _RoomUi implements CompanionAgentRoomUi, CompanionInitiativeRoom {
   @override
   void detached() => mounted = false;
   @override
-  void controlChanged({required bool own}) {}
+  void controlChanged({required bool own}) => controlChanges.add(own);
   @override
   void connectionChanged() {}
   @override
@@ -1071,6 +1072,18 @@ void main() {
       await visit.attachment.submit('旧窗口迟到的提交。');
       expect(visit.requests, hasLength(1));
       expect(visit.userSource, source);
+      final previousSession = visit.memory.store.lightSessionId;
+      final history = visit.memory.store.messages();
+      final controlsBeforeRestart = background.controlChanges.length;
+      await reopened.restart();
+      expect(visit.memory.store.lightSessionId, isNot(previousSession));
+      expect(resident.recentMessages, isEmpty);
+      expect(reopened.text, isEmpty);
+      expect(background.controlChanges, hasLength(controlsBeforeRestart + 1));
+      expect(background.controlChanges.last, isFalse);
+      expect(visit.memory.store.messages(), history);
+      expect(visit.requests, hasLength(1));
+      expect(visit.calls('clock'), 1);
     } finally {
       if (!release.isCompleted) release.complete();
       await work;

@@ -62,9 +62,17 @@ class CompanionAlwaysOnService : Service() {
         running = false
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        CompanionAlwaysOnPlugin.statusChanged()
-        super.onDestroy()
+        try {
+            CompanionConversationNotification.clear(this) { keepReminder ->
+                stopForeground(if (keepReminder) STOP_FOREGROUND_DETACH else STOP_FOREGROUND_REMOVE)
+            }
+        } catch (_: Exception) {
+            // An unreadable display cannot prove there is no task reminder.
+            stopForeground(STOP_FOREGROUND_DETACH)
+        } finally {
+            CompanionAlwaysOnPlugin.statusChanged()
+            super.onDestroy()
+        }
     }
 
     companion object {
