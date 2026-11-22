@@ -135,15 +135,6 @@
     return (el.textContent || '').replace(/\s+/g, ' ').trim();
   }
 
-  function namesOf(n) {
-    var names = [n.getAttribute('aria-label') || '', text(n)];
-    var leaves = n.querySelectorAll('*');
-    for (var l = 0; l < leaves.length; l++) {
-      if (!leaves[l].children.length) names.push(text(leaves[l]));
-    }
-    return names;
-  }
-
   // A control whose aria-label, text, or the text of one of its leaf
   // elements (cards: title + description) is one of [labels]; a label may
   // also be followed by a space ("新建终端 在会话工作区运行命令").
@@ -152,7 +143,11 @@
     var nodes = root.querySelectorAll(selector);
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
-      var names = namesOf(n);
+      var names = [n.getAttribute('aria-label') || '', text(n)];
+      var leaves = n.querySelectorAll('*');
+      for (var l = 0; l < leaves.length; l++) {
+        if (!leaves[l].children.length) names.push(text(leaves[l]));
+      }
       for (var j = 0; j < labels.length; j++) {
         for (var k = 0; k < names.length; k++) {
           var name = names[k];
@@ -208,7 +203,7 @@
   // Section ids are not on the DOM. Use the live ledger's label for this id
   // (the WebView may use a different language), then registered names supplied
   // by the app on older hosts. Never match a prefix or a button in the body.
-  function settingsButtons(key, fallback) {
+  function settingsButtons(key, fallback, pkg) {
     var dialog = settingsDialog();
     if (!dialog) return [];
     var names = labelsOf(fallback && fallback.length ? fallback : LABELS.settings[key]);
@@ -218,12 +213,15 @@
         var entries = bridge.occupants('settings.section').filter(function (o) { return o.active !== false; });
         var own = entries.filter(function (o) { return o.cell === key; });
         if (own.length > 1) return [];
-        if (own.length === 1 && labelsOf([own[0].label]).length) names = labelsOf([own[0].label]);
+        if (pkg && own.length === 1 && own[0].package && own[0].package !== pkg) return [];
+        if (own.length === 1 && (!pkg || own[0].package === pkg) && labelsOf([own[0].label]).length) names = labelsOf([own[0].label]);
         if (entries.some(function (o) { return o.cell !== key && names.indexOf(labelsOf([o.label])[0]) >= 0; })) return [];
       } catch (e) {}
     }
     return Array.prototype.filter.call(dialog.querySelectorAll('nav button'), function (button) {
-      return namesOf(button).some(function (name) { return names.indexOf(name) >= 0; });
+      // The settings shell renders its label after the decorative icon.
+      var label = button.lastElementChild || button;
+      return names.indexOf(button.getAttribute('aria-label') || text(label)) >= 0;
     });
   }
 
@@ -232,7 +230,7 @@
     return value !== null && value !== 'false';
   }
 
-  async function openSettings(r, key, names) {
+  async function openSettings(r, key, names, pkg) {
     // The sidebar can mount before remote access registers either launcher.
     // Wait for both alternatives, rather than committing to the account menu.
     var way = await waitFor(function () {
@@ -256,14 +254,14 @@
     // Islands that select a third-party section next only need the dialog.
     if (key === true) return true;
     var buttons = await waitFor(function () {
-      var matches = settingsButtons(key, names);
+      var matches = settingsButtons(key, names, pkg);
       return matches.length ? matches : null;
     }, 3000, r);
     if (!buttons || buttons.length !== 1) return false;
     if (currentSetting(buttons[0])) return live(r);
     if (!press(r, buttons[0])) return false;
     return !!(await waitFor(function () {
-      var matches = settingsButtons(key, names);
+      var matches = settingsButtons(key, names, pkg);
       return matches.length === 1 && currentSetting(matches[0]);
     }, 3000, r));
   }
@@ -543,7 +541,7 @@
       ok = await openPanel(r, target.panel);
     } else if (target.settings) {
       step = 'settings';
-      ok = await openSettings(r, target.settings, target.settingsLabels);
+      ok = await openSettings(r, target.settings, target.settingsLabels, target.settingsPackage);
     } else if (target.pluginItem && target.pluginItem.length) {
       step = 'pluginItem';
       ok = labels.length > 0 && (await openPluginItem(r, labels));

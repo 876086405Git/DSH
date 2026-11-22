@@ -18,6 +18,7 @@ class DshWebTarget {
     this.panel,
     this.settings,
     this.settingsSection,
+    this.settingsPackage,
     this.settingsLabels = const [],
     this.pluginItem = const [],
     this.rightbar,
@@ -35,9 +36,10 @@ class DshWebTarget {
   /// A section of the settings dialog.
   final DshWebSettings? settings;
 
-  /// A third-party settings section id, with its registered names as a fallback
-  /// on hosts without a browser bridge. Bundle titles are not section names.
+  /// A third-party section and its owner, with registered names for hosts
+  /// without a browser bridge. Bundle titles are not section names.
   final String? settingsSection;
+  final String? settingsPackage;
   final List<String> settingsLabels;
 
   /// Names of a card on the Plugins page: its titles (zh and en), e.g. a
@@ -79,6 +81,7 @@ class DshWebTarget {
     'session': ?sessionId,
     'panel': ?panel?.key,
     'settings': ?(settingsSection ?? settings?.key),
+    'settingsPackage': ?settingsPackage,
     if (settingsSection != null && _labelsOf(settingsLabels).isNotEmpty) 'settingsLabels': _labelsOf(settingsLabels),
     if (_pluginLabels case final labels when labels.isNotEmpty) 'pluginItem': labels,
     'rightbar': ?rightbar?.key,
@@ -119,6 +122,7 @@ class DshWebTarget {
     panel: panel,
     settings: settings,
     settingsSection: settingsSection,
+    settingsPackage: settingsPackage,
     settingsLabels: settingsLabels,
     pluginItem: pluginItem,
     rightbar: rightbar,

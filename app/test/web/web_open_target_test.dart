@@ -48,11 +48,13 @@ void main() {
   test('a third-party section keeps its id and normalized names through copies', () {
     const target = DshWebTarget(
       settingsSection: 'skin-manager',
+      settingsPackage: '@acme/skin',
       settingsLabels: [' 皮肤管理 ', '', '皮肤管理', 'Skin  manager'],
     );
     expect(target.isHome, isFalse);
     final wire = {
       'settings': 'skin-manager',
+      'settingsPackage': '@acme/skin',
       'settingsLabels': ['皮肤管理', 'Skin manager'],
     };
     expect(target.toJson(), wire);
@@ -63,12 +65,14 @@ void main() {
     final copied =
         const DshWebTarget(
           settingsSection: 'skin-manager',
+          settingsPackage: '@acme/skin',
           settingsLabels: ['Skin manager'],
           pluginItem: ['weather'],
         ).withPluginNames([
           _bundle('@acme/weather', {'en': 'Weather'}, ['weather']),
         ]);
     expect(copied.settingsSection, 'skin-manager');
+    expect(copied.settingsPackage, '@acme/skin');
     expect(copied.settingsLabels, ['Skin manager']);
     expect(
       jsonDecode(target.openScript.substring(target.openScript.indexOf('({') + 1, target.openScript.length - 2)),

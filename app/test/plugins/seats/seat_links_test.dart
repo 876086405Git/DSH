@@ -19,11 +19,11 @@ void main() {
     test('settings: official and third-party section ids are kept', () {
       expect(
         seatWebTarget(occupant(Slots.settingsSection, probe, 'models')),
-        const DshWebTarget(settings: DshWebSettings.models),
+        const DshWebTarget(settingsSection: 'models', settingsPackage: probe),
       );
       expect(
         seatWebTarget(occupant(Slots.settingsSection, probe, 'k4-probe')),
-        const DshWebTarget(settingsSection: 'k4-probe'),
+        const DshWebTarget(settingsSection: 'k4-probe', settingsPackage: probe),
       );
       expect(
         seatWebTarget(occupant(Slots.generalItem, pet, 'x')),
@@ -39,6 +39,7 @@ void main() {
       );
       expect(target.toJson(), {
         'settings': 'k4-probe',
+        'settingsPackage': probe,
         'settingsLabels': ['探针设置', 'Probe settings'],
       });
     });

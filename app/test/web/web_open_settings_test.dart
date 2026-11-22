@@ -209,6 +209,67 @@ void main() {
       expect(out['current'], 'general');
     }, skip: skip);
 
+    test('a shadowed package cannot open the winning owner of the same id', () async {
+      final out = await page({
+        'open': {
+          'settings': 'memo',
+          'settingsPackage': '@acme/a',
+          'settingsLabels': ['Memo A'],
+        },
+        'sections': [
+          _general,
+          {'id': 'memo', 'label': 'Memo B'},
+        ],
+        'occupants': [
+          {'cell': 'memo', 'package': '@acme/a', 'label': 'Memo A', 'active': false},
+          {'cell': 'memo', 'package': '@acme/b', 'label': 'Memo B', 'active': true},
+        ],
+      });
+      missed(out);
+      expect(pressed(out), ['direct']);
+    }, skip: skip);
+
+    test('the requested package can use its live label despite inactive siblings', () async {
+      final out = await page({
+        'open': {
+          'settings': 'memo',
+          'settingsPackage': '@acme/a',
+          'settingsLabels': ['Old memo'],
+        },
+        'sections': [_general, _memo],
+        'occupants': [
+          {'cell': 'memo', 'package': '@acme/b', 'label': 'Other memo', 'active': false},
+          {'cell': 'memo', 'package': '@acme/a', 'label': 'Memo', 'active': true},
+        ],
+      });
+      landed(out, 'memo');
+    }, skip: skip);
+
+    test('a package target still works on hosts without an occupancy bridge', () async {
+      final out = await page({
+        'open': {
+          'settings': 'memo',
+          'settingsPackage': '@acme/a',
+          'settingsLabels': ['Memo'],
+        },
+      });
+      landed(out, 'memo');
+    }, skip: skip);
+
+    test('unknown attribution uses registered names instead of a foreign live label', () async {
+      final out = await page({
+        'open': {
+          'settings': 'memo',
+          'settingsPackage': '@acme/a',
+          'settingsLabels': ['Memo'],
+        },
+        'occupants': [
+          {'cell': 'memo', 'package': null, 'label': 'Unknown name', 'active': true},
+        ],
+      });
+      landed(out, 'memo');
+    }, skip: skip);
+
     test('registered labels are normalized and empty names do not match icons', () async {
       final out = await page({
         'open': {
@@ -234,6 +295,29 @@ void main() {
         expect(pressed(out), ['direct', 'section:memo']);
       }, skip: skip);
     }
+
+    test('another section icon matching the label does not count as a second label', () async {
+      final out = await page({
+        'sections': [
+          _general,
+          {'id': 'other', 'label': 'Other', 'icon': 'Memo'},
+          _memo,
+        ],
+      });
+      landed(out, 'memo');
+      expect(pressed(out), ['direct', 'section:memo']);
+    }, skip: skip);
+
+    test('an icon alone cannot select a section whose actual label is different', () async {
+      final out = await page({
+        'sections': [
+          _general,
+          {'id': 'other', 'label': 'Other', 'icon': 'Memo'},
+        ],
+      });
+      missed(out);
+      expect(pressed(out), ['direct']);
+    }, skip: skip);
 
     test('a longer prefix is not the section; matching content is not navigation', () async {
       final out = await page({

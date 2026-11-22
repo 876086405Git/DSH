@@ -57,6 +57,31 @@ SeatInventory _inventory({
   },
 );
 
+SeatInventory _legacyInventory({bool native = true}) => SeatInventory.from(
+  ClientInventory.combine(
+    bundles: [_bundle()],
+    boot: const WebBootGraph(
+      rev: 'legacy-boot',
+      entries: [WebBootEntry(id: probe)],
+    ),
+  ),
+  namespaces: {
+    if (native)
+      _nativeRow: SettingsNamespaceView.fromJson({
+        'ns': _nativeRow,
+        'schema': {
+          'type': 'object',
+          'dict': {
+            'enabled': {'type': 'boolean'},
+          },
+        },
+        'value': {'enabled': true},
+        'revision': 1,
+      }),
+  },
+  webReachable: true,
+);
+
 class _Config extends PluginConfigController {
   _Config(this.config);
   final PluginConfigState config;
@@ -191,6 +216,36 @@ void main() {
     expect(_settingsRows(), findsOneWidget);
     expect(_customEntry(), findsNothing);
     expect(find.byType(PluginSeat), findsNothing);
+  });
+
+  testWidgets('旧主机只推断出 B 的行占位时保留原生 A 而不制造自定义入口', (tester) async {
+    final inventory = _legacyInventory();
+    expect(inventory.tier, ClientInventoryTier.boot);
+    expect(inventory.occupancy, isNull);
+    expect(inventory.infoOf(probe).configNamespaces, [_nativeRow]);
+    expect(inventory.occupantsFor(Slots.rowConfig, package: probe, cell: '$probe#$_customRow').single.inferred, isTrue);
+    await _pump(tester, inventory: inventory);
+    await _reveal(tester, _settingsRows());
+    expect(_settingsRows(), findsOneWidget);
+    expect(tester.widget<ListPageRow>(_settingsRows()).title, '设置');
+    expect(tester.widget<ListPageRow>(_settingsRows()).meta, isNull);
+    expect(_customEntry(), findsNothing);
+    expect(find.byType(PluginSeat), findsNothing);
+  });
+
+  testWidgets('旧主机没有原生配置时仍保留整包通用网页兜底', (tester) async {
+    final inventory = _legacyInventory(native: false);
+    expect(inventory.occupantsFor(Slots.bundleConfig, package: probe).single.inferred, isTrue);
+    await _pump(tester, inventory: inventory, native: false, budget: const NoIslandBudget());
+    await _reveal(tester, _settingsRows());
+    expect(_settingsRows(), findsOneWidget);
+    expect(tester.widget<PluginSeat>(find.byType(PluginSeat)).slot, Slots.bundleConfig);
+    expect(tester.widget<ListPageRow>(_settingsRows()).meta, '网页版');
+    expect(_customEntry(), findsNothing);
+    await tester.tap(_settingsRows());
+    expect(openedWeb.single.pluginItem, ['混合设置', 'Mixed settings', probe]);
+    expect(find.byType(PluginSeatPage), findsNothing);
+    expect(find.byType(FakeIsland), findsNothing);
   });
 
   testWidgets('没有座位清单时不生成自定义入口', (tester) async {

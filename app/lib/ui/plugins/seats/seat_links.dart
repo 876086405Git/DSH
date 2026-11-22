@@ -75,9 +75,8 @@ String seatConfigTitle(SlotOccupant o, {PluginBundle? bundle}) {
 DshWebTarget seatWebTarget(SlotOccupant o, {String? sessionId, PluginBundle? bundle, List<String> labels = const []}) {
   switch (o.slot) {
     case Slots.settingsSection:
-      final builtIn = DshWebSettings.values.where((s) => s.key == o.cell).firstOrNull;
-      if (builtIn != null || o.cell.isEmpty) return DshWebTarget(settings: builtIn ?? DshWebSettings.general);
-      return DshWebTarget(settingsSection: o.cell, settingsLabels: [?o.label, ...labels]);
+      if (o.cell.isEmpty) return const DshWebTarget(settings: DshWebSettings.general);
+      return DshWebTarget(settingsSection: o.cell, settingsPackage: o.package, settingsLabels: [?o.label, ...labels]);
     case Slots.generalItem:
       return const DshWebTarget(settings: DshWebSettings.general);
     case Slots.settingsPluginsTab:

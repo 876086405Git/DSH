@@ -424,7 +424,9 @@ class BundleSheet extends ConsumerWidget {
             package: bundle.name,
             cell: '${bundle.name}#${row.rowId}',
           );
-          if (!ref.watch(seatPlanProvider(seat.request)).isEmpty) configSeats.add(seat);
+          if (ref.watch(seatPlanProvider(seat.request)).visible.any((item) => !item.occupant.inferred)) {
+            configSeats.add(seat);
+          }
         }
       }
     }

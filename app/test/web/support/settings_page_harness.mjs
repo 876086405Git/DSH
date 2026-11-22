@@ -84,6 +84,7 @@ class El {
     for (const child of kids) child.parentElement = this;
   }
   get children() { return this.kids; }
+  get lastElementChild() { return this.kids.at(-1) || null; }
   get textContent() { return this.ownText + this.kids.map((k) => k.textContent).join(''); }
   getAttribute(n) { return n in this.attrs ? String(this.attrs[n]) : null; }
   hasAttribute(n) { return n in this.attrs; }
