@@ -1,0 +1,6 @@
+--- a/node_modules/@deepseek-ai/dsh-otel/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-otel/lib/index.js
+@@ -10 +10,2 @@
+-import { JsonLogsSerializer, LogsExporterMetricsHelper } from "@opentelemetry/otlp-transformer";
++import { JsonLogsSerializer } from "@opentelemetry/otlp-transformer/build/src/logs/json/index.js";
++import { LogsExporterMetricsHelper } from "@opentelemetry/otlp-transformer/build/src/logs/index.js";
