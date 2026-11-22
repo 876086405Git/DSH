@@ -520,7 +520,7 @@ void main() {
       isEmpty,
     );
     restart();
-    expect(database.select('PRAGMA user_version').single['user_version'], 14);
+    expect(database.select('PRAGMA user_version').single['user_version'], 15);
     expect(store.task(prior['task_id']! as String), prior);
     expect(
       database
