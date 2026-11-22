@@ -43572,6 +43572,18 @@ abstract class L10n {
   /// **'网页里不运行卡的脚本'**
   String get tavernIslandNoScripts;
 
+  /// No description provided for @tavernSPresetExternal.
+  ///
+  /// In zh, this message translates to:
+  /// **'让预设自己加载 SPreset'**
+  String get tavernSPresetExternal;
+
+  /// No description provided for @tavernSPresetExternalSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认用内置的 SPreset，不从预设作者的网站加载脚本；打开后改用预设自己加载的'**
+  String get tavernSPresetExternalSubtitle;
+
   /// No description provided for @tavernIslandNoScriptsSubtitle.
   ///
   /// In zh, this message translates to:
@@ -46349,6 +46361,18 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'接回了 {count} 段，其余的在对话列表里'**
   String tavernDeepSeekTaken(int count);
+
+  /// No description provided for @tavernIslandStoryWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取本条消息的数据…'**
+  String get tavernIslandStoryWaiting;
+
+  /// No description provided for @tavernIslandStoryFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'本条消息的数据读取失败：{reason}'**
+  String tavernIslandStoryFailed(String reason);
 
   /// No description provided for @tavernPacks.
   ///

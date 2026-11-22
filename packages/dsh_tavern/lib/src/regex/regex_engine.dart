@@ -150,7 +150,17 @@ final class RegexEngine {
     Iterable<RegexScript> characterScripts = const [],
     Iterable<RegexScript> chatScripts = const [],
     this.enabled = true,
-  }) : _scripts = List.unmodifiable([...globalScripts, ...presetScripts, ...characterScripts, ...chatScripts]);
+    List<int> scopeOrder = const [0, 2, 1],
+  }) : _scripts = List.unmodifiable([
+         for (final scope in scopeOrder)
+           ...switch (scope) {
+             0 => globalScripts,
+             1 => characterScripts,
+             2 => presetScripts,
+             _ => const <RegexScript>[],
+           },
+         ...chatScripts,
+       ]);
 
   final bool enabled;
   final List<RegexScript> _scripts;

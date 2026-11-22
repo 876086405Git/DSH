@@ -201,6 +201,21 @@ extension _ManagedScriptLibrary on TavernEngine {
           (id) => TavernScriptOwner(kind: TavernScriptOwnerKind.character, assetId: selectedCharacter, scriptId: id),
         );
       }
+      final mode = _effectiveReadSettings(chat)['spresetRuntimeMode'] == 'external' ? 'external' : 'native';
+      scripts.removeWhere((script) {
+        final reason = spresetScriptSkipReason(script.content, runtimeMode: mode);
+        if (reason == null) return false;
+        issues.add(
+          TavernScriptIssue(
+            code: 'nativeRuntimeSkipped',
+            message: reason,
+            committed: false,
+            stage: 'SPreset',
+            details: {'scriptId': script.owner.scriptId, 'runtimeMode': mode},
+          ),
+        );
+        return true;
+      });
       return TavernChatScripts(chatId: chatId, characterId: selectedCharacter, scripts: scripts, issues: issues);
     });
   }

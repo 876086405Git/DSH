@@ -681,12 +681,14 @@ class _Evaluation {
     this.inheritOriginal = true,
     this.postProcess,
     this.scriptResolver,
-  }) : contentHash = MacroEngine.stringHash(original),
+  }) : _original = original,
        replaceCharacterCard = replaceCharacterCard ?? context.replaceCharacterCard,
        overrides = {for (final entry in overrides.entries) entry.key.toLowerCase(): entry.value};
 
   final MacroContext context;
-  final int contentHash;
+  final String _original;
+  // Pick seeds use the raw input, even after earlier passes change the text.
+  late final int contentHash = MacroEngine.stringHash(_original);
   final Map<String, String> overrides;
   final bool replaceCharacterCard;
   final String? characterOverride;

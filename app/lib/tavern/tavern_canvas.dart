@@ -240,7 +240,8 @@ const tavernToastMax = 300;
 /// when scripts do not run.
 /// [card] (its fields) and [characterId] are the chat's character, for the
 /// scripts that ask about it; none for a group. [lowPower] is 省电渲染
-/// ([tavernCalmJs]); [perf] the frame log ([tavernPerfJs]).
+/// ([tavernCalmJs]); [perf] the frame log ([tavernPerfJs]). [page] is which
+/// document this is to the app: every message the page sends carries it.
 String tavernCanvasDocument({
   required Color text,
   required Color accent,
@@ -261,6 +262,7 @@ String tavernCanvasDocument({
   String? characterId,
   bool lowPower = false,
   bool perf = false,
+  int page = 0,
 }) {
   // The card goes in as JSON (see [_inScript]).
   final cardJson = noScripts || card == null ? 'null' : _inScript(card);
@@ -545,6 +547,20 @@ ${lowPower ? tavernCalmJs : ''}
       msgs[i].data=v.value;var at=vars['message:'+i];if(at){at.version=v.version;at.value=v.value;}
     }
   }
+  // A preset's SPreset function (packages/dsh_tavern/assets/
+  // spreset_page_runtime.js, on this page with the preset's scripts): the
+  // runtime's answer goes back, or why it threw. A cancel settles it at
+  // once, as not known what it did, even if the function never returns.
+  var spresetRuns={};
+  function spreset(r){
+    var run=new AbortController();spresetRuns[r.requestId]=run;
+    var cancelled=new Promise(function(_,no){run.signal.addEventListener('abort',function(){no(new Error('SPreset evaluation cancelled; what it did is not known.'));});});
+    Promise.race([cancelled,Promise.resolve().then(function(){
+      if(!window.DshSPresetPageRuntime)throw new Error('The SPreset runtime is not on this page (scripts are off).');
+      return DshSPresetPageRuntime.evaluate(r,run.signal);
+    })]).then(function(a){delete spresetRuns[r.requestId];post(Object.assign({},a,{type:'spreset'}));},
+      function(e){delete spresetRuns[r.requestId];post({type:'spreset',requestId:r.requestId,error:String(e&&e.message||e)});});
+  }
   function reload(){loaded=false;loading=null;dsh.scripts.ready().catch(function(){});}
   function apply(d){
     if(typeof d.seq!=='number'||d.seq<=lastSeq)return;
@@ -589,6 +605,10 @@ ${lowPower ? tavernCalmJs : ''}
       if(!d)return;
       if(d.kind==='lifecycle'){lifecycle(d);return;}
       if(d.kind==='invoke'){invoke(d);return;}
+      // A preset's SPreset function, evaluated here where its scripts run.
+      if(d.kind==='spreset'){spreset(d.request);return;}
+      if(d.kind==='spresetCancel'){var run=spresetRuns[d.requestId];if(run)run.abort();return;}
+      if(d.kind==='spresetRelease'){if(window.DshSPresetPageRuntime)DshSPresetPageRuntime.releaseSession(d.sessionId);return;}
       if(d.kind==='generation'){generationEvent(d);return;}
       // A script's button pressed in the app: the event getButtonEvent names.
       if(d.kind==='button'){var f=frames[d.key];if(f)fire(evName(buttonEvent(f,d.name)),[]);return;}
@@ -1388,7 +1408,7 @@ ${lowPower ? tavernCalmJs : ''}
   if(!window.injectPrompts)window.injectPrompts=injectPrompts;
   if(!window.uninjectPrompts)window.uninjectPrompts=uninjectPrompts;
   var hold=null,from=null;
-  function post(o){if(window.DshTavern)DshTavern.postMessage(JSON.stringify(o));}
+  function post(o){if(window.DshTavern){o.page=$page;DshTavern.postMessage(JSON.stringify(o));}}
   function owner(t){while(t&&t!==chat){if(t.classList&&t.classList.contains('mes'))return t;t=t.parentNode;}return null;}
   chat.addEventListener('touchstart',function(ev){
     var m=owner(ev.target);if(!m||!m.dataset.node)return;

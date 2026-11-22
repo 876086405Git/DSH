@@ -83,10 +83,7 @@ extension _DeepSeekImportOperations on TavernEngine {
     final path = session.currentPath;
     final next = {for (var i = 0; i + 1 < path.length; i++) path[i].id: path[i + 1].id};
     // Off the branch last on screen, a message leads on to its newest reply.
-    final newest = <int, int>{
-      for (final message in session.messages)
-        if (message.parentId case final parent?) parent: message.id,
-    };
+    final newest = <int, int>{for (final message in session.messages) ?message.parentId: message.id};
     return _store.transaction(() {
       final chatId = _store.createChat(
         characterId: character.id,

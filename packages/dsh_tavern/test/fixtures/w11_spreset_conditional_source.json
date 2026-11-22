@@ -1,0 +1,189 @@
+{
+  "sourceCommit": "53bd585da14248ba10baaede7fc7ed0cebe1eeeb",
+  "sourceSha256": "d0766c830f3bfd4a69c63bba60423d7a797276fbd4695420adb8f17ea330037b",
+  "extracted": [
+    {
+      "name": "handleChatCompletionPromptReady",
+      "sha256": "37b60ecfe8985564ae164c6016475abbf19550b3587148ecf28747b41f7b890b"
+    },
+    {
+      "name": "consumeConditionalTag",
+      "sha256": "537ae4b01b0d6a9c1638bb0e7246483e697a7487888b3cfede9abe5c7e5fec01"
+    }
+  ],
+  "scope": "Actual fixed conditional handler/function. Downstream squash is only a receiver-neutral observer of the already-mutated message array. No whole follow/tool-ID preservation equivalence claim.",
+  "passed": true,
+  "count": 5,
+  "results": [
+    {
+      "name": "enabled-tool-string",
+      "settings": {
+        "enabled": true,
+        "role": "follow",
+        "conditional_enabled": true,
+        "conditional_tag": "<yes>",
+        "separate_chat_history": false,
+        "parse_clewd": false
+      },
+      "input": [
+        {
+          "role": "tool",
+          "content": "value<yes>",
+          "tool_call_id": "call<yes>",
+          "signature": "<yes>signature"
+        }
+      ],
+      "afterConditional": [
+        {
+          "role": "tool",
+          "content": "value",
+          "tool_call_id": "call<yes>",
+          "signature": "<yes>signature"
+        }
+      ],
+      "downstreamSquashCalls": 1
+    },
+    {
+      "name": "disabled-tool-string",
+      "settings": {
+        "enabled": true,
+        "role": "follow",
+        "conditional_enabled": false,
+        "conditional_tag": "<yes>",
+        "separate_chat_history": false,
+        "parse_clewd": false
+      },
+      "input": [
+        {
+          "role": "tool",
+          "content": "value<yes>",
+          "tool_call_id": "call<yes>",
+          "signature": "<yes>signature"
+        }
+      ],
+      "afterConditional": [
+        {
+          "role": "tool",
+          "content": "value<yes>",
+          "tool_call_id": "call<yes>",
+          "signature": "<yes>signature"
+        }
+      ],
+      "downstreamSquashCalls": 1
+    },
+    {
+      "name": "unmatched-tool-string",
+      "settings": {
+        "enabled": true,
+        "role": "follow",
+        "conditional_enabled": true,
+        "conditional_tag": "<yes>",
+        "separate_chat_history": false,
+        "parse_clewd": false
+      },
+      "input": [
+        {
+          "role": "tool",
+          "content": "value<no>",
+          "tool_call_id": "call<yes>",
+          "signature": "<yes>signature"
+        }
+      ],
+      "afterConditional": [
+        {
+          "role": "tool",
+          "content": "value<no>",
+          "tool_call_id": "call<yes>",
+          "signature": "<yes>signature"
+        }
+      ],
+      "downstreamSquashCalls": 0
+    },
+    {
+      "name": "empty-tag-tool-string",
+      "settings": {
+        "enabled": true,
+        "role": "follow",
+        "conditional_enabled": true,
+        "conditional_tag": "",
+        "separate_chat_history": false,
+        "parse_clewd": false
+      },
+      "input": [
+        {
+          "role": "tool",
+          "content": "value<yes>",
+          "tool_call_id": "call<yes>",
+          "signature": "<yes>signature"
+        }
+      ],
+      "afterConditional": [
+        {
+          "role": "tool",
+          "content": "value<yes>",
+          "tool_call_id": "call<yes>",
+          "signature": "<yes>signature"
+        }
+      ],
+      "downstreamSquashCalls": 0
+    },
+    {
+      "name": "enabled-tool-content-parts",
+      "settings": {
+        "enabled": true,
+        "role": "follow",
+        "conditional_enabled": true,
+        "conditional_tag": "<yes>",
+        "separate_chat_history": false,
+        "parse_clewd": false
+      },
+      "input": [
+        {
+          "role": "tool",
+          "content": [
+            {
+              "type": "text",
+              "text": "value<yes>"
+            },
+            {
+              "type": "opaque",
+              "nested": {
+                "key<yes>": [
+                  "<yes>x",
+                  3,
+                  false
+                ]
+              }
+            }
+          ],
+          "tool_call_id": "call<yes>",
+          "signature": "<yes>signature"
+        }
+      ],
+      "afterConditional": [
+        {
+          "role": "tool",
+          "content": [
+            {
+              "type": "text",
+              "text": "value"
+            },
+            {
+              "type": "opaque",
+              "nested": {
+                "key<yes>": [
+                  "x",
+                  3,
+                  false
+                ]
+              }
+            }
+          ],
+          "tool_call_id": "call<yes>",
+          "signature": "<yes>signature"
+        }
+      ],
+      "downstreamSquashCalls": 1
+    }
+  ]
+}

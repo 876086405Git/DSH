@@ -57,12 +57,14 @@ import 'preset_library.dart';
 import 'prompt/character_fields.dart';
 import 'prompt/preset.dart';
 import 'prompt/prompt_assembler.dart';
+import 'prompt/post_processing.dart';
 import 'prompt/prompt_types.dart';
 import 'regex/regex_engine.dart';
 import 'regex/regex_worker.dart';
 import 'regex_library.dart';
 import 'script_library.dart';
 import 'scripts.dart';
+import 'spreset.dart';
 import 'slash/slash_language.dart';
 import 'slash/st_fuse.dart';
 import 'slash/st_output_cleanup.dart';
@@ -78,6 +80,7 @@ import 'tools.dart';
 import 'worldinfo/world_info.dart';
 
 part 'engine_state.dart';
+part 'engine_spreset.dart';
 part 'engine_profile.dart';
 part 'engine_prompt_history.dart';
 part 'engine_authoring.dart';
@@ -230,7 +233,7 @@ class TavernInspection {
 
 /// Owns the character files, chat database, settings, and active generations.
 /// Only one engine should open a given app-support directory at a time.
-class TavernEngine implements Tavern {
+class TavernEngine implements Tavern, TavernSPresetLogApi {
   TavernEngine._(
     this.directory,
     this._store,
@@ -449,6 +452,11 @@ class TavernEngine implements Tavern {
   final _manualTools = <String, _ManualToolAction>{};
   late final _GroupCoordinator _groups = _GroupCoordinator(this);
   late final _ScriptCoordinator _scripts = _ScriptCoordinator(this);
+  final _spresetGenerations = <_SPresetGeneration>{};
+  final _spresetMacroNest = SPresetMacroNestRuntime();
+  final _spresetLogs = SPresetLogBuffer();
+  Future<void>? _spresetLogLoad;
+  Future<void> _spresetLogWrite = Future.value();
   @override
   TavernScriptBridge get scripts {
     _ensureOpen();
@@ -483,6 +491,10 @@ class TavernEngine implements Tavern {
   Future<List<StoredCharacterSummary>>? _characterCache;
   final _characterDetails = <String, Future<StoredCharacter?>>{};
   static const _detailCacheCapacity = 8;
+  final _chatPreviews = <String, ({String raw, String plain})>{};
+  var _chatPreviewUnits = 0;
+  static const _chatPreviewEntries = 64;
+  static const _chatPreviewCapacity = 4 * 1024 * 1024;
   Future<void> _libraryQueue = Future.value();
 
   /// DeepSeek imports, one after another (engine_deepseek_import.dart).
@@ -789,6 +801,24 @@ class TavernEngine implements Tavern {
     return result;
   }
 
+  String? _chatPreview(String chatId, String? raw) {
+    final previous = _chatPreviews.remove(chatId);
+    if (previous != null) _chatPreviewUnits -= previous.raw.length + previous.plain.length;
+    if (raw == null) return null;
+    // Compare what SQLite just returned, including edits made by another connection.
+    final plain = previous != null && previous.raw == raw ? previous.plain : _plainText(raw);
+    final units = raw.length + plain.length;
+    if (units <= _chatPreviewCapacity) {
+      while (_chatPreviews.length >= _chatPreviewEntries || _chatPreviewUnits + units > _chatPreviewCapacity) {
+        final oldest = _chatPreviews.remove(_chatPreviews.keys.first)!;
+        _chatPreviewUnits -= oldest.raw.length + oldest.plain.length;
+      }
+      _chatPreviews[chatId] = (raw: raw, plain: plain);
+      _chatPreviewUnits += units;
+    }
+    return plain;
+  }
+
   List<TavernChatSummary> _chatSummaries({String? characterId}) => [
     for (final chat in _store.listChats(characterId: characterId))
       TavernChatSummary(
@@ -796,7 +826,7 @@ class TavernEngine implements Tavern {
         characterId: chat.characterId,
         title: chat.title,
         updatedAt: chat.updatedAt,
-        lastText: chat.lastText == null ? null : _plainText(chat.lastText!),
+        lastText: _chatPreview(chat.id, chat.lastText),
         messageCount: chat.messageCount,
         kind: chat.kind,
         memberCharacterIds: chat.memberCharacterIds,
@@ -967,7 +997,7 @@ class TavernEngine implements Tavern {
         final rawPreset = _map(settings['preset']);
         final preset = ChatPreset({
           ...(rawPreset.isEmpty ? ChatPreset.stDefault().raw : rawPreset),
-          'show_thoughts': config.thinking,
+          if (!rawPreset.containsKey('show_thoughts')) 'show_thoughts': !config.deepseek || config.thinking,
         });
         void checkGameplay() {
           if (!_gameplayResourcesCurrent(this, gameplayCapture)) {
@@ -1786,24 +1816,42 @@ class TavernEngine implements Tavern {
   @override
   Future<TavernPresetImportResult> importPreset(String text, {String? fileName}) => _operation(() async {
     final decoded = _presetCodec.decode(text, fileName: fileName);
-    final diagnostics = await inspectRegexScripts(_map(decoded.raw['extensions'])['regex_scripts'], _regexWorker);
-    final report = await assessImportAsync(
-      kind: TavernImportKind.preset,
-      document: decoded.raw,
-      envelope: decoded.envelope,
-      regexDiagnostics: diagnostics,
-      presetIssues: decoded.issues,
-      checkedAt: _clock().toUtc(),
-    );
-    return _presetOperation(() {
+    final importedRaw = decoded.raw;
+    final fixedName = spresetSanitizedPresetName(spresetFixedPresetName(importedRaw));
+    final diagnostics = await inspectRegexScripts(_map(importedRaw['extensions'])['regex_scripts'], _regexWorker);
+    return _presetOperation(() async {
+      // Name resolution and publication share the preset mutation queue.
+      // Regex inspection above may await while another import claims the name.
+      final conflict =
+          fixedName.isNotEmpty &&
+          _store.listPresets().any((preset) => _slashNamesEqualIgnoreCaseAndAccents(preset.name, fixedName));
+      final issues = [
+        ...decoded.issues,
+        if (conflict)
+          TavernPresetIssue(
+            path: r'$.extensions.SPreset.FixedPresetName',
+            code: 'spreset-fixed-name-conflict',
+            message:
+                'A preset named "$fixedName" already exists. Imported under its source name; the fixed-name marker was kept.',
+          ),
+      ];
+      if (fixedName.isNotEmpty && !conflict) clearSPresetFixedPresetName(importedRaw);
+      final report = await assessImportAsync(
+        kind: TavernImportKind.preset,
+        document: importedRaw,
+        envelope: decoded.envelope,
+        regexDiagnostics: diagnostics,
+        presetIssues: issues,
+        checkedAt: _clock().toUtc(),
+      );
       final value = _store.createPreset(
-        name: decoded.name,
+        name: fixedName.isEmpty || conflict ? decoded.name : fixedName,
         sourceText: text,
-        raw: decoded.raw,
+        raw: importedRaw,
         envelope: decoded.envelope,
         importReport: report,
       );
-      return TavernPresetImportResult(_presetView(value), decoded.issues, regexDiagnostics: diagnostics);
+      return TavernPresetImportResult(_presetView(value), issues, regexDiagnostics: diagnostics);
     });
   });
 
@@ -1826,11 +1874,55 @@ class TavernEngine implements Tavern {
         final captured = _copy(patch);
         return _presetOperation(() {
           final original = _requirePreset(presetId);
-          final raw = _merge(original.raw, captured);
+          final raw = _mergeReadMaps(original.raw, captured);
           _guardPresetCarrier(original.raw, raw);
           return _savePresetEdit(original, raw, name: name);
         });
       });
+
+  @override
+  Future<Map<String, Object?>> exportSPresetLogs(
+    String chatId, {
+    Map<String, Object?>? tavernHelper,
+    Map<String, Object?>? browserConsole,
+  }) {
+    final helper = tavernHelper == null ? null : _copy(tavernHelper);
+    final console = browserConsole == null ? null : _copy(browserConsole);
+    return _operation(() async {
+      final chat = _store.chat(chatId);
+      final settings = _effectiveReadSettings(chat);
+      final preset = _readMap(settings['preset']);
+      final selected = _resolvePreset(chat);
+      final name = selected.preset?.name ?? _spString(preset['preset_settings_openai'], 'current');
+      await _loadSPresetLogs();
+      return _spresetLogs.report(presetName: name, at: _clock(), tavernHelper: helper, browserConsole: console);
+    });
+  }
+
+  @override
+  Future<Map<String, Object?>> uploadSPresetLogs(
+    String chatId, {
+    String? address,
+    String? bearerToken,
+    Map<String, Object?>? tavernHelper,
+    Map<String, Object?>? browserConsole,
+  }) {
+    final helper = tavernHelper == null ? null : _copy(tavernHelper);
+    final console = browserConsole == null ? null : _copy(browserConsole);
+    return _operation(() async {
+      final chat = _store.chat(chatId);
+      final settings = _effectiveReadSettings(chat);
+      final preset = _readMap(settings['preset']);
+      final selected = _resolvePreset(chat);
+      final name = selected.preset?.name ?? _spString(preset['preset_settings_openai'], 'current');
+      final config = SPresetConfig.fromPreset(preset);
+      final target = address ?? _spString(config.module('LogUpload')['url']);
+      await _loadSPresetLogs();
+      final report = _spresetLogs.report(presetName: name, at: _clock(), tavernHelper: helper, browserConsole: console);
+      final enabled = _readMap(_document['settings'])['spresetLogUploadEnabled'] == true;
+      return uploadSPresetLogReport(Uri.parse(target), report, enabled: enabled, bearerToken: bearerToken);
+    });
+  }
 
   @override
   Future<String> exportPreset(String presetId) => _operation(() {
@@ -2165,6 +2257,9 @@ class TavernEngine implements Tavern {
   }
 
   Future<void> _setSettingsCaptured(Map<String, Object?> patch, {String? chatId, bool replacePreset = false}) async {
+    if (chatId != null && patch.containsKey('spresetLogUploadEnabled')) {
+      throw ArgumentError('spresetLogUploadEnabled is an App global setting; chat-level writes are not allowed.');
+    }
     try {
       if (chatId == null) {
         final hasPreset = patch.containsKey('preset');
@@ -3293,6 +3388,12 @@ class TavernEngine implements Tavern {
     // Project only after every global/source/chat merge. A read->set roundtrip
     // cannot duplicate the collection or replace it with a supplied snapshot.
     result.remove('managedRegexScripts');
+    // Imported/legacy chat settings must not grant or revoke the App opt-in.
+    if (global.containsKey('spresetLogUploadEnabled')) {
+      result['spresetLogUploadEnabled'] = global['spresetLogUploadEnabled'];
+    } else {
+      result.remove('spresetLogUploadEnabled');
+    }
     final managed = _managedRegexView ??= _regexLibrary.executionScripts;
     if (managed.isNotEmpty) result['managedRegexScripts'] = managed;
     return result;
@@ -3301,8 +3402,12 @@ class TavernEngine implements Tavern {
   Future<Map<String, Object?>?> _readBook(String id) => _bookOperation(() => _readBookNow(id));
 
   Future<({Map<String, Object?> raw, String? stWorldName})?> _readBookSnapshot(String id) => _bookOperation(() async {
+    // Bound standalone books share the directory's admission rules. Keep raw
+    // reads separate so an unreadable entries field can still be repaired.
+    if (_scripts.scriptResources.directory.standalone[id]?.readable == false) return null;
     final raw = await _readBookNow(id);
-    return raw == null ? null : (raw: raw, stWorldName: _bookSourceNames[id]);
+    if (raw == null || _scripts._bookDirectoryEntriesFailure(raw) != null) return null;
+    return (raw: raw, stWorldName: _bookSourceNames[id]);
   });
 
   Future<Map<String, Object?>?> _readBookNow(String id) async {
@@ -3902,7 +4007,7 @@ class TavernEngine implements Tavern {
     final presetRaw = _map(settings['preset']);
     final preset = ChatPreset({
       ...(presetRaw.isEmpty ? ChatPreset.stDefault().raw : presetRaw),
-      'show_thoughts': config.thinking,
+      if (!presetRaw.containsKey('show_thoughts')) 'show_thoughts': !config.deepseek || config.thinking,
     });
     final environment = _MacroEnvironment(
       _effectiveCard(record.card.data, settings),
@@ -4346,10 +4451,36 @@ class TavernEngine implements Tavern {
       turn.gameplayInitialized =
           turn.gameplay != null && !hadGameplayValue && _map(turn.state['messageVariables']).containsKey('dshgo');
       final presetRaw = _readMap(turn.settings['preset']);
-      final preset = ChatPreset({
-        ...(presetRaw.isEmpty ? ChatPreset.stDefault().raw : presetRaw),
-        'show_thoughts': turn.config.thinking,
-      });
+      final spreset = turn.spreset = _SPresetGeneration(
+        this,
+        chatId: chatId,
+        generationId: turn.generationId,
+        cancellation: turn.cancellation,
+        settings: turn.settings,
+        model: turn.config,
+        generationType: turn.generationType,
+        presetId: turn.presetId,
+        onIssue: turn.hookIssues.add,
+        preset: {
+          ...(presetRaw.isEmpty ? ChatPreset.stDefault().raw : presetRaw),
+          if (!presetRaw.containsKey('show_thoughts')) 'show_thoughts': !turn.config.deepseek || turn.config.thinking,
+        },
+      );
+      final preset = ChatPreset(
+        await spreset.preparePreset(
+          turn.generationType,
+          () => [
+            for (final node in _store.scriptHistoryTo(chatId, parent))
+              {
+                'mes': node.message.text,
+                'name': node.message.speaker,
+                'is_user': node.message.role == TavernRole.user,
+                'is_system': _systemMessage(node),
+              },
+          ],
+        ),
+      );
+      turn.effectiveShowThoughts = presetTruthy(preset.settings['show_thoughts']);
       final worldSettings = WorldInfoSettings.fromJson(_map(turn.settings['worldInfo']));
       turn.profile?.record('prepare_context', prepareContextAt!);
       turn.profile?.mark('prepare');
@@ -4611,7 +4742,7 @@ class TavernEngine implements Tavern {
       ];
       final windowConfiguration = _PromptWindowConfiguration(turn, data, hostData, books.loaded);
       final cacheWindow = _reusePromptWindow(turn, parent, windowConfiguration);
-      final assembly = _assemblePreparedPrompt(
+      var assembly = _assemblePreparedPrompt(
         turn: turn,
         data: data,
         environment: environment,
@@ -4623,7 +4754,9 @@ class TavernEngine implements Tavern {
         counter: counter,
         prefix: historyWindow?.prefix ?? const [],
         cacheWindow: cacheWindow,
+        onInput: (input) => turn.spresetPromptInput = input,
       );
+      assembly = await spreset.assembly(assembly, turn.spresetPromptInput!, counter);
       if (assembly.historyWindow case final window?) {
         turn.pendingPromptWindow = _PendingPromptWindow(window, parent, windowConfiguration);
       } else {
@@ -4722,7 +4855,7 @@ class TavernEngine implements Tavern {
       await Future<void>.delayed(Duration.zero);
       turn.cancellation.check();
       if (turn.toolOwner == null) {
-        await _consume(turn, requestBody);
+        await _consume(turn, await spreset.request(requestBody));
       } else {
         await _consumeOrdinaryTools(this, turn, requestBody);
       }
@@ -4869,6 +5002,14 @@ class TavernEngine implements Tavern {
       turn.profile?.mark('failure_settlement');
     } finally {
       turn.flushTimer?.cancel();
+      final spreset = turn.spreset;
+      if (spreset != null) {
+        unawaited(
+          _trackOperation(spreset.close()).catchError((Object error) {
+            spreset.diagnose('close', error);
+          }),
+        );
+      }
       // The capture remains in _operations until its real library read ends.
       // Its I/O must not delay the cancelled turn's terminal stream or done.
       unawaited(turn.toolPolicyCapture?.drainStarted());
@@ -4909,19 +5050,21 @@ class TavernEngine implements Tavern {
     final result = <WorldInfoBook>[];
     final missing = <Map<String, Object?>>[];
     final bindings = _map(settings['lorebooks']);
+    final characterCards = group == null
+        ? <String, Map<String, Object?>>{characterId: data}
+        : {
+            for (final member in group.group.members)
+              member.characterId: group.cards[member.characterId]?.card.data ?? <String, Object?>{},
+          };
+    final primaries = await _scripts._captureCharacterPrimaryBooks(settings, characterCards);
+    for (final entry in primaries.entries) {
+      if (entry.value.issue(entry.key) case final issue?) missing.add(_characterBookMissing(issue));
+    }
     for (final source in WorldInfoSource.values) {
       final ids = <String>[
         ..._strings(bindings[source.name]),
         if (source == WorldInfoSource.character)
-          for (final id
-              in group == null ? [characterId] : [for (final member in group.group.members) member.characterId])
-            ..._characterLinkedBookIds(
-              settings,
-              id,
-              embedded: group == null
-                  ? data.containsKey('character_book')
-                  : (group.cards[id]?.card.data.containsKey('character_book') ?? false),
-            ),
+          for (final entry in primaries.entries) ..._characterLinkedBookIds(settings, entry.key, primary: entry.value),
         if (source == WorldInfoSource.persona && personaId != null)
           ..._strings(_map(settings['personaLorebooks'])[personaId]),
       ];
@@ -4940,13 +5083,7 @@ class TavernEngine implements Tavern {
     }
     checkCancelled?.call();
     final embeddedBooks = <WorldInfoBook>[];
-    final embeddedCards = group == null
-        ? <String, Map<String, Object?>>{characterId: data}
-        : {
-            for (final member in group.group.members)
-              if (group.cards[member.characterId] case final card?) member.characterId: card.card.data,
-          };
-    for (final card in embeddedCards.entries) {
+    for (final card in characterCards.entries) {
       final embedded = card.value['character_book'];
       if (embedded is Map<String, Object?>) {
         embeddedBooks.add(_compiledBook(id: '${card.key}:card', source: WorldInfoSource.character, json: embedded));
@@ -4966,16 +5103,20 @@ class TavernEngine implements Tavern {
         fail(const TavernModelException(TavernFailure.cancelled, 'cancelled'), StackTrace.current);
       }),
     );
-    StreamSubscription<ModelDelta>? subscription;
+    StreamSubscription<({ModelDelta delta, String? text})>? subscription;
     final requestCancellation = _gameplayRequestCancellation(this, turn.gameplayAdmission, turn.cancellation);
-    final requestContext = request == null
+    final requestContext = request == null && turn.spreset == null
         ? null
         : ModelRequestContext(
+            preparedBody: turn.spreset != null,
+            onResponseStarted: turn.spreset?.observeResponseStarted,
+            onResponseBytes: turn.spreset?.observeResponseBytes,
+            onResponseSecret: turn.spreset?.observeResponseSecret,
             cancellation: requestCancellation,
             onUsageReport: (report) {
               if (completed.isCompleted) return;
               try {
-                _recordOrdinaryUsage(this, turn, request, report);
+                if (request != null) _recordOrdinaryUsage(this, turn, request, report);
               } catch (error, stack) {
                 fail(error, stack);
               }
@@ -5000,7 +5141,12 @@ class TavernEngine implements Tavern {
       if (request != null &&
           !_stateJsonEqual(
             request.authorization.toJson(),
-            toolWireAuthorization(config: turn.config, body: body, policy: turn.toolPolicy!).toJson(),
+            toolWireAuthorization(
+              config: turn.config,
+              body: body,
+              policy: turn.toolPolicy!,
+              showThoughts: turn.effectiveShowThoughts,
+            ).toJson(),
           )) {
         throw const _ToolLoopFailure('protocol_invalid', 'The actual request authorization changed.');
       }
@@ -5010,91 +5156,125 @@ class TavernEngine implements Tavern {
         turn.secretRequestAttempted = true;
         _setInspection(turn, secretInspection);
       }
-      subscription = _modelClient
-          .generate(
-            config: turn.config,
-            body: body,
-            cancellation: requestContext ?? requestCancellation,
-            onRequestStarted: request == null
-                ? null
-                : (attempt) {
-                    if (completed.isCompleted) return;
-                    try {
-                      _store.observeToolRequest(
-                        request.snapshot.requestId,
-                        sendAttempt: attempt,
-                        onCommitted: (snapshot) {
-                          request.snapshot = snapshot;
-                        },
-                      );
-                    } catch (error) {
-                      request.diagnostics = {
-                        ...request.diagnostics,
-                        'sendObservationFailure': {'type': '${error.runtimeType}'},
-                      };
-                    }
-                  },
-          )
-          .listen(
-            (delta) {
-              if (completed.isCompleted || turn.cancellation.isCancelled) return;
-              try {
-                switch (delta) {
-                  case ModelToolFragment():
-                    turn.stateTools.add(delta);
-                    turn.stateWatch ??= Stopwatch()..start();
-                    return;
-                  case ModelText(:final text):
-                    if (text.isEmpty) return;
-                    var addition = text;
-                    if (turn.kind == _TurnKind.continueReply && !turn.receivedText) {
-                      if (!turn.text!.toString().endsWith(' ')) addition = '${turn.postfix}$text';
-                    }
-                    turn.receivedText = true;
-                    turn.text!.write(addition);
-                    turn.dirty = true;
-                    turn.emit(TavernTextDelta(turn.reply!.nodeId, addition));
-                  case ModelReasoning(:final text):
-                    if (text.isEmpty || (turn.config.deepseek && !turn.config.thinking)) return;
-                    turn.reasoning!.write(text);
-                    turn.dirty = true;
-                    turn.emit(TavernReasoningDelta(turn.reply!.nodeId, text));
-                  case ModelUsage(:final usage, :final report):
-                    if (request != null) {
-                      _recordOrdinaryUsage(
-                        this,
-                        turn,
-                        request,
-                        report ?? ModelUsageReport.legacyNormalized(observationIndex: request.legacyObservationIndex++),
-                        normalizedUsage: usage,
-                      );
-                    }
-                    if (turn.toolRequests.length < 2) {
-                      turn.usage = usage;
-                      _setInspection(turn, turn.inspection.copyWith(reportedUsage: usage));
-                    }
-                  case ModelFinished(:final reason, :final assistantSnapshot, :final finalUsageReport):
-                    if (request != null) {
-                      request.assistant = assistantSnapshot;
-                      request.finishReason = reason;
-                      request.responseComplete = true;
-                      if (finalUsageReport != null) _recordOrdinaryUsage(this, turn, request, finalUsageReport);
-                    }
-                    turn.finishReason = reason;
-                    completed.complete();
-                    return;
+      final modelStream = _modelClient.generate(
+        config: turn.config,
+        body: body,
+        cancellation: requestContext ?? requestCancellation,
+        onRequestStarted: request == null
+            ? null
+            : (attempt) {
+                if (completed.isCompleted) return;
+                try {
+                  _store.observeToolRequest(
+                    request.snapshot.requestId,
+                    sendAttempt: attempt,
+                    onCommitted: (snapshot) {
+                      request.snapshot = snapshot;
+                    },
+                  );
+                } catch (error) {
+                  request.diagnostics = {
+                    ...request.diagnostics,
+                    'sendObservationFailure': {'type': '${error.runtimeType}'},
+                  };
                 }
-                turn.hasOutput = true;
-              } catch (error, stack) {
-                fail(error, stack);
-              }
-            },
-            onError: (Object error, StackTrace stack) => fail(error, stack),
-            onDone: () {
-              if (!completed.isCompleted) completed.complete();
-            },
-            cancelOnError: true,
-          );
+              },
+      );
+      final responseStream =
+          turn.spreset?.response(modelStream, body) ?? modelStream.map((delta) => (delta: delta, text: null));
+      final responsePrefix = turn.text!.toString();
+      final responsePostfix =
+          turn.kind == _TurnKind.continueReply && !turn.receivedText && !responsePrefix.endsWith(' ')
+          ? turn.postfix
+          : '';
+      var previousProcessed = '';
+      subscription = responseStream.listen(
+        (packet) {
+          if (completed.isCompleted || turn.cancellation.isCancelled) return;
+          try {
+            final delta = packet.delta;
+            switch (delta) {
+              case ModelToolFragment():
+                turn.stateTools.add(delta);
+                turn.stateWatch ??= Stopwatch()..start();
+                return;
+              case ModelText(:final text):
+                if (packet.text case final processed?) {
+                  final appended = processed.startsWith(previousProcessed)
+                      ? processed.substring(previousProcessed.length)
+                      : null;
+                  final firstProcessed = previousProcessed.isEmpty;
+                  previousProcessed = processed;
+                  if (appended == '') return;
+                  final postfix = responsePostfix;
+                  turn.text = StringBuffer(responsePrefix + postfix + processed);
+                  turn.receivedText = processed.isNotEmpty;
+                  turn.dirty = true;
+                  if (appended != null) {
+                    turn.emit(TavernTextDelta(turn.reply!.nodeId, (firstProcessed ? postfix : '') + appended));
+                  } else {
+                    turn.emit(
+                      TavernTurnSnapshot(
+                        chatId: turn.chat.id,
+                        generationType: turn.generationType,
+                        startedAt: turn.at,
+                        message: _buffered(turn),
+                        logicalTurnId: turn.toolAdmitted ? turn.toolLogicalId : null,
+                      ),
+                    );
+                  }
+                  break;
+                }
+                if (text.isEmpty) return;
+                var addition = text;
+                if (turn.kind == _TurnKind.continueReply && !turn.receivedText) {
+                  if (!turn.text!.toString().endsWith(' ')) addition = '${turn.postfix}$text';
+                }
+                turn.receivedText = true;
+                turn.text!.write(addition);
+                turn.dirty = true;
+                turn.emit(TavernTextDelta(turn.reply!.nodeId, addition));
+              case ModelReasoning(:final text):
+                if (text.isEmpty || !turn.effectiveShowThoughts) return;
+                turn.reasoning!.write(text);
+                turn.dirty = true;
+                turn.emit(TavernReasoningDelta(turn.reply!.nodeId, text));
+              case ModelUsage(:final usage, :final report):
+                if (request != null) {
+                  _recordOrdinaryUsage(
+                    this,
+                    turn,
+                    request,
+                    report ?? ModelUsageReport.legacyNormalized(observationIndex: request.legacyObservationIndex++),
+                    normalizedUsage: usage,
+                  );
+                }
+                if (turn.toolRequests.length < 2) {
+                  turn.usage = usage;
+                  _setInspection(turn, turn.inspection.copyWith(reportedUsage: usage));
+                }
+              case ModelFinished(:final reason, :final assistantSnapshot, :final finalUsageReport):
+                if (request != null) {
+                  request.assistant = assistantSnapshot;
+                  request.finishReason = reason;
+                  request.responseComplete = true;
+                  if (finalUsageReport != null) _recordOrdinaryUsage(this, turn, request, finalUsageReport);
+                }
+                turn.finishReason = reason;
+                completed.complete();
+                return;
+            }
+            turn.hasOutput = true;
+          } catch (error, stack) {
+            fail(error, stack);
+          }
+        },
+        onError: (Object error, StackTrace stack) => fail(error, stack),
+        onDone: () {
+          if (!completed.isCompleted) completed.complete();
+        },
+        cancelOnError: true,
+      );
       _adoptPromptWindow(turn);
       await completed.future;
     } finally {
@@ -5585,6 +5765,8 @@ class TavernEngine implements Tavern {
     _liveVariables.clear();
     _latestInspections.clear();
     _inspections.clear();
+    _chatPreviews.clear();
+    _chatPreviewUnits = 0;
     _closed = true;
     unawaited(_charactersChanged.close());
     unawaited(_chatsChanged.close());
@@ -5922,6 +6104,10 @@ class _Turn {
   Map<String, Object?> originalVariables = {};
   final previousSelections = <(String, String?)>[];
   _MacroEnvironment? environment;
+  bool effectiveShowThoughts = true;
+  bool get effectiveThinking => config.deepseek ? effectiveShowThoughts : config.thinking;
+  _SPresetGeneration? spreset;
+  PromptInput? spresetPromptInput;
   _MvuResources? mvuResources;
   _MvuTurnBase? mvuBase;
   bool writeBackAttempted = false;
@@ -6086,16 +6272,23 @@ class _MacroEnvironment {
   final outlets = <String, String>{};
   late final Map<String, Object?> _presetSettings;
   late final Map<String, Object?> _regexPresetSettings;
+  late final _spresetRegexConfig = SPresetConfig.fromPreset({
+    ..._regexPresetSettings,
+    if (settings['spresetRuntimeMode'] == 'external') 'dsh_spreset_runtime': 'external',
+  });
   late final RegexEngine regex = RegexEngine(
     globalScripts: [
-      ...RegexEngine.readScripts(settings['globalRegexScripts'] ?? settings['regex']),
-      ...RegexEngine.readScripts(settings['managedRegexScripts']),
+      ...RegexEngine.readScripts(
+        spresetGlobalRegexes(settings['globalRegexScripts'] ?? settings['regex'], _spresetRegexConfig),
+      ),
+      ...RegexEngine.readScripts(spresetGlobalRegexes(settings['managedRegexScripts'], _spresetRegexConfig)),
       for (final rule in _capturedPackRegex)
         if (rule.source == TavernScriptRegexSource.global) rule.execution,
     ],
+    scopeOrder: spresetRegexOrder(_spresetRegexConfig, settings),
     presetScripts: settings['presetRegexEnabled'] == false
         ? const []
-        : _readRegexScripts(_readMap(_regexPresetSettings['extensions'])['regex_scripts']),
+        : _readRegexScripts(_spresetRegexConfig.presetRegexes(_regexPresetSettings)),
     characterScripts:
         settings['characterRegexEnabled'] == false || _strings(settings['disabledCharacterRegex']).contains(characterId)
         ? const []

@@ -22,6 +22,7 @@ class _ScriptGenerationRecord implements TavernScriptGeneration {
   final reasoning = StringBuffer();
   final hookIssues = <TavernScriptIssue>[];
   _ScriptGenerationCapture? capture;
+  _SPresetGeneration? spreset;
   TavernUsage? usage;
   String? finishReason;
   int seq = 0;
@@ -204,11 +205,21 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
       record.cancellation.check();
       _context(record.context.value.id);
       // The pure transport phase is not a backup storage barrier.
-      await _consumeGeneration(record, prepared.body);
+      final body = await record.spreset?.request(prepared.body) ?? prepared.body;
+      await _consumeGeneration(record, body);
     } catch (error) {
       if (record.terminal == null) record.finish(error: _generationFailure(record, error));
       // All hot task failures have a structured result and an internal error
       // observer. No detached error is sent to the isolate's uncaught zone.
+    } finally {
+      final spreset = record.spreset;
+      if (spreset != null) {
+        unawaited(
+          engine._trackOperation(spreset.close()).catchError((Object error) {
+            spreset.diagnose('close', error);
+          }),
+        );
+      }
     }
   }
 
@@ -227,11 +238,43 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
             ? await _captureGeneration(record)
             : await _captureSlashGeneration(record);
         record.capture = capture;
+        final selected = capture.promptPreset;
+        final spreset = record.spreset = _SPresetGeneration(
+          engine,
+          chatId: capture.context.value.chatId ?? '',
+          generationId: record.id,
+          cancellation: record.cancellation,
+          settings: capture.settings,
+          model: capture.config,
+          presetId: capture.request.presetId ?? capture.chat?.presetId ?? engine._store.defaultPresetId,
+          generationType: record.slashSpec == null ? 'normal' : 'quiet',
+          onIssue: record.hookIssues.add,
+          preset: selected == null
+              ? const {}
+              : {
+                  ...selected.raw,
+                  if (!selected.raw.containsKey('show_thoughts'))
+                    'show_thoughts': !capture.config.deepseek || capture.config.thinking,
+                },
+        );
+        await spreset.preparePreset(
+          record.slashSpec == null ? 'normal' : 'quiet',
+          () => [
+            for (final node in capture.history)
+              {
+                'mes': node.message.text,
+                'name': node.message.speaker,
+                'is_user': node.message.role == TavernRole.user,
+                'is_system': _systemMessage(node),
+              },
+          ],
+        );
         record.receipt.phase = 'assemble';
         final prepared = record.slashSpec == null
             ? await prepareGeneration(
                 capture,
                 record.cancellation,
+                spreset: spreset,
                 onPhase: (phase) {
                   record.receipt.phase = phase;
                 },
@@ -355,7 +398,7 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
         _generationDrains.remove(owned);
       }),
     );
-    StreamSubscription<ModelDelta>? subscription;
+    StreamSubscription<({ModelDelta delta, String? text})>? subscription;
     var cancelling = false;
     void release() {
       if (!drained.isCompleted) drained.complete();
@@ -403,104 +446,137 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
       record.status = TavernScriptGenerationStatus.running;
       record.receipt.phase = 'key';
       final slashSpec = record.slashSpec;
-      subscription = engine._modelClient
-          .generate(
-            config: transportConfig,
-            body: _captureScriptObject(body),
-            cancellation: requestCancellation,
-            onRequestStarted: slashSpec == null ? null : (attempt) => slashSpec.onModelStarted(record, attempt),
-          )
-          .listen(
-            (delta) {
-              if (record.terminal != null || record.cancellation.isCancelled) return;
-              try {
-                _checkScriptGameplayResources(engine, gameplayCapture, 'generate');
-              } catch (error) {
-                fail(error);
+      final requestContext = ModelRequestContext(
+        cancellation: requestCancellation,
+        preparedBody: record.spreset != null,
+        onUsageReport: (_) {},
+        onResponseStarted: record.spreset?.observeResponseStarted,
+        onResponseBytes: record.spreset?.observeResponseBytes,
+        onResponseSecret: record.spreset?.observeResponseSecret,
+      );
+      final modelStream = engine._modelClient.generate(
+        config: transportConfig,
+        body: _captureScriptObject(body),
+        cancellation: requestContext,
+        onRequestStarted: slashSpec == null ? null : (attempt) => slashSpec.onModelStarted(record, attempt),
+      );
+      final responseStream =
+          record.spreset?.response(modelStream, body) ?? modelStream.map((delta) => (delta: delta, text: null));
+      subscription = responseStream.listen(
+        (packet) {
+          final delta = packet.delta;
+          if (record.terminal != null || record.cancellation.isCancelled) return;
+          try {
+            _checkScriptGameplayResources(engine, gameplayCapture, 'generate');
+          } catch (error) {
+            fail(error);
+            return;
+          }
+          record.receipt.phase = 'model';
+          switch (delta) {
+            case ModelText(:final text):
+              if (packet.text case final processed?) {
+                final previous = record.text.toString();
+                if (processed == previous) return;
+                final addition = processed.startsWith(previous) ? processed.substring(previous.length) : null;
+                record.text.clear();
+                record.text.write(processed);
+                record.emit(
+                  addition == null
+                      ? TavernScriptGenerationEventKind.snapshot
+                      : TavernScriptGenerationEventKind.textDelta,
+                  delta: addition,
+                );
+                if (record.request.stream) {
+                  if (addition != null) _generationNotify(record, 'STREAM_TOKEN_RECEIVED_INCREMENTALLY', [addition]);
+                  _generationNotify(record, 'STREAM_TOKEN_RECEIVED_FULLY', [processed]);
+                }
                 return;
               }
-              record.receipt.phase = 'model';
-              switch (delta) {
-                case ModelText(:final text):
-                  if (text.isEmpty) return;
-                  record.text.write(text);
-                  record.emit(TavernScriptGenerationEventKind.textDelta, delta: text);
-                  if (record.request.stream) {
-                    _generationNotify(record, 'STREAM_TOKEN_RECEIVED_INCREMENTALLY', [text]);
-                    _generationNotify(record, 'STREAM_TOKEN_RECEIVED_FULLY', [record.text.toString()]);
-                  }
-                case ModelReasoning(:final text):
-                  if (text.isEmpty || (record.config.deepseek && !record.config.thinking)) return;
-                  record.reasoning.write(text);
-                  if (record.request.includeReasoning) {
-                    record.emit(TavernScriptGenerationEventKind.reasoningDelta, delta: text);
-                  }
-                case ModelUsage(:final usage):
-                  record.usage = usage;
-                case ModelToolFragment():
-                  fail(
-                    TavernScriptException(
-                      code: TavernScriptErrorCode.unsupportedCapability,
-                      operation: 'generate',
-                      message: 'Background tool responses are not supported.',
+              if (text.isEmpty) return;
+              record.text.write(text);
+              record.emit(TavernScriptGenerationEventKind.textDelta, delta: text);
+              if (record.request.stream) {
+                _generationNotify(record, 'STREAM_TOKEN_RECEIVED_INCREMENTALLY', [text]);
+                _generationNotify(record, 'STREAM_TOKEN_RECEIVED_FULLY', [record.text.toString()]);
+              }
+            case ModelReasoning(:final text):
+              if (text.isEmpty ||
+                  !presetTruthy(
+                    record.spreset?.preset['show_thoughts'] ?? (!record.config.deepseek || record.config.thinking),
+                  )) {
+                return;
+              }
+              record.reasoning.write(text);
+              if (record.request.includeReasoning) {
+                record.emit(TavernScriptGenerationEventKind.reasoningDelta, delta: text);
+              }
+            case ModelUsage(:final usage):
+              record.usage = usage;
+            case ModelToolFragment():
+              fail(
+                TavernScriptException(
+                  code: TavernScriptErrorCode.unsupportedCapability,
+                  operation: 'generate',
+                  message: 'Background tool responses are not supported.',
+                  generationId: record.id,
+                  issues: [
+                    TavernScriptIssue(
+                      code: 'unsupportedCapability',
+                      message: 'A tool response was received.',
+                      committed: record.receipt.committed,
+                      stage: 'model',
                       generationId: record.id,
-                      issues: [
-                        TavernScriptIssue(
-                          code: 'unsupportedCapability',
-                          message: 'A tool response was received.',
-                          committed: record.receipt.committed,
-                          stage: 'model',
-                          generationId: record.id,
-                        ),
-                      ],
                     ),
-                  );
-                case ModelFinished(:final reason):
-                  record.finishReason = reason;
-                  if (reason == 'tool_calls') {
-                    fail(
-                      TavernScriptException(
-                        code: TavernScriptErrorCode.unsupportedCapability,
-                        operation: 'generate',
-                        message: 'Background tool responses are not supported.',
+                  ],
+                ),
+              );
+            case ModelFinished(:final reason):
+              record.finishReason = reason;
+              if (reason == 'tool_calls') {
+                fail(
+                  TavernScriptException(
+                    code: TavernScriptErrorCode.unsupportedCapability,
+                    operation: 'generate',
+                    message: 'Background tool responses are not supported.',
+                    generationId: record.id,
+                    issues: [
+                      TavernScriptIssue(
+                        code: 'unsupportedCapability',
+                        message: 'A tool finish was received.',
+                        committed: record.receipt.committed,
+                        stage: 'model',
                         generationId: record.id,
-                        issues: [
-                          TavernScriptIssue(
-                            code: 'unsupportedCapability',
-                            message: 'A tool finish was received.',
-                            committed: record.receipt.committed,
-                            stage: 'model',
-                            generationId: record.id,
-                          ),
-                        ],
                       ),
-                    );
-                  } else {
-                    record.finish();
-                  }
+                    ],
+                  ),
+                );
+              } else {
+                record.finish();
               }
-            },
-            onError: (Object error, StackTrace _) {
-              fail(error);
-            },
-            onDone: () {
-              if (record.terminal == null) {
-                if (record.cancellation.isCancelled) {
-                  record.finish(
-                    error: _generationFailure(record, const TavernModelException(TavernFailure.cancelled, 'cancelled')),
-                  );
-                } else {
-                  try {
-                    _checkScriptGameplayResources(engine, gameplayCapture, 'generate');
-                    record.finish();
-                  } catch (error) {
-                    record.finish(error: _generationFailure(record, error));
-                  }
-                }
+          }
+        },
+        onError: (Object error, StackTrace _) {
+          fail(error);
+        },
+        onDone: () {
+          if (record.terminal == null) {
+            if (record.cancellation.isCancelled) {
+              record.finish(
+                error: _generationFailure(record, const TavernModelException(TavernFailure.cancelled, 'cancelled')),
+              );
+            } else {
+              try {
+                _checkScriptGameplayResources(engine, gameplayCapture, 'generate');
+                record.finish();
+              } catch (error) {
+                record.finish(error: _generationFailure(record, error));
               }
-              release();
-            },
-          );
+            }
+          }
+          release();
+        },
+      );
       unawaited(
         record.cancellation.whenCancelled.then<void>((_) {
           if (record.terminal == null) {

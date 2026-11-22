@@ -280,7 +280,7 @@ class ChatStore {
     return ChatStore._(database, clock: clock, createId: createId);
   }
 
-  static const schemaVersion = 17;
+  static const schemaVersion = 18;
 
   // Keys are destination versions. Future upgrades register every successor
   // here and increase schemaVersion; no existing schema is dropped or replayed.
@@ -303,6 +303,7 @@ class ChatStore {
     15: _gameplayWorldInfoPolicySchema,
     16: _gameplayCastImportsSchema,
     17: _authoringPayloadSchema,
+    18: _spresetToolSchema,
   };
   static const _schemaV12 = '$_authoringRunSchema\n$_authoringSeedSchema';
   final Database _db;
@@ -354,15 +355,23 @@ class ChatStore {
     _db.execute('PRAGMA journal_mode = WAL');
     _db.execute('PRAGMA synchronous = FULL');
     if (plan.isNotEmpty) {
-      transaction(() {
-        // Another connection may have upgraded while BEGIN IMMEDIATE waited.
-        // Build the executable plan from the version under the acquired lock.
-        final lockedVersion = _db.select('PRAGMA user_version').first['user_version'] as int;
-        for (final step in _migrationPlan(lockedVersion)) {
-          _db.execute(step.sql);
-          _db.execute('PRAGMA user_version = ${step.version}');
-        }
-      });
+      final rebuildRequests = plan.any((step) => step.version == 18);
+      if (rebuildRequests) _db.execute('PRAGMA foreign_keys = OFF');
+      try {
+        transaction(() {
+          // Another connection may have upgraded while BEGIN IMMEDIATE waited.
+          final lockedVersion = _db.select('PRAGMA user_version').first['user_version'] as int;
+          for (final step in _migrationPlan(lockedVersion)) {
+            _db.execute(step.sql);
+            _db.execute('PRAGMA user_version = ${step.version}');
+          }
+          if (rebuildRequests && _db.select('PRAGMA foreign_key_check').isNotEmpty) {
+            throw StateError('Schema migration would break existing foreign keys.');
+          }
+        });
+      } finally {
+        if (rebuildRequests) _db.execute('PRAGMA foreign_keys = ON');
+      }
     }
     _recoverPendingNodes();
   }
@@ -1416,17 +1425,20 @@ ORDER BY n.seq
   /// before a cursor on that path. The result is always oldest first.
   List<TavernMessage> path(String chatId, {int limit = 60, String? beforeNodeId}) {
     if (limit < 0) throw ArgumentError.value(limit, 'limit', 'Must be non-negative.');
-    final row = _chatRow(chatId);
+    final row = _chatRow(chatId, columns: 'c.current_leaf_id');
     final currentLeaf = row['current_leaf_id'] as String?;
     var lastId = currentLeaf;
     if (beforeNodeId != null) {
-      final before = _nodeRow(chatId, beforeNodeId);
+      final before = _nodeRow(chatId, beforeNodeId, columns: 'n.parent_id');
       if (currentLeaf == null || !_isAncestor(chatId, beforeNodeId, currentLeaf)) {
         throw StateError('The page cursor is not on the current path.');
       }
       lastId = before['parent_id'] as String?;
     }
-    return [for (final row in _ancestorRows(chatId, lastId, limit: limit)) _message(row)];
+    return [
+      for (final row in _ancestorRows(chatId, lastId, limit: limit, columns: '$_messageColumns, $_siblingColumns'))
+        _message(row),
+    ];
   }
 
   /// One recursive statement returns only grouped counters and path shape.
@@ -2839,6 +2851,14 @@ ORDER BY n.seq
     char(1) || n.reasoning AS reasoning, n.at, n.hidden, n.usage, n.extra, n.original,
     char(1) || n.stream_text AS stream_text, char(1) || n.stream_reasoning AS stream_reasoning,
     n.deleted_by, n.reported_usage, char(1) || n.speaker_character_id AS speaker_character_id''';
+
+  // Public path reads keep the complete message, without StoredNode documents.
+  static const _messageColumns = '''
+    n.id, n.parent_id, n.role,
+    char(1) || n.speaker AS speaker, char(1) || n.text AS text,
+    char(1) || n.reasoning AS reasoning, n.at, n.hidden, n.usage,
+    char(1) || n.stream_text AS stream_text, char(1) || n.stream_reasoning AS stream_reasoning,
+    n.reported_usage, char(1) || n.speaker_character_id AS speaker_character_id''';
 
   static const _displayVisible =
       "(n.hidden = 0 AND n.role != 'system' AND "

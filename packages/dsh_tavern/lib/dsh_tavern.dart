@@ -96,3 +96,6 @@ export 'src/store/chat_store.dart'
         StoredHistoryLink;
 export 'src/worldinfo/world_info.dart'
     hide remapWorldInfoBook, sameWorldInfoBook, WorldInfoPackSource, exportGameplayWorldInfoEntry;
+
+export 'src/spreset.dart';
+export 'src/prompt/post_processing.dart';

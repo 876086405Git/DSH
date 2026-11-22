@@ -874,6 +874,8 @@
   "tavernIslandsSubtitle": "HTML and styles a card writes in its messages (status bars, panels) show in a web page of their own; off, as text",
   "tavernSettingsSafety": "Safety",
   "tavernIslandNoScripts": "No card scripts in those pages",
+  "tavernSPresetExternal": "Presets load their own SPreset",
+  "tavernSPresetExternalSubtitle": "By default the built-in SPreset runs and nothing is loaded from the preset author’s site; turn on to let the preset load its own",
   "tavernIslandNoScriptsSubtitle": "The card's own JavaScript doesn't run; status bars that need it stay still",
   "tavernIslandOffline": "Keep those pages offline",
   "tavernIslandOfflineSubtitle": "Only pictures and fonts inside the card; nothing is loaded from the internet",
@@ -1440,6 +1442,15 @@
     "placeholders": {
       "count": {
         "type": "int"
+      }
+    }
+  },
+  "tavernIslandStoryWaiting": "Loading this message’s data…",
+  "tavernIslandStoryFailed": "Could not read this message’s data: {reason}",
+  "@tavernIslandStoryFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
       }
     }
   }

@@ -25051,6 +25051,13 @@ class L10nEn extends L10n {
   String get tavernIslandNoScripts => 'No card scripts in those pages';
 
   @override
+  String get tavernSPresetExternal => 'Presets load their own SPreset';
+
+  @override
+  String get tavernSPresetExternalSubtitle =>
+      'By default the built-in SPreset runs and nothing is loaded from the preset author’s site; turn on to let the preset load its own';
+
+  @override
   String get tavernIslandNoScriptsSubtitle =>
       'The card\'s own JavaScript doesn\'t run; status bars that need it stay still';
 
@@ -26633,6 +26640,14 @@ class L10nEn extends L10n {
   @override
   String tavernDeepSeekTaken(int count) {
     return '$count chats brought over; the rest are in the chat list';
+  }
+
+  @override
+  String get tavernIslandStoryWaiting => 'Loading this message’s data…';
+
+  @override
+  String tavernIslandStoryFailed(String reason) {
+    return 'Could not read this message’s data: $reason';
   }
 
   @override

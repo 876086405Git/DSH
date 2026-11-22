@@ -1251,20 +1251,25 @@ extension _AuthoringPromptContexts on TavernEngine {
     final linked = <WorldInfoBook>[];
     final missing = <Map<String, Object?>>[];
     final bindings = _map(settings['lorebooks']);
+    final characterCards = group == null
+        ? <String, Map<String, Object?>>{actorId: data}
+        : {
+            for (final member in group.members)
+              member.characterId: cards[member.characterId]?.card.data ?? <String, Object?>{},
+          };
+    // Resolve the current directory. A draft's book-name edits do not rewrite
+    // that shared namespace; selected books still use their candidate bodies.
+    final primaries = await _scripts._captureCharacterPrimaryBooks(settings, characterCards);
+    for (final entry in primaries.entries) {
+      if (entry.value.issue(entry.key) case final issue?) missing.add(_characterBookMissing(issue));
+    }
     final activeWorldName = metadata['world_info'];
     final activeBookId = activeWorldName is String ? _map(chat.settings['stLorebookIds'])[activeWorldName] : null;
     for (final source in WorldInfoSource.values) {
       final ids = <String>[
         ..._strings(bindings[source.name]),
         if (source == WorldInfoSource.character)
-          for (final id in group == null ? [actorId] : [for (final member in group.members) member.characterId])
-            ..._characterLinkedBookIds(
-              settings,
-              id,
-              embedded: group == null
-                  ? data.containsKey('character_book')
-                  : (cards[id]?.card.data.containsKey('character_book') ?? false),
-            ),
+          for (final entry in primaries.entries) ..._characterLinkedBookIds(settings, entry.key, primary: entry.value),
         if (source == WorldInfoSource.persona && persona.persona != null)
           ..._strings(_map(settings['personaLorebooks'])[persona.persona!.id]),
       ];
@@ -1292,13 +1297,7 @@ extension _AuthoringPromptContexts on TavernEngine {
       }
     }
     final embeddedBooks = <WorldInfoBook>[];
-    final embedded = group == null
-        ? <String, Map<String, Object?>>{actorId: data}
-        : {
-            for (final member in group.members)
-              if (cards[member.characterId] case final value?) member.characterId: value.card.data,
-          };
-    for (final entry in embedded.entries) {
+    for (final entry in characterCards.entries) {
       if (entry.value['character_book'] case final Map<String, Object?> book) {
         embeddedBooks.add(
           WorldInfoBook.fromJson(id: '${entry.key}:card', source: WorldInfoSource.character, json: book),
@@ -1329,6 +1328,7 @@ extension _AuthoringPromptContexts on TavernEngine {
       resources.values,
       check: () {
         checkAdmission();
+        if (!_scripts._characterBookNamesCurrent(primaries.values)) _authoringContextConflict();
         final freshDraft = _store.readAuthoringDraftData(request.draftId);
         if (freshDraft == null ||
             freshDraft.revision != request.draftRevision ||

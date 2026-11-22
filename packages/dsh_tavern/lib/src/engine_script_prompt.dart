@@ -70,6 +70,7 @@ extension _ScriptPromptPreparation on _ScriptCoordinator {
     void Function(String)? onBudgetSource,
     void Function(String)? onPhase,
     _SlashQuietPreparation? quiet,
+    _SPresetGeneration? spreset,
   }) async {
     onPhase?.call('capture');
     if (capture.config.deepseek && capture.request.samplingOverrides.containsKey('seed')) {
@@ -99,7 +100,7 @@ extension _ScriptPromptPreparation on _ScriptCoordinator {
     try {
       cancellation.check();
       onPhase?.call('assemble');
-      final run = _ScriptPromptRun(this, capture, cancellation, uses, worldBooks, quiet: quiet);
+      final run = _ScriptPromptRun(this, capture, cancellation, uses, worldBooks, quiet: quiet, spreset: spreset);
       onBudgetSource?.call(run.budgetSource);
       try {
         return await run.prepare();
@@ -287,7 +288,7 @@ void _scriptCheckPromptSources(_ScriptGenerationCapture capture) {
 }
 
 class _ScriptPromptRun {
-  _ScriptPromptRun(this.owner, this.capture, this.cancellation, this.uses, this.worldBooks, {this.quiet})
+  _ScriptPromptRun(this.owner, this.capture, this.cancellation, this.uses, this.worldBooks, {this.quiet, this.spreset})
     : overrides = capture.request.overrides.fields,
       macroHistory = List.of(capture.history),
       promptHistory = List.of(capture.history),
@@ -318,7 +319,12 @@ class _ScriptPromptRun {
     final selected = capture.promptPreset;
     promptPreset = selected == null
         ? null
-        : ChatPreset({...selected.raw, 'stream_openai': request.stream, 'show_thoughts': capture.config.thinking});
+        : ChatPreset({
+            ...(spreset?.preset ?? selected.raw),
+            'stream_openai': request.stream,
+            if (!selected.raw.containsKey('show_thoughts'))
+              'show_thoughts': !capture.config.deepseek || capture.config.thinking,
+          });
     final macroPreset = promptPreset ?? ChatPreset({'openai_max_context': 4095, 'openai_max_tokens': 300});
     initialHash = _finiteNumber(capture.metadata['chat_id_hash']);
     environment = _MacroEnvironment(
@@ -364,6 +370,7 @@ class _ScriptPromptRun {
   final _ScriptInjectionUseSet uses;
   final _ScriptWorldBooksSnapshot? worldBooks;
   final _SlashQuietPreparation? quiet;
+  final _SPresetGeneration? spreset;
   final Map<String, Object?> overrides, card, settings;
   final List<StoredNode> macroHistory;
   final List<StoredNode> promptHistory;
@@ -472,7 +479,7 @@ class _ScriptPromptRun {
         configured.any((injection) => injection.scan);
     if (needWorld) await _evaluateWorld();
     cancellation.check();
-    final body = raw ? _rawBody() : _ordinaryBody();
+    final body = raw ? await _rawBody() : await _ordinaryBody();
     // Legacy macro passes catch handler exceptions to preserve ST behavior.
     // Remember actual unavailable reads so that catch cannot turn a missing
     // source into an accepted request with a silently unresolved macro.
@@ -702,7 +709,7 @@ class _ScriptPromptRun {
     return [for (final node in prepared) _promptHistory(node)];
   }
 
-  Map<String, Object?> _ordinaryBody() {
+  Future<Map<String, Object?>> _ordinaryBody() async {
     final evaluated = world!;
     final fields = ordinaryFields!;
     List<PromptFragment> outlet(String name, List<WorldInfoHit> values) {
@@ -741,6 +748,9 @@ class _ScriptPromptRun {
     }
     final input = PromptInput(
       preset: promptPreset!,
+      chatCompletionSource: _modelChatCompletionSource(capture.config),
+      macroNestRuntime: spreset?.macroNestRuntime,
+      onSPresetDiagnostic: spreset?.diagnose,
       card: card,
       history: history,
       model: capture.config.model,
@@ -781,9 +791,10 @@ class _ScriptPromptRun {
       preparedFields: fields,
     );
     final assembler = PromptAssembler(counter: owner.engine._counter);
-    final assembly = quiet == null
+    var assembly = quiet == null
         ? assembler.assemble(input)
         : assembleScriptPrompt(assembler, input, preparedStops: () => quiet!.wireStops(this));
+    if (spreset != null) assembly = await spreset!.assembly(assembly, input, owner.engine._counter);
     final excluded = <(String, String)>{
       for (final exclusion in assembly.excluded)
         if (exclusion.reason == 'v3-ignore-on-max-context')
@@ -795,7 +806,7 @@ class _ScriptPromptRun {
     return _captureScriptObject(assembly.body);
   }
 
-  Map<String, Object?> _rawBody() {
+  Future<Map<String, Object?>> _rawBody() async {
     final request = capture.request as TavernScriptRawRequest;
     final base = <_ScriptRawPiece>[];
     for (final part in request.orderedPrompts) {
@@ -885,6 +896,49 @@ class _ScriptPromptRun {
       }
     }
     if (world != null && dropped.isNotEmpty) world = world!.withoutEntries(dropped);
+    if (spreset?.config.present == true) {
+      final squashed = await spresetSquashSegments(
+        [
+          for (final piece in explicit)
+            if (piece.worldIdentity == null || !dropped.contains(piece.worldIdentity))
+              piece.segment(owner.engine._counter),
+        ],
+        spreset!.config,
+        owner.engine._counter,
+        expand: (text) => environment.expand(text, const {}),
+        evaluate: spreset!.evaluate,
+        diagnose: spreset!.diagnose,
+        historyIds: {
+          for (final piece in explicit)
+            if (piece.source.kind == 'history') piece.id,
+        },
+      );
+      converted = convertExplicitPromptMessages(
+        postProcessPrompt(
+          squashed,
+          _spString(promptPreset?.settings['custom_prompt_post_processing']),
+          userName: environment.userName,
+          characterName: _string(card['name']),
+          groupNames: capture.groupView?.names ?? const [],
+          counter: owner.engine._counter,
+        ),
+        deepseek: capture.config.deepseek,
+        userName: environment.userName,
+        characterName: _string(card['name']),
+        groupNames: capture.groupView?.names ?? const [],
+        counter: owner.engine._counter,
+      );
+      // This explicit-preset raw API promises a final budget. Recount only;
+      // the fixed ST/SP hook itself does not repeat admission after scripts.
+      if (promptPreset != null &&
+          converted.fold<int>(0, (total, item) => total + owner.engine._counter.countMessage(item.message)) >
+              environment.maxContext - environment.maxResponse) {
+        throw const TavernModelException(
+          TavernFailure.contextTooLong,
+          'The final explicit raw messages exceed the selected parameter preset budget.',
+        );
+      }
+    }
     return explicitPromptRequestBody(
       messages: converted,
       settings: promptPreset?.settings,
@@ -1120,8 +1174,9 @@ class _ScriptPromptRun {
     }
     body['stream'] = capture.request.stream;
     if (capture.config.deepseek) {
-      body['thinking'] = {'type': capture.config.thinking ? 'enabled' : 'disabled'};
-      if (!capture.config.thinking) body.remove('reasoning_effort');
+      final thinking = presetTruthy(promptPreset?.settings['show_thoughts'] ?? capture.config.thinking);
+      body['thinking'] = {'type': thinking ? 'enabled' : 'disabled'};
+      if (!thinking) body.remove('reasoning_effort');
     }
   }
 }

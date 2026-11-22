@@ -418,6 +418,9 @@ class _ScriptCoordinator implements TavernScriptBridge {
       return;
     }
     _slashHostReplaced(_host, _hostVersion);
+    for (final generation in engine._spresetGenerations) {
+      generation.token.cancel('hostUnavailable');
+    }
     _hostVersion++;
     for (final context in contexts.values) {
       for (final token in context.pending.values) {
@@ -934,9 +937,20 @@ class _ScriptCoordinator implements TavernScriptBridge {
       ];
       for (final target in bindingTargets) {
         try {
-          bindingViews.add(
-            await _captureBookBindingView(context.value.id, target, characterData: characterData, chatRead: chatRead),
+          final view = await _captureBookBindingView(
+            context.value.id,
+            target,
+            characterData: characterData,
+            chatRead: chatRead,
           );
+          bindingViews.add(view);
+          if (view.issue case final issue?) {
+            bindingIssues.add({
+              'scope': target.scope.name,
+              'targetId': target.targetId,
+              ..._scriptDirectoryIssueJson(issue),
+            });
+          }
         } on FormatException catch (error) {
           if (target.scope != TavernScriptBookBindingScope.character) {
             rethrow;

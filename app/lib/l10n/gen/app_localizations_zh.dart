@@ -23715,6 +23715,12 @@ class L10nZh extends L10n {
   String get tavernIslandNoScripts => '网页里不运行卡的脚本';
 
   @override
+  String get tavernSPresetExternal => '让预设自己加载 SPreset';
+
+  @override
+  String get tavernSPresetExternalSubtitle => '默认用内置的 SPreset，不从预设作者的网站加载脚本；打开后改用预设自己加载的';
+
+  @override
   String get tavernIslandNoScriptsSubtitle => '卡自带的 JavaScript 不运行；要靠脚本动起来的状态栏会停住';
 
   @override
@@ -25255,6 +25261,14 @@ class L10nZh extends L10n {
   @override
   String tavernDeepSeekTaken(int count) {
     return '接回了 $count 段，其余的在对话列表里';
+  }
+
+  @override
+  String get tavernIslandStoryWaiting => '正在读取本条消息的数据…';
+
+  @override
+  String tavernIslandStoryFailed(String reason) {
+    return '本条消息的数据读取失败：$reason';
   }
 
   @override

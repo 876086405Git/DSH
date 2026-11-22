@@ -372,6 +372,19 @@ List<Widget> tavernSettingsGroups(BuildContext context, WidgetRef ref) {
         value: settings.islandOffline,
         onChanged: (on) => unawaited(controller.setIslandOffline(on)),
       ),
+      // A preset's SPreset: the engine's own, unless the person lets the
+      // preset load its own from the web.
+      SettingsSwitchTile(
+        key: const ValueKey('tavern-spreset-external'),
+        icon: AppIcons.code,
+        title: l10n.tavernSPresetExternal,
+        subtitle: l10n.tavernSPresetExternalSubtitle,
+        value: ref.watch(tavernSPresetExternalProvider).value ?? false,
+        onChanged: (on) => unawaited(() async {
+          await ref.read(tavernProvider).setSettings({'spresetRuntimeMode': on ? 'external' : 'native'});
+          ref.invalidate(tavernSPresetExternalProvider);
+        }()),
+      ),
     ],
   );
   final startupGroup = SettingsSection(
@@ -491,3 +504,9 @@ class _ValueText extends StatelessWidget {
     child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
   );
 }
+
+/// Whether presets load their own SPreset from the web (the engine's
+/// setting), instead of the engine's.
+final tavernSPresetExternalProvider = FutureProvider<bool>(
+  (ref) async => (await ref.watch(tavernProvider).readSettings())['spresetRuntimeMode'] == 'external',
+);

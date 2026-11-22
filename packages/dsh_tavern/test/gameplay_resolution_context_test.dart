@@ -15,6 +15,7 @@ void main() {
     hostExtension['regex_scripts'] = [_regex('host-rule')];
     final actorExtension = scriptStateExtension(initial: 99);
     actorExtension['regex_scripts'] = [_regex('actor-rule')];
+    actorExtension['world'] = 'Actor world';
     final host = await h.card('Outside host', extensions: hostExtension);
     final actor = await h.card('Selected actor', extensions: actorExtension);
     final muted = await h.card(
@@ -26,6 +27,7 @@ void main() {
     for (final id in ['host-wi', 'actor-wi', 'muted-wi']) {
       await h.engine.putLorebook(id, _book(id));
     }
+    await h.engine.putLorebook('actor-auto', {..._book('automatic actor world'), 'name': 'Actor world'});
     await h.engine.bindLorebooks(['host-wi'], source: WorldInfoSource.character, characterId: host);
     await h.engine.bindLorebooks(['actor-wi'], source: WorldInfoSource.character, characterId: actor);
     await h.engine.bindLorebooks(['muted-wi'], source: WorldInfoSource.character, characterId: muted);
@@ -44,6 +46,7 @@ void main() {
       'settings.json',
       for (final id in [host, actor, muted]) ...['characters/$id/card.json', 'characters/$id/library.json'],
       for (final id in ['host-wi', 'actor-wi', 'muted-wi']) 'lorebooks/$id.json',
+      'lorebooks/actor-auto.json',
     ];
     final files = await _files(h, paths);
     var randomReads = 0;
@@ -66,10 +69,10 @@ void main() {
     expect(current.validated, isTrue);
     expect(current.issues, isEmpty);
     final books = result.resources.where((item) => item['kind'] == 'lorebook').toList();
-    expect(books.map((item) => _map(item['resource'])['bookId']), ['actor-wi', 'muted-wi']);
+    expect(books.map((item) => _map(item['resource'])['bookId']), ['actor-auto', 'actor-wi', 'muted-wi']);
     expect(books.map((item) => item['bucket']), everyElement('character'));
     expect(books.map((item) => _map(item['resource'])['phase']), everyElement('linked'));
-    expect(books.map((item) => _map(item['source'])['characterId']), [actor, muted]);
+    expect(books.map((item) => _map(item['source'])['characterId']), [actor, actor, muted]);
     final regex = result.resources.singleWhere((item) => item['kind'] == 'regex' && item['bucket'] == 'character');
     expect(regex['source'], {'kind': 'card', 'characterId': actor});
     expect(_map(regex['resource'])['pointer'], '/extensions/regex_scripts');

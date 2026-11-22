@@ -11,6 +11,7 @@ import 'dart:math';
 import 'package:dsh_tavern/dsh_tavern.dart' show TavernPersona;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -58,6 +59,12 @@ final tavernCanvasLibrariesProvider = FutureProvider<List<String>>(
     await rootBundle.loadString('assets/tavern/zod-4.6.7.min.js'),
     await rootBundle.loadString('assets/tavern/yaml-2.9.1.min.js'),
   ],
+);
+
+/// SPreset's page side, for the canvas only: a preset's SPreset functions
+/// are evaluated with it where the preset's scripts run.
+final tavernSPresetRuntimeProvider = FutureProvider<String>(
+  (ref) => rootBundle.loadString('packages/dsh_tavern/assets/spreset_page_runtime.js'),
 );
 
 /// Builds the canvas. Tests swap it.
@@ -212,13 +219,14 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       card = null;
     } else {
       final loaded = ref.read(tavernCanvasLibrariesProvider);
+      final spreset = ref.read(tavernSPresetRuntimeProvider);
       // The chat's scripts are told to the page once it is up (_pushScripts),
       // but it waits for them, so they start with the story.
       final chat = widget.calls?.chatId;
       final scripts = chat == null ? null : ref.read(tavernChatScriptsProvider((chat, character)));
       final data = character == null ? null : ref.read(tavernCardDataProvider(character));
-      if (loaded.isLoading || (scripts?.isLoading ?? false) || (data?.isLoading ?? false)) return;
-      libraries = loaded.value ?? const [];
+      if (loaded.isLoading || spreset.isLoading || (scripts?.isLoading ?? false) || (data?.isLoading ?? false)) return;
+      libraries = [...?loaded.value, ?spreset.value];
       card = data?.value;
     }
     // The colours are set in place on the loaded page (_pushColors), never by
@@ -241,6 +249,9 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       return;
     }
     _loaded = key;
+    // What the old page was running (events, filters, SPreset functions)
+    // will not be answered by the new one.
+    widget.calls?.pageLost();
     _document++;
     _ready = false;
     _rendered = null;
@@ -259,6 +270,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       fontSize: reading.$1,
       lineHeight: reading.$2,
       nonce: _nonce(),
+      page: _document,
       userLabel: context.l10n.tavernYou,
       labels: TavernCanvasLabels(
         letter: context.l10n.tavernLetter,
@@ -283,9 +295,22 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       lowPower: lowPower,
       perf: tavernPerfLog,
     );
+    // A controller made here (its libraries came later than the first
+    // build) needs a build to be shown: now, or after this frame when this
+    // runs while building.
+    if (_controller == null) {
+      if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      } else {
+        setState(() {});
+      }
+    }
     final controller = _controller ??= WebViewController();
     final textZoom = MediaQuery.textScalerOf(context).scale(100).round().clamp(50, 300);
     final dark = theme.brightness == Brightness.dark;
+    final generation = _document;
     unawaited(() async {
       await Future.wait(
         [
@@ -302,8 +327,13 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       if (!mounted || controller != _controller) return;
       await _guard.attach(controller, dark: dark, textZoom: textZoom).catchError((_) {});
       if (!mounted || controller != _controller) return;
+      // A later _open has its own document to load; this one is not loaded.
+      if (generation != _document) return;
       _darkSent = dark;
       _syncDark();
+      // Whatever came up meanwhile (a page still loading when _open ran) is
+      // replaced now: what it was given is settled.
+      widget.calls?.pageLost();
       await controller.loadHtmlString(document, baseUrl: tavernFrameBaseUrl).catchError((_) {});
     }());
   }
@@ -318,7 +348,8 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     } on FormatException {
       return;
     }
-    if (data is! Map || !mounted) return;
+    // A page since replaced says nothing more (its ready, its answers).
+    if (data is! Map || !mounted || data['page'] != _document) return;
     switch (data['type']) {
       case 'ready':
         _ready = true;
@@ -328,6 +359,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
         _streamSent = null;
         _avatars.reset();
         widget.calls?.hostButtons.value = const [];
+        widget.calls?.pageReady();
         _audio?.report(null);
         if (_hidden) _suspendAudio(true);
         _pushPersonas();
@@ -341,6 +373,8 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
         unawaited(_answer(data));
       case 'invoked':
         widget.calls?.invoked(data);
+      case 'spreset':
+        widget.calls?.spreset(data);
       case 'ack':
         widget.calls?.acknowledge(data);
       case 'toast':
@@ -568,6 +602,9 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
         _pushScripts();
       });
     }
+    ref.listen(tavernSPresetRuntimeProvider, (_, next) {
+      if (!next.isLoading) _open();
+    });
     ref.listen(tavernCanvasLibrariesProvider, (_, next) {
       if (!next.isLoading) _open();
     });

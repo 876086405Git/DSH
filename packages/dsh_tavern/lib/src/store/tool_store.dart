@@ -438,7 +438,7 @@ extension ToolStore on ChatStore {
           'id = ?',
           [_toolText(receipt, 'id')],
         );
-      } else if (receipt['status'] == 'prepared' && _toolText(receipt, 'tool_name') == 'roll') {
+      } else if (receipt['status'] == 'prepared') {
         _toolUpdate(
           'tool_receipts',
           {
@@ -930,7 +930,7 @@ extension ToolStore on ChatStore {
       'admissionAnchor': _toolObject(row['admission_anchor_json']),
       'candidateSource': _toolOwnership(row).candidateSource?.toJson(),
       'budgetUsed': requests.length,
-      'budgetMax': 4,
+      'budgetMax': row['request_budget'],
       'requests': [for (final request in snapshots) request.toJson()],
       'receiptIds': [for (final request in snapshots) ...request.receiptIds],
       'proposals': [for (final proposal in proposals) _toolProposalView(proposal).toJson()],
@@ -1376,6 +1376,7 @@ extension ToolStore on ChatStore {
     StoredToolTurnOwner owner, {
     required List<String> offeredTools,
     required Map<String, Object?> wireAuthorization,
+    int? requestLimit = 4,
     required void Function(TavernToolRequestSnapshot) onCommitted,
   }) {
     final offered = List<String>.unmodifiable(offeredTools);
@@ -1386,7 +1387,14 @@ extension ToolStore on ChatStore {
         throw StateError('A request requires completed admission policy.');
       }
       final count = _toolRows('tool_requests', 't.logical_turn_id = ?', [owner.logicalTurnId]).length;
-      if (count >= 4) throw StoredToolBudgetException(owner.logicalTurnId);
+      if (requestLimit != null && (requestLimit < 1 || count >= requestLimit)) {
+        throw StoredToolBudgetException(owner.logicalTurnId);
+      }
+      if (count == 0) {
+        _toolUpdate('tool_turns', {'request_budget': requestLimit}, 'id = ?', [owner.logicalTurnId]);
+      } else if (turn['request_budget'] != requestLimit) {
+        throw StateError('A logical turn request budget is immutable.');
+      }
       final index = count + 1;
       final id = '${owner.logicalTurnId}:request:$index';
       _toolInsert('tool_requests', {
@@ -1701,6 +1709,66 @@ extension ToolStore on ChatStore {
       return _toolReceiptView(_toolRequired('tool_receipts', id));
     }, onCommitted);
   }
+
+  /// Registered SPreset actions share request identity and durable intent.
+  /// Native roll/remember authorization remains separate and unchanged.
+  TavernToolReceipt prepareSPresetToolReceipt(
+    StoredToolTurnOwner owner, {
+    required StoredModelToolCall call,
+    required void Function(TavernToolReceipt) onCommitted,
+  }) => _toolOuter(() {
+    final request = _toolModelRequest(owner, call);
+    final offered = _toolObject(request['wire_authorization_json'])['spresetTools'];
+    if (offered is! List<Object?> || !offered.contains(call.toolName)) {
+      throw StateError('The SPreset tool was not offered in this request.');
+    }
+    final id = _toolInsertModelReceipt(owner, call, 'prepared');
+    return _toolReceiptView(_toolRequired('tool_receipts', id));
+  }, onCommitted);
+
+  TavernToolReceipt finishSPresetToolReceipt(
+    String executionId, {
+    required Object? value,
+    required bool? committed,
+    String? error,
+    bool late = false,
+    required void Function(TavernToolReceipt) onCommitted,
+  }) => _toolOuter(() {
+    final row = _toolRequired('tool_receipts', executionId);
+    if (row['status'] != (late ? 'unresolved' : 'prepared')) {
+      if (late) return _toolReceiptView(row);
+      throw StateError('The SPreset action already completed.');
+    }
+    final request = _toolRequired('tool_requests', _toolText(row, 'request_id')!);
+    final offered = _toolObject(request['wire_authorization_json'])['spresetTools'];
+    if (offered is! List<Object?> || !offered.contains(row['tool_name'])) {
+      throw StateError('This receipt does not belong to an offered SPreset action.');
+    }
+    if (late && committed == null) return _toolReceiptView(row);
+    final status = committed == null
+        ? 'unresolved'
+        : committed
+        ? 'committed'
+        : 'completed_no_change';
+    _toolUpdate(
+      'tool_receipts',
+      {
+        'status': status,
+        'committed': committed == null
+            ? null
+            : committed
+            ? 1
+            : 0,
+        'result_json': _toolResult({'value': value}, error == null ? null : {'code': 'script_error', 'message': error}),
+        'updated_at_ms': _toolNow(),
+        'result_adopted_at_ms': _toolNow(),
+      },
+      'id = ?',
+      [executionId],
+    );
+    _changedChats.add(_toolText(row, 'chat_id')!);
+    return _toolReceiptView(_toolRequired('tool_receipts', executionId));
+  }, onCommitted);
 
   TavernToolReceipt? readManualToolReceipt(
     String chatId, {
@@ -2841,4 +2909,33 @@ CREATE TRIGGER nodes_tool_physical_delete AFTER DELETE ON nodes BEGIN
     WHERE chat_id = OLD.chat_id AND origin = 'remember' AND source_node_id = OLD.id AND source_seq = OLD.seq
       AND source_validity != 'orphaned';
 END;
+''';
+
+// Rebuild only the request table; ChatStore disables FK enforcement outside
+// the migration transaction and checks every reference before commit.
+const _spresetToolSchema = r'''
+ALTER TABLE tool_turns ADD COLUMN request_budget INTEGER DEFAULT 4
+  CHECK(request_budget IS NULL OR (typeof(request_budget) = 'integer' AND request_budget >= 1));
+CREATE TABLE tool_requests_next (
+  id TEXT PRIMARY KEY NOT NULL,
+  chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  logical_turn_id TEXT NOT NULL REFERENCES tool_turns(id) ON DELETE CASCADE,
+  request_index INTEGER NOT NULL CHECK(typeof(request_index) = 'integer' AND request_index >= 1),
+  created_at_ms INTEGER NOT NULL CHECK(typeof(created_at_ms) = 'integer'),
+  offered_tools_json TEXT NOT NULL,
+  wire_authorization_json TEXT NOT NULL,
+  response_snapshot_json TEXT,
+  batch_diagnostics_json TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('registered', 'in_flight', 'response_complete', 'failed', 'interrupted')),
+  provider_finish_reason TEXT,
+  response_finished_at_ms INTEGER,
+  response_complete INTEGER NOT NULL CHECK(response_complete IN (0, 1)),
+  error_json TEXT,
+  send_attempts_json TEXT NOT NULL,
+  usage_json TEXT NOT NULL,
+  UNIQUE(logical_turn_id, request_index), UNIQUE(chat_id, id)
+);
+INSERT INTO tool_requests_next SELECT * FROM tool_requests;
+DROP TABLE tool_requests;
+ALTER TABLE tool_requests_next RENAME TO tool_requests;
 ''';

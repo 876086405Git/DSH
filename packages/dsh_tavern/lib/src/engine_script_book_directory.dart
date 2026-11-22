@@ -10,6 +10,7 @@ class _ScriptBookDirectoryState {
   bool loaded = false;
   String? standaloneVersion;
   final standalone = <String, TavernScriptBookDirectoryEntry>{};
+  final standaloneNames = <String, Set<String>>{};
   final issues = <String, TavernScriptIssue>{};
   final embedded = <String, _ScriptEmbeddedDirectory>{};
 }
@@ -50,6 +51,17 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
     );
   }
 
+  TavernScriptException? _bookDirectoryEntriesFailure(Map<String, Object?> raw) {
+    final entries = raw['entries'];
+    if (entries is Map<String, Object?> || entries is List<Object?>) return null;
+    return _scriptError(
+      TavernScriptErrorCode.shapeMismatch,
+      'bookDirectory',
+      'The book entries field is not an object or array.',
+      fieldPath: 'entries',
+    );
+  }
+
   void _updateStandaloneDirectoryVersion() {
     final state = scriptResources.directory;
     if (!state.loaded) {
@@ -65,8 +77,9 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
 
   void _observeStandaloneDirectory(String id, Map<String, Object?>? raw, String? sourceName, {Object? error}) {
     final state = scriptResources.directory;
-    final before = state.standalone[id]?.toJson();
+    final before = state.standalone[id];
     final oldIssue = state.issues[id];
+    final failure = error ?? (raw == null ? null : _bookDirectoryEntriesFailure(raw));
     if (raw == null && error == null) {
       state.standalone.remove(id);
       state.issues.remove(id);
@@ -75,15 +88,31 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
         ref: TavernScriptBookRef.standalone(bookId: id),
         name: raw?['name'] is String ? raw!['name']! as String : null,
         stWorldName: sourceName,
-        readable: error == null,
+        readable: failure == null,
       );
-      if (error == null) {
+      if (failure == null) {
         state.issues.remove(id);
       } else {
-        state.issues[id] = _bookDirectoryIssue('standalone:$id', error);
+        state.issues[id] = _bookDirectoryIssue('standalone:$id', failure);
       }
     }
-    if (!_stateJsonEqual(before, state.standalone[id]?.toJson()) ||
+    final after = state.standalone[id];
+    final changed = !_stateJsonEqual(before?.toJson(), after?.toJson());
+    if (changed) {
+      if (before != null && before.readable) {
+        for (final name in <String>{?before.name, ?before.stWorldName}) {
+          final ids = state.standaloneNames[name]!;
+          ids.remove(id);
+          if (ids.isEmpty) state.standaloneNames.remove(name);
+        }
+      }
+      if (after != null && after.readable) {
+        for (final name in <String>{?after.name, ?after.stWorldName}) {
+          (state.standaloneNames[name] ??= {}).add(id);
+        }
+      }
+    }
+    if (changed ||
         !_stateJsonEqual(
           oldIssue == null ? null : _scriptDirectoryIssueJson(oldIssue),
           state.issues[id] == null ? null : _scriptDirectoryIssueJson(state.issues[id]!),
@@ -103,6 +132,8 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
                 'bookDirectory',
                 'The embedded book root is not an object.',
               )
+            : raw is Map<String, Object?>
+            ? _bookDirectoryEntriesFailure(raw)
             : null);
     final entry = present
         ? TavernScriptBookDirectoryEntry(
@@ -125,6 +156,7 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
       return;
     }
     state.standalone.clear();
+    state.standaloneNames.clear();
     state.issues.clear();
     final folder = Directory('${engine.directory.path}/lorebooks');
     try {

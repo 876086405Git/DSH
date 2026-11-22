@@ -17,6 +17,10 @@
 // - slash lookups are refused as unsupported (the app keeps no script
 //   library), never answered with an empty success.
 // - refresh: the chat page redraws from its own watch of the path.
+// - SPreset: a preset's SPreset function (its output step, a tool…) is
+//   evaluated by the page of the chat it is for, where the preset's scripts
+//   and their storage live; the page's own answer settles it, also after a
+//   cancel (told to the page), or as unknown when the page goes.
 
 import 'dart:async';
 
@@ -37,8 +41,14 @@ typedef TavernScriptInteractor = Future<TavernInteractAnswer> Function(
   required Future<void> withdraw,
 });
 
-class TavernScriptPages implements TavernScriptHost {
+class TavernScriptPages implements TavernScriptHost, TavernSPresetScriptHost {
   final _pages = <String, TavernScriptPage>{};
+
+  /// Each context's chat, for the SPreset evaluations of that chat.
+  final _chats = <String, String>{};
+
+  /// SPreset evaluations a page is running, by request.
+  final _evaluating = <String, ({String contextId, Completer<TavernSPresetEvaluationResult> answer})>{};
   TavernScriptBridge? _attached;
 
   /// Lifecycle events a page is running, by event: which context, and the
@@ -65,8 +75,9 @@ class TavernScriptPages implements TavernScriptHost {
     bridge.attachHost(this);
   }
 
-  void add(String contextId, TavernScriptPage page, {TavernScriptInteractor? interact}) {
+  void add(String contextId, TavernScriptPage page, {TavernScriptInteractor? interact, String? chatId}) {
     _pages[contextId] = page;
+    if (chatId != null) _chats[contextId] = chatId;
     if (interact != null) {
       _interactors[contextId] = interact;
     } else {
@@ -78,6 +89,7 @@ class TavernScriptPages implements TavernScriptHost {
   /// scripts asked the person is taken back.
   void remove(String contextId) {
     _pages.remove(contextId);
+    _chats.remove(contextId);
     _interactors.remove(contextId);
     drop(contextId);
     for (final asking in [..._asking.values]) {
@@ -101,6 +113,12 @@ class TavernScriptPages implements TavernScriptHost {
       if (!value.answer.isCompleted) {
         value.answer.completeError(_unavailable(value.request, 'The page went before its filter answered.'));
       }
+    }
+    for (final MapEntry(:key, :value) in [..._evaluating.entries]) {
+      if (value.contextId != contextId) continue;
+      _evaluating.remove(key);
+      // Whatever it did before going is not known.
+      value.answer.completeError(_spresetGone('The page went before it answered.'));
     }
   }
 
@@ -311,6 +329,78 @@ class TavernScriptPages implements TavernScriptHost {
     );
   }
 
+  /// A preset's SPreset function, evaluated by the page of its chat. The
+  /// engine cancelling is passed on to the page, which still answers: what
+  /// the function did is only known from there.
+  @override
+  Future<TavernSPresetEvaluationResult> evaluateSPreset(
+    TavernSPresetEvaluationRequest request,
+    TavernScriptCancellation cancellation,
+  ) async {
+    final contextId = _chats.entries
+        .where((e) => e.value == request.chatId && _pages.containsKey(e.key))
+        .lastOrNull
+        ?.key;
+    if (contextId == null) throw _spresetGone('The chat is not open, so its preset scripts have no page to run in.');
+    final answer = Completer<TavernSPresetEvaluationResult>();
+    _evaluating[request.requestId] = (contextId: contextId, answer: answer);
+    final page = _pages[contextId]!;
+    final bool delivered;
+    try {
+      delivered = await page({'kind': 'spreset', 'request': request.toJson()});
+    } on Object {
+      _evaluating.remove(request.requestId);
+      throw _spresetGone('The page could not take the evaluation.');
+    }
+    if (!delivered) {
+      _evaluating.remove(request.requestId);
+      throw _spresetGone('The page is not ready.');
+    }
+    unawaited(
+      cancellation.whenCancelled.then((_) {
+        if (!answer.isCompleted) unawaited(page({'kind': 'spresetCancel', 'requestId': request.requestId}));
+      }),
+    );
+    try {
+      return await answer.future;
+    } finally {
+      _evaluating.remove(request.requestId);
+    }
+  }
+
+  /// The page's answer to an SPreset evaluation: the runtime's result, or
+  /// {requestId, error} when the function threw.
+  void spresetAnswered(Map<Object?, Object?> answer) {
+    final id = answer['requestId'];
+    final waiting = _evaluating.remove(id);
+    if (waiting == null || waiting.answer.isCompleted) return;
+    if (answer['error'] case final Object error) {
+      waiting.answer.completeError(
+        TavernScriptException(
+          code: TavernScriptErrorCode.hookFailure,
+          operation: 'evaluateSPreset',
+          message: '$error',
+          contextId: waiting.contextId,
+        ),
+      );
+      return;
+    }
+    waiting.answer.complete(TavernSPresetEvaluationResult.fromJson(answer.cast<String, Object?>()));
+  }
+
+  /// A finished generation's SPreset session: its functions go from the
+  /// pages that kept them.
+  @override
+  Future<void> releaseSPresetSession(String sessionId) async {
+    for (final page in [..._pages.values]) {
+      try {
+        await page({'kind': 'spresetRelease', 'sessionId': sessionId});
+      } on Object {
+        // A page that went took its sessions with it.
+      }
+    }
+  }
+
   @override
   Future<TavernResolvedSlash?> resolveSlash(TavernSlashReference request, TavernScriptCancellation cancellation) =>
       Future.error(_unsupported('resolveSlash'));
@@ -341,6 +431,9 @@ TavernScriptException _unavailable(TavernScriptCallbackRequest request, String m
   message: message,
   contextId: request.ref.contextId,
 );
+
+TavernScriptException _spresetGone(String message) =>
+    TavernScriptException(code: TavernScriptErrorCode.hostUnavailable, operation: 'evaluateSPreset', message: message);
 
 TavernScriptException _unsupported(String operation) => TavernScriptException(
   code: TavernScriptErrorCode.unsupportedCapability,

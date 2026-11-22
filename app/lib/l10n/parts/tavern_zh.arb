@@ -874,6 +874,8 @@
   "tavernIslandsSubtitle": "卡在消息里写的 HTML 和样式（状态栏、面板），单独放进一个网页里显示；关掉就按文字显示",
   "tavernSettingsSafety": "安全",
   "tavernIslandNoScripts": "网页里不运行卡的脚本",
+  "tavernSPresetExternal": "让预设自己加载 SPreset",
+  "tavernSPresetExternalSubtitle": "默认用内置的 SPreset，不从预设作者的网站加载脚本；打开后改用预设自己加载的",
   "tavernIslandNoScriptsSubtitle": "卡自带的 JavaScript 不运行；要靠脚本动起来的状态栏会停住",
   "tavernIslandOffline": "网页不联网",
   "tavernIslandOfflineSubtitle": "只用卡里自带的图片和字体，不从网上加载任何东西",
@@ -1440,6 +1442,15 @@
     "placeholders": {
       "count": {
         "type": "int"
+      }
+    }
+  },
+  "tavernIslandStoryWaiting": "正在读取本条消息的数据…",
+  "tavernIslandStoryFailed": "本条消息的数据读取失败：{reason}",
+  "@tavernIslandStoryFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
       }
     }
   }

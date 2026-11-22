@@ -37,7 +37,11 @@ const tavernCanvasHostJs = r'''
   }});
   function presetDelivered(was,now){
     if(!was||!now||was.version===now.version)return;
-    if((was.source||{}).loadedPresetId!==(now.source||{}).loadedPresetId)fire('OAI_PRESET_CHANGED_AFTER',[]);
+    if((was.source||{}).loadedPresetId!==(now.source||{}).loadedPresetId){
+      // Another preset: the last one's SPreset functions and tools go.
+      if(window.DshSPresetPageRuntime)DshSPresetPageRuntime.resetPreset();
+      fire('OAI_PRESET_CHANGED_AFTER',[]);
+    }
     fire('SETTINGS_UPDATED',[]);
   }
   // Which preset an edit is of: the one its copy is.
