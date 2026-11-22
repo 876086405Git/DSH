@@ -309,6 +309,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   Timer? _voiceNoticeTimer;
   bool _fallbackNoted = false;
   bool _ttsReady = false;
+  CompanionVoiceSource? _ttsSource;
   bool _ttsRanges = false;
   int _ttsSerial = 0;
   int _spokenTo = 0;
@@ -1574,7 +1575,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       _hush();
       return;
     }
-    final ready = await _speaker.ready(settings);
+    final previous = _ttsSource;
+    _ttsSource = settings.source;
+    final preparing = _speaker.ready(settings);
+    // ready's source setter already stops the old queue. Retire this page's
+    // IDs too, including fetched lines that never reached the native player.
+    if (previous != null && previous != settings.source && _ttsPending.isNotEmpty) {
+      _ttsPending.clear();
+      _stage.command('quiet');
+    }
+    final ready = await preparing;
     if (mounted) _ttsReady = ready;
   }
 

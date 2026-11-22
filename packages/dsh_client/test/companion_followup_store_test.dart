@@ -554,7 +554,7 @@ void main() {
       now = utc('2026-11-20T01:00:00Z');
       final opportunity = store.nextFollowup(nowMs: now)!;
       final before = store.archive;
-      submit('unclear', '忘了那件事');
+      submit('unclear', '忘掉那件事');
       store.finishUnresolvedControl(messageId: 'unclear', expectedSourceRev: 1);
       expect(store.cards(), [card]);
       expect(store.archive['history_after_seq'], before['history_after_seq']);
@@ -571,7 +571,7 @@ void main() {
       final existing = invite(id: 'not-refreshed');
       const lateRaw = '周五可以问我琴修好没';
       submit('late-extraction', lateRaw);
-      final command = submit('unclear', '忘了那件事');
+      final command = submit('unclear', '忘掉那件事');
       store.finishUnresolvedControl(messageId: 'unclear', expectedSourceRev: 1);
       expect(store.archive['history_after_seq'], 0);
       expect(store.archive['followup_after_seq'], command['first_seq']);

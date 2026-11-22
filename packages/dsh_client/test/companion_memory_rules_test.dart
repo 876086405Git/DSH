@@ -761,6 +761,31 @@ void main() {
     final interview = card('interview', '你周四有蓝桥面试。', keywords: ['蓝桥', '面试']);
     final music = card('music', '你周五上琴课。', keywords: ['琴课']);
 
+    test('forgetting an errand remains chat even when a memory keyword matches', () {
+      final cards = [
+        card('umbrella', '我出门会带伞。', keywords: ['带伞']),
+        card('keys', '我出门会带钥匙。', keywords: ['带钥匙']),
+      ];
+      for (final input in ['忘了带伞。', '忘记带钥匙了', '我忘了带伞。', '把带伞忘了', '别记错带伞了']) {
+        expect(parseMemoryControl(input, cards), isNull, reason: input);
+      }
+    });
+
+    test('only explicit forget requests select the resolved memory', () {
+      final cards = [
+        card('umbrella', '我出门会带伞。', keywords: ['带伞']),
+        card('keys', '我出门会带钥匙。', keywords: ['带钥匙']),
+      ];
+      for (final input in ['忘掉带伞。', '请忘掉带伞。', '把带伞忘了吧', '别记带伞了']) {
+        final result = parseMemoryControl(input, cards)!;
+        expect(result['kind'], 'forget', reason: input);
+        expect(result['topic_ids'], ['umbrella'], reason: input);
+        expect(result['target_card_ids'], ['umbrella'], reason: input);
+        expect(result['ambiguous'], isFalse, reason: input);
+        expect(result['delete_chat'], isFalse, reason: input);
+      }
+    });
+
     test('forget, never, less, cancel and reopen remain separate operations', () {
       for (final entry in {
         '忘掉蓝桥面试，聊天留着': 'forget',
