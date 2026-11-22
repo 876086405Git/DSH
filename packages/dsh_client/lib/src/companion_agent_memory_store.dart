@@ -825,11 +825,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
 
   void _agentCheckDiarySources(Row turn, Iterable<MemoryRow> sources) {
     final claim = _agentClaim(turn['claim_id'] as String);
-    if (!sources.any(
-      (source) =>
-          source['role'] == 'user' &&
-          _agentSourceOnDay(source, claim['local_day'] as String),
-    )) {
+    if (!sources.any((source) => source['role'] == 'user' && _agentSourceOnDay(source, claim['local_day'] as String))) {
       throw const _AgentMemoryRejected('diary_day_source_required');
     }
   }

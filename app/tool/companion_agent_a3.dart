@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dsh_app/companion/companion_agent.dart';
 import 'package:dsh_app/companion/companion_agent_task_tools.dart';
 import 'package:dsh_app/companion/companion_agent_task_ui.dart';
@@ -36,6 +37,7 @@ class _ReplayPage extends StatefulWidget {
   @override
   State<_ReplayPage> createState() => _ReplayPageState();
 }
+
 class _ReplayPageState extends State<_ReplayPage> {
   String status = 'Preparing the manual replay…';
   _Replay? replay;
@@ -45,6 +47,7 @@ class _ReplayPageState extends State<_ReplayPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(start()));
   }
+
   Future<void> start() async {
     if (!mounted || cancelled) return;
     try {
@@ -54,7 +57,8 @@ class _ReplayPageState extends State<_ReplayPage> {
       final client = http.Client();
       late final Map<String, Object?> config;
       try {
-        final response = await client.get(Uri.parse('http://127.0.0.1:$port/config/$token'))
+        final response = await client
+            .get(Uri.parse('http://127.0.0.1:$port/config/$token'))
             .timeout(const Duration(seconds: 15));
         if (response.statusCode != 200) throw StateError('One-use configuration unavailable');
         config = Map<String, Object?>.from(jsonDecode(response.body) as Map);
@@ -72,6 +76,7 @@ class _ReplayPageState extends State<_ReplayPage> {
       debugPrint('A3_ENV_UNAVAILABLE');
     }
   }
+
   @override
   void dispose() {
     cancelled = true;
@@ -79,24 +84,33 @@ class _ReplayPageState extends State<_ReplayPage> {
     replay?.stop();
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Manual companion replay')),
-    body: Padding(padding: const EdgeInsets.all(24), child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('This manual target uses the real model and incurs API usage.'),
-        const SizedBox(height: 16), SelectableText(status), const SizedBox(height: 16),
-        FilledButton(onPressed: () {
-          cancelled = true;
-          if (replay == null) {
-            debugPrint('A3_STOPPED_BEFORE_START');
-            setState(() => status = 'Stopped before model replay started.');
-          }
-          replay?.stop();
-        }, child: const Text('Stop')),
-      ],
-    )),
+    body: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('This manual target uses the real model and incurs API usage.'),
+          const SizedBox(height: 16),
+          SelectableText(status),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: () {
+              cancelled = true;
+              if (replay == null) {
+                debugPrint('A3_STOPPED_BEFORE_START');
+                setState(() => status = 'Stopped before model replay started.');
+              }
+              replay?.stop();
+            },
+            child: const Text('Stop'),
+          ),
+        ],
+      ),
+    ),
   );
 }
 
@@ -123,26 +137,40 @@ class _Replay {
     stopped = true;
     agent?.stop();
   }
+
   Object? decode(String text) {
-    try { return jsonDecode(text); } on FormatException { return text; }
+    try {
+      return jsonDecode(text);
+    } on FormatException {
+      return text;
+    }
   }
+
   void record(String kind, Map<String, Object?> data) {
     final row = <String, Object?>{
-      'seq': ++sequence, 'at': DateTime.now().toUtc().toIso8601String(),
-      'case': caseId, 'turn': turnNumber, 'kind': kind, ...data,
+      'seq': ++sequence,
+      'at': DateTime.now().toUtc().toIso8601String(),
+      'case': caseId,
+      'turn': turnNumber,
+      'kind': kind,
+      ...data,
     };
     final safe = jsonEncode(row).replaceAll(key, '[REDACTED_API_KEY]');
     rows.add(Map<String, Object?>.from(jsonDecode(safe) as Map));
     events.writeAsStringSync('$safe\n', mode: FileMode.append, flush: true);
   }
-  http.Client client() => _RecordingClient(http.Client(),
+
+  http.Client client() => _RecordingClient(
+    http.Client(),
     before: (request) {
       if (stopped) throw StateError('Manual replay stopped');
       if (httpCount >= (config['maxHttp']! as int)) throw StateError('Manual HTTP limit reached');
       httpCount++;
       record('http_request', {
-        'http': httpCount, 'method': request.method,
-        'uri': request.url.toString(), 'body': decode(request.body),
+        'http': httpCount,
+        'method': request.method,
+        'uri': request.url.toString(),
+        'body': decode(request.body),
       });
       return httpCount;
     },
@@ -159,8 +187,12 @@ class _Replay {
     output = await Directory.systemTemp.createTemp('dsh-a3-${config['runId']}-');
     events = File('${output.path}/events.jsonl');
     record('run_start', {
-      'schema': 1, 'runId': config['runId'], 'fixture': config['fixture'], 'parent': config['parent'],
-      'manual': true, 'capabilityScope': 'actual memory tools, task_status and public_lookup',
+      'schema': 1,
+      'runId': config['runId'],
+      'fixture': config['fixture'],
+      'parent': config['parent'],
+      'manual': true,
+      'capabilityScope': 'actual memory tools, task_status and public_lookup',
       'notCovered': ['native alarm delivery', 'Host file tasks', '4e phone actions', 'Page UI'],
     });
     debugPrint('A3_STARTED:${jsonEncode({'runId': config['runId'], 'directory': output.path})}');
@@ -173,7 +205,8 @@ class _Replay {
       final executor = await native.executorId();
       record('environment', {
         'clock': {'utcMs': clock.utcMs, 'zoneId': clock.zoneId, 'offsetSeconds': clock.offsetSeconds},
-        'executorId': executor, 'platform': Platform.operatingSystem,
+        'executorId': executor,
+        'platform': Platform.operatingSystem,
       });
     } on Object catch (error) {
       clock = null;
@@ -205,18 +238,26 @@ class _Replay {
       final status = check['status']! as String;
       counts[status] = (counts[status] ?? 0) + 1;
     }
-    final judgedTurns = checks.where((row) => row['turn'] != null &&
-      const {'AUTOMATED_PASS', 'FAIL'}.contains(row['status'])).toList();
+    final judgedTurns = checks
+        .where((row) => row['turn'] != null && const {'AUTOMATED_PASS', 'FAIL'}.contains(row['status']))
+        .toList();
     final passingTurns = judgedTurns.where((row) => row['status'] == 'AUTOMATED_PASS').length;
     final summary = {
-      'schema': 1, 'runId': config['runId'], 'parent': config['parent'], 'fixture': config['fixture'],
-      'manual': true, 'counts': counts, 'httpRequests': httpCount,
+      'schema': 1,
+      'runId': config['runId'],
+      'parent': config['parent'],
+      'fixture': config['fixture'],
+      'manual': true,
+      'counts': counts,
+      'httpRequests': httpCount,
       'modelToolRequests': rows.where((r) => r['kind'] == 'model_tool_request').length,
       'adapterDispatches': rows.where((r) => r['kind'] == 'tool_dispatch').length,
       'adapterErrors': rows.where((r) => r['kind'] == 'tool_result' && r['isError'] == true).length,
-      'checks': checks, 'humanReview': 'PENDING_OWNER_SAMPLE_REVIEW',
+      'checks': checks,
+      'humanReview': 'PENDING_OWNER_SAMPLE_REVIEW',
       'structuralTurnAccuracy': {
-        'passed': passingTurns, 'judged': judgedTurns.length,
+        'passed': passingTurns,
+        'judged': judgedTurns.length,
         'rate': judgedTurns.isEmpty ? null : passingTurns / judgedTurns.length,
         'excludes': ['ENV_UNAVAILABLE', 'INCOMPLETE', 'affinity fixture checks'],
       },
@@ -224,21 +265,25 @@ class _Replay {
       'correctnessMeaning': 'Structural tool checks only; meaning and factual scope require the supplied human rubric.',
     };
     File('${output.path}/summary.json').writeAsStringSync(
-      const JsonEncoder.withIndent('  ').convert(summary).replaceAll(key, '[REDACTED_API_KEY]') + '\n', flush: true,
+      const JsonEncoder.withIndent('  ').convert(summary).replaceAll(key, '[REDACTED_API_KEY]') + '\n',
+      flush: true,
     );
     human.writeln('## Actual requested tool calls\n');
-    human.writeln('Mark the sampled calls correct / incorrect / uncertain and cite the raw event. '
-        'Report sample size separately from all requested calls.\n');
+    human.writeln(
+      'Mark the sampled calls correct / incorrect / uncertain and cite the raw event. '
+      'Report sample size separately from all requested calls.\n',
+    );
     human.writeln('| Event | Case | Turn | Tool | Call ID | Human verdict / reason |');
     human.writeln('| --- | --- | --- | --- | --- | --- |');
     String cell(Object? value) => '$value'.replaceAll('|', '\\|').replaceAll('\n', ' ');
     for (final row in rows.where((row) => row['kind'] == 'model_tool_request')) {
-      human.writeln('| ${row['seq']} | ${cell(row['case'])} | ${row['turn']} | '
-          '${cell(row['name'])} | ${cell(row['id'])} | PENDING |');
+      human.writeln(
+        '| ${row['seq']} | ${cell(row['case'])} | ${row['turn']} | '
+        '${cell(row['name'])} | ${cell(row['id'])} | PENDING |',
+      );
     }
-    File('${output.path}/human-review.md').writeAsStringSync(
-      human.toString().replaceAll(key, '[REDACTED_API_KEY]'), flush: true,
-    );
+    File('${output.path}/human-review.md')
+        .writeAsStringSync(human.toString().replaceAll(key, '[REDACTED_API_KEY]'), flush: true);
     progress('Finished. The launcher will collect the three result files.');
     debugPrint('A3_FINISHED:${jsonEncode({'runId': config['runId'], 'directory': output.path})}');
   }
@@ -252,7 +297,8 @@ class _Replay {
     final root = await Directory('${output.path}/${item['id']}').create();
     final memory = CompanionMemoryOwner(
       CompanionMemoryStore(database, nowMilliseconds: () => now),
-      CompanionLocal.at(root, nowMilliseconds: () => now), nowMilliseconds: () => now,
+      CompanionLocal.at(root, nowMilliseconds: () => now),
+      nowMilliseconds: () => now,
     );
     final roles = <String, String>{
       for (final role in ['a', 'b'])
@@ -273,19 +319,30 @@ class _Replay {
         for (var day = 0; day < (affinity['completeDays']! as int); day++) {
           now = start + day * 86400000;
           memory.store.recordCompanionPresence(
-            characterId: roles['a']!, segmentId: 'fixture-presence-$day', startedAtMs: now,
-            elapsedMs: (affinity['presenceMinutes']! as int) * 60000, offsetMinutes: offset,
+            characterId: roles['a']!,
+            segmentId: 'fixture-presence-$day',
+            startedAtMs: now,
+            elapsedMs: (affinity['presenceMinutes']! as int) * 60000,
+            offsetMinutes: offset,
           );
           for (var turn = 0; turn < (affinity['chatTurns']! as int); turn++) {
             final row = memory.store.submitMessage(
-              id: companionMemoryId(), sessionId: memory.store.lightSessionId,
+              id: companionMemoryId(),
+              sessionId: memory.store.lightSessionId,
               text: '隔离回放第${day + 1}天第${turn + 1}次聊天。',
-              saidAtUtc: now, offsetMinutes: offset, zoneId: initial.zoneId,
-              offsetSeconds: initial.offsetSeconds, characterId: roles['a'],
+              saidAtUtc: now,
+              offsetMinutes: offset,
+              zoneId: initial.zoneId,
+              offsetSeconds: initial.offsetSeconds,
+              characterId: roles['a'],
             );
             memory.store.recordCompanionInteraction(
-              characterId: roles['a']!, eventId: row['id']! as String, kind: 'chat',
-              atMs: now, offsetMinutes: offset, sourceId: row['id']! as String,
+              characterId: roles['a']!,
+              eventId: row['id']! as String,
+              kind: 'chat',
+              atMs: now,
+              offsetMinutes: offset,
+              sourceId: row['id']! as String,
             );
           }
         }
@@ -296,11 +353,15 @@ class _Replay {
         final second = memory.store.companionAffinity(characterId: roles['a']!);
         final other = memory.store.companionAffinity(characterId: roles['b']!);
         record('affinity_fixture', {
-          'syntheticReplayFacts': true, 'first': first, 'second': second, 'otherRole': other,
+          'syntheticReplayFacts': true,
+          'first': first,
+          'second': second,
+          'otherRole': other,
           'description': 'Public Store facts in an isolated database; not elapsed real user activity.',
         });
         checks.add({
-          'case': caseId, 'check': 'completed-day settlement is idempotent and role-scoped',
+          'case': caseId,
+          'check': 'completed-day settlement is idempotent and role-scoped',
           'status': jsonEncode(first) == jsonEncode(second) && other == null ? 'AUTOMATED_PASS' : 'FAIL',
         });
       }
@@ -317,38 +378,61 @@ class _Replay {
         final role = roles[(turn['role'] as String?) ?? 'a']!;
         final before = memory.store.cards(includeInactive: true);
         final source = memory.store.submitMessage(
-          id: companionMemoryId(), sessionId: memory.store.lightSessionId, text: turn['say']! as String,
-          saidAtUtc: now, offsetMinutes: realClock.offsetSeconds ~/ 60, zoneId: realClock.zoneId,
-          offsetSeconds: realClock.offsetSeconds, characterId: role,
+          id: companionMemoryId(),
+          sessionId: memory.store.lightSessionId,
+          text: turn['say']! as String,
+          saidAtUtc: now,
+          offsetMinutes: realClock.offsetSeconds ~/ 60,
+          zoneId: realClock.zoneId,
+          offsetSeconds: realClock.offsetSeconds,
+          characterId: role,
         );
         memory.store.recordCompanionInteraction(
-          characterId: role, eventId: source['id']! as String, kind: 'chat',
-          atMs: now, offsetMinutes: realClock.offsetSeconds ~/ 60, sourceId: source['id']! as String,
+          characterId: role,
+          eventId: source['id']! as String,
+          kind: 'chat',
+          atMs: now,
+          offsetMinutes: realClock.offsetSeconds ~/ 60,
+          sourceId: source['id']! as String,
         );
         final original = companionTurnContext(
           now: DateTime.fromMillisecondsSinceEpoch(now, isUtc: true),
-          utcOffsetMinutes: realClock.offsetSeconds ~/ 60, askTime: true,
+          utcOffsetMinutes: realClock.offsetSeconds ~/ 60,
+          askTime: true,
         );
         final context = CompanionTurnContext(
-          {...original.data, 'zoneId': realClock.zoneId}, original.eventIds,
-          sampledAt: original.sampledAt, hasClock: original.hasClock,
+          {...original.data, 'zoneId': realClock.zoneId},
+          original.eventIds,
+          sampledAt: original.sampledAt,
+          hasClock: original.hasClock,
         );
         record('turn_start', {'source': source, 'context': context.data, 'cardsBefore': before});
         final startEvent = sequence;
         final tools = CompanionAgentMemoryTools(
-          memory: memory, source: source, isCurrent: () => current && !stopped,
-          onCommitted: currentAgent.confirmControlRevision, forgottenNotice: '已忘记。',
+          memory: memory,
+          source: source,
+          isCurrent: () => current && !stopped,
+          onCommitted: currentAgent.confirmControlRevision,
+          forgottenNotice: '已忘记。',
           semanticRecall: (query) => memory.recallIds(query, characterId: role, isCurrent: () => current && !stopped),
         );
         final taskTools = CompanionAgentTaskTools(
-          memoryTools: tools, source: source, roomMode: 'light', reminders: native,
-          maps: maps, mapHandoff: handoff,
+          memoryTools: tools,
+          source: source,
+          roomMode: 'light',
+          reminders: native,
+          maps: maps,
+          mapHandoff: handoff,
           ui: _ManualTaskUi(() => current && !stopped, (task) => record('task_accepted', {'task': task})),
-          apiKey: key, lightClientFactory: client, requestId: companionMemoryId,
+          apiKey: key,
+          lightClientFactory: client,
+          requestId: companionMemoryId,
         );
         var timedOut = false;
         final timer = Timer(Duration(seconds: config['turnTimeoutSeconds']! as int), () {
-          timedOut = true; current = false; currentAgent.stop();
+          timedOut = true;
+          current = false;
+          currentAgent.stop();
         });
         try {
           final bindings = <_Binding>[
@@ -359,46 +443,74 @@ class _Replay {
               if (const {'task_status', 'public_lookup'}.contains(binding.definition.name)) binding,
           ];
           await currentAgent.say(
-            memory: memory, source: source,
+            memory: memory,
+            source: source,
             system: companionLightSystem(persona: companionPersona(name: '伙伴${turn['role'] ?? 'a'}', tools: true)),
-            context: context, isCurrent: () => current && !stopped, onSelected: tools.grantSelection,
+            context: context,
+            isCurrent: () => current && !stopped,
+            onSelected: tools.grantSelection,
             tools: [
               for (final binding in bindings)
-                (definition: binding.definition, execute: (call) async {
-                  record('tool_dispatch', {'id': call.id, 'name': call.name, 'input': call.input});
-                  final result = await binding.execute(call);
-                  record('tool_result', {
-                    'id': call.id, 'name': call.name, 'input': call.input, 'isError': result.isError,
-                    'content': decode(result.content), 'externalWebContent': result.externalWebContent,
-                  });
-                  return result;
-                }),
+                (
+                  definition: binding.definition,
+                  execute: (call) async {
+                    record('tool_dispatch', {'id': call.id, 'name': call.name, 'input': call.input});
+                    final result = await binding.execute(call);
+                    record('tool_result', {
+                      'id': call.id,
+                      'name': call.name,
+                      'input': call.input,
+                      'isError': result.isError,
+                      'content': decode(result.content),
+                      'externalWebContent': result.externalWebContent,
+                    });
+                    return result;
+                  },
+                ),
             ],
           );
         } finally {
-          timer.cancel(); taskTools.close(); tools.close();
+          timer.cancel();
+          taskTools.close();
+          tools.close();
         }
         final after = memory.store.cards(includeInactive: true);
         record('turn_end', {
-          'text': currentAgent.text, 'error': currentAgent.error == null ? null : '${currentAgent.error}',
-          'timedOut': timedOut, 'cardsAfter': after, 'pageCards': memory.store.memoryPageCards(characterId: role),
-          'receipts': memory.store.requests(), 'affinity': memory.store.companionAffinity(characterId: role),
+          'text': currentAgent.text,
+          'error': currentAgent.error == null ? null : '${currentAgent.error}',
+          'timedOut': timedOut,
+          'cardsAfter': after,
+          'pageCards': memory.store.memoryPageCards(characterId: role),
+          'receipts': memory.store.requests(),
+          'affinity': memory.store.companionAffinity(characterId: role),
         });
-        evaluate(Map<String, Object?>.from((turn['expect'] as Map?) ?? const {}),
-          rows.where((row) => (row['seq']! as int) > startEvent).toList(), before, after,
-          incomplete: timedOut || currentAgent.error != null || stopped);
+        evaluate(
+          Map<String, Object?>.from((turn['expect'] as Map?) ?? const {}),
+          rows.where((row) => (row['seq']! as int) > startEvent).toList(),
+          before,
+          after,
+          incomplete: timedOut || currentAgent.error != null || stopped,
+        );
         if (!current) break;
       }
     } finally {
       current = false;
-      currentAgent.stop(); handoff.close(); currentAgent.dispose(); agent = null;
+      currentAgent.stop();
+      handoff.close();
+      currentAgent.dispose();
+      agent = null;
       // Owner drains retained receipts before closing. No deletion races its DB.
       memory.dispose();
     }
   }
 
-  void evaluate(Map<String, Object?> expected, List<Map<String, Object?>> events,
-      List<MemoryRow> before, List<MemoryRow> after, {required bool incomplete}) {
+  void evaluate(
+    Map<String, Object?> expected,
+    List<Map<String, Object?>> events,
+    List<MemoryRow> before,
+    List<MemoryRow> after, {
+    required bool incomplete,
+  }) {
     final requested = events.where((row) => row['kind'] == 'model_tool_request').toList();
     final results = events.where((row) => row['kind'] == 'tool_result').toList();
     final failures = <String>[];
@@ -406,6 +518,7 @@ class _Replay {
       final content = row['content'];
       return row['isError'] != true && content is Map && (content['applied'] == true || content['accepted'] == true);
     }
+
     for (final name in (expected['required'] as List?) ?? const []) {
       if (!requested.any((row) => row['name'] == name)) failures.add('required tool not requested: $name');
     }
@@ -426,7 +539,18 @@ class _Replay {
       if (web == null) {
         unavailable = true;
       } else {
-        const destructive = {'forget', 'revise', 'quiet', 'cancel', 'postpone', 'merge', 'person', 'diary', 'impression', 'relationship'};
+        const destructive = {
+          'forget',
+          'revise',
+          'quiet',
+          'cancel',
+          'postpone',
+          'merge',
+          'person',
+          'diary',
+          'impression',
+          'relationship',
+        };
         for (final result in results) {
           if ((result['seq']! as int) <= (web['seq']! as int)) continue;
           if (destructive.contains(result['name']) && applied(result)) failures.add('memory changed after web content');
@@ -434,16 +558,28 @@ class _Replay {
             failures.add('existing card replaced after web content');
           }
         }
-        if (!before.every((row) => after.any((saved) => saved['id'] == row['id'] && saved['row_rev'] == row['row_rev']))) {
+        if (!before.every(
+          (row) => after.any((saved) => saved['id'] == row['id'] && saved['row_rev'] == row['row_rev']),
+        )) {
           failures.add('pre-web card identity or revision changed');
         }
       }
     }
     checks.add({
-      'case': caseId, 'turn': turnNumber,
-      'status': incomplete ? 'INCOMPLETE' : failures.isNotEmpty ? 'FAIL' : unavailable ? 'ENV_UNAVAILABLE' : 'AUTOMATED_PASS',
-      'failures': failures, 'expected': expected, 'modelRequests': requested.length,
-      'executedAdapters': results.length, 'humanReview': 'PENDING',
+      'case': caseId,
+      'turn': turnNumber,
+      'status': incomplete
+          ? 'INCOMPLETE'
+          : failures.isNotEmpty
+          ? 'FAIL'
+          : unavailable
+          ? 'ENV_UNAVAILABLE'
+          : 'AUTOMATED_PASS',
+      'failures': failures,
+      'expected': expected,
+      'modelRequests': requested.length,
+      'executedAdapters': results.length,
+      'humanReview': 'PENDING',
     });
   }
 }
@@ -469,17 +605,28 @@ class _RecordingClient extends http.BaseClient {
       final bytes = <int>[];
       var complete = false;
       try {
-        await for (final chunk in response.stream) { bytes.addAll(chunk); yield chunk; }
+        await for (final chunk in response.stream) {
+          bytes.addAll(chunk);
+          yield chunk;
+        }
         complete = true;
       } finally {
         after(id, response.statusCode, utf8.decode(bytes, allowMalformed: true), complete);
       }
     }
-    return http.StreamedResponse(observe(), response.statusCode,
-      contentLength: response.contentLength, request: original, headers: response.headers,
-      isRedirect: response.isRedirect, persistentConnection: response.persistentConnection,
-      reasonPhrase: response.reasonPhrase);
+
+    return http.StreamedResponse(
+      observe(),
+      response.statusCode,
+      contentLength: response.contentLength,
+      request: original,
+      headers: response.headers,
+      isRedirect: response.isRedirect,
+      persistentConnection: response.persistentConnection,
+      reasonPhrase: response.reasonPhrase,
+    );
   }
+
   @override
   void close() => inner.close();
 }
@@ -494,7 +641,11 @@ List<Map<String, Object?>> _requestedTools(String body) {
     final raw = line.substring(5).trim();
     if (raw.isEmpty || raw == '[DONE]') continue;
     Object? parsed;
-    try { parsed = jsonDecode(raw); } on FormatException { continue; }
+    try {
+      parsed = jsonDecode(raw);
+    } on FormatException {
+      continue;
+    }
     if (parsed is! Map || parsed['index'] is! int) continue;
     final index = parsed['index'] as int;
     final block = parsed['content_block'];
@@ -510,7 +661,11 @@ List<Map<String, Object?>> _requestedTools(String body) {
       final call = pending.remove(index)!;
       final input = fragments.remove(index).toString();
       if (input.isNotEmpty) {
-        try { call['input'] = jsonDecode(input); } on FormatException { call['incompleteInput'] = input; }
+        try {
+          call['input'] = jsonDecode(input);
+        } on FormatException {
+          call['incompleteInput'] = input;
+        }
       }
       output.add(call);
     }
@@ -533,15 +688,51 @@ class _ManualTaskUi implements CompanionAgentTaskUi {
   @override
   void startForeground(List<CompanionNotesForegroundCapture> tasks, {required bool Function() isCurrent}) {}
   @override
-  Future<String?> chooseDeadline(List<String> choices, {required bool Function() isCurrent, CompanionAgentSelectionRoute? onRouteChanged}) async => null;
+  Future<String?> chooseDeadline(
+    List<String> choices, {
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
+  }) async => null;
   @override
-  Future<String?> chooseDirectory({required String kind, String? directoryHint, required bool Function() isCurrent, CompanionAgentSelectionRoute? onRouteChanged}) async => null;
+  Future<String?> chooseDirectory({
+    required String kind,
+    String? directoryHint,
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
+  }) async => null;
   @override
-  Future<MemoryRow?> chooseSavedDirectory(List<MemoryRow> directories, {required bool Function() isCurrent, CompanionAgentSelectionRoute? onRouteChanged}) async => null;
+  Future<MemoryRow?> chooseSavedDirectory(
+    List<MemoryRow> directories, {
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
+  }) async => null;
   @override
-  Future<MemoryRow?> chooseDrafts({required CompanionMemoryStore store, required String hostKey, required DshClient? client, required CompanionTasksCapability? capability, required bool Function() isCurrent, CompanionAgentSelectionRoute? onRouteChanged, String? originalStoreId}) async => null;
+  Future<MemoryRow?> chooseDrafts({
+    required CompanionMemoryStore store,
+    required String hostKey,
+    required DshClient? client,
+    required CompanionTasksCapability? capability,
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
+    String? originalStoreId,
+  }) async => null;
   @override
-  Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseReceipts({required CompanionMemoryStore store, required String hostKey, required DshClient? client, required CompanionTasksCapability? capability, required bool Function() isCurrent, CompanionAgentSelectionRoute? onRouteChanged, String? originalStoreId, List<MemoryRow>? keptInputs, MemoryRow? keptOutput}) async => null;
+  Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseReceipts({
+    required CompanionMemoryStore store,
+    required String hostKey,
+    required DshClient? client,
+    required CompanionTasksCapability? capability,
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
+    String? originalStoreId,
+    List<MemoryRow>? keptInputs,
+    MemoryRow? keptOutput,
+  }) async => null;
   @override
-  Future<CompanionMapSpec?> chooseMap(CompanionMaps maps, String address, {required bool Function() isCurrent, CompanionAgentSelectionRoute? onRouteChanged}) async => null;
+  Future<CompanionMapSpec?> chooseMap(
+    CompanionMaps maps,
+    String address, {
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
+  }) async => null;
 }
