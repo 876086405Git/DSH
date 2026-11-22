@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import {
   advanceState, applyEvent, initialState, publicState,
 } from '../bridge/dsh-go-bridge/lib/companion/state.js';
-import { MAX_FILE_BYTES } from '../bridge/dsh-go-bridge/lib/companion/schema.js';
+import { MAX_FILE_BYTES, validMemory } from '../bridge/dsh-go-bridge/lib/companion/schema.js';
 import { createCompanionStore } from '../bridge/dsh-go-bridge/lib/companion/store.js';
 
 const MINUTE = 60_000;
@@ -346,6 +346,27 @@ test('malformed writes fail before initializing a file', async (t) => {
     () => f.store.getContext({ limit: 13 }),
   ]) await rejects(operation, 400, 'invalid-request');
   await assert.rejects(fs.stat(f.filePath), { code: 'ENOENT' });
+});
+
+test('memory text validation avoids code point arrays inside UTF-16 bounds', () => {
+  const text = '喜欢无糖茶。', keyword = '茶', sourceId = 'message-1';
+  const counted = new Set([text, keyword, sourceId]);
+  const iterator = String.prototype[Symbol.iterator];
+  let arrays = 0;
+  const input = memory({text, keywords: [keyword], source: {kind: 'manual', messageId: sourceId}});
+  String.prototype[Symbol.iterator] = function () {
+    if (counted.has(this.valueOf())) arrays++;
+    return iterator.call(this);
+  };
+  try {
+    assert.equal(validMemory(input), true);
+    assert.equal(arrays, 0);
+  } finally { String.prototype[Symbol.iterator] = iterator; }
+  for (const [value, expected] of [
+    ['😀'.repeat(512), true], ['😀'.repeat(513), false],
+    ['a'.repeat(512), true], ['a'.repeat(513), false],
+    ['\ud800', false], ['\udc00', false], ['😀\ud800', false], ['a\n😀', true],
+  ]) assert.equal(validMemory({...input, text: value}), expected);
 });
 
 test('Unicode scalar and documented source-ID limits are enforced without truncation', async (t) => {

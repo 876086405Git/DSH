@@ -28,10 +28,10 @@ export function fields(value, required, optional = []) {
 }
 
 function boundedText(value, max, { empty = false, multiline = false } = {}) {
-  if (typeof value !== "string" || codePoints(value) > max || (!empty && value.trim() === "")) return false;
+  if (typeof value !== "string" || (value.length > max && codePoints(value) > max) || (!empty && value.trim() === "")) return false;
   if ((multiline ? /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/ : /[\u0000-\u001f\u007f]/).test(value)) return false;
   // JSON permits isolated UTF-16 surrogates; they are not Unicode scalar values.
-  return [...value].every((part) => { const cp = part.codePointAt(0); return cp < 0xd800 || cp > 0xdfff; });
+  return value.isWellFormed();
 }
 
 export function validMemory(value, stored = false) {
