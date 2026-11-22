@@ -185,19 +185,13 @@ Future<void> _unmount(WidgetTester tester, List<_StoryFeed> feeds) async {
 }
 
 class _StoryFeed {
-  _StoryFeed() {
-    controller = StreamController<TavernIslandStory>(onListen: () => _listened = true);
-  }
-
-  late final StreamController<TavernIslandStory> controller;
-  bool _listened = false;
+  final controller = StreamController<TavernIslandStory>();
 
   Future<void> close() async {
-    // A never-listened single-subscription stream's close Future never ends.
-    // The retry feed can remain in that state when an earlier assertion fails.
-    if (!_listened) await controller.stream.listen(null).cancel();
     if (controller.hasListener) throw StateError('Unmount the story provider before closing its test feed.');
-    await controller.close();
+    // Not awaited: a single-subscription controller whose listener cancelled
+    // never completes close()'s Future (it has no one to send done to).
+    unawaited(controller.close());
   }
 }
 
