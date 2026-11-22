@@ -1,0 +1,52 @@
+--- a/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
+@@ -3463,23 +3463,26 @@
+-			let content = Buffer.alloc(0);
+-			const chunk = Buffer.alloc(8192);
+-			for (;;) {
+-				signal?.throwIfAborted();
+-				const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
+-				signal?.throwIfAborted();
+-				if (bytesRead === 0) return void 0;
+-				signal?.throwIfAborted();
+-				content = Buffer.concat([content, chunk.subarray(0, bytesRead)]);
+-				signal?.throwIfAborted();
+-				try {
+-					const first = scanZstdFrames(content, 1).frames[0];
+-					if (first === void 0) continue;
+-					const plaintext = await decompressZstdFrame(content.subarray(first.start, first.end));
+-					signal?.throwIfAborted();
+-					assertZstdHeaderFrame(plaintext);
+-					return plaintext.subarray(0, -1).toString("utf8");
+-				} catch (error) {
+-					/* v8 ignore next -- decoder failure plus concurrent abort is timing-dependent */
+-					if (signal?.aborted) signal.throwIfAborted();
+-					throw new SessionPersistenceCorruptionError(`corrupt Zstandard session log: header frame failed validation: ${String(error)} (raw log: ${path})`, { cause: error });
+-				}
+-			}
++			let prefix;
++			const chunk = Buffer.alloc(8192);
++			for (;;) {
++				signal?.throwIfAborted();
++				const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
++				signal?.throwIfAborted();
++				if (bytesRead === 0) return void 0;
++				signal?.throwIfAborted();
++				const part = chunk.subarray(0, bytesRead);
++				const content = prefix === void 0 ? part : Buffer.concat([prefix, part]);
++				signal?.throwIfAborted();
++				try {
++					const first = scanZstdFrames(content, 1).frames[0];
++					if (first !== void 0) {
++						const plaintext = await decompressZstdFrame(content.subarray(first.start, first.end));
++						signal?.throwIfAborted();
++						assertZstdHeaderFrame(plaintext);
++						return plaintext.subarray(0, -1).toString("utf8");
++					}
++				} catch (error) {
++					/* v8 ignore next -- decoder failure plus concurrent abort is timing-dependent */
++					if (signal?.aborted) signal.throwIfAborted();
++					throw new SessionPersistenceCorruptionError(`corrupt Zstandard session log: header frame failed validation: ${String(error)} (raw log: ${path})`, { cause: error });
++				}
++				prefix = content === part ? Buffer.from(part) : content;
++			}

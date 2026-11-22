@@ -142,6 +142,7 @@ provider-discovery-headers.diff
 session-format-error.diff
 session-queue-steer-deletion.diff
 webserver-resource-abort.diff
+jsonl-header-first-read.diff
 rrule-negative-position-range.diff
 rrule-weekly-first-period.diff
 rrule-mixed-byday.diff
