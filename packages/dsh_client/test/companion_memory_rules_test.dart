@@ -766,7 +766,7 @@ void main() {
         card('umbrella', '我出门会带伞。', keywords: ['带伞']),
         card('keys', '我出门会带钥匙。', keywords: ['带钥匙']),
       ];
-      for (final input in ['忘了带伞。', '忘记带钥匙了', '我忘了带伞。', '把带伞忘了']) {
+      for (final input in ['忘了带伞。', '忘记带钥匙了', '我忘了带伞。', '把带伞忘了', '别记错带伞了']) {
         expect(parseMemoryControl(input, cards), isNull, reason: input);
       }
     });
