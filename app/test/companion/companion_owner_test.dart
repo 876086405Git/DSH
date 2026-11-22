@@ -199,6 +199,7 @@ class _Room {
     utf8.encode(
       'data: ${jsonEncode({
         'type': 'content_block_delta',
+        'index': 0,
         'delta': {'type': 'text_delta', 'text': text},
       })}\n\n',
     ),
@@ -352,24 +353,38 @@ void main() {
     await room.close(tester);
   });
 
+  // Full mode chats through the phone loop too: the pending send is A's model
+  // request, already out with no words back, when the host becomes B.
   testWidgets('switching host retires a pending send without restoring its draft into B', (tester) async {
     final room = _Room(temporary);
-    final pending = Completer<CompanionBinding>();
-    room.sessions.pending = pending.future;
     const nextHost = HostRef.ssh('b');
     room.connect(nextHost);
     await room.open(tester);
     await tester.enterText(find.byType(TextField), '属于 A 的句子');
     tester.widget<CompanionComposer>(find.byType(CompanionComposer)).onSend();
-    // The source must be durable before this session-read race starts.
-    await settleMixed(tester, room.sessions.ensureStarted.future);
+    // The source must be durable before the host race starts.
+    for (var i = 0; i < 100 && room.lightAsked.isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump();
+    }
+    expect(room.lightAsked, hasLength(1));
+    final memory = room.container.read(companionMemoryOwnerProvider(room.root.absolute.path)).value!;
+    expect(memory.store.messages().where((row) => row['text'] == '属于 A 的句子'), hasLength(1));
     await flush(tester);
     room.host.change(nextHost);
     await flush(tester);
-    final busyAfterSwitch = tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy;
-    pending.complete(const CompanionBinding('companion-local'));
-    await flush(tester);
+    final composer = tester.widget<CompanionComposer>(find.byType(CompanionComposer));
+    final busyAfterSwitch = composer.busy || composer.running;
+    // A's late reply has nowhere to land.
+    room.lightSays('A 的回答');
+    room.lightDone();
+    for (var i = 0; i < 4; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     expect((busyAfterSwitch, tester.widget<TextField>(find.byType(TextField)).controller!.text), (false, ''));
+    expect(find.textContaining('A 的回答'), findsNothing);
+    expect(memory.store.messages().where((row) => row['role'] == 'assistant'), isEmpty);
     expect(room.chats.values.expand((chat) => chat.sent), isEmpty);
     await room.close(tester);
   });

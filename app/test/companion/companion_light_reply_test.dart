@@ -61,13 +61,19 @@ class _Room {
     utf8.encode(
       'data: ${jsonEncode({
         'type': 'content_block_delta',
+        'index': 0,
         'delta': {'type': 'text_delta', 'text': text},
       })}\n\n',
     ),
   );
 
   Future<void> finish(WidgetTester tester) async {
-    replies.last.add(utf8.encode('data: {"type":"message_stop"}\n\n'));
+    replies.last.add(
+      utf8.encode(
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":4}}\n\n'
+        'data: {"type":"message_stop"}\n\n',
+      ),
+    );
     unawaited(replies.last.close());
     await flush(tester);
     // The actual light history writes asynchronously after completion, one

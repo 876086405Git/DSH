@@ -17,6 +17,7 @@ part 'companion_task_store.dart';
 part 'companion_public_lookup_store.dart';
 part 'companion_host_task_store.dart';
 part 'companion_map_store.dart';
+part 'companion_agent_memory_store.dart';
 
 const _conflict = DshRemoteException('companion/conflict', 'Companion memory changed; read it again', {'status': 409});
 const _cleanupUnknown = DshRemoteException(
@@ -35,7 +36,7 @@ class CompanionMemoryStore {
       _db.execute('PRAGMA foreign_keys = ON');
       _db.execute('PRAGMA busy_timeout = 1000');
       final version = _db.select('PRAGMA user_version').single['user_version'] as int;
-      if (version > 14) {
+      if (version > 15) {
         throw const DshRemoteException('companion/newer-store', 'This memory store needs a newer app', {'status': 409});
       }
       if (version == 0) {
@@ -243,7 +244,16 @@ class CompanionMemoryStore {
           _db.execute('PRAGMA user_version = 14');
         });
       }
+      if (version < 15) {
+        _transaction(() {
+          _db.execute(_agentMemorySchema);
+          _db.execute('ALTER TABLE memory_followups ADD COLUMN agent_origin INTEGER NOT NULL DEFAULT 0');
+          _db.execute('PRAGMA user_version = 15');
+        });
+      }
       _transaction(() {
+        // A cold process can read old tool effects, but cannot recreate their calls.
+        _db.execute('UPDATE memory_agent_turns SET closed=1 WHERE closed=0');
         // A response captured by the previous process cannot own a new batch.
         // Its sent/uncertain request receipt keeps the existing budget hold.
         _db.execute('DELETE FROM memory_merge_batches');
@@ -1127,7 +1137,12 @@ class CompanionMemoryStore {
     return _anchorWord(original) && _containsAnchor(normalizeMemoryText(text), original);
   }
 
-  void _removeFactRelations(Set<String> roots, {String? retainTargetId, bool deleteChat = false}) {
+  Set<String> _removeFactRelations(
+    Set<String> roots, {
+    String? retainTargetId,
+    bool deleteChat = false,
+    void Function(Set<String> changedCardIds)? beforeWrite,
+  }) {
     // Decide the complete deletion before any write, including cards that
     // lose their last proof through an explicitly selected raw-message deletion.
     final snapshot = cards(includeInactive: true);
@@ -1241,6 +1256,7 @@ class CompanionMemoryStore {
       // non-manual card has a full group outside all planned removals.
       expanded = before != deleting.length + rawSources.length;
     }
+    beforeWrite?.call(deleting);
     _deleteCards(deleting.where((id) => id != retainTargetId));
     if (deleteChat) {
       for (final id in rawSources) {
@@ -1251,6 +1267,7 @@ class CompanionMemoryStore {
         _eraseMessage(rows.single);
       }
     }
+    return deleting;
   }
 
   void _bumpControl({int? historyAfterSeq, int? followupAfterSeq, String followupCloseReason = 'control_changed'}) {
@@ -1283,9 +1300,16 @@ class CompanionMemoryStore {
       UPDATE memory_followups SET row_rev=row_rev+1,invitation='',support_quote=NULL,wait_subject=NULL,local_line=NULL,
         state=CASE WHEN state IN ('waiting','pending','reserved') THEN 'closed' ELSE state END,
         reason=CASE WHEN reason IN ('unresolved_control','expired','already_presented') THEN reason ELSE ? END
+      WHERE agent_origin=0
     ''',
       [followupCloseReason],
     );
+    // Structured invitations keep their source/card identity. Old displayed
+    // tickets are fenced, and eligibility is rechecked before another reserve.
+    _db.execute('''
+      UPDATE memory_followups SET control_revision=(SELECT control_revision FROM memory_archive),
+        row_rev=row_rev+1,local_line=NULL WHERE agent_origin=1 AND state IN ('pending','reserved','asked')
+    ''');
   }
 
   MemoryBatch? nextBatch({bool forceTail = false, required int Function(String) estimateTokens}) => _transaction(() {
@@ -2746,7 +2770,7 @@ class CompanionMemoryStore {
       AND (c.plan_state IS NULL OR c.plan_state NOT IN ('cancelled','postponed'))
       AND (c.expires_at_ms IS NULL OR c.expires_at_ms>?) AND t.mode='normal'
       AND m.source_rev=f.source_rev AND m.role='user' AND m.scope='real'
-      AND m.first_seq>MAX(a.history_after_seq,a.followup_after_seq)
+      AND (f.agent_origin=1 OR m.first_seq>MAX(a.history_after_seq,a.followup_after_seq))
       AND (f.wait_subject IS NULL OR (support.source_rev=f.support_source_rev AND support.role='user'
         AND support.scope='real' AND support.first_seq>m.first_seq))
   ''',
@@ -2768,6 +2792,7 @@ class CompanionMemoryStore {
       .isNotEmpty;
 
   void _refreshFollowups(int at) {
+    _refreshAgentFollowups(at);
     final meta = archive;
     final sources = <String, MemoryRow>{
       for (final row in _db.select(
@@ -2815,7 +2840,9 @@ class CompanionMemoryStore {
         if (group.length == 1) group.single,
     ];
     final chosenIds = choices.map((row) => row['id']).toSet();
-    final existing = {for (final row in _db.select('SELECT * FROM memory_followups')) row['id'] as String: row};
+    final existing = {
+      for (final row in _db.select('SELECT * FROM memory_followups WHERE agent_origin=0')) row['id'] as String: row,
+    };
     for (final old in existing.values) {
       if (const ['waiting', 'pending'].contains(old['state']) && !chosenIds.contains(old['id'])) {
         _db.execute(

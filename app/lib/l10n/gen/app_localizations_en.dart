@@ -5379,6 +5379,10 @@ class L10nEn extends L10n {
   String get companionSendFailed => 'That didn\'t get through. Say it again?';
 
   @override
+  String get companionAgentRetryClosed =>
+      'I may have already started on that, and I don\'t want to do it twice. Take a look in Tasks, then tell me whether to carry on?';
+
+  @override
   String get companionLogTitle => 'Log';
 
   @override

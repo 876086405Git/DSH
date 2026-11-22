@@ -171,6 +171,55 @@ class CompanionUsage {
   };
 }
 
+/// A client tool in the official Messages schema, without a custom tool type.
+class CompanionAgentTool {
+  const CompanionAgentTool({required this.name, required this.description, required this.inputSchema});
+
+  final String name;
+  final String description;
+  final Map<String, Object?> inputSchema;
+
+  Map<String, Object?> toJson() => {'name': name, 'description': description, 'input_schema': inputSchema};
+}
+
+class CompanionAgentToolCall {
+  const CompanionAgentToolCall({required this.id, required this.name, required this.input});
+
+  final String id;
+  final String name;
+  final Map<String, Object?> input;
+}
+
+class CompanionAgentToolResult {
+  const CompanionAgentToolResult({required this.content, this.isError = false, this.notice});
+
+  /// Includes a truthful failure explanation: DeepSeek ignores is_error.
+  final String content;
+  final bool isError;
+
+  /// A committed deletion's short natural acknowledgement, even if the next
+  /// model request fails. This is spoken text, not a tool log.
+  final String? notice;
+}
+
+class CompanionAgentMessage {
+  CompanionAgentMessage({required List<Map<String, Object?>> content, required this.stopReason})
+    : content = List.unmodifiable(content.map(Map<String, Object?>.unmodifiable));
+
+  final List<Map<String, Object?>> content;
+  final String? stopReason;
+
+  List<CompanionAgentToolCall> get calls => [
+    for (final block in content)
+      if (block['type'] == 'tool_use')
+        CompanionAgentToolCall(
+          id: block['id'] as String,
+          name: block['name'] as String,
+          input: block['input'] as Map<String, Object?>,
+        ),
+  ];
+}
+
 /// Her reply to [lines], as text deltas. Cancelling the subscription drops the
 /// request; [client] is the caller's to close.
 ///
@@ -192,6 +241,66 @@ Stream<String> streamCompanionReply({
   void Function(Map<String, Object?> usage, {required bool partial})? onUsageSettled,
 }) async* {
   if (apiKey.trim().isEmpty) throw const CompanionLightError(CompanionLightFailure.noKey);
+  yield* _streamCompanionMessage(
+    client: client,
+    apiKey: apiKey,
+    system: system,
+    messages: companionRequestMessages(
+      [for (final line in lines) (role: line.role, text: line.text)],
+      context: context,
+      memory: memory,
+    ),
+    maxTokens: maxTokens,
+    onSent: onSent,
+    onUsage: onUsage,
+    onUsageSettled: onUsageSettled,
+  );
+}
+
+/// The same wire and receipt as the text-only entry point. Tool arguments are
+/// accumulated by content index and are exposed only after message_stop.
+/// The caller executes calls after this stream (and its receipt finally) ends.
+Stream<String> streamCompanionAgentReply({
+  required http.Client client,
+  required String apiKey,
+  required String system,
+  required List<Map<String, Object?>> messages,
+  required List<CompanionAgentTool> tools,
+  required void Function(CompanionAgentMessage) onMessage,
+  int maxTokens = 800,
+  void Function()? onSent,
+  void Function(CompanionUsage usage)? onUsage,
+  void Function(Map<String, Object?> usage, {required bool partial})? onUsageSettled,
+}) async* {
+  if (apiKey.trim().isEmpty) throw const CompanionLightError(CompanionLightFailure.noKey);
+  yield* _streamCompanionMessage(
+    client: client,
+    apiKey: apiKey,
+    system: system,
+    messages: messages,
+    tools: tools,
+    collector: _CompanionAgentMessageBuilder(),
+    onMessage: onMessage,
+    maxTokens: maxTokens,
+    onSent: onSent,
+    onUsage: onUsage,
+    onUsageSettled: onUsageSettled,
+  );
+}
+
+Stream<String> _streamCompanionMessage({
+  required http.Client client,
+  required String apiKey,
+  required String system,
+  required List<Map<String, Object?>> messages,
+  List<CompanionAgentTool> tools = const [],
+  _CompanionAgentMessageBuilder? collector,
+  void Function(CompanionAgentMessage)? onMessage,
+  int maxTokens = 800,
+  void Function()? onSent,
+  void Function(CompanionUsage usage)? onUsage,
+  void Function(Map<String, Object?> usage, {required bool partial})? onUsageSettled,
+}) async* {
   final request = http.Request('POST', Uri.parse(companionLightEndpoint))
     ..headers.addAll({
       'content-type': 'application/json',
@@ -205,11 +314,8 @@ Stream<String> streamCompanionReply({
       'max_tokens': maxTokens,
       'thinking': {'type': 'disabled'},
       'system': system,
-      'messages': companionRequestMessages(
-        [for (final line in lines) (role: line.role, text: line.text)],
-        context: context,
-        memory: memory,
-      ),
+      'messages': messages,
+      if (tools.isNotEmpty) 'tools': [for (final tool in tools) tool.toJson()],
     });
   Map<String, Object?>? startUsage;
   Map<String, Object?>? finalUsage;
@@ -261,7 +367,17 @@ Stream<String> streamCompanionReply({
           error is Map ? '${error['message']}' : '$error',
         );
       }
+      if (event['type'] != 'message_stop') collector?.add(event);
       switch (event['type']) {
+        case 'content_block_start':
+          final block = event['content_block'];
+          if (collector != null &&
+              block is Map &&
+              block['type'] == 'text' &&
+              block['text'] is String &&
+              (block['text'] as String).isNotEmpty) {
+            yield block['text'] as String;
+          }
         case 'content_block_delta':
           final delta = event['delta'];
           if (delta is Map && delta['type'] == 'text_delta' && delta['text'] is String) {
@@ -287,6 +403,14 @@ Stream<String> streamCompanionReply({
             'refusal' => 'refusal',
             _ => 'complete',
           };
+          if (collector != null && stopReason != 'max_tokens' && stopReason != 'refusal') {
+            try {
+              onMessage!(collector.finish(stopReason));
+            } on FormatException catch (error) {
+              terminal = 'provider_error';
+              throw CompanionLightError(CompanionLightFailure.server, error.message);
+            }
+          }
           return;
       }
     }
@@ -325,6 +449,94 @@ Stream<String> streamCompanionReply({
     );
     onUsage?.call(usage);
     onUsageSettled?.call(usage.telemetry, partial: !complete);
+  }
+}
+
+class _CompanionAgentMessageBuilder {
+  final _blocks = <int, Map<String, Object?>>{};
+  final _arguments = <int, StringBuffer>{};
+  final _openTools = <int>{};
+  FormatException? _error;
+
+  void add(Map event) {
+    if (_error != null) return;
+    try {
+      _add(event);
+    } on FormatException catch (error) {
+      // Still read message_delta usage and the actual stop reason. A truncated
+      // tool must not replace a provider max_tokens/refusal receipt with a
+      // locally inferred terminal, nor become executable along the way.
+      _error = error;
+    }
+  }
+
+  void _add(Map event) {
+    final type = event['type'];
+    if (type != 'content_block_start' && type != 'content_block_delta' && type != 'content_block_stop') return;
+    final index = event['index'];
+    if (index is! int || index < 0) throw const FormatException('Missing content block index');
+    switch (type) {
+      case 'content_block_start':
+        final block = event['content_block'];
+        if (block is! Map || _blocks.containsKey(index)) throw const FormatException('Invalid content block start');
+        switch (block['type']) {
+          case 'text':
+            _blocks[index] = {'type': 'text', 'text': block['text'] as String? ?? ''};
+          case 'tool_use':
+            if (block['id'] is! String ||
+                (block['id'] as String).isEmpty ||
+                block['name'] is! String ||
+                (block['name'] as String).isEmpty ||
+                block['input'] is! Map) {
+              throw const FormatException('Invalid tool call');
+            }
+            _blocks[index] = {
+              'type': 'tool_use',
+              'id': block['id'],
+              'name': block['name'],
+              'input': Map<String, Object?>.from(block['input'] as Map),
+            };
+            _arguments[index] = StringBuffer();
+            _openTools.add(index);
+          default:
+            throw const FormatException('Unsupported content block');
+        }
+      case 'content_block_delta':
+        final delta = event['delta'];
+        if (delta is! Map) return;
+        if (delta['type'] == 'text_delta' && delta['text'] is String) {
+          // Preserve the existing text-delta contract; tool blocks below still
+          // require their actual start and stop before an argument is usable.
+          final block = _blocks.putIfAbsent(index, () => {'type': 'text', 'text': ''});
+          if (block['type'] != 'text') throw const FormatException('Text in a tool block');
+          block['text'] = '${block['text']}${delta['text']}';
+        } else if (delta['type'] == 'input_json_delta') {
+          if (!_openTools.contains(index) || delta['partial_json'] is! String) {
+            throw const FormatException('Arguments outside a tool block');
+          }
+          _arguments[index]!.write(delta['partial_json']);
+        }
+      case 'content_block_stop':
+        if (_openTools.remove(index)) {
+          final json = _arguments.remove(index)!.toString();
+          final Object? input = json.isEmpty ? _blocks[index]!['input'] : jsonDecode(json);
+          if (input is! Map) throw const FormatException('Tool arguments must be an object');
+          _blocks[index]!['input'] = Map<String, Object?>.unmodifiable(input);
+        }
+    }
+  }
+
+  CompanionAgentMessage finish(String? stopReason) {
+    if (_error case final error?) throw error;
+    if (_openTools.isNotEmpty) throw const FormatException('Tool block did not finish');
+    final indices = _blocks.keys.toList()..sort();
+    final ids = <String>{};
+    for (final block in _blocks.values) {
+      if (block['type'] == 'tool_use' && !ids.add(block['id'] as String)) {
+        throw const FormatException('Duplicate tool call ID');
+      }
+    }
+    return CompanionAgentMessage(content: [for (final index in indices) _blocks[index]!], stopReason: stopReason);
   }
 }
 

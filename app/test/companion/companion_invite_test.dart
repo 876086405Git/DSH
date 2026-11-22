@@ -10,8 +10,10 @@ import 'package:dsh_app/companion/companion_initiative_owner.dart';
 import 'package:dsh_app/companion/companion_keeper.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
+import 'package:dsh_app/companion/companion_context.dart' show estimateCompanionMemoryTokens;
 import 'package:dsh_app/companion/companion_state.dart' show companionLightClientProvider;
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
+import 'package:dsh_app/state/companion_agent_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
 import 'package:dsh_app/ui/companion/companion_chrome.dart';
@@ -48,6 +50,7 @@ http.Response _generated(String text, {int outputTokens = 12, String stop = 'end
   [
     {
       'type': 'content_block_delta',
+      'index': 0,
       'delta': {'type': 'text_delta', 'text': text},
     },
     {
@@ -59,6 +62,33 @@ http.Response _generated(String text, {int outputTokens = 12, String stop = 'end
         'cache_creation_input_tokens': 0,
         'output_tokens': outputTokens,
       },
+    },
+    {'type': 'message_stop'},
+  ].map((event) => 'data: ${jsonEncode(event)}\n\n').join(),
+  200,
+  headers: {'content-type': 'text/event-stream; charset=utf-8'},
+);
+
+String? _cardId;
+
+/// One complete model tool call, as the Messages stream delivers it.
+http.Response _toolUse(String id, String name, Map<String, Object?> input) => http.Response(
+  [
+    {
+      'type': 'content_block_start',
+      'index': 0,
+      'content_block': {'type': 'tool_use', 'id': id, 'name': name, 'input': <String, Object?>{}},
+    },
+    {
+      'type': 'content_block_delta',
+      'index': 0,
+      'delta': {'type': 'input_json_delta', 'partial_json': jsonEncode(input)},
+    },
+    {'type': 'content_block_stop', 'index': 0},
+    {
+      'type': 'message_delta',
+      'delta': {'stop_reason': 'tool_use'},
+      'usage': {'input_tokens': 120, 'output_tokens': 9},
     },
     {'type': 'message_stop'},
   ].map((event) => 'data: ${jsonEncode(event)}\n\n').join(),
@@ -366,6 +396,12 @@ class _Room {
       await tester.tap(find.byIcon(AppIcons.send).last);
       final receipt = await settleMixed(tester, terminal.future);
       await tester.pump();
+      // The phone loop settles its receipt before the stream's cancel drain;
+      // the reply row and the idle composer follow on that real future.
+      for (var i = 0; i < 100 && tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+        await tester.pump();
+      }
       expect(receipt['terminal'], 'complete');
       return receipt;
     } finally {
@@ -562,6 +598,7 @@ void main() {
     await tester.enterText(find.byType(TextField), '晚安，我先走了');
     await tester.pump();
     await tester.tap(find.byIcon(AppIcons.send).last);
+    await room.settle();
     await tester.pumpAndSettle();
     expect(room.requests, isEmpty);
     expect(room.memory.store.messages(), before);
@@ -750,6 +787,15 @@ void main() {
         );
       };
     await room.open(seed: _seedFollowup);
+    // The room's worker belongs to its process-level visit, which a test cannot
+    // name. Run the same owner's real extraction under a stand-in room, then
+    // hand the owner back to a fresh actual visit for the wording opportunity.
+    final standIn = Object();
+    room.memory.enter(
+      standIn,
+      transport: () => room.container.read(companionAgentMemoryTransportProvider),
+      estimateTokens: estimateCompanionMemoryTokens,
+    );
     for (var i = 0; i < 4; i++) {
       room.memory.store.submitMessage(
         id: 'budget-source-$i',
@@ -758,8 +804,11 @@ void main() {
         saidAtUtc: room.wallStart,
         offsetMinutes: 0,
       );
-      await settleMixed(tester, room.memory.extract(tester.state(find.byType(CompanionPage)), forceTail: true));
+      await settleMixed(tester, room.memory.extract(standIn, forceTail: true));
     }
+    room.memory.leave(standIn);
+    await room.close();
+    await room.open();
     expect(room.requests, hasLength(4));
     expect(room.requests.map((body) => body['system']), everyElement(companionMemoryExtractionPrompt));
     expect(room.memory.store.requests().map((row) => row['category']), everyElement('extract'));
@@ -823,20 +872,44 @@ void main() {
   });
 
   for (final (control, state) in [('修琴取消了', 'cancelled'), ('修琴改期，时间还没定', 'postponed')]) {
-    testWidgets('a pending memory question yields to $state through the real composer', (tester) async {
-      final room = _Room(tester, root);
+    // A plan change is now the model's tool call on the card it was shown,
+    // not a phrase the room recognizes itself. The chat turn costs its own
+    // receipts; the memory question costs nothing.
+    testWidgets('a pending memory question yields to $state through the real composer', (
+      tester,
+    ) async {
+      final chats = <Map<String, Object?>>[];
+      final room = _Room(tester, root)
+        ..answer = (body) async {
+          if (body['system'] == companionMemoryFollowupPrompt || body['system'] == companionMemoryExtractionPrompt) {
+            return _conversationReply(body);
+          }
+          chats.add(body);
+          if (chats.length == 1) {
+            expect(jsonEncode(body['messages']), contains(_cardId!));
+            return _toolUse('call-plan', state == 'cancelled' ? 'cancel' : 'postpone', {'card': _cardId!});
+          }
+          final results = (((body['messages']! as List).last as Map)['content']! as List).cast<Map>();
+          expect(results.single['tool_use_id'], 'call-plan');
+          expect(jsonDecode(results.single['content']! as String), containsPair('applied', true));
+          return _generated('好，那就不问啦。');
+        };
       await room.open(seed: _seedFollowup);
+      _cardId = room.memory.store.cards().single['id']! as String;
       await room.wait(const Duration(seconds: 15));
       expect(room.memory.store.followups().single['state'], 'pending');
       await tester.enterText(find.byType(TextField), control);
       await tester.pump();
       await tester.tap(find.byIcon(AppIcons.send).last);
       await room.settle();
+      expect(chats, hasLength(2));
       expect(room.memory.store.cards().single['plan_state'], state);
       await room.wait(const Duration(minutes: 2));
       expect(find.text(_followup), findsNothing);
       expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
-      expect(room.memory.store.requests(), isEmpty);
+      expect(room.memory.store.requests().where((row) => row['category'] == 'followup'), isEmpty);
+      expect(room.memory.store.cards().single['plan_state'], state, reason: 'the later extraction keeps the plan');
+      expect(room.requests.where((body) => body['system'] == companionMemoryFollowupPrompt), isEmpty);
       await room.close();
     });
   }
