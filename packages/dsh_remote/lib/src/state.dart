@@ -43,7 +43,8 @@ enum RemoteConnectionPhase {
   /// First attempt in progress.
   connecting,
 
-  /// Secure channel up and the Host's `$events` stream is ready.
+  /// Secure channel up and the Host's `$events` stream is ready, including
+  /// Control-only recovery while the same data plane remains usable.
   connected,
 
   /// The link dropped or an attempt failed; retrying with backoff

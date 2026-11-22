@@ -9,10 +9,13 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../protocol/close_semantics.dart';
 import '../protocol/control.dart';
 import '../util/bytes.dart';
+import 'control_lease.dart';
 import 'transport.dart';
 
 /// Opens the Control WebSocket (`wss://<server>/ws/v1/connect`); injectable
@@ -53,8 +56,8 @@ typedef ControlTracer = void Function(String direction, JsonMap frame);
 /// handshake stays on the Control socket; `relay` frames and the node's
 /// heartbeats move to the data socket. `relay.detach` or a dropped data
 /// socket ends the connection: Noise state is never carried over, the
-/// caller opens a new one. Without an assignment (older Server or Host)
-/// everything stays on the Control socket.
+/// caller opens a new one. Without an independent assignment, ciphertext
+/// stays on Control and the connection is not eligible for detached recovery.
 ///
 /// Direct paths (`offerDirect`): the client also offers `transport.lan`,
 /// `transport.p2p` and `transport.turn`. When the Server negotiates any of
@@ -62,12 +65,14 @@ typedef ControlTracer = void Function(String direction, JsonMap frame);
 /// them before `relay` and [connect] returns at `connect.accepted` with the
 /// data plane still open: [directTransports] is non-empty, nothing is
 /// attached and no `transport.selected` was sent. The caller then
-/// negotiates WebRTC over [sendSignal] / [onSignal] ([WebRtcTransport]).
+/// negotiates WebRTC over [sendSignal] / [onSignal] ([WebRtcTransport]), or
+/// calls [selectRelay] on this tunnel if negotiation fails. A confirmed lease
+/// retains the channel only while its independent data plane remains alive.
 ///
 /// One Control WebSocket per device: the Server closes an older socket of
 /// the same device (`CONNECTION_REPLACED`, close code 4003), and a new
 /// `connect.request` replaces the device's previous Host connection.
-class RelayTransport implements SecureHandshakeTransport {
+class RelayTransport implements LeaseAwareTransport {
   RelayTransport._(
     this._socket,
     this._deviceId,
@@ -77,6 +82,11 @@ class RelayTransport implements SecureHandshakeTransport {
     this._timeout,
     this._offered,
     this._preferredTransports,
+    this._url,
+    this._accessToken,
+    this._clientVersion,
+    this._refreshAccessToken,
+    this._isCancelled,
   );
 
   /// Connects and waits for `connect.accepted`.
@@ -102,6 +112,7 @@ class RelayTransport implements SecureHandshakeTransport {
     ControlTracer? tracer,
     bool offerDirect = false,
     List<RemoteTransportMode>? preferredTransports,
+    Future<String> Function(bool forceRefresh)? refreshAccessToken,
   }) async {
     if (isCancelled?.call() == true) {
       throw const RemoteTransportException('CLIENT_CLOSED', 'The connection owner closed.', retryable: false);
@@ -114,7 +125,8 @@ class RelayTransport implements SecureHandshakeTransport {
       final status = error.httpStatusCode;
       throw RemoteTransportException(
         status == 401 || status == 403 ? 'AUTH_INVALID' : 'CONNECTION_FAILED',
-        'Control WebSocket failed: ${error.message}${status == null ? '' : ' (HTTP $status)'}',
+        'Control WebSocket failed${status == null ? '' : ' (HTTP $status)'}.',
+        retryable: status != 401 && status != 403,
       );
     } on TimeoutException {
       throw const RemoteTransportException('CONNECTION_FAILED', 'Control WebSocket connect timed out.');
@@ -138,21 +150,30 @@ class RelayTransport implements SecureHandshakeTransport {
       timeout,
       offerDirect ? _directOffered : _relayOffered,
       preferredTransports,
+      url,
+      accessToken,
+      clientVersion,
+      refreshAccessToken,
+      isCancelled,
     );
     try {
-      await transport._open(accessToken, clientVersion).timeout(timeout);
+      await transport._open(accessToken).timeout(timeout);
+      transport._ready = null;
+      if (transport.directTransports.isEmpty) await transport.selectRelay();
       return transport;
     } on TimeoutException {
-      await transport._abort();
+      await transport.close();
       throw const RemoteTransportException('CONNECTION_FAILED', 'Relay control handshake timed out.');
     } on Object {
-      await transport._abort();
+      await transport.close();
       rethrow;
     }
   }
 
-  static const List<String> _relayOffered = ['transport.relay', 'transport.relay.attach'];
+  static const List<String> _relayOffered = [relayResumeCapability, 'transport.relay', 'transport.relay.attach'];
   static const List<String> _directOffered = [
+    webRtcResumeCapability,
+    relayResumeCapability,
     'transport.lan',
     'transport.p2p',
     'transport.turn',
@@ -160,7 +181,12 @@ class RelayTransport implements SecureHandshakeTransport {
     'transport.relay.attach',
   ];
 
-  final WebSocket _socket;
+  WebSocket? _socket;
+  final Uri _url;
+  final String _accessToken;
+  final String? _clientVersion;
+  final Future<String> Function(bool forceRefresh)? _refreshAccessToken;
+  final bool Function()? _isCancelled;
   final String _deviceId;
   final String _hostDeviceId;
   final ControlTracer? _tracer;
@@ -172,10 +198,32 @@ class RelayTransport implements SecureHandshakeTransport {
   String? _connectionId;
   List<String> _direct = const [];
   int? _webrtcFallbackMs;
+  List<String> _negotiated = const [];
+
+  // hello.ack sets readiness for one socket; loss clears it. Generation checks
+  // retire late opens/frames on loss or close; only recovery hello + lease ack
+  // reauthorize the original tunnel. A failed recovery closes this lifetime.
+  bool _controlReady = false;
+  int _controlGeneration = 0;
+  bool _authRecoveryAttempted = false;
+  // One timer: either jitter before dialing or the deadline until hello.ack.
+  Timer? _recoveryTimer;
+
+  // connect.accepted owns assignments/tickets until terminal cleanup. The lease
+  // rotates its selected ticket on ack; no unconfirmed ticket is sent in hello.
+  JsonMap? _relayAssignment;
+  String? _recoveryTicket;
+  String? _relayRecoveryTicket;
+  ControlLease? _lease;
+  bool Function()? _webRtcAlive;
 
   /// Relay node data socket, once assigned.
   WebSocket? _data;
   int? _relayEpoch;
+  // Only matching relay.ready sets data readiness. Data loss invalidates the
+  // whole tunnel; the carrier obtains a fresh assignment and Noise session.
+  bool _dataReady = false;
+  Completer<void>? _dataOpening;
   Completer<void>? _ready;
   int _heartbeatMs = 25000;
   DateTime _lastReceived = DateTime.now();
@@ -213,42 +261,90 @@ class RelayTransport implements SecureHandshakeTransport {
     return RemoteConnectionInfo(connectionId: id, localDeviceId: _deviceId, remoteDeviceId: _hostDeviceId);
   }
 
-  Future<void> _open(String accessToken, String? clientVersion) {
+  Future<void> _open(String accessToken) {
     final ready = _ready = Completer<void>();
-    _socket.listen(
-      _onMessage,
-      onError: (Object error) => _fail(RemoteTransportClosed('CONNECTION_FAILED', 'Control socket error: $error')),
-      onDone: () => _fail(_closeReason()),
-      cancelOnError: true,
-    );
-    _sendControl('hello', {
-      'role': 'client',
-      'deviceId': _deviceId,
-      'accessToken': accessToken,
-      'protocols': [protocolVersion],
-      'capabilities': _offered,
-      'clientVersion': ?clientVersion,
-    });
+    _listenControl(_socket!);
+    _sendHello(accessToken);
     return ready.future;
   }
 
-  RemoteTransportClosed _closeReason() {
-    final code = _socket.closeCode;
-    final reason = _socket.closeReason ?? '';
-    final known = RegExp(r'^[A-Z][A-Z0-9_]+$').hasMatch(reason) ? reason : null;
-    if (code == 4003) {
-      return RemoteTransportClosed(
-        'CONNECTION_REPLACED',
-        'Another connection of this device replaced the Control channel.',
-        retryable: false,
-        closeCode: code,
-      );
+  void _listenControl(WebSocket socket) {
+    socket.listen(
+      (raw) {
+        if (identical(_socket, socket)) _onMessage(raw);
+      },
+      onError: (Object _) {
+        if (identical(_socket, socket)) {
+          _controlLost(const RemoteTransportClosed('CONNECTION_FAILED', 'Control socket failed.'));
+        }
+      },
+      onDone: () {
+        if (identical(_socket, socket)) _onControlClosed(socket);
+      },
+      cancelOnError: true,
+    );
+  }
+
+  void _sendHello(String token) {
+    final ticket = _lease?.recoveryTicket;
+    _sendControl('hello', {
+      'role': 'client',
+      'deviceId': _deviceId,
+      'accessToken': token,
+      'protocols': [protocolVersion],
+      'capabilities': _offered,
+      'clientVersion': ?_clientVersion,
+      if (ticket != null) 'recoveryTickets': [ticket],
+    });
+  }
+
+  void _onControlClosed(WebSocket socket) {
+    final code = socket.closeCode;
+    final reason = socket.closeReason?.trim() ?? '';
+    // Current recovery authorization failure: retire the old tunnel/ticket,
+    // then let the existing carrier establish a new Noise session.
+    if (_lease != null &&
+        !_controlReady &&
+        (code == 4012 || (code == 4002 && reason == 'recovery authorization rejected'))) {
+      _fail(RemoteTransportClosed('RECOVERY_REJECTED', 'Recovery authorization rejected.', closeCode: code));
+      return;
     }
-    return RemoteTransportClosed(
-      known ?? 'CONNECTION_FAILED',
-      'Control channel closed (${code ?? 'no code'} $reason)'.trim(),
-      retryable: known == null || _retryableCodes.contains(known),
-      closeCode: code,
+    if (_lease != null &&
+        !_controlReady &&
+        (code == 4002 || (code == 4001 && (reason == 'AUTH_INVALID' || reason == 'TOKEN_EXPIRED')))) {
+      _recoverAuthentication();
+      return;
+    }
+    // dart:io reports an empty Close frame as a synthetic 1005.
+    final semantics = classifyControlClose(code == WebSocketStatus.noStatusReceived ? null : code, reason);
+    final semanticCode = semantics.replaced
+        ? 'CONNECTION_REPLACED'
+        : semantics.serverShutdown
+        ? 'SERVER_SHUTDOWN'
+        : semantics.heartbeatTimeout
+        ? 'HEARTBEAT_TIMEOUT'
+        : code == 4004
+        ? 'DEVICE_REVOKED'
+        : code == 4011
+        ? 'UNSUPPORTED_VERSION'
+        : (code == 4001 && const ['AUTH_INVALID', 'TOKEN_EXPIRED', 'DEVICE_REVOKED'].contains(reason))
+        ? reason
+        : code == 4002
+        ? 'AUTH_INVALID'
+        : 'CONNECTION_FAILED';
+    // Never include arbitrary close text in diagnostics.
+    final detail = semantics.serverShutdown
+        ? 'server shutdown'
+        : semantics.heartbeatTimeout
+        ? 'heartbeat timeout'
+        : semanticCode;
+    _controlLost(
+      RemoteTransportClosed(
+        semanticCode,
+        'Control channel closed (${code ?? 'no code'} $detail).',
+        retryable: semantics.retryable,
+        closeCode: code,
+      ),
     );
   }
 
@@ -258,13 +354,9 @@ class RelayTransport implements SecureHandshakeTransport {
     'RATE_LIMITED',
     'SLOW_CONSUMER',
     'RELAY_UNAVAILABLE',
-    'TOKEN_EXPIRED',
-    'AUTH_INVALID',
   };
 
   void _onMessage(Object? raw) {
-    if (_closed) return;
-    _lastReceived = DateTime.now();
     final ControlFrame frame;
     try {
       if (raw is! String) throw const ProtocolError('Relay control frames must be text JSON.');
@@ -279,73 +371,97 @@ class RelayTransport implements SecureHandshakeTransport {
       _fail(RemoteTransportClosed(code, error.message, retryable: false));
       return;
     }
+    _lastReceived = DateTime.now();
     _trace('in', frame.toJson());
     try {
       _handle(frame);
     } on ProtocolError catch (error) {
-      // A well-formed frame out of turn (a race around a reconnect) is worth
-      // another attempt; a refused capability or version is not.
+      // Assignment races may be retried; protocol/capability/auth failures may not.
       _fail(RemoteTransportClosed(error.code, error.message, retryable: !_incompatibleCodes.contains(error.code)));
+    } on RemoteTransportException catch (error) {
+      _controlLost(RemoteTransportClosed(error.code, error.message, retryable: error.retryable));
     }
   }
 
   /// [ProtocolError] codes that say the two sides do not speak the same protocol.
-  static const Set<String> _incompatibleCodes = {'UNSUPPORTED_VERSION', 'CAPABILITY_NOT_SUPPORTED', 'FRAME_TOO_LARGE'};
+  static const Set<String> _incompatibleCodes = {
+    'UNSUPPORTED_VERSION',
+    'PROTOCOL_MISMATCH',
+    'CAPABILITY_NOT_SUPPORTED',
+    'FRAME_TOO_LARGE',
+    'AUTH_INVALID',
+    'TOKEN_EXPIRED',
+    'DEVICE_REVOKED',
+    'CONNECTION_REPLACED',
+    'PEER_IDENTITY_MISMATCH',
+  };
 
   void _handle(ControlFrame frame) {
     final p = frame.payload;
     switch (frame.type) {
       case 'hello.ack':
-        if (_ready == null || _ready!.isCompleted) {
-          throw const ProtocolError('Unexpected hello.ack.');
-        }
-        final caps = p['capabilities'];
-        final List<String> negotiated;
+        if (_controlReady) throw const ProtocolError('Unexpected hello.ack.');
         try {
-          negotiated = acceptNegotiatedCapabilities(_offered, caps is List ? caps.cast<String>() : null);
+          _negotiated = acceptNegotiatedCapabilities(_offered, (p['capabilities'] as List<Object?>?)?.cast<String>());
         } on ProtocolError catch (error) {
           throw ProtocolError(error.message, 'CAPABILITY_NOT_SUPPORTED');
         }
-        if (!negotiated.contains('transport.relay')) {
-          throw const ProtocolError(
-            'Server did not negotiate the required Relay capability.',
-            'CAPABILITY_NOT_SUPPORTED',
-          );
-        }
         _limits = ControlFrameLimits(
-          maxControlFrameBytes: asInt(p['maxControlFrameBytes']),
-          maxRelayFrameBytes: asInt(p['maxRelayFrameBytes']),
+          maxControlFrameBytes: p['maxControlFrameBytes']! as int,
+          maxRelayFrameBytes: p['maxRelayFrameBytes']! as int,
         );
-        _heartbeatMs = asInt(p['heartbeatIntervalMs']) ?? _heartbeatMs;
-        if (p['webrtcEnabled'] != false) {
-          _direct = [
-            for (final t in (_preferredTransports?.map((t) => t.name) ?? const ['lan', 'p2p', 'turn']))
-              if (t != 'relay')
-                if (negotiated.contains('transport.$t')) t,
-          ];
-          _webrtcFallbackMs = asInt(p['webrtcFallbackTimeoutMs']);
+        _heartbeatMs = p['heartbeatIntervalMs']! as int;
+        _direct = p['webrtcEnabled'] == false
+            ? const []
+            : [
+                for (final t in (_preferredTransports?.map((t) => t.name) ?? const ['lan', 'p2p', 'turn']))
+                  if (t != 'relay' && _negotiated.contains('transport.$t')) t,
+              ];
+        _webrtcFallbackMs = asInt(p['webrtcFallbackTimeoutMs']);
+        if (_direct.isEmpty && !canUseRelay) {
+          throw const ProtocolError('Server did not negotiate a supported transport.', 'CAPABILITY_NOT_SUPPORTED');
+        }
+        final lease = _lease;
+        if (lease != null) {
+          final required = _webRtcAlive != null ? webRtcResumeCapability : relayResumeCapability;
+          if (!_negotiated.contains(required)) {
+            _fail(
+              const RemoteTransportClosed(
+                'RECOVERY_REJECTED',
+                'Server no longer negotiated the active transport recovery capability.',
+              ),
+            );
+            return;
+          }
+        }
+        _controlReady = true;
+        _watchdog = Timer.periodic(heartbeatInterval, (_) => checkControlHealth());
+        if (lease != null) {
+          // The hello deadline is independent of the lease ack window.
+          _recoveryTimer?.cancel();
+          _recoveryTimer = null;
+          lease.tick(force: true);
+          return;
         }
         _sendControl('connect.request', {
           'hostDeviceId': _hostDeviceId,
-          'preferredTransports': [..._direct, 'relay'],
+          'preferredTransports': [..._direct, if (canUseRelay) 'relay'],
         });
       case 'connect.accepted':
         final ready = _ready;
-        if (ready == null || ready.isCompleted || _connectionId != null) {
+        if (!_controlReady || ready == null || ready.isCompleted || _connectionId != null) {
           throw const ProtocolError('Unexpected connect.accepted.');
         }
         _connectionId = p['connectionId']! as String;
-        _startWatchdog();
-        final endpoint = asString(p['relayEndpoint']);
-        final ticket = asString(p['relayTicket']);
-        // A direct attempt picks its data plane next; a failed one falls back
-        // on a new connection, so this one never attaches.
-        if (endpoint == null || ticket == null || _direct.isNotEmpty) {
-          ready.complete();
-          return;
-        }
-        _relayEpoch = asInt(p['relayEpoch']);
-        unawaited(_attach(Uri.parse(endpoint), ticket));
+        _recoveryTicket = _negotiated.contains(webRtcResumeCapability) ? asString(p['recoveryTicket']) : null;
+        _relayRecoveryTicket = _negotiated.contains(relayResumeCapability) ? asString(p['relayRecoveryTicket']) : null;
+        _webrtcFallbackMs = asInt(p['webrtcFallbackTimeoutMs']) ?? _webrtcFallbackMs;
+        if (p['relayEndpoint'] is String && p['relayTicket'] is String) _relayAssignment = p;
+        ready.complete();
+      case 'connection.lease.ack':
+        final lease = _lease;
+        if (lease == null) throw const ProtocolError('Unexpected connection lease.');
+        if (lease.acknowledge(p)) _authRecoveryAttempted = false;
       case 'connect.rejected':
         if (_connectionId != null && p['connectionId'] != _connectionId) return;
         final code = asString(p['code']) ?? 'CONNECTION_REJECTED';
@@ -362,11 +478,16 @@ class RelayTransport implements SecureHandshakeTransport {
         final connectionId = asString(p['connectionId']);
         if (connectionId != null && _connectionId != null && connectionId != _connectionId) return;
         final code = p['code']! as String;
+        if (_lease != null && !_controlReady && (code == 'AUTH_INVALID' || code == 'TOKEN_EXPIRED')) {
+          _recoverAuthentication();
+          return;
+        }
         _fail(
           RemoteTransportClosed(
             code,
             p['message']! as String,
-            retryable: p['retryable'] == true || _retryableCodes.contains(code),
+            retryable:
+                !_incompatibleCodes.contains(code) && ((p['retryable'] as bool?) ?? _retryableCodes.contains(code)),
           ),
         );
       case 'relay':
@@ -389,6 +510,8 @@ class RelayTransport implements SecureHandshakeTransport {
     if (p['connectionId'] != _connectionId || p['targetDeviceId'] != _deviceId) {
       throw const ProtocolError('Received a relay frame for an unknown connection.');
     }
+    if (_data != null && !_dataReady) throw const ProtocolError('Relay data arrived before relay.ready.');
+    if (_lease?.isValid == false) return;
     final data = fromBase64Url(p['ciphertext']! as String);
     final counter = p['counter']! as int;
     _deliver(() => _onData!(data, counter));
@@ -406,12 +529,47 @@ class RelayTransport implements SecureHandshakeTransport {
   // ---------------------------------------------------------------------------
   // Relay node data socket
 
+  bool get canUseRelay => _negotiated.contains('transport.relay');
+
+  /// Select Relay on this already-authorized tunnel after a provisional RTC
+  /// attempt fails. No Noise state exists yet; no new Control tunnel is needed.
+  Future<void> selectRelay() async {
+    _requireConnection();
+    if (!canUseRelay) {
+      throw const RemoteTransportException(
+        'CAPABILITY_NOT_SUPPORTED',
+        'Server did not negotiate Relay fallback.',
+        retryable: false,
+      );
+    }
+    final assignment = _relayAssignment;
+    if (assignment != null) {
+      final ready = _dataOpening = Completer<void>();
+      _relayEpoch = asInt(assignment['relayEpoch']);
+      unawaited(_attach(Uri.parse(assignment['relayEndpoint']! as String), assignment['relayTicket']! as String));
+      try {
+        await ready.future.timeout(_timeout);
+      } on TimeoutException {
+        _fail(const RemoteTransportClosed('CONNECTION_FAILED', 'Relay data attach timed out.'));
+        throw const RemoteTransportException('CONNECTION_FAILED', 'Relay data attach timed out.');
+      } finally {
+        _dataOpening = null;
+      }
+    }
+    _requireConnection();
+    _sendControl('transport.selected', {
+      'connectionId': _connectionId,
+      'targetDeviceId': _hostDeviceId,
+      'transport': 'relay',
+    });
+  }
+
   Future<void> _attach(Uri endpoint, String ticket) async {
     final WebSocket socket;
     try {
       socket = await _connector(endpoint, _timeout);
-    } on Object catch (error) {
-      _fail(RemoteTransportClosed('CONNECTION_FAILED', 'Relay data socket failed: $error'));
+    } on Object {
+      _fail(const RemoteTransportClosed('CONNECTION_FAILED', 'Relay data socket failed.'));
       return;
     }
     if (_closed) {
@@ -420,23 +578,33 @@ class RelayTransport implements SecureHandshakeTransport {
     }
     _data = socket;
     socket.listen(
-      _onDataMessage,
-      onError: (Object error) => _fail(RemoteTransportClosed('CONNECTION_FAILED', 'Relay data socket error: $error')),
-      onDone: () => _fail(
-        RemoteTransportClosed(
-          'CONNECTION_FAILED',
-          'Relay data socket closed (${socket.closeCode ?? 'no code'} ${socket.closeReason ?? ''})'.trim(),
-          closeCode: socket.closeCode,
-        ),
-      ),
+      (raw) {
+        if (identical(_data, socket)) _onDataMessage(raw);
+      },
+      onError: (Object _) {
+        if (identical(_data, socket)) {
+          _fail(const RemoteTransportClosed('CONNECTION_FAILED', 'Relay data socket failed.'));
+        }
+      },
+      onDone: () {
+        if (identical(_data, socket)) {
+          _fail(RemoteTransportClosed('CONNECTION_FAILED', 'Relay data socket closed.', closeCode: socket.closeCode));
+        }
+      },
       cancelOnError: true,
     );
-    _sendData('relay.attach', {
-      'connectionId': _connectionId,
-      'deviceId': _deviceId,
-      'peerDeviceId': _hostDeviceId,
-      'ticket': ticket,
-    });
+    try {
+      _sendData('relay.attach', {
+        'connectionId': _connectionId,
+        'deviceId': _deviceId,
+        'peerDeviceId': _hostDeviceId,
+        'ticket': ticket,
+      });
+    } on ProtocolError catch (error) {
+      _fail(RemoteTransportClosed(error.code, error.message, retryable: false));
+    } on RemoteTransportException catch (error) {
+      _fail(RemoteTransportClosed(error.code, error.message, retryable: error.retryable));
+    }
   }
 
   void _onDataMessage(Object? raw) {
@@ -455,6 +623,8 @@ class RelayTransport implements SecureHandshakeTransport {
       _handleData(frame);
     } on ProtocolError catch (error) {
       _fail(RemoteTransportClosed(error.code, error.message, retryable: !_incompatibleCodes.contains(error.code)));
+    } on RemoteTransportException catch (error) {
+      _fail(RemoteTransportClosed(error.code, error.message, retryable: error.retryable));
     }
   }
 
@@ -462,28 +632,23 @@ class RelayTransport implements SecureHandshakeTransport {
     final p = frame.payload;
     switch (frame.type) {
       case 'relay.ready':
-        final ready = _ready!;
-        if (ready.isCompleted) return;
-        if (p['connectionId'] != _connectionId || (_relayEpoch != null && p['epoch'] != _relayEpoch)) {
+        if (p['connectionId'] != _connectionId ||
+            (_relayEpoch != null && p['epoch'] != _relayEpoch) ||
+            (p.containsKey('deviceId') && p['deviceId'] != _deviceId) ||
+            (p.containsKey('peerDeviceId') && p['peerDeviceId'] != _hostDeviceId)) {
           throw const ProtocolError('Relay data attach does not match the assigned connection.');
         }
-        // As upstream AdaptiveTransport: a Host with an assignment holds the
-        // Noise handshake until the client confirms the data plane, then
-        // attaches itself.
-        _sendControl('transport.selected', {
-          'connectionId': _connectionId,
-          'targetDeviceId': _hostDeviceId,
-          'transport': 'relay',
-        });
-        ready.complete();
+        _dataReady = true;
+        final opening = _dataOpening;
+        if (opening != null && !opening.isCompleted) opening.complete();
       case 'relay.detach':
         _fail(const RemoteTransportClosed('CONNECTION_FAILED', 'The Host detached from the Relay node.'));
       case 'ping':
         _sendData('pong', p);
       case 'relay':
-        _receiveRelay(parseControlFrame(frame.toJson()).payload);
+        _receiveRelay(p);
       case 'secure.handshake':
-        _receiveHandshake(parseControlFrame(frame.toJson()).payload);
+        _receiveHandshake(p);
       default:
         break;
     }
@@ -493,7 +658,15 @@ class RelayTransport implements SecureHandshakeTransport {
     final frame = ControlFrame(type, payload);
     final encoded = encodeRelayDataFrame(frame, _limits);
     _trace('data-out', frame.toJson());
-    _data!.add(encoded);
+    final socket = _data;
+    if (socket == null || socket.readyState != WebSocket.open) {
+      throw const RemoteTransportException('CONNECTION_FAILED', 'Relay data socket is not open.');
+    }
+    try {
+      socket.add(encoded);
+    } on Object {
+      throw const RemoteTransportException('CONNECTION_FAILED', 'Relay data socket write failed.');
+    }
   }
 
   void _deliver(void Function() action) {
@@ -504,15 +677,132 @@ class RelayTransport implements SecureHandshakeTransport {
     }
   }
 
-  void _startWatchdog() {
+  @override
+  void checkControlHealth() {
+    // The deadline also applies while Control is detached or the app was suspended.
+    if (_lease?.isValid == false || !_controlReady) return;
+    final timeoutMs = math.max(15000, _heartbeatMs * 3);
+    if (DateTime.now().difference(_lastReceived).inMilliseconds >= timeoutMs) {
+      _controlLost(const RemoteTransportClosed('HEARTBEAT_TIMEOUT', 'Control heartbeat timed out.', closeCode: 4009));
+    }
+  }
+
+  /// Called by WebRtcTransport only after DataChannel open + selected. Closing
+  /// that transport makes the callback false; final cleanup removes it. A
+  /// provisional failed attempt never registers a recoverable data plane.
+  void confirmWebRtcDataPlane(bool Function() isAlive) => _webRtcAlive = isAlive;
+
+  bool get _dataPlaneAlive => _webRtcAlive?.call() ?? (_dataReady && _data?.readyState == WebSocket.open);
+
+  @override
+  void markSecureReady() {
+    if (!_controlReady || _lease != null || !_dataPlaneAlive) return;
+    final ticket = _webRtcAlive != null ? _recoveryTicket : _relayRecoveryTicket;
+    if (ticket == null) return;
+    _recoveryTicket = null;
+    _relayRecoveryTicket = null;
+    _lease = ControlLease(_connectionId!, ticket, (payload) {
+      checkControlHealth();
+      if (!_controlReady) return false;
+      try {
+        _sendControl('connection.lease.request', payload);
+        return true;
+      } on ProtocolError catch (error) {
+        _fail(RemoteTransportClosed(error.code, error.message, retryable: false));
+        return false;
+      } on RemoteTransportException {
+        _controlLost(const RemoteTransportClosed('CONNECTION_FAILED', 'Control lease send failed.'));
+        return false;
+      }
+    }, () => _fail(const RemoteTransportClosed('CONNECTION_FAILED', 'Control authorization lease expired.')));
+    _lease!.start();
+  }
+
+  void _recoverAuthentication() {
+    if (_authRecoveryAttempted || _refreshAccessToken == null) {
+      _fail(const RemoteTransportClosed('AUTH_INVALID', 'Server rejected refreshed credentials.', retryable: false));
+      return;
+    }
+    _controlLost(
+      const RemoteTransportClosed('CONNECTION_FAILED', 'Control authentication requires refresh.'),
+      forceRefresh: true,
+    );
+  }
+
+  void _controlLost(RemoteTransportClosed reason, {bool forceRefresh = false}) {
+    if (_closed) return;
+    if (_isCancelled?.call() == true) {
+      _fail(const RemoteTransportClosed('CLIENT_CLOSED', 'The connection owner closed.', retryable: false));
+      return;
+    }
+    if (!reason.retryable || _lease?.canDetach != true || !_dataPlaneAlive) {
+      _fail(reason);
+      return;
+    }
+    final socket = _socket;
+    _socket = null;
+    _controlGeneration++;
+    _controlReady = false;
     _watchdog?.cancel();
-    final period = Duration(milliseconds: _heartbeatMs);
-    _watchdog = Timer.periodic(period, (_) {
-      if (DateTime.now().difference(_lastReceived) > period * 3) {
-        _fail(const RemoteTransportClosed('CONNECTION_FAILED', 'The Server Control channel went silent.'));
-        unawaited(_socket.close(4000, 'heartbeat timeout'));
+    _lease!.controlLost();
+    _recoveryTimer?.cancel();
+    unawaited(socket?.close().catchError((Object _) {}));
+    // Current AdaptiveTransport uses full jitter [0,15s] for every attempt,
+    // including server shutdown; the confirmed lease is the total retry bound.
+    _recoveryTimer = Timer(Duration(milliseconds: (math.Random().nextDouble() * 15000).floor()), () {
+      _recoveryTimer = null;
+      unawaited(_reopenControl(forceRefresh: forceRefresh));
+    });
+  }
+
+  Future<void> _reopenControl({required bool forceRefresh}) async {
+    if (_isCancelled?.call() == true) {
+      _fail(const RemoteTransportClosed('CLIENT_CLOSED', 'The connection owner closed.', retryable: false));
+      return;
+    }
+    final generation = _controlGeneration;
+    if (_closed || _lease?.canDetach != true) return;
+    bool current() => !_closed && generation == _controlGeneration && _isCancelled?.call() != true;
+    var needsRefresh = forceRefresh;
+    _recoveryTimer = Timer(const Duration(seconds: 15), () {
+      if (current()) {
+        _controlLost(
+          const RemoteTransportClosed('CONNECTION_FAILED', 'Control recovery handshake timed out.'),
+          forceRefresh: needsRefresh,
+        );
       }
     });
+    try {
+      final token = _refreshAccessToken == null ? _accessToken : await _refreshAccessToken(forceRefresh);
+      if (!current() || _lease?.canDetach != true) return;
+      if (forceRefresh) _authRecoveryAttempted = true;
+      needsRefresh = false;
+      final socket = await _connector(_url, _timeout);
+      if (!current() || _lease?.canDetach != true) {
+        unawaited(socket.close(1000).catchError((Object _) {}));
+        return;
+      }
+      _socket = socket;
+      _limits = const ControlFrameLimits();
+      _listenControl(socket);
+      _sendHello(token);
+    } on RemoteTransportException catch (error) {
+      if (current()) {
+        _controlLost(
+          RemoteTransportClosed(error.code, error.message, retryable: error.retryable),
+          forceRefresh: needsRefresh,
+        );
+      }
+    } on ProtocolError catch (error) {
+      if (current()) _fail(RemoteTransportClosed(error.code, error.message, retryable: false));
+    } on Object {
+      if (current()) {
+        _controlLost(
+          const RemoteTransportClosed('CONNECTION_FAILED', 'Control recovery unavailable.'),
+          forceRefresh: needsRefresh,
+        );
+      }
+    }
   }
 
   @override
@@ -570,20 +860,24 @@ class RelayTransport implements SecureHandshakeTransport {
 
   String _requireConnection() {
     final id = _connectionId;
-    if (_closed || id == null) {
-      throw const RemoteTransportException('CONNECTION_FAILED', 'The relay connection is not open.');
-    }
+    if (_lease?.isValid == false || _closed) throw _asException(_pendingClose!);
+    if (id == null) throw StateError('relay connection has not been authorized');
     return id;
   }
 
   void _sendControl(String type, JsonMap payload) {
-    if (_closed) {
+    final socket = _socket;
+    if (_closed || socket == null || socket.readyState != WebSocket.open) {
       throw const RemoteTransportException('CONNECTION_FAILED', 'The relay control socket is closed.');
     }
     final frame = ControlFrame(type, payload);
     final encoded = encodeControlFrame(frame, _limits);
     _trace('out', frame.toJson());
-    _socket.add(encoded);
+    try {
+      socket.add(encoded);
+    } on Object {
+      throw const RemoteTransportException('CONNECTION_FAILED', 'Control socket write failed.');
+    }
   }
 
   void _trace(String direction, JsonMap frame) {
@@ -595,53 +889,83 @@ class RelayTransport implements SecureHandshakeTransport {
       'payload': {
         ...payload,
         if (payload.containsKey('accessToken')) 'accessToken': '<redacted>',
+        if (payload.containsKey('relayEndpoint')) 'relayEndpoint': '<redacted>',
         if (payload.containsKey('relayTicket')) 'relayTicket': '<redacted>',
+        if (payload.containsKey('recoveryTicket')) 'recoveryTicket': '<redacted>',
+        if (payload.containsKey('relayRecoveryTicket')) 'relayRecoveryTicket': '<redacted>',
+        if (payload.containsKey('recoveryTickets')) 'recoveryTickets': '<redacted>',
+        if (payload.containsKey('data')) 'data': '<redacted>',
         if (payload.containsKey('ticket')) 'ticket': '<redacted>',
-        if (payload.containsKey('ciphertext')) 'ciphertext': '<${(payload['ciphertext']! as String).length} chars>',
+        if (payload.containsKey('ciphertext')) 'ciphertext': '<redacted>',
         // SDP and candidates carry the device's network addresses.
-        if (payload.containsKey('sdp')) 'sdp': '<${(payload['sdp']! as String).length} chars>',
+        if (payload.containsKey('sdp')) 'sdp': '<redacted>',
         if (payload.containsKey('candidate')) 'candidate': '<redacted>',
       },
     });
   }
 
+  void _closeLease() {
+    if (_lease != null && _controlReady && _socket?.readyState == WebSocket.open) {
+      try {
+        _sendControl('connection.lease.close', {'connectionId': _connectionId});
+      } on Object {
+        // A failed close write must not keep local authorization alive.
+      }
+    }
+  }
+
+  void _dispose() {
+    _closed = true;
+    _controlReady = false;
+    _watchdog?.cancel();
+    _watchdog = null;
+    _recoveryTimer?.cancel();
+    _recoveryTimer = null;
+    _lease?.stop();
+    _lease = null;
+    _recoveryTicket = null;
+    _relayRecoveryTicket = null;
+    _relayAssignment = null;
+    _webRtcAlive = null;
+    _dataReady = false;
+    _backlog.clear();
+    final data = _data;
+    final socket = _socket;
+    _data = null;
+    _socket = null;
+    unawaited(data?.close(1000).catchError((Object _) {}));
+    unawaited(socket?.close(1000).catchError((Object _) {}));
+  }
+
   void _fail(RemoteTransportClosed reason) {
     if (_closed) return;
-    _closed = true;
-    _watchdog?.cancel();
+    _pendingClose = reason;
+    _closeLease();
+    _dispose();
+    final failure = _asException(reason);
+    final opening = _dataOpening;
+    if (opening != null && !opening.isCompleted) opening.completeError(failure);
+    _dataOpening = null;
     final ready = _ready;
+    _ready = null;
     if (ready != null && !ready.isCompleted) {
-      ready.completeError(
-        RemoteTransportException(reason.code, reason.message, retryable: reason.retryable, closeCode: reason.closeCode),
-      );
-      // Avoid an unhandled error if the caller already gave up waiting.
+      ready.completeError(failure);
       ready.future.ignore();
     } else if (_onClosed != null) {
       if (!_closedNotified) {
         _closedNotified = true;
         _onClosed!(reason);
       }
-    } else {
-      _pendingClose = reason;
     }
-    unawaited(_data?.close(1000).catchError((Object _) {}));
-    unawaited(_socket.close(1000).catchError((Object _) {}));
   }
 
-  Future<void> _abort() async {
-    _closed = true;
-    _watchdog?.cancel();
-    unawaited(_data?.close(1000).catchError((Object _) {}));
-    await _socket.close(1000).catchError((Object _) {});
-  }
+  RemoteTransportException _asException(RemoteTransportClosed reason) =>
+      RemoteTransportException(reason.code, reason.message, retryable: reason.retryable, closeCode: reason.closeCode);
 
   @override
   Future<void> close() async {
     if (_closed) return;
-    _closed = true;
     _closedNotified = true;
-    _watchdog?.cancel();
-    unawaited(_data?.close(1000, 'client closed').catchError((Object _) {}));
-    await _socket.close(1000, 'client closed').catchError((Object _) {});
+    _fail(const RemoteTransportClosed('CLIENT_CLOSED', 'The client closed the connection.', retryable: false));
   }
 }

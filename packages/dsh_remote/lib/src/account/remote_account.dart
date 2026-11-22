@@ -425,8 +425,8 @@ class RemoteAccount {
   /// an unsupported Host stays full even if it gains support on reconnect.
   bool compactHistory;
 
-  /// How long a direct attempt may take to open its DataChannel before the
-  /// next path is tried (the Server's larger deadline is capped at 15 s).
+  /// Local DataChannel negotiation deadline when the Server does not provide
+  /// `webrtcFallbackTimeoutMs`; a supplied Server deadline takes precedence.
   final Duration directTimeout;
 
   /// Budget for each connection's fresh STUN/TURN credential request,
@@ -1179,7 +1179,7 @@ class RemoteAccount {
     late final RemoteTunnelCarrier carrier;
     carrier = RemoteTunnelCarrier(
       hostId: host.id,
-      open: (last) => _openHostSession(host, last, confirmNewHost, historyMode, () => carrier.isClosed),
+      open: (last) => _openHostSession(host, last, confirmNewHost, historyMode, () => carrier.isClosed, carrier.states),
       healthInterval: healthInterval,
       healthTimeout: healthTimeout,
       tracer: tracer,
@@ -1228,9 +1228,10 @@ class RemoteAccount {
     HostTrustPrompt? confirm,
     _HistoryMode historyMode,
     bool Function() isCancelled,
+    Stream<RemoteConnectionState> ownerStates,
   ) async {
     try {
-      return await _openHostSessionOnce(host, previous, confirm, historyMode, isCancelled);
+      return await _openHostSessionOnce(host, previous, confirm, historyMode, isCancelled, ownerStates);
     } on RemoteConnectException {
       rethrow;
     } on Object catch (error) {
@@ -1244,6 +1245,7 @@ class RemoteAccount {
     HostTrustPrompt? confirm,
     _HistoryMode historyMode,
     bool Function() isCancelled,
+    Stream<RemoteConnectionState> ownerStates,
   ) async {
     final identity = _identity;
     if (identity == null || _credentials == null) {
@@ -1286,6 +1288,10 @@ class RemoteAccount {
       selection = await _connectTransport(token, host.id, isCancelled);
     }
     final transport = selection.transport;
+    if (isCancelled()) {
+      await transport.close();
+      throw const RemoteTransportException('CLIENT_CLOSED', 'The connection owner closed.', retryable: false);
+    }
 
     // 3. Noise IK (client = initiator) against the pinned key.
     final channel = await SecureChannel.establish(
@@ -1296,6 +1302,10 @@ class RemoteAccount {
       hostDeviceId: host.id,
       hostIdentityKey: hostKey,
     );
+    if (isCancelled()) {
+      await channel.close();
+      throw const RemoteTransportException('CLIENT_CLOSED', 'The connection owner closed.', retryable: false);
+    }
     final rpc = RemoteRpcClient(channel);
     // A failed live carrier needs a fresh Noise session on a different path.
     // Cooldowns are short, account-local hints; no candidate or token is kept.
@@ -1315,12 +1325,22 @@ class RemoteAccount {
       }),
     );
 
+    // Until the carrier installs this session, its close must retire Noise/lease
+    // even while a capability RPC is pending. The finally releases this handoff.
+    final ownerSub = ownerStates.listen((state) {
+      if (state.phase == RemoteConnectionPhase.closed) unawaited(rpc.close());
+    }, onDone: () => unawaited(rpc.close()));
     // 4. Capability probe: the first RPC must be harness.transport.describe.
     var probingCapabilities = true;
     try {
+      // Recovery may keep this Noise session only after the RPC receiver exists.
+      if (transport is LeaseAwareTransport) transport.markSecureReady();
       final description = asMap(
         await rpc.call('harness.transport.describe', const <String, Object?>{}, timeout: const Duration(seconds: 10)),
       );
+      if (isCancelled()) {
+        throw const RemoteTransportException('CLIENT_CLOSED', 'The connection owner closed.', retryable: false);
+      }
       probingCapabilities = false;
       final raw = description?['capabilities'];
       if (raw is! List ||
@@ -1369,6 +1389,9 @@ class RemoteAccount {
         final result = asMap(
           await rpc.call('remote.history.configure', {'compact': compact}, timeout: const Duration(seconds: 10)),
         );
+        if (isCancelled()) {
+          throw const RemoteTransportException('CLIENT_CLOSED', 'The connection owner closed.', retryable: false);
+        }
         if (result == null || result.length != 1 || result['compact'] is! bool || result['compact'] != compact) {
           throw const RemoteConnectException(
             RemoteFailure('INVALID_MESSAGE', 'The Host returned an invalid history configuration.', retryable: false),
@@ -1404,7 +1427,11 @@ class RemoteAccount {
         },
       );
     } on RemoteRpcException catch (error) {
+      final closed = channel.closedReason;
       await rpc.close();
+      if (error.isLocal && closed != null) {
+        throw _asConnectException(SecureChannelException(closed.code, closed.message, retryable: closed.retryable));
+      }
       if (probingCapabilities && error.code == 'METHOD_NOT_FOUND') {
         throw const RemoteConnectException(
           RemoteFailure(
@@ -1420,13 +1447,14 @@ class RemoteAccount {
     } on Object {
       await rpc.close();
       rethrow;
+    } finally {
+      await ownerSub.cancel();
     }
   }
 
-  /// Tries LAN/P2P without relay candidates, then TURN with relay-only ICE,
-  /// then the Relay. Each failed stage gets a fresh authorized connection:
-  /// the Host may still hold state for the old one. Noise always starts only
-  /// after the final data plane is chosen. Recent failures skip the bad path
+  /// Tries LAN/P2P, then TURN on a fresh tunnel (the Host accepts one offer per
+  /// tunnel). An unopened RTC failure can select Relay on that same tunnel.
+  /// Noise starts only after selection. Recent failures skip the bad path
   /// for 45 seconds; a changed native network hint clears that cooldown.
   Future<_TransportSelection> _connectTransport(String token, String hostId, bool Function() isCancelled) async {
     final connector = peerConnector;
@@ -1457,8 +1485,8 @@ class RemoteAccount {
     RemoteNetworkFallbackReason? reason = skipDirect ? RemoteNetworkFallbackReason.directRecentlyFailed : null;
     var wantDirect = !skipDirect && preferred.any((p) => p == RemoteTransportMode.lan || p == RemoteTransportMode.p2p);
     var wantTurn = !skipTurn && preferred.contains(RemoteTransportMode.turn);
-    // Credentials belong to a connectionId. A failed direct-stage lookup
-    // must not suppress a fresh lookup on the separately authorized TURN stage.
+    // TURN refetches credentials for its new connectionId; a failed direct
+    // lookup must not suppress that separately authorized attempt.
     Future<List<RemoteIceServer>> fetchIce(String id) => api.turnCredentials(token, id);
 
     if (!wantDirect && !wantTurn) {
@@ -1468,56 +1496,85 @@ class RemoteAccount {
     if (control.directTransports.isEmpty) {
       return _TransportSelection(control, RemoteNetworkFallbackReason.webrtcUnavailable);
     }
-    wantDirect = wantDirect && control.directTransports.any((p) => p == 'lan' || p == 'p2p');
-    wantTurn = wantTurn && control.directTransports.contains('turn');
-    var directFailed = false;
-    if (wantDirect) {
-      try {
-        final rtc = await WebRtcTransport.negotiate(
-          control: control,
-          connector: connector,
-          iceServers: fetchIce,
-          timeout: directTimeout,
-          iceServersTimeout: iceServersTimeout,
-        );
-        return _TransportSelection(rtc, reason);
-      } on WebRtcUnavailable catch (error) {
-        directFailed = true;
-        reason = error.timedOut ? RemoteNetworkFallbackReason.directTimeout : RemoteNetworkFallbackReason.directFailed;
-        _directCooldown[hostId] = DateTime.now().add(const Duration(seconds: 45));
-        _notifyFallback(reason);
-      }
-      if (wantTurn) {
-        control = await _connectRelay(token, hostId, direct: true, preferred: preferred, isCancelled: isCancelled);
-      }
-    }
-    if (wantTurn) {
-      try {
-        final rtc = await WebRtcTransport.negotiate(
-          control: control,
-          connector: connector,
-          iceServers: fetchIce,
-          timeout: directTimeout,
-          iceServersTimeout: iceServersTimeout,
-          relayOnly: true,
-        );
-        return _TransportSelection(rtc, reason);
-      } on WebRtcUnavailable catch (error) {
-        if (error.turnUnavailable) {
-          reason ??= RemoteNetworkFallbackReason.turnUnavailable;
-        } else {
-          reason = error.timedOut ? RemoteNetworkFallbackReason.turnTimeout : RemoteNetworkFallbackReason.turnFailed;
-        }
-        _turnCooldown[hostId] = DateTime.now().add(const Duration(seconds: 45));
-        // Missing credentials should not duplicate the direct-stage reason.
-        if (!error.turnUnavailable || !directFailed) {
+    try {
+      wantDirect = wantDirect && control.directTransports.any((p) => p == 'lan' || p == 'p2p');
+      wantTurn = wantTurn && control.directTransports.contains('turn');
+      var directFailed = false;
+      var dataChannelOpened = false;
+      if (wantDirect) {
+        try {
+          final rtc = await WebRtcTransport.negotiate(
+            control: control,
+            connector: connector,
+            iceServers: fetchIce,
+            timeout: directTimeout,
+            iceServersTimeout: iceServersTimeout,
+          );
+          return _TransportSelection(rtc, reason);
+        } on WebRtcUnavailable catch (error) {
+          directFailed = true;
+          dataChannelOpened = error.dataChannelOpened;
+          reason = error.timedOut
+              ? RemoteNetworkFallbackReason.directTimeout
+              : RemoteNetworkFallbackReason.directFailed;
+          _directCooldown[hostId] = DateTime.now().add(const Duration(seconds: 45));
           _notifyFallback(reason);
         }
       }
-    } else if (!wantDirect) {
+      if (isCancelled()) {
+        throw const RemoteTransportException('CLIENT_CLOSED', 'The connection owner closed.', retryable: false);
+      }
+      if (wantTurn) {
+        if (directFailed) {
+          await control.close();
+          control = await _connectRelay(
+            token,
+            hostId,
+            direct: true,
+            preferred: const [RemoteTransportMode.turn, RemoteTransportMode.relay],
+            isCancelled: isCancelled,
+          );
+          if (control.directTransports.isEmpty) return _TransportSelection(control, reason);
+        }
+        try {
+          final rtc = await WebRtcTransport.negotiate(
+            control: control,
+            connector: connector,
+            iceServers: fetchIce,
+            timeout: directTimeout,
+            iceServersTimeout: iceServersTimeout,
+            relayOnly: true,
+          );
+          return _TransportSelection(rtc, reason);
+        } on WebRtcUnavailable catch (error) {
+          dataChannelOpened = error.dataChannelOpened;
+          if (error.turnUnavailable) {
+            reason ??= RemoteNetworkFallbackReason.turnUnavailable;
+          } else {
+            reason = error.timedOut ? RemoteNetworkFallbackReason.turnTimeout : RemoteNetworkFallbackReason.turnFailed;
+          }
+          _turnCooldown[hostId] = DateTime.now().add(const Duration(seconds: 45));
+          // Missing credentials should not duplicate the direct-stage reason.
+          if (!error.turnUnavailable || !directFailed) {
+            _notifyFallback(reason);
+          }
+        }
+      }
+      if (isCancelled()) {
+        throw const RemoteTransportException('CLIENT_CLOSED', 'The connection owner closed.', retryable: false);
+      }
+      if (dataChannelOpened && control.canUseRelay) {
+        // The Host already selected RTC and drops this tunnel when its peer closes.
+        await control.close();
+        control = await _connectRelay(token, hostId, isCancelled: isCancelled);
+      } else {
+        await control.selectRelay();
+      }
+      return _TransportSelection(control, reason);
+    } on Object {
       await control.close();
+      rethrow;
     }
-    return _TransportSelection(await _connectRelay(token, hostId, isCancelled: isCancelled), reason);
   }
 
   void _notifyFallback(RemoteNetworkFallbackReason reason) {
@@ -1538,6 +1595,14 @@ class RemoteAccount {
     url: controlSocketUrl(serverUrl),
     deviceId: _identity!.deviceId,
     accessToken: token,
+    refreshAccessToken: (forceRefresh) async {
+      try {
+        return await accessToken(forceRefresh: forceRefresh);
+      } on RemoteConnectException catch (error) {
+        final failure = error.failure;
+        throw RemoteTransportException(failure.code, failure.message, retryable: failure.retryable);
+      }
+    },
     hostDeviceId: hostId,
     clientVersion: clientVersion,
     connector: _socketConnector,

@@ -56,7 +56,7 @@ void main() {
     expect(await client.listSessions(), isEmpty);
     final me = await clientId();
     final link = server.links.values.single;
-    expect(server.peers[me]!.capabilities, ['transport.relay', 'transport.relay.attach']);
+    expect(server.peers[me]!.capabilities, ['transport.relay.resume.v1', 'transport.relay', 'transport.relay.attach']);
     expect(server.relayAttaches, [
       {
         'connectionId': link.id,
@@ -144,8 +144,7 @@ void main() {
     expect(server.peers[await clientId()]!.capabilities, contains('transport.relay.attach'));
     expect(server.relayAttaches, isEmpty);
     final types = controlTypes();
-    expect(types, containsAllInOrder(['connect.request', 'secure.handshake', 'relay']));
-    expect(types, isNot(contains('transport.selected')));
+    expect(types, containsAllInOrder(['connect.request', 'transport.selected', 'secure.handshake', 'relay']));
   });
 
   test('an older Host gets no assignment, so the client stays on the Control socket', () async {
@@ -156,7 +155,7 @@ void main() {
     expect(await client.listSessions(), isEmpty);
     expect(server.links.values.single.assignments, isEmpty);
     expect(server.relayAttaches, isEmpty);
-    expect(controlTypes(), containsAllInOrder(['connect.request', 'secure.handshake', 'relay']));
+    expect(controlTypes(), containsAllInOrder(['connect.request', 'transport.selected', 'secure.handshake', 'relay']));
   });
 }
 

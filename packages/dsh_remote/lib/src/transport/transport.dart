@@ -124,6 +124,16 @@ abstract class SecureHandshakeTransport {
   Future<void> close();
 }
 
+/// Optional lifecycle hooks for transports with lease-backed Control recovery.
+/// The secure-channel owner marks readiness only after registering its receiver.
+abstract interface class LeaseAwareTransport implements SecureHandshakeTransport {
+  void markSecureReady();
+
+  /// Check Control liveness on foreground/network kicks, independent of RPC
+  /// traffic on a still healthy data plane.
+  void checkControlHealth();
+}
+
 /// Thrown while establishing a transport (Control handshake, connect
 /// request). [code] as in [RemoteTransportClosed].
 class RemoteTransportException implements Exception {

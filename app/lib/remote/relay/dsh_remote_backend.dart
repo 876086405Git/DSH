@@ -31,8 +31,7 @@ class DshRemoteRelayBackend implements RelayBackend, RelayNetworkBackend, RelayP
     bool direct = true,
     Future<RemoteNetworkRoute> Function()? resolveNetworkRoute,
     this._loadCompactHistory,
-  }) : _resolveNetworkRoute = resolveNetworkRoute ?? resolveRemoteNetworkRoute,
-       account =
+  }) : account =
            account ??
            remote.RemoteAccount(
              secrets: _Secrets(secrets),
@@ -48,20 +47,13 @@ class DshRemoteRelayBackend implements RelayBackend, RelayNetworkBackend, RelayP
            ) {
     this.direct = direct;
     if (account == null) {
-      this.account.preferredTransports = () async {
-        final route = await _resolveNetworkRoute();
-        _networkRoute = route;
-        return transportsForRemoteRoute(route);
-      };
+      final resolveRoute = resolveNetworkRoute ?? resolveRemoteNetworkRoute;
+      this.account.preferredTransports = () async => transportsForRemoteRoute(await resolveRoute());
     }
   }
 
   final remote.RemoteAccount account;
   final Future<bool> Function()? _loadCompactHistory;
-  final Future<RemoteNetworkRoute> Function() _resolveNetworkRoute;
-  RemoteNetworkRoute _networkRoute = RemoteNetworkRoute.unknown;
-  final _sessionRoutes = Expando<RemoteNetworkRoute>('remote route');
-  final _networkProbes = Expando<Future<bool>>('remote network probe');
   final _loggedSessions = Expando<bool>('logged remote network');
 
   /// The WebRTC stack [direct] connections use.
@@ -188,23 +180,7 @@ class DshRemoteRelayBackend implements RelayBackend, RelayNetworkBackend, RelayP
   }
 
   @override
-  Future<bool> probe(DshClient client) =>
-      _networkProbes[client] ??= _probeNetwork(client).whenComplete(() => _networkProbes[client] = null);
-
-  Future<bool> _probeNetwork(DshClient client) async {
-    final carrier = client.remoteCarrier;
-    final session = carrier?.session;
-    if (carrier == null || session == null || session.isClosed) return true;
-    final previous = _sessionRoutes[session] ?? _networkRoute;
-    final next = await _resolveNetworkRoute();
-    if (carrier.session != session || session.isClosed) return true;
-    if (next != RemoteNetworkRoute.unknown) _sessionRoutes[session] = next;
-    if (shouldRenegotiateRemoteRoute(previous, next)) {
-      carrier.reconnect();
-      return false;
-    }
-    return carrier.probe();
-  }
+  Future<bool> probe(DshClient client) => client.remoteCarrier?.probe() ?? Future.value(true);
 
   @override
   RelayPath? pathOf(DshClient client) {
@@ -223,7 +199,6 @@ class DshRemoteRelayBackend implements RelayBackend, RelayNetworkBackend, RelayP
   @override
   RemoteNetworkStatus? networkOf(DshClient client) {
     final session = client.remoteCarrier?.session;
-    if (session != null) _sessionRoutes[session] ??= _networkRoute;
     final snapshot = session?.networkDiagnostics;
     if (session == null || session.isClosed || snapshot == null) return null;
     final value = _network(snapshot);

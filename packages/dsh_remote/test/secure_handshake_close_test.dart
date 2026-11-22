@@ -80,9 +80,9 @@ void main() {
             (await acceptedSocket.future).add(
               frame('error', {
                 'connectionId': 'connection-304',
-                'code': 'CONNECTION_FAILED',
-                'message': 'Host connection ended',
-                'retryable': true,
+                'code': 'CONNECTION_REPLACED',
+                'message': 'Connection replaced',
+                'retryable': false,
               }),
             );
             // Tracer runs inside the real frame handler; this continuation runs
@@ -98,7 +98,14 @@ void main() {
             hostIdentityKey: hostKey.publicKeyBase64Url,
           );
           if (closeBeforeHandshake) {
-            await expectLater(establishing, throwsA(isA<SecureChannelException>()));
+            await expectLater(
+              establishing,
+              throwsA(
+                isA<SecureChannelException>()
+                    .having((error) => error.code, 'code', 'CONNECTION_REPLACED')
+                    .having((error) => error.retryable, 'retryable', false),
+              ),
+            );
           } else {
             channel = await establishing;
             expect(channel.isClosed, isFalse);

@@ -16,14 +16,19 @@ import 'relay_transport.dart';
 import 'rtc_chunking.dart';
 import 'transport.dart';
 
-/// WebRTC could not open a DataChannel (ICE or DTLS failed, timed out, or
-/// the path is not one both sides negotiated). The attempt's connection is
-/// closed; the caller falls back to the Relay on a new one.
+/// WebRTC failed before connecting the secure channel. If the DataChannel
+/// opened, the Host may already have bound this tunnel to RTC.
 class WebRtcUnavailable implements Exception {
-  const WebRtcUnavailable(this.message, {this.timedOut = false, this.turnUnavailable = false});
+  const WebRtcUnavailable(
+    this.message, {
+    this.timedOut = false,
+    this.turnUnavailable = false,
+    this.dataChannelOpened = false,
+  });
   final String message;
   final bool timedOut;
   final bool turnUnavailable;
+  final bool dataChannelOpened;
 
   @override
   String toString() => 'WebRtcUnavailable: $message';
@@ -37,9 +42,10 @@ class WebRtcUnavailable implements Exception {
 /// `signal.answer` / `signal.ice` both ways → DataChannel open →
 /// `transport.selected` (`lan` / `p2p` / `turn`) → Noise handshake on the
 /// Control socket → ciphertext as binary DataChannel messages (`RTCH`
-/// chunks above 8 KiB). The DataChannel or the Control socket closing ends
-/// the connection; a reconnect negotiates a new one with a new Noise session.
-class WebRtcTransport implements SecureHandshakeTransport {
+/// chunks above 8 KiB). An active DataChannel closing ends the connection;
+/// a reconnect negotiates a new one with a new Noise session. Control loss can
+/// recover while its authorization lease and the DataChannel remain valid.
+class WebRtcTransport implements LeaseAwareTransport {
   WebRtcTransport._(this._control);
 
   /// Negotiates a DataChannel for [control], which must have returned from
@@ -49,12 +55,12 @@ class WebRtcTransport implements SecureHandshakeTransport {
   /// or exceeds [iceServersTimeout] (10 s by default), direct candidates are
   /// still tried. Each new attempt fetches its own credentials. TURN is
   /// dropped unless `transport.turn` was negotiated. [timeout] is the local
-  /// negotiation deadline; the Server's `webrtcFallbackTimeoutMs` wins when
-  /// longer, within a 15 s safety ceiling.
+  /// negotiation deadline when the Server does not supply
+  /// `webrtcFallbackTimeoutMs`; server budgets stay within 15 s.
   ///
   /// Throws [WebRtcUnavailable] when no DataChannel opened, and the
-  /// [RemoteTransportException] of the Control socket when that one failed;
-  /// either way [control] is closed.
+  /// [RemoteTransportException] of the Control socket when that one failed.
+  /// Only a Control failure closes [control].
   static Future<WebRtcTransport> negotiate({
     required RelayTransport control,
     required RemotePeerConnector connector,
@@ -68,10 +74,16 @@ class WebRtcTransport implements SecureHandshakeTransport {
       await transport._negotiate(connector, iceServers, timeout, iceServersTimeout);
       return transport;
     } on Object catch (error) {
-      await transport._abort();
-      if (error is RemoteTransportException || error is WebRtcUnavailable) rethrow;
-      // The platform stack refused (no WebRTC, bad configuration, ...).
-      throw WebRtcUnavailable('$error');
+      transport.checkControlHealth();
+      await transport._abort(closeControl: error is RemoteTransportException || transport._pendingClose != null);
+      // A simultaneous Control failure must not become transport fallback.
+      if (transport._pendingClose != null) transport._check();
+      if (error is RemoteTransportException || error is ProtocolError) rethrow;
+      if (error is WebRtcUnavailable) {
+        if (!transport._dataChannelOpened) rethrow;
+        throw WebRtcUnavailable(error.message, timedOut: error.timedOut, dataChannelOpened: true);
+      }
+      throw WebRtcUnavailable('WebRTC negotiation failed.', dataChannelOpened: transport._dataChannelOpened);
     }
   }
 
@@ -86,6 +98,7 @@ class WebRtcTransport implements SecureHandshakeTransport {
   final RtcChunkCodec _outgoing = RtcChunkCodec();
   final RtcChunkCodec _incoming = RtcChunkCodec();
   Completer<void>? _opening;
+  bool _dataChannelOpened = false;
   bool _answered = false;
   final List<JsonMap> _remoteCandidates = [];
 
@@ -165,10 +178,9 @@ class WebRtcTransport implements SecureHandshakeTransport {
             !servers.any((s) => s.urls.any((u) => RegExp(r'^turns?:', caseSensitive: false).hasMatch(u.trim()))))) {
       throw const WebRtcUnavailable('No negotiated TURN server is available.', turnUnavailable: true);
     }
-    final server = _control.webrtcFallbackTimeout;
-    // Honor the Server budget only within a finite local safety ceiling.
-    final requested = server != null && server > localTimeout ? server : localTimeout;
-    final timeout = requested > const Duration(seconds: 15) ? const Duration(seconds: 15) : requested;
+    const ceiling = Duration(seconds: 15);
+    final serverTimeout = _control.webrtcFallbackTimeout;
+    final timeout = serverTimeout == null ? localTimeout : (serverTimeout > ceiling ? ceiling : serverTimeout);
     final RemotePeerConnection peer;
     try {
       // The deadline includes native creation and offer generation: either
@@ -207,6 +219,7 @@ class WebRtcTransport implements SecureHandshakeTransport {
     // Before the handshake: the Host binds the Noise channel to the data
     // plane this names.
     _control.sendSignal('transport.selected', {'transport': wire.name});
+    _control.confirmWebRtcDataPlane(() => !_closed && _peer != null);
     _opening = null;
   }
 
@@ -230,12 +243,17 @@ class WebRtcTransport implements SecureHandshakeTransport {
           }
         },
         onOpen: () {
+          if (_closed) return;
+          _dataChannelOpened = true;
           if (!opening.isCompleted) opening.complete();
         },
         onMessage: _receive,
         onClosed: (reason) {
-          if (!opening.isCompleted) {
-            opening.completeError(WebRtcUnavailable(reason));
+          if (_closed) return;
+          if (_opening != null) {
+            if (!opening.isCompleted) opening.completeError(WebRtcUnavailable(reason));
+            // Even after onOpen, stats/selection still belong to this attempt.
+            unawaited(_abort());
           } else {
             _fail(RemoteTransportClosed('CONNECTION_FAILED', 'The direct connection closed: $reason'));
           }
@@ -261,14 +279,21 @@ class WebRtcTransport implements SecureHandshakeTransport {
     return peer;
   }
 
-  /// Sends unless the connection already ended (stack callbacks can trail).
+  /// Trickle ICE is only needed until this attempt selects its data plane.
   void _signal(String type, JsonMap payload) {
-    if (!_closed && _pendingClose == null) _control.sendSignal(type, payload);
+    if (_closed || _pendingClose != null || _opening == null) return;
+    try {
+      _control.sendSignal(type, payload);
+    } on RemoteTransportException catch (error) {
+      _onControlClosed(
+        RemoteTransportClosed(error.code, error.message, retryable: error.retryable, closeCode: error.closeCode),
+      );
+    }
   }
 
   /// Throws when the Control socket failed meanwhile.
   void _check() {
-    if (_closed) throw const WebRtcUnavailable('The direct connection closed during negotiation.');
+    checkControlHealth();
     if (_pendingClose case final reason?) {
       throw RemoteTransportException(
         reason.code,
@@ -277,6 +302,7 @@ class WebRtcTransport implements SecureHandshakeTransport {
         closeCode: reason.closeCode,
       );
     }
+    if (_closed) throw const WebRtcUnavailable('The direct connection closed during negotiation.');
   }
 
   /// Native stacks can open the DataChannel a moment before the selected
@@ -285,9 +311,11 @@ class WebRtcTransport implements SecureHandshakeTransport {
     RemoteTransportMode? path;
     for (var attempt = 0; attempt < 6; attempt++) {
       if (attempt > 0) await Future<void>.delayed(const Duration(milliseconds: 50));
+      _check();
       try {
         // A native getStats() that stalls must not hold up the connect.
         final stats = await peer.stats().timeout(const Duration(milliseconds: 250));
+        if (_closed || _pendingClose != null) break;
         path = selectedPeerPath(stats) ?? path;
         _roundTripTime = selectedPeerRoundTripTime(stats);
         _peerNetwork = selectedPeerNetworkInfo(stats);
@@ -335,6 +363,7 @@ class WebRtcTransport implements SecureHandshakeTransport {
     try {
       await peer.setAnswer(sdp);
     } on Object catch (error) {
+      if (_closed) return;
       final opening = _opening;
       if (opening != null && !opening.isCompleted) opening.completeError(WebRtcUnavailable('Invalid answer: $error'));
       return;
@@ -344,6 +373,7 @@ class WebRtcTransport implements SecureHandshakeTransport {
     final buffered = [..._remoteCandidates];
     _remoteCandidates.clear();
     for (final candidate in buffered) {
+      if (_closed) return;
       // A candidate the stack refuses is skipped; ICE uses the others.
       await peer.addIceCandidate(candidate).catchError((Object _) {});
     }
@@ -370,6 +400,8 @@ class WebRtcTransport implements SecureHandshakeTransport {
 
   void _receive(Uint8List frame) {
     if (_closed) return;
+    checkControlHealth();
+    if (_closed || _pendingClose != null) return;
     final Uint8List? message;
     try {
       message = _incoming.decode(frame);
@@ -410,6 +442,12 @@ class WebRtcTransport implements SecureHandshakeTransport {
   }
 
   @override
+  void markSecureReady() => _control.markSecureReady();
+
+  @override
+  void checkControlHealth() => _control.checkControlHealth();
+
+  @override
   Future<void> sendHandshake(int step, Uint8List data) => _control.sendHandshake(step, data);
 
   /// [counter] only matters to the Relay: the DataChannel is ordered and
@@ -417,10 +455,12 @@ class WebRtcTransport implements SecureHandshakeTransport {
   @override
   Future<void> send(Uint8List ciphertext, {required int counter}) async {
     final peer = _peer;
-    if (_closed || peer == null) {
+    if (peer == null) {
       throw const RemoteTransportException('CONNECTION_FAILED', 'The direct connection is not open.');
     }
     for (final frame in _outgoing.encode(ciphertext)) {
+      checkControlHealth();
+      if (_closed) throw const RemoteTransportException('CONNECTION_FAILED', 'The direct connection is not open.');
       await peer.send(frame);
     }
   }
@@ -439,7 +479,7 @@ class WebRtcTransport implements SecureHandshakeTransport {
     }
   }
 
-  void _release() {
+  void _release({bool closeControl = true}) {
     _control.onSignal = null;
     _incoming.reset();
     _outgoing.reset();
@@ -447,21 +487,21 @@ class WebRtcTransport implements SecureHandshakeTransport {
     final peer = _peer;
     _peer = null;
     if (peer != null) unawaited(_closePeer(peer));
-    unawaited(_control.close());
+    if (closeControl) unawaited(_control.close());
   }
 
   Future<void> _closePeer(RemotePeerConnection peer) async {
     try {
       await peer.close();
     } on Object {
-      // Even a synchronous platform error must not skip Control cleanup.
+      // Platform teardown must not interrupt the remaining cleanup.
     }
   }
 
-  Future<void> _abort() async {
+  Future<void> _abort({bool closeControl = false}) async {
     _closed = true;
-    // Native teardown must not hold up the fresh Relay connection either.
-    _release();
+    // Native teardown must not hold up the next same-tunnel attempt.
+    _release(closeControl: closeControl);
   }
 
   @override

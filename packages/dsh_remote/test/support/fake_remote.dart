@@ -51,6 +51,13 @@ class FakeLink {
   String stage = 'pending';
   final Map<String, int> counters = {};
 
+  // connect.request mints per-device tickets. A matching lease request rotates
+  // leases; only that confirmed ticket authorizes hello recovery. Link removal
+  // or lease.close retires them; a fresh connection starts with empty maps.
+  final Map<String, String> recoveryTickets = {};
+  final Map<String, String> relayRecoveryTickets = {};
+  final Map<String, String> leases = {};
+
   /// Relay assignment per device id (`transport.relay.attach`).
   final Map<String, Map<String, Object?>> assignments = {};
 }
@@ -96,6 +103,7 @@ class FakeRemoteServer {
   Future<void> Function()? beforeRefreshResponse;
   Future<void> Function()? beforeRevokeResponse;
   bool failNextRevoke = false;
+  bool failNextRefresh = false;
   final responses = <({String method, String path, int status})>[];
   Duration accessTtl = const Duration(hours: 1);
   int refreshCount = 0;
@@ -267,6 +275,10 @@ class FakeRemoteServer {
       return json(200, _issue(device['deviceId']! as String));
     }
     if (request.method == 'POST' && path == '/api/v1/auth/refresh') {
+      if (failNextRefresh) {
+        failNextRefresh = false;
+        return error(503, 'SERVICE_UNAVAILABLE');
+      }
       final beforeRequest = beforeRefreshRequest;
       beforeRefreshRequest = null;
       if (beforeRequest != null) await beforeRequest();
@@ -342,6 +354,21 @@ class FakeRemoteServer {
 
   /// Raw Control frames received from client devices.
   final List<String> clientControlFrames = [];
+
+  /// Opt-in current resume/lease support; all older fixtures keep their behavior.
+  bool controlResume = false;
+  bool acknowledgeLeases = true;
+
+  /// One-shot recovery rejection: retires the old link before a fresh hello.
+  bool rejectNextRecovery = false;
+
+  /// One-shot gate, cleared before awaiting; data sockets stay usable meanwhile.
+  Future<void> Function()? beforeRecoveryHelloAck;
+
+  /// One-shot lease-ack gate, cleared before awaiting; link removal retires it.
+  Future<void> Function()? beforeLeaseAck;
+  final List<Map<String, Object?>> clientHellos = [];
+  final List<Map<String, Object?>> leaseRequests = [];
 
   /// `relay` frames forwarded on Control sockets.
   int controlRelayFrames = 0;
@@ -458,6 +485,9 @@ class FakeRemoteServer {
 
   void _dropLink(FakeLink link, String code) {
     links.remove(link.id);
+    link.leases.clear();
+    link.recoveryTickets.clear();
+    link.relayRecoveryTickets.clear();
     for (final id in [link.host, link.client]) {
       final peer = peers[id];
       if (peer != null) {
@@ -474,17 +504,23 @@ class FakeRemoteServer {
     if (peer != null) unawaited(peer.ws.close(code == 'CONNECTION_REPLACED' ? 4003 : 4001, code));
   }
 
+  /// Drops only the Control socket; onDone retains a confirmed leased link.
+  Future<void> dropControl(String id, {int code = 4001, String reason = 'server shutdown'}) async {
+    await peers[id]!.ws.close(code, reason);
+  }
+
   void _accept(WebSocket ws) {
     controlConnects++;
     FakePeer? peer;
     ws.listen(
-      (raw) {
+      (raw) async {
         try {
           if (peer?.role == 'client') clientControlFrames.add(raw as String);
           final frame = decodeControlFrame(raw as String);
           if (peer == null) {
             if (frame.type != 'hello') throw const ProtocolError('AUTH_REQUIRED');
             final p = frame.payload;
+            if (p['role'] == 'client') clientHellos.add(p);
             if (rejectHelloWith != null) {
               ws.add(
                 encodeControlFrame(ControlFrame('error', {'code': rejectHelloWith!, 'message': rejectHelloWith!})),
@@ -498,10 +534,34 @@ class FakeRemoteServer {
               unawaited(ws.close(4001, 'AUTH_INVALID'));
               return;
             }
-            disconnectPeer(device.id, 'CONNECTION_REPLACED');
+            final tickets = (p['recoveryTickets'] as List<Object?>?)?.cast<String>() ?? const <String>[];
+            if (tickets.isNotEmpty) {
+              final owned = links.values.where((link) => link.client == device.id || link.host == device.id).toList();
+              final valid =
+                  controlResume && tickets.every((ticket) => owned.any((link) => link.leases[device.id] == ticket));
+              if (rejectNextRecovery || !valid) {
+                rejectNextRecovery = false;
+                await ws.close(4012, 'recovery authorization rejected');
+                for (final link in owned) {
+                  _dropLink(link, 'CONNECTION_FAILED');
+                }
+                return;
+              }
+              // Replacing a socket after valid recovery must not replace its link.
+              final previous = peers.remove(device.id);
+              unawaited(previous?.ws.close(4003, 'CONNECTION_REPLACED'));
+            } else {
+              disconnectPeer(device.id, 'CONNECTION_REPLACED');
+            }
             final caps = (p['capabilities']! as List).cast<String>();
             final created = peer = FakePeer(ws, device.id, device.role, caps);
             peers[device.id] = created;
+            if (tickets.isNotEmpty) {
+              final gate = beforeRecoveryHelloAck;
+              beforeRecoveryHelloAck = null;
+              if (gate != null) await gate();
+              if (peers[device.id] != created || ws.closeCode != null) return;
+            }
             _send(created, 'hello.ack', {
               'protocol': 1,
               'serverVersion': 'fake/0.1.0',
@@ -510,6 +570,8 @@ class FakeRemoteServer {
               'maxControlFrameBytes': maxControlFrameBytes,
               'maxRelayFrameBytes': maxRelayFrameBytes,
               'capabilities': [
+                if (controlResume && caps.contains(webRtcResumeCapability)) webRtcResumeCapability,
+                if (controlResume && caps.contains(relayResumeCapability)) relayResumeCapability,
                 if (webrtc) ...webrtcTransports.where(caps.contains),
                 if (caps.contains('transport.relay')) 'transport.relay',
                 if (relayAttach && caps.contains('transport.relay.attach')) 'transport.relay.attach',
@@ -537,10 +599,29 @@ class FakeRemoteServer {
       onDone: () {
         final current = peer;
         if (current != null && peers[current.id] == current) {
-          disconnectPeer(current.id, 'CONNECTION_FAILED');
+          final leased = controlResume && links.values.any((link) => link.leases.containsKey(current.id));
+          if (leased) {
+            peers.remove(current.id);
+          } else {
+            disconnectPeer(current.id, 'CONNECTION_FAILED');
+          }
         }
       },
     );
+  }
+
+  Future<void> _ackLease(FakePeer peer, FakeLink link, Map<String, Object?> request) async {
+    final gate = beforeLeaseAck;
+    beforeLeaseAck = null;
+    if (gate != null) await gate();
+    if (links[link.id] != link || peers[peer.id] != peer || peer.ws.closeCode != null) return;
+    final rotated = link.leases[peer.id] = 'dshlease.${_secret()}';
+    _send(peer, 'connection.lease.ack', {
+      'connectionId': link.id,
+      'requestId': request['requestId'],
+      'ticket': rotated,
+      'leaseMs': controlLeaseMs,
+    });
   }
 
   void _route(FakePeer peer, ControlFrame frame) {
@@ -562,6 +643,18 @@ class FakeRemoteServer {
         }
         final link = FakeLink(uuidV7(), host.id, peer.id);
         links[link.id] = link;
+        if (controlResume) {
+          for (final id in [host.id, peer.id]) {
+            if (peer.capabilities.contains(webRtcResumeCapability) &&
+                host.capabilities.contains(webRtcResumeCapability)) {
+              link.recoveryTickets[id] = 'dshwr.${_secret()}';
+            }
+            if (peer.capabilities.contains(relayResumeCapability) &&
+                host.capabilities.contains(relayResumeCapability)) {
+              link.relayRecoveryTickets[id] = 'dshrr.${_secret()}';
+            }
+          }
+        }
         final attach =
             relayAttach &&
             peer.capabilities.contains('transport.relay.attach') &&
@@ -572,14 +665,33 @@ class FakeRemoteServer {
           'clientIdentityKey': devices[peer.id]!.descriptor['identityKey'],
           'authorization': 'account',
           'preferredTransports': webrtc ? p['preferredTransports'] : ['relay'],
+          'recoveryTicket': ?link.recoveryTickets[host.id],
+          'relayRecoveryTicket': ?link.relayRecoveryTickets[host.id],
           if (attach) ..._assign(link, host.id, peer.id),
         });
         if (attach) _assign(link, peer.id, host.id);
         return;
     }
     final link = links[p['connectionId']];
+    if (frame.type == 'connection.lease.close' && link == null) return;
     if (link == null || (peer.id != link.host && peer.id != link.client)) {
       throw const ProtocolError('CONNECTION_NOT_FOUND', 'CONNECTION_NOT_FOUND');
+    }
+    if (frame.type == 'connection.lease.close') {
+      _dropLink(link, 'CONNECTION_FAILED');
+      return;
+    }
+    if (frame.type == 'connection.lease.request') {
+      leaseRequests.add({...p, 'deviceId': peer.id});
+      final current = link.leases[peer.id];
+      final ticket = p['ticket'];
+      final valid = current == null
+          ? ticket == link.recoveryTickets[peer.id] || ticket == link.relayRecoveryTickets[peer.id]
+          : ticket == current;
+      if (!controlResume || link.stage != 'ready' || !valid) throw const ProtocolError('INVALID_MESSAGE');
+      if (!acknowledgeLeases) return;
+      unawaited(_ackLease(peer, link, p));
+      return;
     }
     final other = peers[peer.id == link.host ? link.client : link.host];
     if (other == null) throw const ProtocolError('CONNECTION_FAILED', 'CONNECTION_FAILED');
@@ -589,8 +701,16 @@ class FakeRemoteServer {
         if (frame.type == 'connect.rejected') links.remove(link.id);
         link.stage = 'accepted';
         final assignment = link.assignments[link.client];
-        if (frame.type == 'connect.accepted' && assignment != null) {
-          other.ws.add(encodeControlFrame(ControlFrame('connect.accepted', {...p, ...assignment})));
+        if (frame.type == 'connect.accepted' &&
+            (assignment != null ||
+                link.recoveryTickets.containsKey(link.client) ||
+                link.relayRecoveryTickets.containsKey(link.client))) {
+          _send(other, 'connect.accepted', {
+            ...p,
+            ...?assignment,
+            'recoveryTicket': ?link.recoveryTickets[link.client],
+            'relayRecoveryTicket': ?link.relayRecoveryTickets[link.client],
+          });
           return;
         }
       case 'transport.selected':
@@ -799,6 +919,9 @@ class FakeRemoteHost {
   /// Unary handlers by endpoint; default: `gateway/not-found`.
   final Map<String, Map<String, Object?> Function(Map<String, Object?> args)> handlers = {};
 
+  /// Optional unary reply gate, after execution but before the encrypted reply.
+  Future<void> Function(String endpoint)? beforeUnaryResponse;
+
   /// Called for each non-`$events` stream a client opens.
   void Function(FakeHostStream stream)? onOpen;
 
@@ -854,6 +977,7 @@ class FakeRemoteHost {
       'accessToken': _tokens['accessToken'],
       'protocols': [1],
       'capabilities': [
+        if (server.controlResume) ...[webRtcResumeCapability, relayResumeCapability],
         if (webrtc) ...['transport.lan', 'transport.p2p', 'transport.turn'],
         'transport.relay',
         if (relayAttach) 'transport.relay.attach',
@@ -929,7 +1053,7 @@ class FakeRemoteHost {
         _completeHandshake(connection, p);
       case 'signal.offer':
         final connection = connections[p['connectionId']];
-        if (connection == null || !webrtc) return;
+        if (connection == null || !webrtc || connection.rtc != null || connection.selected) return;
         rtcOffers.add(connection.connectionId);
         final rtc = rtcNetwork!.answer(
           p['sdp']! as String,
@@ -1105,6 +1229,11 @@ class FakeRemoteHost {
           return reject('METHOD_NOT_ALLOWED', 'Not allowed.');
         }
         final result = _dispatch(connection, endpoint, params['payload']);
+        final beforeResponse = beforeUnaryResponse;
+        if (beforeResponse != null) {
+          await beforeResponse(endpoint);
+          if (connections[connection.connectionId] != connection) return;
+        }
         final limit = directResponseLimit;
         if (limit != null && utf8.encode(jsonEncode(result)).length > limit) {
           return reject('RESPONSE_TOO_LARGE', 'Too large for a direct response.');

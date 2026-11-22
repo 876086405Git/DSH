@@ -182,9 +182,10 @@ typedef RemoteSessionOpener = Future<RemoteHostSession> Function(RemoteFailure? 
 
 /// [DshCarrier] over ds-harness-remote. Unary calls become
 /// `harness.remote.call`; each [DshMux] link is one secure connection whose
-/// logical streams map to `harness.remote.stream.*`. A dropped connection
-/// is reported as link loss, so [DshMux] reconnects (new connection, new
-/// `$events` generation, streams reopened) with its usual backoff.
+/// logical streams map to `harness.remote.stream.*`. A lost data plane or
+/// refused recovery is reported as link loss, so [DshMux] reconnects (new
+/// connection, new `$events` generation, streams reopened) with its backoff.
+/// Lease-backed Control recovery keeps this link and its existing streams.
 ///
 /// Differences from the local carrier that callers see:
 /// * only [harnessRemoteAllowlist] endpoints (others: `METHOD_NOT_ALLOWED`;
@@ -401,6 +402,7 @@ class RemoteTunnelCarrier extends DshCarrier implements WorkspaceUploadCarrier {
   Future<bool> probe({Duration? timeout}) {
     final session = _session;
     if (session == null) return Future.value(true);
+    session.rpc.channel.checkControlHealth();
     return _probing ??= _check(session, timeout ?? healthTimeout).whenComplete(() => _probing = null);
   }
 

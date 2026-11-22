@@ -1,6 +1,6 @@
 // Direct path (LAN / P2P / TURN) over a fake WebRTC stack: signaling order,
 // transport.selected before Noise, ciphertext on the DataChannel only, and
-// fallback to the Relay on a new connection. Upstream:
+// RTC-to-Relay fallback on the same tunnel; TURN retries use a fresh one. Upstream:
 // packages/webrtc/src/adaptive-transport.ts, rtc-data-channel.ts,
 // rtc-chunking.ts; Host side packages/plugin/src/server-connection.ts.
 import 'dart:async';
@@ -94,6 +94,94 @@ void main() {
     });
   });
 
+  group('native trickle ICE failures', () {
+    for (final opened in [false, true]) {
+      test('Control failure with DataChannel opened=$opened never escapes the callback', () async {
+        final control = _SignalControl();
+        final network = FakeRtcNetwork();
+        final stats = Completer<void>();
+        network.statsGate = stats.future;
+        addTearDown(() {
+          if (!stats.isCompleted) stats.complete();
+        });
+        _ClosingPeer? peer;
+        final opening = WebRtcTransport.negotiate(
+          control: control,
+          connector: (servers, handlers) async => peer = _ClosingPeer(await network.connector(servers, handlers)),
+          iceServers: (_) async => [],
+          timeout: const Duration(seconds: 5),
+        );
+        const failure = RemoteTransportException(
+          'AUTH_INVALID',
+          'Control authorization failed.',
+          retryable: false,
+          closeCode: 4001,
+        );
+        final rejected = expectLater(
+          opening,
+          throwsA(
+            isA<RemoteTransportException>()
+                .having((e) => e.code, 'code', failure.code)
+                .having((e) => e.message, 'message', failure.message)
+                .having((e) => e.retryable, 'retryable', failure.retryable)
+                .having((e) => e.closeCode, 'closeCode', failure.closeCode),
+          ),
+        );
+        await _eventually(() => control.signals.contains('signal.ice'));
+        final handlers = network.clients.single.handlers;
+        if (opened) {
+          handlers.onOpen();
+          await _eventually(() => peer?.inspecting ?? false);
+        }
+        control.signalError = failure;
+
+        expect(
+          () => handlers.onIceCandidate({'candidate': 'candidate:late 1 udp 1234 192.168.1.20 5000 typ host'}),
+          returnsNormally,
+        );
+        stats.complete();
+        await rejected;
+
+        expect(control.closed, isTrue);
+        expect(network.clients.single.closed, isTrue);
+        expect(control.signals, ['signal.offer', 'signal.ice']);
+      });
+    }
+
+    test('selected data plane ignores late ICE but an active DataChannel close still ends Control', () async {
+      final control = _SignalControl();
+      final network = FakeRtcNetwork();
+      final opening = WebRtcTransport.negotiate(
+        control: control,
+        connector: network.connector,
+        iceServers: (_) async => [],
+      );
+      await _eventually(() => control.signals.contains('signal.ice'));
+      final handlers = network.clients.single.handlers;
+      handlers.onOpen();
+      final transport = await opening;
+      addTearDown(transport.close);
+      final closed = <RemoteTransportClosed>[];
+      transport.listen(onData: (_, _) {}, onHandshake: (_, _) {}, onClosed: closed.add);
+      control.signalError = const RemoteTransportException('CONNECTION_FAILED', 'Control is recovering.');
+      final signals = [...control.signals];
+
+      expect(
+        () => handlers.onIceCandidate({'candidate': 'candidate:late 1 udp 1234 192.168.1.20 5000 typ host'}),
+        returnsNormally,
+      );
+
+      expect(control.signals, signals);
+      expect(control.closed, isFalse);
+      expect(network.clients.single.closed, isFalse);
+      expect(closed, isEmpty);
+      handlers.onClosed('active DataChannel failed');
+      expect(control.closed, isTrue);
+      expect(network.clients.single.closed, isTrue);
+      expect(closed.single.code, 'CONNECTION_FAILED');
+    });
+  });
+
   group('connectHost', () {
     late FakeRemoteServer server;
     late FakeRemoteHost host;
@@ -158,6 +246,8 @@ void main() {
       final link = server.links.values.single;
 
       expect(server.peers[await clientId()]!.capabilities, [
+        'transport.webrtc.resume.v1',
+        'transport.relay.resume.v1',
         'transport.lan',
         'transport.p2p',
         'transport.turn',
@@ -195,7 +285,8 @@ void main() {
       expect(fallbacks, isEmpty);
     });
 
-    test('ICE failure falls back to the Relay on a new connection with a new Noise session', () async {
+    test('ICE failure selects Relay on the same tunnel before its only Noise handshake', () async {
+      server.webrtcTransports.remove('transport.turn');
       network.outcome = FakeRtcOutcome.fail;
       final client = await connect();
       expect(await client.listSessions(), isEmpty);
@@ -208,31 +299,59 @@ void main() {
           if (f['type'] == 'connect.request') (f['payload']! as Map)['preferredTransports'],
       ];
       expect(requests, [
-        ['lan', 'p2p', 'turn', 'relay'],
-        ['lan', 'p2p', 'turn', 'relay'],
-        ['relay'],
+        ['lan', 'p2p', 'relay'],
       ]);
-      expect(server.turnRequests, hasLength(2));
-      expect(server.turnRequests.toSet(), hasLength(2), reason: 'TURN credentials are connection-scoped');
+      expect(server.turnRequests, hasLength(1));
       expect(host.rtcOffers, hasLength(1));
       final relayConnection = server.links.values.single.id;
-      expect(host.rtcOffers.single, isNot(relayConnection));
-      expect(host.handshakes, [relayConnection], reason: 'Noise ran once, on the Relay connection');
+      expect(host.rtcOffers.single, relayConnection);
+      expect(host.handshakes, [relayConnection], reason: 'Noise starts only after selecting Relay');
+      final selected = clientFrames().singleWhere((f) => f['type'] == 'transport.selected')['payload']! as Map;
+      expect(selected, {'connectionId': relayConnection, 'targetDeviceId': host.deviceId, 'transport': 'relay'});
       expect(types().where((t) => t == 'secure.handshake'), hasLength(1));
       expect(server.controlRelayFrames, greaterThan(0));
     });
 
     test('a DataChannel that never opens times out to the Relay', () async {
+      server.webrtcTransports.remove('transport.turn');
       network.outcome = FakeRtcOutcome.silent;
       final client = await connect();
       expect(await client.listSessions(), isEmpty);
       expect(client.remoteCarrier!.state!.transport, 'relay');
       expect(fallbacks.single, 'directTimeout');
       expect(host.handshakes, hasLength(1));
-      expect(host.handshakes.single, isNot(host.rtcOffers.single));
+      expect(host.handshakes.single, host.rtcOffers.single);
+    });
+
+    test('the Server negotiation budget overrides a longer local deadline', () async {
+      server.webrtcTransports.remove('transport.turn');
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      network.creationGate = gate.future;
+      server.webrtcFallbackTimeoutMs = 50;
+      await account.close();
+      account = RemoteAccount(
+        secrets: MemorySecretStore(),
+        serverUrl: server.url,
+        peerConnector: network.connector,
+        onDirectFallback: fallbacks.add,
+        directTimeout: const Duration(seconds: 8),
+      );
+
+      final client = await connect().timeout(const Duration(seconds: 3));
+
+      expect(client.remoteCarrier!.state!.transport, 'relay');
+      expect(fallbacks, ['directTimeout']);
+      expect(types().where((t) => t == 'connect.request'), hasLength(1));
+      gate.complete();
+      await _eventually(() => network.clients.single.closed);
+      expect(await client.listSessions(), isEmpty);
     });
 
     test('a late native creation falls back and disposes its peer without sending an offer', () async {
+      server.webrtcTransports.remove('transport.turn');
       final gate = Completer<void>();
       network.creationGate = gate.future;
       final client = await connect();
@@ -242,8 +361,16 @@ void main() {
       expect(network.clients.single.closed, isFalse);
       gate.complete();
       await _eventually(() => network.clients.single.closed);
+      final handlers = network.clients.single.handlers;
+      handlers.onOpen();
+      handlers.onIceCandidate({'candidate': 'candidate:late 1 udp 1234 192.168.1.20 5000 typ host'});
+      handlers.onMessage(Uint8List.fromList([0x52, 0x54, 0x43, 0x48]));
+      handlers.onClosed('late native close');
       expect(types(), isNot(contains('signal.offer')));
+      expect(types(), isNot(contains('signal.ice')));
+      expect(types().where((t) => t == 'connect.request'), hasLength(1));
       expect(host.handshakes, hasLength(1));
+      expect(await client.listSessions(), isEmpty);
     });
 
     test('a stalled native offer and teardown cannot hold up the Relay fallback', () async {
@@ -284,7 +411,30 @@ void main() {
       expect(types(), isNot(contains('signal.offer')));
     });
 
-    test('a synchronous peer close failure cannot skip Control cleanup or Relay fallback', () async {
+    test('a DataChannel closing during stats uses fresh Relay before Noise', () async {
+      server.webrtcTransports.remove('transport.turn');
+      final stats = Completer<void>();
+      addTearDown(() {
+        if (!stats.isCompleted) stats.complete();
+      });
+      network.statsGate = stats.future;
+      final connecting = connect();
+      await _eventually(() => network.clients.isNotEmpty && network.clients.single.open);
+      network.clients.single.handlers.onClosed('closed before transport.selected');
+      stats.complete();
+
+      final client = await connecting;
+
+      expect(client.remoteCarrier!.state!.transport, 'relay');
+      expect(network.clients.single.closed, isTrue);
+      expect(types().where((t) => t == 'connect.request'), hasLength(2));
+      expect(host.handshakes, hasLength(1));
+      expect(host.handshakes.single, isNot(host.rtcOffers.single));
+      expect(await client.listSessions(), isEmpty);
+    });
+
+    test('a synchronous provisional peer close failure cannot interrupt same-tunnel Relay fallback', () async {
+      server.webrtcTransports.remove('transport.turn');
       network.outcome = FakeRtcOutcome.fail;
       late _ClosingPeer peer;
       account.peerConnector = (servers, callbacks) async =>
@@ -378,7 +528,7 @@ void main() {
       expect(client.remoteCarrier!.state!.transport, 'p2p');
     });
 
-    test('a selected remote relay cannot bypass the direct stage and TURN is retried on a fresh connection', () async {
+    test('a selected remote relay cannot bypass direct ICE and TURN uses a fresh tunnel', () async {
       server.iceServers = [
         {
           'urls': ['stun:stun.example:3478', 'turn:turn.example:3478'],
@@ -395,6 +545,18 @@ void main() {
       expect(network.policies, [RemoteIceTransportPolicy.all, RemoteIceTransportPolicy.relay]);
       expect(host.handshakes, hasLength(1));
       expect(host.rtcOffers, hasLength(2));
+      expect(host.rtcOffers.toSet(), hasLength(2));
+      expect(host.handshakes, [host.rtcOffers.last]);
+      expect(
+        [
+          for (final frame in clientFrames())
+            if (frame['type'] == 'connect.request') (frame['payload']! as Map)['preferredTransports'],
+        ],
+        [
+          ['lan', 'p2p', 'turn', 'relay'],
+          ['turn', 'relay'],
+        ],
+      );
     });
 
     test('direct ICE gets its own window before TURN, and a failed live TURN goes straight to Relay', () async {
@@ -420,6 +582,32 @@ void main() {
         client.remoteCarrier!.session!.networkDiagnostics!.fallbackReason,
         RemoteNetworkFallbackReason.directRecentlyFailed,
       );
+    });
+
+    test('retired direct callbacks cannot close or signal into the fresh TURN successor', () async {
+      server.iceServers = [
+        {
+          'urls': ['stun:stun.example:3478', 'turn:turn.example:3478'],
+        },
+      ];
+      network.policyOutcomes[RemoteIceTransportPolicy.all] = FakeRtcOutcome.fail;
+      final client = await connect();
+      final signals = types().where((t) => t.startsWith('signal.')).length;
+      final retired = network.clients.first.handlers;
+
+      retired.onOpen();
+      retired.onIceCandidate({'candidate': 'candidate:late 1 udp 1234 192.168.1.20 5000 typ host'});
+      retired.onMessage(Uint8List.fromList([0x52, 0x54, 0x43, 0x48]));
+      retired.onClosed('late direct close');
+
+      expect(await client.listSessions(), isEmpty);
+      expect(client.remoteCarrier!.state!.transport, 'turn');
+      expect(network.clients.first.closed, isTrue);
+      expect(network.clients.last.closed, isFalse);
+      expect(types().where((t) => t.startsWith('signal.')), hasLength(signals));
+      expect(types().where((t) => t == 'connect.request'), hasLength(2));
+      expect(host.rtcOffers.toSet(), hasLength(2));
+      expect(host.handshakes, [host.rtcOffers.last]);
     });
 
     for (final firstFetchTimesOut in [false, true]) {
@@ -455,7 +643,7 @@ void main() {
           final client = await connect();
           expect(await client.listSessions(), isEmpty);
           expect(server.turnRequests, hasLength(2));
-          expect(server.turnRequests.toSet(), hasLength(2), reason: 'TURN uses a fresh connection-scoped request');
+          expect(server.turnRequests.toSet(), hasLength(2), reason: 'TURN credentials belong to its fresh tunnel');
           expect(host.rtcOffers, server.turnRequests);
           expect(network.policies, [RemoteIceTransportPolicy.all, RemoteIceTransportPolicy.relay]);
           expect(network.iceServers.first, isEmpty);
@@ -495,6 +683,23 @@ void main() {
       expect(fallbacks, isEmpty);
     });
 
+    test('when the fresh TURN attempt negotiates Relay only, it attaches once', () async {
+      server.relayAttach = true;
+      server.iceServersForRequest = (_) async {
+        server.webrtcTransports = const {'p2p'};
+        return [];
+      };
+      network.outcome = FakeRtcOutcome.fail;
+      final client = await connect();
+      expect(await client.listSessions(), isEmpty);
+      expect(client.remoteCarrier!.state!.transport, 'relay');
+      expect(host.rtcOffers, hasLength(1));
+      expect(types().where((t) => t == 'connect.request'), hasLength(2));
+      expect(types().where((t) => t == 'transport.selected'), hasLength(1));
+      expect(server.relayAttaches, hasLength(2));
+      expect(host.handshakes, [server.links.keys.single]);
+    });
+
     test('failed direct and TURN attempts reach Relay with exactly one Noise handshake', () async {
       server.iceServers = [
         {
@@ -509,7 +714,10 @@ void main() {
       expect(fallbacks, ['directFailed', 'turnFailed']);
       expect(client.remoteCarrier!.session!.networkDiagnostics!.fallbackReason, RemoteNetworkFallbackReason.turnFailed);
       expect(host.handshakes, hasLength(1));
-      expect(host.rtcOffers, isNot(contains(host.handshakes.single)));
+      expect(host.rtcOffers, hasLength(2));
+      expect(host.rtcOffers.toSet(), hasLength(2));
+      expect(host.handshakes, [host.rtcOffers.last]);
+      expect(types().where((t) => t == 'connect.request'), hasLength(2));
       expect(network.clients.every((p) => p.closed), isTrue);
     });
 
@@ -596,6 +804,36 @@ void main() {
       expect((lastRequest['payload']! as Map)['preferredTransports'], ['p2p', 'turn', 'relay']);
     });
 
+    for (final code in ['CONNECTION_REPLACED', 'PROTOCOL_MISMATCH']) {
+      test('a pending capability probe preserves terminal $code without reconnecting', () async {
+        host.stallDescribe = true;
+        final rejected = expectLater(
+          connect(),
+          throwsA(
+            isA<RemoteConnectException>()
+                .having((error) => error.code, 'code', code)
+                .having((error) => error.failure.retryable, 'retryable', isFalse),
+          ),
+        );
+        await _eventually(() => host.rpcMethods.contains('harness.transport.describe'));
+        final id = await clientId();
+        // Keep the data plane alive so this exercises the Control failure,
+        // not a race with a separate Host DataChannel close.
+        server.peers[id]!.ws.add(
+          code == 'CONNECTION_REPLACED'
+              ? jsonEncode(ControlFrame('error', {'code': code, 'message': code, 'retryable': false}).toJson())
+              : '{',
+        );
+        await rejected.timeout(const Duration(seconds: 5));
+        expect(host.rpcMethods, ['harness.transport.describe']);
+        expect(host.handshakes, hasLength(1));
+        expect(network.clients, hasLength(1));
+        expect(network.clients.single.closed, isTrue);
+        expect(types().where((type) => type == 'connect.request'), hasLength(1));
+        expect(fallbacks, isEmpty);
+      });
+    }
+
     test('authorization revocation during negotiation ends the attempt without transport fallback', () async {
       network.offerGate = Completer<void>().future;
       final rejected = expectLater(
@@ -621,6 +859,7 @@ void main() {
       expect(fallbacks.single, 'directFailed');
       expect(host.handshakes, hasLength(1));
       expect(host.handshakes.single, isNot(host.rtcOffers.single));
+      expect(types().where((type) => type == 'connect.request'), hasLength(2));
     });
 
     test('a LAN pair is announced as p2p when the Server does not know lan', () async {
@@ -644,15 +883,19 @@ void main() {
       expect(fallbacks, isEmpty);
     });
 
-    test('without a peer connector the client is Relay-only exactly as before', () async {
+    test('without a peer connector the client selects Relay without RTC signaling', () async {
       account.peerConnector = null;
       final client = await connect();
       expect(await client.listSessions(), isEmpty);
-      expect(server.peers[await clientId()]!.capabilities, ['transport.relay', 'transport.relay.attach']);
+      expect(server.peers[await clientId()]!.capabilities, [
+        'transport.relay.resume.v1',
+        'transport.relay',
+        'transport.relay.attach',
+      ]);
       final request = clientFrames().firstWhere((f) => f['type'] == 'connect.request');
       expect((request['payload']! as Map)['preferredTransports'], ['relay']);
-      expect(types(), ['connect.request', 'secure.handshake', ...types().skip(2)]);
-      expect(types().skip(2).toSet(), {'relay'});
+      expect(types().take(3), ['connect.request', 'transport.selected', 'secure.handshake']);
+      expect(types().skip(3).toSet(), {'relay'});
       expect(network.clients, isEmpty);
       expect(server.turnRequests, isEmpty);
       expect(host.rtcOffers, isEmpty);
@@ -679,6 +922,54 @@ void main() {
   });
 }
 
+// Injects a typed Control write failure without changing the RTC test stack.
+class _SignalControl implements RelayTransport {
+  final List<String> signals = [];
+  RemoteTransportException? signalError;
+  bool closed = false;
+
+  @override
+  void Function(ControlFrame frame)? onSignal;
+
+  @override
+  RemoteConnectionInfo get info =>
+      const RemoteConnectionInfo(connectionId: 'trickle-connection', localDeviceId: 'phone', remoteDeviceId: 'host');
+
+  @override
+  List<String> get directTransports => const ['p2p'];
+
+  @override
+  Duration? get webrtcFallbackTimeout => null;
+
+  @override
+  void listen({
+    required TransportDataHandler onData,
+    required TransportHandshakeHandler onHandshake,
+    required TransportClosedHandler onClosed,
+  }) {}
+
+  @override
+  void sendSignal(String type, Map<String, Object?> payload) {
+    final error = signalError;
+    if (type == 'signal.ice' && error != null) throw error;
+    signals.add(type);
+  }
+
+  @override
+  void checkControlHealth() {}
+
+  @override
+  void confirmWebRtcDataPlane(bool Function() isAlive) {}
+
+  @override
+  Future<void> close() async {
+    closed = true;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _ClosingPeer implements RemotePeerConnection {
   _ClosingPeer(this.delegate, {this.throwOnClose = false});
 
@@ -686,6 +977,7 @@ class _ClosingPeer implements RemotePeerConnection {
   final bool throwOnClose;
   int closes = 0;
   bool offering = false;
+  bool inspecting = false;
 
   @override
   Future<String> createOffer(String channelLabel) {
@@ -703,7 +995,10 @@ class _ClosingPeer implements RemotePeerConnection {
   Future<void> send(Uint8List data) => delegate.send(data);
 
   @override
-  Future<List<Map<String, Object?>>> stats() => delegate.stats();
+  Future<List<Map<String, Object?>>> stats() {
+    inspecting = true;
+    return delegate.stats();
+  }
 
   @override
   Future<void> close() {
