@@ -6,7 +6,6 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Canvas
-import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Outline
 import android.graphics.Paint
@@ -17,6 +16,7 @@ import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.RippleDrawable
 import android.text.InputFilter
 import android.text.InputType
+import android.text.StaticLayout
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.KeyEvent
@@ -28,17 +28,20 @@ import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.animation.Interpolator
+import android.view.animation.LinearInterpolator
+import android.view.animation.OvershootInterpolator
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import io.github.ccch1mneyyy.dsh_app.R
 import io.github.ccch1mneyyy.dsh_app.pet.Side
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /** What the capsule and its card show; ControlOverlay builds it from the task and the line. */
 internal data class CapsuleState(
@@ -53,7 +56,7 @@ internal data class CapsuleState(
     val unlocked: Boolean,
     /** The card's 已解除限制 row (which limits). */
     val unlockedLine: CharSequence?,
-    /** The card's first line under the header: 「微信 · 免确认」. */
+    /** The card's first line under the header: 「免确认」 while approvals are off; null: none. */
     val meta: String?,
     /** The steps before this one, newest first. */
     val steps: List<String>,
@@ -63,17 +66,23 @@ internal data class CapsuleState(
     val startedAt: Long? = null,
     /** The app DSH works in, in the mark's place; null: the mark. */
     val icon: android.graphics.drawable.Drawable? = null,
+    /** What DSH thinks now: its latest words in the chat (the card shows the tail); null: nothing yet. */
+    val thought: String? = null,
 )
 
 /**
  * The control's open window (TYPE_ACCESSIBILITY_OVERLAY): one dark island surface that is a capsule
  * — the default: the app DSH works in, what it does now over 「微信 · 第 6 步 · 0:42」, 暂停 (held a
  * second: 停止) and 回到 DSH Go — or the card that grows out of it, and shrinks to a circle when it
- * folds into the ball. While DSH works a beam runs round its edge. The surface is one view drawing one rounded rect that the morphs
- * animate ([OverlaySurface]); the rows inside never re-flow during a fold, they are cut by the
- * outline and fade. The header row is the same in both forms, so its keys never move. The
- * capsule sits on its [anchor]'s side of the card and grows from it. The header can be dragged
- * (anywhere but 暂停 / 回到 DSH Go, which stay taps and holds); the owner moves the window.
+ * folds into the ball. While DSH works a beam runs round its edge. The card is for watching DSH
+ * work: what it thinks (its own words from the chat) and the steps it took, on a timeline that
+ * runs out from the app's icon, each new step sliding in with its node popping; then 插话 and
+ * 收成小球 / 停止. The surface is one view drawing one rounded rect that the morphs animate
+ * ([OverlaySurface]); the rows inside never re-flow during a fold, they are cut by the outline and
+ * fade. The header row is the same in both forms, so its keys never move. The card opens away from
+ * the nearer end of the screen ([down]: under an island at the top, it hangs down). The capsule
+ * sits on its [anchor]'s side of the card and grows from it. The header can be dragged (anywhere
+ * but 暂停 / 回到 DSH Go, which stay taps and holds); the owner moves the window.
  *
  * Main thread only. The owner ([ControlOverlay]) adds and removes the window, decides the form and
  * runs the ball; this class draws, lays out and morphs.
@@ -93,6 +102,8 @@ internal class OverlayCapsule(
         val unlocksDescription: String, val review: String,
         val foldRow: String, val holdHint: String, val separator: String,
         val moveLeft: String, val moveCentre: String, val moveRight: String,
+        /** The screen reader's name for the thought row: 「DSH 的想法」. */
+        val thought: String,
     )
 
     interface Actions {
@@ -267,9 +278,23 @@ internal class OverlayCapsule(
         setTextColor(c.faint)
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
-        setPadding(column, ctx.dp(4), ctx.dp(16), 0)
     }
 
+    /**
+     * What DSH thinks now — its own words in the chat, the tail that fits [THOUGHT_LINES] lines —
+     * next to the line, a sparkle for its node on the timeline.
+     */
+    private val thought = TextView(ctx).apply {
+        textSize = 13f
+        setTextColor(c.ink)
+        maxLines = THOUGHT_LINES
+        setLineSpacing(0f, THOUGHT_SPACING)
+        includeFontPadding = false
+        setPadding(column, ctx.dp(6), ctx.dp(16), ctx.dp(8))
+        visibility = View.GONE
+    }
+
+    /** The steps before the line's, newest nearest the header. */
     private val stepRows = List(StepHistory.CAPACITY) { StepRow() }
 
     private val unlockText = TextView(ctx).apply {
@@ -398,86 +423,293 @@ internal class OverlayCapsule(
         setOnClickListener { actions.mark() }
     }
 
-    private val previewImage = ImageView(ctx).apply {
-        scaleType = ImageView.ScaleType.FIT_CENTER
-        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-    }
-    private val previewLabel = TextView(ctx).apply {
-        gravity = Gravity.CENTER
-        textSize = 12f
-        setTextColor(c.muted)
-        setPadding(ctx.dp(12), ctx.dp(8), ctx.dp(12), ctx.dp(8))
-    }
-    private val previewFrame = FrameLayout(ctx).apply {
-        visibility = View.GONE
-        setBackgroundColor(c.field)
-        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
-        addView(previewImage, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        addView(previewLabel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-    }
-
-    /** Read-only fixed-size viewport. A new frame never changes the card's dimensions. */
-    fun showPreview(bitmap: Bitmap?, label: String?) {
-        previewImage.setImageBitmap(bitmap)
-        previewImage.visibility = if (bitmap == null) View.GONE else View.VISIBLE
-        previewLabel.text = label.orEmpty()
-        previewLabel.visibility = if (bitmap == null) View.VISIBLE else View.GONE
-        previewFrame.contentDescription = label
-        previewFrame.visibility = if (label == null) View.GONE else View.VISIBLE
-        // Previously displayed bitmaps belong to Android's renderer until its display lists retire;
-        // dropping the drawable reference lets GC reclaim them without recycling a still-drawn image.
-    }
-
     /**
-     * The card's second layer, above the header (the card grows up from the capsule): nearest the
-     * line its meta, then the steps (newest lowest), the preview, the lifted limits, 插话 and 收成小球
-     * at the top — the order of the old downward card, mirrored, so what belongs to the line stays
-     * next to it.
+     * The card's second layer, on the header's far side ([arrange]): out from the line, 免确认,
+     * what DSH thinks, its steps (newest first), the lifted limits, 插话 and 收成小球 / 停止 — in
+     * that order down from an island at the top, mirrored up from a capsule lower down, so what
+     * belongs to the line stays next to it. Under the rows, the timeline ([drawTimeline]).
      */
     private val body = object : LinearLayout(ctx) {
-        private val rule = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = c.faint; alpha = 0x40; strokeWidth = ctx.dpf(1f) }
-
-        /** The timeline: from above the mark up to the oldest step's dot. */
         override fun dispatchDraw(canvas: Canvas) {
-            var first: View? = null
-            for (row in stepRows) if (row.visibility == View.VISIBLE && row.parent === this && (first == null || row.top < first.top)) first = row
-            if (first != null) canvas.drawLine(gutter, height - ctx.dpf(2f), gutter, first.top + first.height / 2f, rule)
+            drawTimeline(canvas, this)
             super.dispatchDraw(canvas)
+        }
+
+        override fun onVisibilityAggregated(isVisible: Boolean) {
+            super.onVisibilityAggregated(isVisible)
+            post { syncFlow() }
         }
     }.apply {
         orientation = LinearLayout.VERTICAL
         setWillNotDraw(false)
-        setPadding(0, ctx.dp(8), 0, 0)
-        val m = ctx.dp(BODY_INSET_DP)
-        addView(footer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = ctx.dp(4) })
-        addView(steer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(m, 0, m, ctx.dp(10)) })
-        addView(unlocks, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(m, 0, m, ctx.dp(8)) })
-        stepRows.asReversed().forEach { addView(it) }
-        addView(previewFrame, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ctx.dp(144)).apply {
-            setMargins(ctx.dp(BODY_INSET_DP), ctx.dp(8), ctx.dp(BODY_INSET_DP), ctx.dp(8))
-        })
-        addView(meta)
     }
 
-    /** One past step: a dot on the timeline in the mark's column, the step level with the line. */
+    /** One past step, level with the line; its node on the timeline is the body's to draw. */
     private inner class StepRow : TextView(ctx) {
-        private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = c.faint }
-
         init {
             textSize = 13f
             setTextColor(c.muted)
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             gravity = Gravity.CENTER_VERTICAL
-            minHeight = ctx.dp(26)
+            minHeight = ctx.dp(STEP_ROW_DP)
             setPadding(column, 0, ctx.dp(16), 0)
             visibility = View.GONE
         }
+    }
 
-        override fun onDraw(canvas: Canvas) {
-            canvas.drawCircle(gutter, height / 2f, ctx.dpf(2.5f), dot)
-            super.onDraw(canvas)
+    /** The body's rows in order for the way the card opens ([down]): from the header outward, or mirrored. */
+    private fun arrange() {
+        body.removeAllViews()
+        val m = ctx.dp(BODY_INSET_DP)
+        fun row() = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        // [near]: the margin on the header's side, [far]: on the other.
+        fun spaced(near: Int, far: Int, inset: Int = 0) = row().apply {
+            if (down) { topMargin = near; bottomMargin = far } else { bottomMargin = near; topMargin = far }
+            leftMargin = inset
+            rightMargin = inset
         }
+        meta.setPadding(column, if (down) ctx.dp(2) else ctx.dp(4), ctx.dp(16), if (down) ctx.dp(4) else 0)
+        val outward = listOf<Pair<View, LinearLayout.LayoutParams>>(meta to row(), thought to row()) +
+            stepRows.map { it to row() } +
+            listOf(
+                unlocks to spaced(ctx.dp(8), 0, m),
+                steer to spaced(ctx.dp(10), 0, m),
+                footer to spaced(ctx.dp(4), 0),
+            )
+        for ((v, lp) in if (down) outward else outward.asReversed()) body.addView(v, lp)
+        body.setPadding(0, if (down) ctx.dp(4) else ctx.dp(8), 0, if (down) ctx.dp(8) else 0)
+    }
+
+    // ---- the timeline ---------------------------------------------------------------------------------
+
+    private val rule = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = ctx.dpf(1f) }
+    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = ctx.dpf(1.25f) }
+    private val dot = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val spark = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val overshoot = OvershootInterpolator(2.2f)
+
+    /** 0–1 while the newest step's node pops in; 1 at rest. */
+    private var pop = 1f
+    private var popAnim: ValueAnimator? = null
+
+    /** 0–1 along [FLOW_MS]: the light running back along the timeline to the line; NaN when it doesn't run. */
+    private var flow = Float.NaN
+    private var flowAnim: ValueAnimator? = null
+
+    // The nodes this frame, out from the header: y, kind, opacity.
+    private val nodeY = FloatArray(StepHistory.CAPACITY + 1)
+    private val nodeKind = IntArray(StepHistory.CAPACITY + 1)
+    private val nodeAlpha = FloatArray(StepHistory.CAPACITY + 1)
+
+    /**
+     * The timeline in the mark's column, out from under the app's icon: the thought's sparkle, then
+     * a dot per step — the newest in the accent, popping in when it arrives, the rest faint — joined
+     * by a hairline broken round each node. While DSH works, a small light runs now and then from
+     * the oldest step back to the line: the work flows toward now.
+     */
+    private fun drawTimeline(canvas: Canvas, v: View) {
+        val out = if (down) 1f else -1f
+        val start = if (down) ctx.dpf(1f) else v.height - ctx.dpf(1f)
+        var n = 0
+        if (thought.visibility == View.VISIBLE && thought.parent === v) {
+            nodeY[n] = thought.top + thought.translationY + thought.paddingTop + thought.lineHeight / 2f
+            nodeKind[n] = NODE_THOUGHT
+            nodeAlpha[n] = thought.alpha
+            n++
+        }
+        stepRows.forEachIndexed { i, row ->
+            if (row.visibility != View.VISIBLE || row.parent !== v) return@forEachIndexed
+            nodeY[n] = row.top + row.translationY + row.height / 2f
+            nodeKind[n] = if (i == 0) NODE_NEWEST else NODE_STEP
+            nodeAlpha[n] = row.alpha
+            n++
+        }
+        if (n == 0) return
+        rule.color = c.faint
+        rule.alpha = 0x40
+        // The hairline, in pieces between the nodes (they come in order out from the header).
+        var from = start
+        var far = start
+        for (i in 0 until n) {
+            val gap = nodeRadius(nodeKind[i]) + ctx.dpf(3f)
+            val to = nodeY[i] - out * gap
+            if ((to - from) * out > 0f) canvas.drawLine(gutter, from, gutter, to, rule)
+            from = nodeY[i] + out * gap
+            if ((nodeY[i] - far) * out > 0f) far = nodeY[i]
+        }
+        // The light, under the nodes: from the far end back to the line, a short trail behind it.
+        val f = flow
+        if (!f.isNaN() && f < FLOW_RUN && (far - start) * out > ctx.dpf(24f)) {
+            val t = f / FLOW_RUN
+            val y = far + (start - far) * OverlayMotion.glide.getInterpolation(t)
+            val fade = sin(PI * t).toFloat()
+            dot.color = c.accent
+            for (k in 0 until FLOW_TRAIL) {
+                dot.alpha = (255 * 0.75f * fade * (1f - k.toFloat() / FLOW_TRAIL)).roundToInt()
+                canvas.drawCircle(gutter, y + out * k * ctx.dpf(2.5f), ctx.dpf(1.4f), dot)
+            }
+        }
+        for (i in 0 until n) {
+            val y = nodeY[i]
+            val a = nodeAlpha[i].coerceIn(0f, 1f)
+            when (nodeKind[i]) {
+                NODE_THOUGHT -> {
+                    spark.color = c.accent
+                    spark.alpha = (255 * a).roundToInt()
+                    Glyph.draw(canvas, Glyph.SPARK, gutter, y, ctx.dpf(SPARK_DP), spark)
+                }
+                NODE_NEWEST -> {
+                    val r = ctx.dpf(NEWEST_DOT_DP)
+                    val p = pop
+                    if (p < 1f) {
+                        // A ring going out once as the node lands.
+                        ring.color = c.accent
+                        ring.alpha = (255 * 0.5f * (1f - p) * a).roundToInt()
+                        canvas.drawCircle(gutter, y, r * (1f + 1.8f * p), ring)
+                    }
+                    dot.color = c.accent
+                    dot.alpha = (255 * a).roundToInt()
+                    canvas.drawCircle(gutter, y, r * (0.35f + 0.65f * overshoot.getInterpolation(p)), dot)
+                }
+                else -> {
+                    dot.color = c.faint
+                    dot.alpha = (255 * 0.85f * a).roundToInt()
+                    canvas.drawCircle(gutter, y, ctx.dpf(DOT_DP), dot)
+                }
+            }
+        }
+    }
+
+    private fun nodeRadius(kind: Int): Float = ctx.dpf(
+        when (kind) {
+            NODE_THOUGHT -> SPARK_DP / 2f
+            NODE_NEWEST -> NEWEST_DOT_DP
+            else -> DOT_DP
+        },
+    )
+
+    /** The light runs while DSH works and the card shows (never with 移除动画). */
+    private fun syncFlow() {
+        val want = state?.look == MarkLook.RUNNING && layer.visibility == View.VISIBLE && body.isShown &&
+            body.isAttachedToWindow && OverlayMotion.on()
+        if (want && flowAnim == null) {
+            flowAnim = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = FLOW_MS
+                repeatCount = ValueAnimator.INFINITE
+                interpolator = LinearInterpolator()
+                addUpdateListener { flow = it.animatedValue as Float; body.invalidate() }
+                start()
+            }
+        } else if (!want && flowAnim != null) {
+            flowAnim?.cancel()
+            flowAnim = null
+            flow = Float.NaN
+            body.invalidate()
+        }
+    }
+
+    /**
+     * A step arrived on an open card: the steps already there move one place out from the header
+     * (each row takes over the text of the one nearer the header, and starts where that one was),
+     * the new one fades in at the head and its node pops.
+     */
+    private fun slideSteps() {
+        val toward = if (down) -1f else 1f
+        val fallback = ctx.dp(STEP_ROW_DP).toFloat()
+        stepRows.forEachIndexed { i, row ->
+            if (row.visibility != View.VISIBLE) return@forEachIndexed
+            row.animate().cancel()
+            val h = row.height.takeIf { it > 0 }?.toFloat() ?: fallback
+            if (i == 0) {
+                row.alpha = 0f
+                row.translationY = toward * h * 0.6f
+            } else {
+                row.alpha = 1f
+                row.translationY = toward * h
+            }
+            row.animate().alpha(1f).translationY(0f).setDuration(STEP_SLIDE_MS).setInterpolator(OverlayMotion.glide)
+                .setUpdateListener { body.invalidate() }.start()
+        }
+        popAnim?.cancel()
+        pop = 0f
+        popAnim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = POP_MS
+            startDelay = STEP_SLIDE_MS / 3
+            interpolator = LinearInterpolator()
+            addUpdateListener { pop = it.animatedValue as Float; body.invalidate() }
+            start()
+        }
+    }
+
+    /** Every step row where it belongs, the newest node at rest (no slide under way). */
+    private fun settleSteps() {
+        popAnim?.cancel()
+        popAnim = null
+        pop = 1f
+        for (row in stepRows) {
+            row.animate().cancel()
+            row.alpha = 1f
+            row.translationY = 0f
+        }
+    }
+
+    /** The steps on show now (what the next ones are compared with, for [slideSteps]). */
+    private var shownSteps: List<String> = emptyList()
+
+    /**
+     * What DSH thinks: a longer version of the same words (they stream in) changes in place; other
+     * words cross-fade. Only the tail that fits shows, after an ellipsis: the newest words matter.
+     */
+    private fun setThought(raw: String?, animated: Boolean) {
+        val words = raw?.trim()?.takeIf { it.isNotEmpty() }
+        thought.animate().cancel()
+        if (words == null) {
+            thought.alpha = 1f
+            thought.text = ""
+            thought.visibility = View.GONE
+            return
+        }
+        val fitted = fitTail(words, cardW - column - ctx.dp(16))
+        thought.contentDescription = strings.thought + strings.separator + words
+        val old = thought.text?.toString().orEmpty()
+        if (fitted == old && thought.visibility == View.VISIBLE) {
+            thought.alpha = 1f
+            return
+        }
+        if (!animated || thought.visibility != View.VISIBLE || old.isEmpty() || sameWords(old, fitted)) {
+            thought.alpha = 1f
+            thought.text = fitted
+            thought.visibility = View.VISIBLE
+            return
+        }
+        thought.animate().alpha(0f).setDuration(90).setInterpolator(OverlayMotion.emphasized).setUpdateListener { body.invalidate() }.withEndAction {
+            thought.text = fitted
+            thought.animate().alpha(1f).setDuration(200).setInterpolator(OverlayMotion.glide).setUpdateListener { body.invalidate() }.start()
+        }.start()
+    }
+
+    /** Two cuts of the same streaming words: one begins as the other does, or both are tails of something long. */
+    private fun sameWords(a: String, b: String): Boolean {
+        if (a.startsWith(ELLIPSIS) && b.startsWith(ELLIPSIS)) return true
+        val k = minOf(a.length, b.length, 12)
+        return k > 0 && a.take(k) == b.take(k)
+    }
+
+    /** [text] if it fits [THOUGHT_LINES] lines [width] px wide, else 「…」 and as much of its end as fits. */
+    private fun fitTail(text: String, width: Int): String {
+        if (width <= 0) return text
+        fun lines(t: CharSequence) = StaticLayout.Builder.obtain(t, 0, t.length, thought.paint, width)
+            .setLineSpacing(0f, THOUGHT_SPACING).setIncludePad(false).build().lineCount
+        if (lines(text) <= THOUGHT_LINES) return text
+        var lo = 0
+        var hi = text.length
+        while (lo < hi) {
+            val mid = (lo + hi) / 2
+            if (lines(ELLIPSIS + text.substring(mid)) <= THOUGHT_LINES) hi = mid else lo = mid + 1
+        }
+        if (lo < text.length && Character.isLowSurrogate(text[lo])) lo++
+        return ELLIPSIS + text.substring(lo).trimStart()
     }
 
     /**
@@ -492,11 +724,15 @@ internal class OverlayCapsule(
         addView(body)
     }
 
+    init {
+        arrange()
+    }
+
     // ---- window ---------------------------------------------------------------------------------------
 
     val surface = OverlaySurface(ctx, c, header, layer)
 
-    /** The tallest the card may be (header included): from the header's bottom up to under the status bar. */
+    /** The tallest the card may be (header included): from the header's far edge to under the status bar, or (down) to over the keyboard or the navigation bar. */
     var maxCardHeight: Int = Int.MAX_VALUE
         set(value) {
             if (field == value) return
@@ -683,7 +919,8 @@ internal class OverlayCapsule(
         pause.contentDescription = if (s.paused) strings.resume else strings.pause
         mark.contentDescription = strings.fold
         mark.isClickable = !s.stopped
-        bindBody(s)
+        bindBody(s, anim)
+        syncFlow()
         // The width: a state change (stopped) at once; a new line grows now, shrinks later.
         val wanted = wantedWidth(s)
         val changed = if (old == null || old.stopped != s.stopped || old.unlocked != s.unlocked || old.expandable != s.expandable ||
@@ -751,17 +988,24 @@ internal class OverlayCapsule(
         })
     }
 
-    private fun bindBody(s: CapsuleState) {
+    private fun bindBody(s: CapsuleState, animated: Boolean) {
         meta.text = s.meta.orEmpty()
         meta.visibility = if (s.meta.isNullOrBlank()) View.GONE else View.VISIBLE
-        val n = CapsuleMetrics.steps(screenHdp)
+        val next = s.steps.take(CapsuleMetrics.steps(screenHdp))
+        // One new step at the head of the ones on show: it slides in, on a card that is open.
+        val arrived = animated && shape == Shape.CARD && morph == null && body.isShown && next.isNotEmpty() &&
+            next != shownSteps && next.drop(1) == shownSteps.take(next.size - 1)
         stepRows.forEachIndexed { i, row ->
-            val step = s.steps.getOrNull(i)?.takeIf { i < n }
+            val step = next.getOrNull(i)
             row.visibility = if (step == null) View.GONE else View.VISIBLE
             row.text = step.orEmpty()
         }
+        shownSteps = next
+        if (arrived) slideSteps() else if (next.isEmpty() || !animated) settleSteps()
+        setThought(s.thought, animated && shape == Shape.CARD && body.isShown)
         unlocks.visibility = if (s.unlocked && s.unlockedLine != null) View.VISIBLE else View.GONE
         unlockText.text = s.unlockedLine
+        body.invalidate()
     }
 
     private fun syncSend() {
@@ -773,10 +1017,21 @@ internal class OverlayCapsule(
 
     init {
         syncSend()
-        // The field grows a line while typing: the card follows.
+        // The field grows a line while typing, the thought a line as it streams: the card follows.
         body.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
-            if (shape == Shape.CARD && morph == null && bottom - top != oldBottom - oldTop) root.post { if (shape == Shape.CARD && morph == null) refitCard(false) }
+            if (shape == Shape.CARD && morph == null && bottom - top != oldBottom - oldTop) {
+                root.post { if (shape == Shape.CARD && morph == null) refitCard(OverlayMotion.on() && root.isShown) }
+            }
         }
+        root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) = syncFlow()
+            override fun onViewDetachedFromWindow(v: View) {
+                flowAnim?.cancel()
+                flowAnim = null
+                flow = Float.NaN
+                settleSteps()
+            }
+        })
     }
 
     // ---- typing ---------------------------------------------------------------------------------------
@@ -792,6 +1047,28 @@ internal class OverlayCapsule(
         input.clearFocus()
     }
 
+    // ---- which way the card opens -----------------------------------------------------------------------
+
+    /**
+     * The card opens downward: the capsule is an island in the upper half of the screen. The owner
+     * hangs the window from the top then (from the bottom otherwise), so the header stays put.
+     */
+    var down = false
+        private set
+
+    /** Which way the card opens; the owner changes it only on a capsule at rest (no card, no morph). */
+    fun setDown(value: Boolean) {
+        if (down == value) return
+        down = value
+        surface.down = value
+        arrange()
+        if (extentSet) settle(shape)
+    }
+
+    /** The chevron's turn on the capsule and on the card: it points the way the card opens, then back. */
+    private val capsuleTurn: Float get() = if (down) CAPSULE_TURN_DOWN else CAPSULE_TURN
+    private val cardTurn: Float get() = if (down) CARD_TURN_DOWN else CARD_TURN
+
     // ---- morphs ---------------------------------------------------------------------------------------
 
     /** The steady layout of [to]: extent, rect, what shows, the window's size. */
@@ -806,7 +1083,7 @@ internal class OverlayCapsule(
                 layer.visibility = View.GONE
                 layer.alpha = 0f
                 layer.translationY = 0f
-                chevron.turn = CAPSULE_TURN
+                chevron.turn = capsuleTurn
                 surface.setExtent(capW, headerH)
                 surface.setRect(0f, 0f, capW.toFloat(), headerH.toFloat())
             }
@@ -814,13 +1091,14 @@ internal class OverlayCapsule(
                 layer.visibility = View.VISIBLE
                 layer.alpha = 1f
                 layer.translationY = 0f
-                chevron.turn = CARD_TURN
+                chevron.turn = cardTurn
                 val h = surface.cardHeight()
                 surface.setExtent(cardW, h)
                 surface.setRect(0f, 0f, cardW.toFloat(), h.toFloat())
             }
         }
         fitWindow()
+        syncFlow()
     }
 
     /** Ends a morph where it stands and lays out the form it was in. */
@@ -832,15 +1110,16 @@ internal class OverlayCapsule(
     }
 
     /**
-     * The capsule grows into the card: up and out, its bottom edge (and the header on it) staying
-     * put, the body fading in behind and rising 6 dp.
+     * The capsule grows into the card: out away from the header — down from an island at the top,
+     * up from a capsule lower down — the header's edge staying put, the body fading in behind and
+     * coming 6 dp out from the header.
      */
     fun expand(animated: Boolean, then: () -> Unit = {}) {
         morph?.let { it.cancel(); morph = null }
         // From a collapse cut short, carry on from where the body and the chevron are.
         val wasOpen = layer.visibility == View.VISIBLE
         val startAlpha = if (wasOpen) layer.alpha else 0f
-        val startTurn = if (wasOpen) chevron.turn else CAPSULE_TURN
+        val startTurn = if (wasOpen) chevron.turn else capsuleTurn
         val carryOn = wasOpen && surface.extentW == cardW
         shape = Shape.CARD
         layer.alpha = startAlpha
@@ -850,27 +1129,27 @@ internal class OverlayCapsule(
         surface.setExtent(cardW, h)
         surface.setRect(if (carryOn) RectF(surface.rect) else steadyRectInCard())
         fitWindow()
-        val shift = ctx.dpf(6f)
+        val shift = ctx.dpf(6f) * if (down) -1f else 1f
         animate(RectF(0f, 0f, cardW.toFloat(), h.toFloat()), OverlayMotion.MORPH_MS, OverlayMotion.emphasized, animated, frame = { t ->
             val k = ((t - 0.3f) / 0.7f).coerceIn(0f, 1f)
             layer.alpha = startAlpha + (1f - startAlpha) * k
             layer.translationY = shift * (1f - k) * (1f - startAlpha)
-            chevron.turn = startTurn + (CARD_TURN - startTurn) * t
+            chevron.turn = startTurn + (cardTurn - startTurn) * t
         }) { settle(Shape.CARD); then() }
     }
 
-    /** The card shrinks back down into the capsule, the body fading first. */
+    /** The card shrinks back into the capsule, toward the header, the body fading first. */
     fun collapse(animated: Boolean, then: () -> Unit = {}) {
         if (shape != Shape.CARD) { then(); return }
         morph?.let { it.cancel(); morph = null }
         val capW = capsuleWidth
         val left = steadyLeft().toFloat()
-        val bottom = surface.extentH.toFloat()
+        val top = if (down) 0f else surface.extentH.toFloat() - headerH
         val startAlpha = layer.alpha
         val startTurn = chevron.turn
-        animate(RectF(left, bottom - headerH, left + capW, bottom), OverlayMotion.MORPH_MS, OverlayMotion.emphasized, animated, frame = { t ->
+        animate(RectF(left, top, left + capW, top + headerH), OverlayMotion.MORPH_MS, OverlayMotion.emphasized, animated, frame = { t ->
             layer.alpha = startAlpha * (1f - t / 0.4f).coerceIn(0f, 1f)
-            chevron.turn = startTurn + (CAPSULE_TURN - startTurn) * t
+            chevron.turn = startTurn + (capsuleTurn - startTurn) * t
         }) { settle(Shape.CAPSULE); then() }
     }
 
@@ -888,54 +1167,55 @@ internal class OverlayCapsule(
         animate(RectF(left, 0f, left + to, headerH.toFloat()), OverlayMotion.RESIZE_MS, OverlayMotion.glide, animated) { settle(Shape.CAPSULE) }
     }
 
-    /** The open card's height follows its content (a step more, a lifted limit, a second line typed). */
+    /** The open card's height follows its content (a step more, a lifted limit, a second line typed or thought). */
     private fun refitCard(animated: Boolean) {
         val h = surface.cardHeight()
         if (h == surface.rect.height().roundToInt() && surface.extentW == cardW) return
-        // Room for the old height and the new while it eases; the bottom stays put.
+        // Room for the old height and the new while it eases; the header's edge stays put.
         surface.setExtent(cardW, maxOf(h, surface.rect.height().roundToInt()))
         fitWindow()
-        val bottom = surface.extentH.toFloat()
-        animate(RectF(0f, bottom - h, cardW.toFloat(), bottom), OverlayMotion.RESIZE_MS, OverlayMotion.glide, animated) { settle(Shape.CARD) }
+        val top = if (down) 0f else surface.extentH.toFloat() - h
+        animate(RectF(0f, top, cardW.toFloat(), top + h), OverlayMotion.RESIZE_MS, OverlayMotion.glide, animated) { settle(Shape.CARD) }
     }
 
-    /** The header's end circle on [side] of the surface now, in the surface's own coordinates (left, top). */
-    fun endCircle(side: Side): Pair<Int, Int> {
+    /** The header's circle at its end on [side] (null: its middle) of the surface now, in the surface's own coordinates (left, top). */
+    fun endCircle(side: Side?): Pair<Int, Int> {
         val r = surface.rect
-        return BallGeometry.circleLeft(r.left.roundToInt(), r.right.roundToInt(), ball, side) to (r.bottom.roundToInt() - headerH)
+        val top = if (down) r.top.roundToInt() else r.bottom.roundToInt() - headerH
+        return BallGeometry.circleLeft(r.left.roundToInt(), r.right.roundToInt(), ball, side) to top
     }
 
-    /** The end circle a steady capsule would have on [side] (left, top in the surface). */
-    fun capsuleEndCircle(side: Side): Pair<Int, Int> {
+    /** The circle a steady capsule would have at its end on [side] (null: its middle) (left, top in the surface). */
+    fun capsuleEndCircle(side: Side?): Pair<Int, Int> {
         val capW = capsuleWidth
         val left = steadyLeft()
-        return BallGeometry.circleLeft(left, left + capW, ball, side) to (surface.extentH - headerH)
+        return BallGeometry.circleLeft(left, left + capW, ball, side) to (if (down) 0 else surface.extentH - headerH)
     }
 
     /**
-     * Folding: the surface narrows (and, from the card, shortens down) to the circle at the
-     * header's end on [side], the rows pinned where they were, fading in the first 40 %. [then]
-     * when it is the ball's size and place.
+     * Folding: the surface narrows (and, from the card, shortens to the header) to the circle at
+     * the header's end on [side] — or, for a ball at the top centre (null), in its middle — the rows
+     * pinned where they were, fading in the first 40 %. [then] when it is the ball's size and place.
      */
-    fun foldTo(side: Side, animated: Boolean, then: () -> Unit) {
+    fun foldTo(side: Side?, animated: Boolean, then: () -> Unit) {
         morph?.let { it.cancel(); morph = null }
         val r = RectF(surface.rect)
-        val top = r.bottom - headerH
-        surface.pin(RectF(r.left, top, r.right, r.bottom))
+        val top = if (down) r.top else r.bottom - headerH
+        surface.pin(RectF(r.left, top, r.right, top + headerH))
         val left = BallGeometry.circleLeft(r.left.roundToInt(), r.right.roundToInt(), ball, side).toFloat()
         val bodyAlpha = layer.alpha
-        animate(RectF(left, top, left + ball, r.bottom), OverlayMotion.MORPH_MS, OverlayMotion.emphasized, animated, frame = { t ->
+        animate(RectF(left, top, left + ball, top + headerH), OverlayMotion.MORPH_MS, OverlayMotion.emphasized, animated, frame = { t ->
             header.alpha = (1f - t / 0.4f).coerceIn(0f, 1f)
             layer.alpha = bodyAlpha * (1f - t / 0.3f).coerceIn(0f, 1f)
         }) { then() }
     }
 
     /**
-     * The capsule as the circle on [side], its row hidden: what [unfoldFrom] starts from. The owner
-     * shows the window like this (transparent) while the ball is still on its way, so the window
-     * has drawn before the swap and the morph starts on its first frame.
+     * The capsule as the circle on [side] (null: its middle), its row hidden: what [unfoldFrom]
+     * starts from. The owner shows the window like this (transparent) while the ball is still on
+     * its way, so the window has drawn before the swap and the morph starts on its first frame.
      */
-    fun prepareUnfold(side: Side) {
+    fun prepareUnfold(side: Side?) {
         morph?.let { it.cancel(); morph = null }
         settle(Shape.CAPSULE)
         val full = RectF(surface.rect)
@@ -946,7 +1226,7 @@ internal class OverlayCapsule(
     }
 
     /** Unfolding: from the circle on [side] ([prepareUnfold]) the capsule grows out, its row fading in over the last half. */
-    fun unfoldFrom(side: Side, animated: Boolean, then: () -> Unit) {
+    fun unfoldFrom(side: Side?, animated: Boolean, then: () -> Unit) {
         if (morph != null || shape != Shape.CAPSULE || surface.rect.width().roundToInt() != ball) prepareUnfold(side)
         val capW = width.width.takeIf { it > 0 } ?: cardW
         val full = RectF(0f, 0f, capW.toFloat(), headerH.toFloat())
@@ -955,12 +1235,12 @@ internal class OverlayCapsule(
         }) { settle(Shape.CAPSULE); then() }
     }
 
-    /** The steady capsule at the bottom of the card's extent, on its anchor's side. */
+    /** The steady capsule at the header's edge of the card's extent, on its anchor's side. */
     private fun steadyRectInCard(): RectF {
         val capW = capsuleWidth
         val left = CapsulePlacement.leftIn(anchor, cardW, capW).toFloat()
-        val bottom = surface.extentH.toFloat()
-        return RectF(left, bottom - headerH, left + capW, bottom)
+        val top = if (down) 0f else surface.extentH.toFloat() - headerH
+        return RectF(left, top, left + capW, top + headerH)
     }
 
     private fun animate(to: RectF, ms: Long, curve: Interpolator, animated: Boolean, frame: ((Float) -> Unit)? = null, then: () -> Unit) {
@@ -1022,15 +1302,43 @@ internal class OverlayCapsule(
         /** The line's chevron: ⌃ on the capsule (the card opens upward), ⌄ on the card (it closes down). */
         const val CAPSULE_TURN = 180f
         const val CARD_TURN = 360f
+
+        /** The chevron under an island at the top: ⌄ on the capsule (the card opens down), ⌃ on the card. */
+        const val CAPSULE_TURN_DOWN = 0f
+        const val CARD_TURN_DOWN = 180f
+
+        /** A step's row; the thought's lines and their spacing. */
+        const val STEP_ROW_DP = 26
+        const val THOUGHT_LINES = 3
+        const val THOUGHT_SPACING = 1.15f
+        const val ELLIPSIS = "…"
+
+        /** The timeline's nodes: a step's dot, the newest step's (accent), the thought's sparkle. */
+        const val DOT_DP = 2.5f
+        const val NEWEST_DOT_DP = 3.5f
+        const val SPARK_DP = 13f
+        const val NODE_THOUGHT = 0
+        const val NODE_NEWEST = 1
+        const val NODE_STEP = 2
+
+        /** A new step: the rows slide one place, then its node pops (with a ring going out). */
+        const val STEP_SLIDE_MS = 260L
+        const val POP_MS = 420L
+
+        /** The light on the timeline: one run back to the line in the first [FLOW_RUN] of [FLOW_MS], then rest. */
+        const val FLOW_MS = 2_800L
+        const val FLOW_RUN = 0.5f
+        const val FLOW_TRAIL = 5
     }
 }
 
 /**
  * One rounded rect of solid surface ([rect], radius 24 dp) that the morphs animate, with the
  * header and the card body inside, cut to its outline. The view itself is [extentW] × [extentH]
- * (the window's content, hanging from the window's bottom); the rect moves inside it. The header
- * sits on the rect's bottom edge and follows its width, or stays where [pin] put it while a fold
- * cuts it; the body is laid out once at the card's width, above the header.
+ * (the window's content, hanging from the window's bottom — or its top, [down]); the rect moves
+ * inside it. The header sits on the rect's bottom edge (top edge, [down]) and follows its width,
+ * or stays where [pin] put it while a fold cuts it; the body is laid out once at the card's width,
+ * on the header's far side.
  */
 internal class OverlaySurface(context: Context, private val c: OverlayPalette, private val header: View, private val body: View) : ViewGroup(context) {
     private val painter = SurfacePainter(context)
@@ -1040,8 +1348,21 @@ internal class OverlaySurface(context: Context, private val c: OverlayPalette, p
     val beam = IslandBeam(this)
     private val headerH = context.dp(CapsuleMetrics.HEIGHT_DP)
 
-    /** The body ends this far down into the header's upper margin: its last line reads as the line's own. */
+    /** The body ends this far into the header's margin: its nearest line reads as the line's own. */
     private val overlap = context.dp(6)
+
+    /**
+     * The card opens downward: the header on the rect's top edge, the body under it. The window
+     * hangs from its top then, so a taller extent leaves everything where it is.
+     */
+    var down = false
+        set(value) {
+            if (field == value) return
+            field = value
+            layoutHeader()
+            requestLayout()
+            invalidateOutline()
+        }
 
     val rect = RectF()
     private var pinned: RectF? = null
@@ -1069,13 +1390,13 @@ internal class OverlaySurface(context: Context, private val c: OverlayPalette, p
     }
 
     /**
-     * The view's size. The window hangs from its bottom edge, so a taller extent moves everything
-     * in it down by as much: the rect (and a pinned header) keep their place on screen.
+     * The view's size. A window hanging from its bottom edge (not [down]) moves everything in it down
+     * by as much as the extent grows: the rect (and a pinned header) keep their place on screen.
      */
     fun setExtent(w: Int, h: Int) {
         if (w == extentW && h == extentH) return
         val dy = (h - extentH).toFloat()
-        if (extentH != 0 && dy != 0f) {
+        if (!down && extentH != 0 && dy != 0f) {
             rect.offset(0f, dy)
             pinned?.offset(0f, dy)
             layoutHeader()
@@ -1136,7 +1457,7 @@ internal class OverlaySurface(context: Context, private val c: OverlayPalette, p
     private fun layoutHeader() {
         val r = headerRect()
         val l = r.left.roundToInt()
-        val t = r.bottom.roundToInt() - headerH
+        val t = if (down) r.top.roundToInt() else r.bottom.roundToInt() - headerH
         header.layout(l, t, l + header.measuredWidth, t + headerH)
     }
 
@@ -1153,8 +1474,13 @@ internal class OverlaySurface(context: Context, private val c: OverlayPalette, p
         layoutHeader()
         if (body.visibility != View.GONE) {
             val left = (extentW - cardW) / 2
-            val bottom = extentH - headerH + overlap
-            body.layout(left, bottom - body.measuredHeight, left + body.measuredWidth, bottom)
+            if (down) {
+                val top = headerH - overlap
+                body.layout(left, top, left + body.measuredWidth, top + body.measuredHeight)
+            } else {
+                val bottom = extentH - headerH + overlap
+                body.layout(left, bottom - body.measuredHeight, left + body.measuredWidth, bottom)
+            }
         }
     }
 

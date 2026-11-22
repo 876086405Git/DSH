@@ -6,15 +6,16 @@ import java.util.EnumSet
  * Which of the control's three forms is due, and when the next one is. Plain Kotlin: the overlay
  * supplies the clock, runs one timer at [nextAt] and animates from what is on screen to [form].
  *
- * - [Form.CAPSULE], the default: one line (what DSH does now) and 暂停 / 停止. Left alone it
- *   fades to the 闲置时不透明度 after [dimMs], unless 「闲置时自动收起」 folds it first.
- * - [Form.CARD]: the capsule grown downwards with the second layer (app, recent steps, lifted
- *   limits, 插话). Opened from the capsule's line; back to the capsule [cardMs] after the last
- *   touch, unless the person is typing.
- * - [Form.BALL]: only the state, docked on a side. The capsule's mark folds it ([foldByHand]),
- *   until the person taps the ball, for the rest of the task. With 「闲置时自动收起」
- *   ([autoFold]) an idle capsule folds after [foldMs]. A ball that is left alone fades like the
- *   capsule; a touch brings either back. The card never fades.
+ * - [Form.CAPSULE], the default: what DSH does now, 暂停 and 回到 DSH Go. Left alone it fades to
+ *   the 闲置时不透明度 after [dimMs], unless 「闲置时自动收起」 folds it first.
+ * - [Form.CARD]: the capsule grown out with the second layer (what DSH thinks, its steps, lifted
+ *   limits, 插话). Opened from the capsule's line and open until the line is tapped again: it is
+ *   there to watch DSH work. Only with 「闲置时自动收起」 does it go back to the capsule [cardMs]
+ *   after the last touch (never while the person is typing).
+ * - [Form.BALL]: only the state. The capsule's mark folds it ([foldByHand]), until the person
+ *   taps the ball, for the rest of the task. With 「闲置时自动收起」 ([autoFold], off unless the
+ *   person turns it on) an idle capsule folds after [foldMs]. A ball that is left alone fades like
+ *   the capsule; a touch brings either back. The card never fades.
  *
  * What needs the person's eyes or hands holds the form and stops every count: a confirm card, a
  * handoff card, 插话 being typed, the 已停止 note. All but typing fold the card back to the
@@ -208,7 +209,7 @@ class FoldClock(val dimMs: Long = DIM_MS, val foldMs: Long = FOLD_MS, val cardMs
         collapseAt = null
         if (!running || held) return
         when (form) {
-            Form.CARD -> collapseAt = now + cardMs
+            Form.CARD -> if (autoFold) collapseAt = now + cardMs
             Form.CAPSULE -> if (autoFold) foldAt = now + foldMs else if (!dimmed) dimAt = now + dimMs
             Form.BALL -> if (!dimmed) dimAt = now + dimMs
         }

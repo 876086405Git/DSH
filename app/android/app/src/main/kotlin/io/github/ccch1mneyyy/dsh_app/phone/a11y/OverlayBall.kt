@@ -34,14 +34,15 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * The folded control: a 48 dp ball on the side of the screen (its own TYPE_ACCESSIBILITY_OVERLAY
- * window, 10 dp of room round it for the shadow), the capsule's surface and mark as a circle. It
- * shows the task's state only and opens the capsule on a tap. Held still for a second it stops the
- * task ([HoldToStop]: a ring fills round it first, letting go cancels); screen readers get the
- * same stop as an action. It first rests on the right, level with the capsule; dragged, it follows
- * the finger and settles on the nearer side, where it stays (side and height kept across tasks,
- * like the pet's dock: pet/EdgeSnap.kt). A confirm card lifts a resting ball above it. Left alone
- * it fades, all of it alike, to the 闲置时不透明度, and slides half out of sight over its side
+ * The folded control: a 48 dp ball (its own TYPE_ACCESSIBILITY_OVERLAY window, 10 dp of room round
+ * it for the shadow), the capsule's surface and mark as a circle. It shows the task's state only
+ * and opens the capsule on a tap. Held still for a second it stops the task ([HoldToStop]: a ring
+ * fills round it first, letting go cancels); screen readers get the same stop as an action. Under
+ * an island at the top it first rests at the top centre, where the island was ([atTop]); else on
+ * the right, level with the capsule. Dragged, it follows the finger and settles on the nearer side
+ * — or back at the top centre, let go near it — where it stays (kept across tasks, like the pet's
+ * dock: pet/EdgeSnap.kt). A confirm card lifts a ball resting on a side above it. Left alone it
+ * fades, all of it alike, to the 闲置时不透明度, and one on a side slides half out of sight over it
  * ([tucked]); a touch brings it back. The whole window (the ball and the room round it) takes the
  * touch, so the half that shows is easy to hit, and it is kept out of the system's edge-back
  * gesture.
@@ -63,17 +64,30 @@ internal class OverlayBall(
     private val capsuleCentre: () -> Int,
     /** A confirm card's top while one shows: a resting ball stays above it. */
     private val bottomLimit: () -> Int?,
+    /** The capsule is an island at the top (its card opens down): a ball never moved rests at the top centre. */
+    private val islandAtTop: () -> Boolean = { false },
+    /** The centre y of a ball at the top centre: where an island at the top has its centre. */
+    private val topCentreY: () -> Int = capsuleCentre,
 ) {
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** Where the person dropped the ball last (kept across tasks); null until they move it. */
-    private var saved: Dock? = if (prefs.contains(K_Y)) Dock(
+    /** Dropped at the top centre last (kept across tasks). */
+    private var savedTop = prefs.getString(K_SIDE, null) == TOP
+
+    /** Where the person dropped the ball on a side last (kept across tasks); null until they do. */
+    private var saved: Dock? = if (!savedTop && prefs.contains(K_Y)) Dock(
         if (prefs.getString(K_SIDE, null) == "left") Side.LEFT else Side.RIGHT,
         prefs.getFloat(K_Y, 0f),
     ) else null
 
-    /** Where the ball rests: where it was dropped, else on the right, level with the capsule. */
+    /** The ball rests at the top centre: dropped there, or never moved and under an island at the top. */
+    val atTop: Boolean get() = savedTop || (saved == null && islandAtTop())
+
+    /** Where the ball rests on a side: where it was dropped, else on the right, level with the capsule. */
     val dock: Dock get() = saved ?: BallGeometry.dockLevel(area(), size, margin, capsuleCentre())
+
+    /** The end of the capsule a fold goes to and an unfold comes from: the ball's side, or its middle (null) at the top centre. */
+    val foldSide: Side? get() = if (atTop) null else dock.side
 
     /** Idle: half of it slid out over its side ([dockPos] says so). The owner sets it and glides the ball there. */
     var tucked = false
@@ -178,9 +192,13 @@ internal class OverlayBall(
     /** The whole ball's opacity: the 闲置时不透明度 when idle, full otherwise. */
     fun setIdle(alpha: Float, animated: Boolean, durationMs: Long) = OverlayMotion.fadeIdle(root, alpha, animated, durationMs)
 
-    /** Where the ball rests now: [dock] on the current screen, above a confirm card if one shows, half out of sight when [tucked]. */
+    /**
+     * Where the ball rests now: at the top centre ([atTop]; never tucked), or [dock] on the current
+     * screen, above a confirm card if one shows, half out of sight when [tucked].
+     */
     fun dockPos(): WindowPos {
         val a = area()
+        if (atTop) return BallGeometry.topCentre(a, size, topCentreY())
         val d = dock
         val pos = BallGeometry.above(EdgeSnap.position(d, size, size, a, margin), size, bottomLimit(), EdgeSnap.minY(a, margin))
         return if (tucked) BallGeometry.tucked(pos, d.side, a, pad, diameter) else pos
@@ -387,13 +405,22 @@ internal class OverlayBall(
     }
 
     private fun settle(velocityX: Float) {
-        keep(EdgeSnap.dockFor(params.x, params.y, size, size, area(), margin, velocityX))
+        val a = area()
+        if (BallGeometry.nearTopCentre(params.x + size / 2, params.y + size / 2, a, diameter)) keepTop()
+        else keep(EdgeSnap.dockFor(params.x, params.y, size, size, a, margin, velocityX))
         glideTo(dockPos(), OverlayMotion.on())
     }
 
     private fun keep(d: Dock) {
         saved = d
+        savedTop = false
         prefs.edit().putString(K_SIDE, if (d.side == Side.LEFT) "left" else "right").putFloat(K_Y, d.yFraction).apply()
+    }
+
+    private fun keepTop() {
+        saved = null
+        savedTop = true
+        prefs.edit().putString(K_SIDE, TOP).remove(K_Y).apply()
     }
 
     private fun press(down: Boolean) {
@@ -548,6 +575,7 @@ internal class OverlayBall(
         private const val PREFS = OverlayPrefs.FILE
         private const val K_SIDE = "ballSide"
         private const val K_Y = "ballY"
+        private const val TOP = "top"
 
         const val BALL_DP = CapsuleMetrics.HEIGHT_DP
         const val PAD_DP = 10

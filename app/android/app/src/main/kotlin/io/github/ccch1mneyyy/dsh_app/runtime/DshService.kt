@@ -82,6 +82,22 @@ class DshService : Service() {
                 // l10n:keep agent stop reason
                 if (taskId != null) PhoneControl.get(this).stopShownTask("用户在通知里停止", taskId)
             }
+            ACTION_PHONE_PAUSE -> {
+                // 暂停 / 继续 on the live activity (the phone's own island): only the task it was shown for.
+                val taskId = intent.data?.takeIf { it.scheme == PHONE_TASK_SCHEME }?.schemeSpecificPart?.toLongOrNull()
+                if (taskId != null) PhoneControl.get(this).pauseTask(taskId, intent.getBooleanExtra(EXTRA_PAUSE, true))
+            }
+            ACTION_PHONE_BACK -> {
+                // A tap on the live activity: back to the chat, as the floating bar's 回到 DSH Go — a task on
+                // the person's own screen pauses first, or it would go on tapping in DSH Go itself.
+                val taskId = intent.data?.takeIf { it.scheme == PHONE_TASK_SCHEME }?.schemeSpecificPart?.toLongOrNull()
+                if (taskId != null) {
+                    val control = PhoneControl.get(this)
+                    val live = control.liveTask()?.takeIf { it.id == taskId }
+                    if (live != null && !live.paused && control.background.previewTarget(taskId) == null) control.pauseTask(taskId, true)
+                    control.reopen(control.taskSession(taskId), null)
+                }
+            }
             ACTION_STOP -> {
                 if (controller.phase != RuntimeController.Phase.INSTALLING) {
                     val expected = if (intent.hasExtra(EXTRA_STOP_GENERATION))
@@ -201,7 +217,10 @@ class DshService : Service() {
         const val ACTION_START = "io.github.ccch1mneyyy.dsh_app.START"
         const val ACTION_STOP = "io.github.ccch1mneyyy.dsh_app.STOP"
         const val ACTION_PHONE_STOP = "io.github.ccch1mneyyy.dsh_app.PHONE_STOP"
+        const val ACTION_PHONE_PAUSE = "io.github.ccch1mneyyy.dsh_app.PHONE_PAUSE"
+        const val ACTION_PHONE_BACK = "io.github.ccch1mneyyy.dsh_app.PHONE_BACK"
         private const val PHONE_TASK_SCHEME = "dsh-phone-task"
+        private const val EXTRA_PAUSE = "pause"
         private const val EXTRA_STOP_GENERATION = "stopGeneration"
         private const val EXTRA_STOP_OWNER = "stopOwner"
 
@@ -209,6 +228,14 @@ class DshService : Service() {
          * PendingIntent: a newer task's button never rewrites the one still on screen. */
         fun phoneStopIntent(context: Context, taskId: Long): Intent = Intent(context, DshService::class.java)
             .setAction(ACTION_PHONE_STOP).setData(Uri.fromParts(PHONE_TASK_SCHEME, taskId.toString(), null))
+
+        /** 暂停 ([pause]) or 继续 for exactly [taskId], from the live activity. */
+        fun phonePauseIntent(context: Context, taskId: Long, pause: Boolean): Intent = Intent(context, DshService::class.java)
+            .setAction(ACTION_PHONE_PAUSE).setData(Uri.fromParts(PHONE_TASK_SCHEME, taskId.toString(), null)).putExtra(EXTRA_PAUSE, pause)
+
+        /** A tap on the live activity for [taskId]: back to its chat, the task paused first when it is on the person's screen. */
+        fun phoneBackIntent(context: Context, taskId: Long): Intent = Intent(context, DshService::class.java)
+            .setAction(ACTION_PHONE_BACK).setData(Uri.fromParts(PHONE_TASK_SCHEME, taskId.toString(), null))
 
         /** With [ACTION_INSTALL_DONE]: the unpack finished (true) or stopped. */
         const val EXTRA_INSTALL_OK = "ok"

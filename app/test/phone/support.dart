@@ -204,7 +204,10 @@ class FakePhoneNative {
   Future<bool> Function()? onRetryInterruption;
 
   /// The 悬浮条 settings as the native side keeps them.
-  Map<String, Object?> overlay = {'idleOpacity': 0.7, 'autoCollapse': true};
+  Map<String, Object?> overlay = {'idleOpacity': 0.7, 'autoCollapse': false};
+
+  /// Whether the phone has its own island (`systemIsland`): none by default.
+  Map<String, Object?> systemIsland = {'vendor': false, 'shows': false};
 
   /// Replies for `{ok, reason}` methods, by method name (default ok).
   final results = <String, Map<String, Object?>>{};
@@ -334,6 +337,10 @@ class FakePhoneNative {
       case 'setOverlayPrefs':
         overlay = {...overlay, ...args};
         return overlay;
+      case 'systemIsland':
+        return systemIsland;
+      case 'setPhoneThought':
+        return true;
       case 'finishTask':
         onFinish?.call();
         final reopen = args['reopen'] == true;

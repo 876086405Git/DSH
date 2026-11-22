@@ -7,15 +7,20 @@ import org.junit.Test
 
 /** The 悬浮条 settings: defaults and the 30–100 % range (the overlay applies whatever this gives). */
 class OverlayPrefsTest {
-    @Test fun defaultsFoldAnIdleCapsuleAndFadeTheBallTo70Percent() {
-        // 闲置时自动收起 is on unless the person turned it off: the capsule gets out of the way by itself.
+    @Test fun defaultsKeepTheIslandAsLeftAndFadeTheBallTo70Percent() {
+        // 闲置时自动收起 is off unless the person turns it on: the island folds into the ball only by hand.
         val p = OverlayPrefs()
         assertEquals(0.7f, p.idleOpacity)
-        assertTrue(p.autoFold)
+        assertFalse(p.autoFold)
         assertTrue(p.edgeGlow)
-        assertEquals(mapOf("idleOpacity" to 0.7f.toDouble(), "autoCollapse" to true, "edgeGlow" to true), p.toMap())
-        assertFalse(p.copy(autoFold = false).toMap()["autoCollapse"] as Boolean)
+        assertTrue(p.systemIsland)
+        assertEquals(
+            mapOf("idleOpacity" to 0.7f.toDouble(), "autoCollapse" to false, "edgeGlow" to true, "systemIsland" to true),
+            p.toMap(),
+        )
+        assertTrue(p.copy(autoFold = true).toMap()["autoCollapse"] as Boolean)
         assertFalse(p.copy(edgeGlow = false).toMap()["edgeGlow"] as Boolean)
+        assertFalse(p.copy(systemIsland = false).toMap()["systemIsland"] as Boolean)
     }
 
     @Test fun opacityStaysWithin30And100Percent() {

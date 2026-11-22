@@ -18,6 +18,7 @@ import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillReplayApps
 import io.github.ccch1mneyyy.dsh_app.runtime.RuntimeController
 import io.github.ccch1mneyyy.dsh_app.runtime.PhoneSkillBundleReader
 import io.github.ccch1mneyyy.dsh_app.phone.a11y.OverlayPrefs
+import io.github.ccch1mneyyy.dsh_app.notify.LiveActivity
 import io.github.ccch1mneyyy.dsh_app.phone.background.PrivilegedActionGate
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -341,9 +342,17 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
                 val id = call.argument<String>("requestId")
                 result.success(id != null && id.length in 1..200 && control.prompts.cancel(id))
             }
-            // 设置 → 手机操控 → 悬浮条: {idleOpacity 0.3–1, autoCollapse, edgeGlow}; a showing overlay follows at once.
+            // 设置 → 手机操控 → 悬浮条: {idleOpacity 0.3–1, autoCollapse, edgeGlow, systemIsland}; a showing overlay follows at once.
             "overlayPrefs" -> result.success(OverlayPrefs.read(appContext).toMap())
             "setOverlayPrefs" -> result.success(OverlayPrefs.write(appContext, call.arguments as? Map<*, *>).toMap())
+            // Whether the phone has its own island for the task (「用系统灵动岛显示」 shows only then). Off the main thread: a binder call on HyperOS.
+            "systemIsland" -> async(result) { LiveActivity.islandSupport(appContext) }
+            // {sessionId, text}: what DSH last said in the conversation driving the phone, for the island's card; null text forgets it.
+            "setPhoneThought" -> {
+                val session = call.argument<String>("sessionId")?.takeIf { it.length in 1..200 }
+                if (session != null) PhoneThoughts.set(session, call.argument<String>("text"))
+                result.success(session != null)
+            }
             else -> result.notImplemented()
         }
         if (call.method == "setBackgroundMode" || call.method == "adbConnect" || call.method == "requestShizukuPermission") {

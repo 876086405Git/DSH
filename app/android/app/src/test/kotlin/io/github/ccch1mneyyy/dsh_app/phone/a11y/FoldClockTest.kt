@@ -45,11 +45,11 @@ class FoldClockTest {
         assertTrue(c.dimmed)
         assertTrue(c.expand(dim + 1))
         assertFalse(c.dimmed)
-        // Only the card's own count runs, and it goes back to a capsule at full.
-        assertEquals(dim + 1 + card, c.nextAt)
-        assertEquals(Tick.COLLAPSE, c.tick(dim + 1 + card))
+        // Nothing is due on an open card: it stays, at full, to watch DSH work.
+        assertNull(c.nextAt)
+        assertEquals(Tick.NONE, c.tick(100 * card))
+        assertEquals(Form.CARD, c.form)
         assertFalse(c.dimmed)
-        assertEquals(dim + 1 + card + dim, c.nextAt)
     }
 
     @Test fun whatAsksThePersonBringsAFadedCapsuleToFull() {
@@ -70,10 +70,21 @@ class FoldClockTest {
         assertEquals(Tick.FOLD, c.tick(fold))
     }
 
-    // ---- 卡片：从胶囊长出来，闲置后收回 -----------------------------------------------------------
+    // ---- 卡片：从胶囊长出来，开着看 DSH 干活；只有「闲置时自动收起」才收回 ----------------------------
 
-    @Test fun theLineOpensTheCardAndItGoesBackWhenLeftAlone() {
+    @Test fun theCardStaysOpenUntilTheLineIsTappedAgain() {
         val c = open()
+        assertTrue(c.expand(100))
+        assertEquals(Form.CARD, c.form)
+        assertNull(c.nextAt)
+        assertEquals(Tick.NONE, c.tick(100 + 10 * card))
+        assertEquals(Form.CARD, c.form)
+        assertTrue(c.collapse(100 + 10 * card))
+        assertEquals(Form.CAPSULE, c.form)
+    }
+
+    @Test fun withAutoFoldTheCardGoesBackWhenLeftAlone() {
+        val c = open(auto = true)
         assertTrue(c.expand(100))
         assertEquals(Form.CARD, c.form)
         assertTrue(c.expanded)
@@ -84,8 +95,8 @@ class FoldClockTest {
         assertEquals(Tick.NONE, c.tick(5_000 + card - 1))
         assertEquals(Tick.COLLAPSE, c.tick(5_000 + card))
         assertEquals(Form.CAPSULE, c.form)
-        // Back as the capsule, which fades when left alone.
-        assertEquals(5_000 + card + dim, c.nextAt)
+        // Back as the capsule, which folds when left alone.
+        assertEquals(5_000 + card + fold, c.nextAt)
     }
 
     @Test fun theLineAgainClosesTheCard() {
@@ -101,7 +112,7 @@ class FoldClockTest {
     }
 
     @Test fun typingKeepsTheCardOpen() {
-        val c = open()
+        val c = open(auto = true)
         c.expand(0)
         assertFalse("typing doesn't fold the card", c.hold(Hold.EDITING, 10))
         assertEquals(Form.CARD, c.form)

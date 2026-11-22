@@ -47,6 +47,8 @@
     <string name="live_channel_description">DSH 在干活、等你处理或在操作手机时，显示在状态栏和锁屏上</string>
     <string name="live_chip_phone">操作中</string>
     <string name="live_chip_paused">已暂停</string>
+    <string name="live_phone_pause">暂停</string>
+    <string name="live_phone_resume">继续</string>
     <!-- overlay -->
     <string name="overlay_allow_once">允许一次</string>
     <string name="overlay_allow_round">本轮允许</string>

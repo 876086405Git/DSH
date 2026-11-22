@@ -50,6 +50,8 @@
     <string name="live_channel_description">What DSH is doing, waiting on, or doing on the phone, in the status bar and on the lock screen</string>
     <string name="live_chip_phone">Acting</string>
     <string name="live_chip_paused">Paused</string>
+    <string name="live_phone_pause">Pause</string>
+    <string name="live_phone_resume">Continue</string>
     <!-- overlay -->
     <string name="overlay_allow_once">Allow once</string>
     <string name="overlay_allow_round">Allow this turn</string>

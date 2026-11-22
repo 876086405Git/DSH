@@ -79,6 +79,7 @@
   "searchKwPhoneConfirm": "don't ask,confirm,always ask,no confirmation",
   "searchKwPhoneAutoCollapse": "floating bar,collapse,bubble",
   "searchKwPhoneEdgeGlow": "edge glow,glow,light,effect,border",
+  "searchKwPhoneSystemIsland": "island,dynamic island,live updates,floating bar,capsule",
   "searchKwPhoneReturn": "return,come back",
   "searchKwPhoneBackgroundGuide": "background confirmation,return",
   "searchKwAutoStart": "auto start,launch",

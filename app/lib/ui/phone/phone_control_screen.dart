@@ -786,10 +786,15 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
 
   Future<void> _setEdgeGlow(bool on) => ref.read(phoneOverlayPrefsProvider.notifier).setEdgeGlow(on);
 
-  /// 悬浮条: 闲置时不透明度, 闲置时自动收起, 屏幕边缘光效, 完成后返回 dsh-go.
+  Future<void> _setSystemIsland(bool on) => ref.read(phoneOverlayPrefsProvider.notifier).setSystemIsland(on);
+
+  /// 悬浮条: 闲置时不透明度, 闲置时自动收起, 屏幕边缘光效, 用系统灵动岛显示, 完成后返回 dsh-go.
   Widget _floatingBar() {
     final overlay = ref.watch(phoneOverlayPrefsProvider);
     final returnAfterDone = ref.watch(phoneReturnPrefProvider);
+    // The switch works only where the phone has its own island; elsewhere the row says why not.
+    final island = ref.watch(phoneSystemIslandProvider).value ?? (vendor: false, shows: false);
+    final islandOn = island.vendor && overlay.systemIsland;
     return ListPageCard(
       title: context.l10n.phoneFloatingBar,
       children: [
@@ -813,6 +818,23 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
             subtitle: context.l10n.phoneEdgeGlowHint,
             onTap: () => unawaited(_setEdgeGlow(!overlay.edgeGlow)),
             trailing: Switch.adaptive(value: overlay.edgeGlow, onChanged: (v) => unawaited(_setEdgeGlow(v))),
+          ),
+        ),
+        MergeSemantics(
+          child: ListPageRow(
+            icon: AppIcons.systemIsland,
+            spot: Spots.phoneSystemIsland,
+            subtitle: !island.vendor
+                ? context.l10n.phoneSystemIslandUnsupported
+                : islandOn && !island.shows
+                ? context.l10n.phoneSystemIslandOff
+                : context.l10n.phoneSystemIslandHint,
+            subtitleMaxLines: 3,
+            onTap: island.vendor ? () => unawaited(_setSystemIsland(!overlay.systemIsland)) : null,
+            trailing: Switch.adaptive(
+              value: islandOn,
+              onChanged: island.vendor ? (v) => unawaited(_setSystemIsland(v)) : null,
+            ),
           ),
         ),
         MergeSemantics(

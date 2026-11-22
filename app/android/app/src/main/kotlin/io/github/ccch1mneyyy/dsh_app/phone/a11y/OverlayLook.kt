@@ -13,6 +13,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.RippleDrawable
@@ -136,7 +137,7 @@ internal fun Context.dpf(v: Float): Float = TypedValue.applyDimension(TypedValue
  * filled: Phosphor-like, the weight of the app's own icons.
  */
 internal enum class Glyph(val filled: Boolean) {
-    PAUSE(true), PLAY(true), STOP(true), CHEVRON(false), LOCK(false), SEND(false), BALL(false), BACK(false);
+    PAUSE(true), PLAY(true), STOP(true), CHEVRON(false), LOCK(false), SEND(false), BALL(false), BACK(false), SPARK(true);
 
     fun path(): Path = Path().apply {
         when (this@Glyph) {
@@ -177,6 +178,15 @@ internal enum class Glyph(val filled: Boolean) {
                 cubicTo(17.9f, 8.75f, 20.5f, 11.1f, 20.5f, 14f)
                 cubicTo(20.5f, 16.9f, 17.9f, 19.25f, 15f, 19.25f)
                 lineTo(8.5f, 19.25f)
+            }
+            SPARK -> {
+                // What DSH thinks: a four-pointed sparkle, its sides drawn in.
+                moveTo(12f, 2.5f)
+                cubicTo(12.7f, 8.1f, 15.9f, 11.3f, 21.5f, 12f)
+                cubicTo(15.9f, 12.7f, 12.7f, 15.9f, 12f, 21.5f)
+                cubicTo(11.3f, 15.9f, 8.1f, 12.7f, 2.5f, 12f)
+                cubicTo(8.1f, 11.3f, 11.3f, 8.1f, 12f, 2.5f)
+                close()
             }
         }
     }
@@ -318,24 +328,57 @@ internal class MarkPainter(private val context: Context) {
 }
 
 /**
- * An app's icon as the island shows it: [sizePx] square, its corners rounded to a quarter of that,
- * centred on ([cx], [cy]).
+ * An app's icon as the island shows it: [sizePx] square, a rounded square whatever the launcher's
+ * shape — its corners rounded to [CORNER] of its side — centred on ([cx], [cy]). An adaptive icon
+ * is drawn from its layers (they reach a quarter of the side past each edge, as the system lays
+ * them out) under that mask, not the system's own (often a circle); any other icon is cut to it.
  */
 internal class IconPainter {
     private val clip = Path()
     private val box = RectF()
+    private val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 
     fun draw(canvas: Canvas, icon: android.graphics.drawable.Drawable, cx: Float, cy: Float, sizePx: Float, alpha: Float) {
         if (alpha <= 0f) return
         box.set(cx - sizePx / 2, cy - sizePx / 2, cx + sizePx / 2, cy + sizePx / 2)
+        val corner = sizePx * CORNER
         clip.reset()
-        clip.addRoundRect(box, sizePx * 0.26f, sizePx * 0.26f, Path.Direction.CW)
+        clip.addRoundRect(box, corner, corner, Path.Direction.CW)
+        val a = (255 * alpha).roundToInt().coerceIn(0, 255)
         val save = canvas.save()
         canvas.clipPath(clip)
-        icon.setBounds(box.left.roundToInt(), box.top.roundToInt(), box.right.roundToInt(), box.bottom.roundToInt())
-        icon.alpha = (255 * alpha).roundToInt().coerceIn(0, 255)
-        icon.draw(canvas)
+        if (icon is AdaptiveIconDrawable) {
+            val bleed = sizePx * ADAPTIVE_BLEED
+            val l = (box.left - bleed).roundToInt()
+            val t = (box.top - bleed).roundToInt()
+            val r = (box.right + bleed).roundToInt()
+            val b = (box.bottom + bleed).roundToInt()
+            for (layer in listOfNotNull(icon.background, icon.foreground)) {
+                layer.setBounds(l, t, r, b)
+                layer.alpha = a
+                layer.draw(canvas)
+            }
+        } else {
+            icon.setBounds(box.left.roundToInt(), box.top.roundToInt(), box.right.roundToInt(), box.bottom.roundToInt())
+            icon.alpha = a
+            icon.draw(canvas)
+        }
         canvas.restoreToCount(save)
+        // A hairline round it, so a white icon still has an edge on the dark island.
+        rim.strokeWidth = sizePx / 40f
+        rim.color = 0x26FFFFFF
+        rim.alpha = (0x26 * alpha).roundToInt()
+        val inset = rim.strokeWidth / 2
+        box.inset(inset, inset)
+        canvas.drawRoundRect(box, corner - inset, corner - inset, rim)
+    }
+
+    companion object {
+        /** iOS-like: a little under a quarter of the side. */
+        const val CORNER = 0.235f
+
+        /** An adaptive icon's layers are 108 dp for a 72 dp face: 18 dp, a quarter of it, past each edge. */
+        const val ADAPTIVE_BLEED = 0.25f
     }
 }
 
