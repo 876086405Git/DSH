@@ -44,14 +44,18 @@ class _KeepRunningGuide extends ConsumerStatefulWidget {
 /// One maker's switch: the name it has in their settings, and the way there.
 typedef _VendorSwitch = ({String name, String key, String path});
 
-class _KeepRunningGuideState extends ConsumerState<_KeepRunningGuide> {
+class _KeepRunningGuideState extends _ProtectionPageState<_KeepRunningGuide> {
   late final AppLifecycleListener _lifecycle;
 
   @override
   void initState() {
     super.initState();
-    // Back from the system dialog or settings page: read the exemption again.
-    _lifecycle = AppLifecycleListener(onResume: () => ref.invalidate(batteryExemptProvider));
+    _lifecycle = AppLifecycleListener(
+      onResume: () {
+        ref.invalidate(batteryExemptProvider);
+        if (ref.read(operatingSystemProvider) == 'android') ref.invalidate(backgroundProtectionProvider);
+      },
+    );
   }
 
   @override
@@ -111,9 +115,41 @@ class _KeepRunningGuideState extends ConsumerState<_KeepRunningGuide> {
     ),
   ];
 
+  Widget _androidProtectionSection(BackgroundProtection protection, {required bool readFailed}) {
+    final l10n = context.l10n;
+    final servicesOff = protection.error == 'android_background_location_services_disabled';
+    final locationIssue = switch ((protection.locationEnabled, servicesOff, protection.locationAuthorization)) {
+      (true, true, _) => l10n.backgroundProtectionLocationServicesOff,
+      (true, false, 'notDetermined') => l10n.androidBackgroundProtectionNeedsLocation,
+      (true, false, 'authorizedWhenInUse') => l10n.androidBackgroundProtectionNeedsAlways,
+      _ => null,
+    };
+    final issues = [?locationIssue, if (protection.hasError && !servicesOff) l10n.backgroundProtectionUnavailable];
+    final issue = issues.isEmpty ? null : issues.join(' · ');
+    final canOpenSettings = !readFailed && locationIssue != null && !_updating;
+    return SettingsSection(
+      title: l10n.androidBackgroundProtectionTitle,
+      footer: Text(l10n.backgroundProtectionDescription),
+      children: [
+        ..._audioAndLocationSwitches(protection, android: true),
+        SettingsTile(
+          key: const ValueKey('background-protection-status'),
+          title: l10n.backgroundProtectionStatus,
+          subtitle: readFailed ? l10n.backgroundProtectionUnavailable : _audioAndLocationStatus(protection, issue),
+          chevron: canOpenSettings,
+          onTap: canOpenSettings ? () => unawaited(_openProtectionSettings()) : null,
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final protection = ref.watch(operatingSystemProvider) == 'android'
+        ? ref.watch(backgroundProtectionProvider)
+        : const AsyncData<BackgroundProtection?>(null);
+    final actual = protection.value;
     // Null without the native side (or on error): no row.
     final exempt = ref.watch(batteryExemptProvider).value;
     final settings = ref.watch(backgroundSettingsProvider).value;
@@ -156,6 +192,7 @@ class _KeepRunningGuideState extends ConsumerState<_KeepRunningGuide> {
               ),
             ],
           ),
+        if (actual != null && actual.supported) _androidProtectionSection(actual, readFailed: protection.hasError),
         SettingsSection(
           title: l10n.pluginsStayOnline,
           children: [
@@ -175,42 +212,8 @@ class _KeepRunningGuideState extends ConsumerState<_KeepRunningGuide> {
   }
 }
 
-/// Older native hosts retain the suspension guide instead of non-working switches.
-class _SuspendedPage extends ConsumerStatefulWidget {
-  const _SuspendedPage();
-
-  @override
-  ConsumerState<_SuspendedPage> createState() => _SuspendedPageState();
-}
-
-class _SuspendedPageState extends ConsumerState<_SuspendedPage> {
-  late final AppLifecycleListener _lifecycle;
+abstract class _ProtectionPageState<T extends ConsumerStatefulWidget> extends ConsumerState<T> {
   bool _updating = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _lifecycle = AppLifecycleListener(
-      onResume: () {
-        ref.invalidate(notifySystemStatusProvider);
-        ref.invalidate(backgroundProtectionProvider);
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _lifecycle.dispose();
-    super.dispose();
-  }
-
-  Future<void> _openNotifications() async {
-    final opened = await ref.read(notifyChannelProvider).openSettings();
-    if (!mounted) return;
-    // A half-sheet over the app: there may be no resume to read again on.
-    ref.invalidate(notifySystemStatusProvider);
-    if (!opened) showBriefNotice(context, context.l10n.accessOpenFailed);
-  }
 
   Future<void> _setProtection({bool? audioEnabled, bool? locationEnabled, bool? taskEnabled}) async {
     if (_updating) return;
@@ -254,6 +257,78 @@ class _SuspendedPageState extends ConsumerState<_SuspendedPage> {
     if (!opened) showBriefNotice(context, context.l10n.accessOpenFailed);
   }
 
+  String _audioAndLocationStatus(BackgroundProtection protection, String? issue) {
+    final l10n = context.l10n;
+    final active = switch ((protection.audioActive, protection.locationActive)) {
+      (true, true) => l10n.backgroundProtectionBothActive,
+      (true, false) => l10n.backgroundProtectionAudioActive,
+      (false, true) => l10n.backgroundProtectionLocationActive,
+      _ => null,
+    };
+    if (issue != null) return active == null ? issue : '$active · $issue';
+    return active ??
+        (protection.audioEnabled || protection.locationEnabled
+            ? l10n.backgroundProtectionReady
+            : l10n.backgroundProtectionOff);
+  }
+
+  List<Widget> _audioAndLocationSwitches(BackgroundProtection protection, {bool android = false}) {
+    final l10n = context.l10n;
+    return [
+      SettingsSwitchTile(
+        key: const ValueKey('background-protection-audio'),
+        title: l10n.backgroundProtectionAudio,
+        subtitle: android ? l10n.androidBackgroundProtectionAudioHint : l10n.backgroundProtectionAudioHint,
+        value: protection.audioEnabled,
+        onChanged: _updating ? null : (value) => unawaited(_setProtection(audioEnabled: value)),
+      ),
+      SettingsSwitchTile(
+        key: const ValueKey('background-protection-location'),
+        title: l10n.backgroundProtectionLocation,
+        subtitle: android ? l10n.androidBackgroundProtectionLocationHint : l10n.backgroundProtectionLocationHint,
+        value: protection.locationEnabled,
+        onChanged: _updating ? null : (value) => unawaited(_setProtection(locationEnabled: value)),
+      ),
+    ];
+  }
+}
+
+/// Older native hosts retain the suspension guide instead of non-working switches.
+class _SuspendedPage extends ConsumerStatefulWidget {
+  const _SuspendedPage();
+
+  @override
+  ConsumerState<_SuspendedPage> createState() => _SuspendedPageState();
+}
+
+class _SuspendedPageState extends _ProtectionPageState<_SuspendedPage> {
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onResume: () {
+        ref.invalidate(notifySystemStatusProvider);
+        ref.invalidate(backgroundProtectionProvider);
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openNotifications() async {
+    final opened = await ref.read(notifyChannelProvider).openSettings();
+    if (!mounted) return;
+    // A half-sheet over the app: there may be no resume to read again on.
+    ref.invalidate(notifySystemStatusProvider);
+    if (!opened) showBriefNotice(context, context.l10n.accessOpenFailed);
+  }
+
   String _protectionStatus(BackgroundProtection protection, {required bool ios}) {
     final l10n = context.l10n;
     if (protection.cleanupPending) return l10n.backgroundProtectionCleanup;
@@ -272,12 +347,6 @@ class _SuspendedPageState extends ConsumerState<_SuspendedPage> {
       if (protection.taskActive) return l10n.backgroundProtectionTaskActive;
       return protection.taskEnabled ? l10n.backgroundProtectionReady : l10n.backgroundProtectionOff;
     }
-    final active = switch ((protection.audioActive, protection.locationActive)) {
-      (true, true) => l10n.backgroundProtectionBothActive,
-      (true, false) => l10n.backgroundProtectionAudioActive,
-      (false, true) => l10n.backgroundProtectionLocationActive,
-      _ => null,
-    };
     final String? issue;
     if (protection.locationEnabled && protection.locationAuthorization == 'restricted') {
       issue = l10n.backgroundProtectionLocationRestricted;
@@ -290,11 +359,7 @@ class _SuspendedPageState extends ConsumerState<_SuspendedPage> {
     } else {
       issue = null;
     }
-    if (issue != null) return active == null ? issue : '$active · $issue';
-    return active ??
-        (protection.audioEnabled || protection.locationEnabled
-            ? l10n.backgroundProtectionReady
-            : l10n.backgroundProtectionOff);
+    return _audioAndLocationStatus(protection, issue);
   }
 
   Widget _protectionPage(BackgroundProtection protection, {required bool readFailed, required bool ios}) {
@@ -311,22 +376,9 @@ class _SuspendedPageState extends ConsumerState<_SuspendedPage> {
       children: [
         SettingsSection(
           children: [
-            if (ios) ...[
-              SettingsSwitchTile(
-                key: const ValueKey('background-protection-audio'),
-                title: l10n.backgroundProtectionAudio,
-                subtitle: l10n.backgroundProtectionAudioHint,
-                value: protection.audioEnabled,
-                onChanged: _updating ? null : (value) => unawaited(_setProtection(audioEnabled: value)),
-              ),
-              SettingsSwitchTile(
-                key: const ValueKey('background-protection-location'),
-                title: l10n.backgroundProtectionLocation,
-                subtitle: l10n.backgroundProtectionLocationHint,
-                value: protection.locationEnabled,
-                onChanged: _updating ? null : (value) => unawaited(_setProtection(locationEnabled: value)),
-              ),
-            ] else
+            if (ios)
+              ..._audioAndLocationSwitches(protection)
+            else
               SettingsSwitchTile(
                 key: const ValueKey('background-protection-task'),
                 title: l10n.backgroundProtectionTask,

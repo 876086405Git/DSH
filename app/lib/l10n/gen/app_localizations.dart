@@ -3476,6 +3476,36 @@ abstract class L10n {
   /// **'未能确认操作结果。先核实结果；已派发的命令不要自动重试。'**
   String get androidShellErrorUnknown;
 
+  /// No description provided for @androidBackgroundProtectionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'增强保活'**
+  String get androidBackgroundProtectionTitle;
+
+  /// No description provided for @androidBackgroundProtectionAudioHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'有本机任务时在后台播放静音音频，可能增加耗电。'**
+  String get androidBackgroundProtectionAudioHint;
+
+  /// No description provided for @androidBackgroundProtectionLocationHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用粗略位置，可能增加耗电；不保存或发送坐标。关闭后停止定位，但不撤回系统权限。'**
+  String get androidBackgroundProtectionLocationHint;
+
+  /// No description provided for @androidBackgroundProtectionNeedsLocation.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未授予位置权限。点此打开 App 的系统设置，在「权限」中允许访问位置。'**
+  String get androidBackgroundProtectionNeedsLocation;
+
+  /// No description provided for @androidBackgroundProtectionNeedsAlways.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台定位尚未生效。点此打开 App 的系统设置，在「权限」中将位置设为“始终允许”。'**
+  String get androidBackgroundProtectionNeedsAlways;
+
   /// No description provided for @backgroundProtectionDescription.
   ///
   /// In zh, this message translates to:

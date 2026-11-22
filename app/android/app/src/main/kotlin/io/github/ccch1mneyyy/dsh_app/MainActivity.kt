@@ -24,6 +24,7 @@ import io.github.ccch1mneyyy.dsh_app.launch.LaunchThemeSync
 import io.github.ccch1mneyyy.dsh_app.links.LinksPlugin
 import io.github.ccch1mneyyy.dsh_app.notify.NotifyPlugin
 import io.github.ccch1mneyyy.dsh_app.phone.PhonePlugin
+import io.github.ccch1mneyyy.dsh_app.runtime.AndroidBackgroundProtection
 import io.github.ccch1mneyyy.dsh_app.runtime.LaunchStart
 import io.github.ccch1mneyyy.dsh_app.runtime.RuntimePlugin
 import io.github.ccch1mneyyy.dsh_app.share.SharePlugin
@@ -125,6 +126,16 @@ class MainActivity : FlutterActivity() {
         LaunchThemeSync.sync(this)
         // The language: other apps' text actions are named in it.
         textActions?.forget()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        AndroidBackgroundProtection.get(this).setAppVisible(true)
+    }
+
+    override fun onStop() {
+        AndroidBackgroundProtection.get(this).setAppVisible(false)
+        super.onStop()
     }
 
     override fun onResume() {

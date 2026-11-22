@@ -1249,6 +1249,7 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         if (next != Phase.RUNNING) managedSkillGate.retire()
         phase = next
         emitStatus()
+        main.post { AndroidBackgroundProtection.get(app).refresh() }
         DshService.updateNotification(app)
     }
 

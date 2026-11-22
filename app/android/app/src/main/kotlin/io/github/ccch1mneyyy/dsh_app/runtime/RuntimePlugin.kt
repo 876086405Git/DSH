@@ -38,6 +38,8 @@ class RuntimePlugin :
     private var sink: RuntimeController.EventSink? = null
     private var activity: ActivityPluginBinding? = null
     private var pendingStorageResult: MethodChannel.Result? = null
+    private var pendingLocationResult: MethodChannel.Result? = null
+    private val protection get() = AndroidBackgroundProtection.get(appContext)
     private var managedSkillOwner: ManagedSkillOwner? = null
     @Volatile private var diagnosticsAttached = false
     private val diagnosticsRefresh: () -> Boolean = { refreshDiagnostics() }
@@ -59,6 +61,7 @@ class RuntimePlugin :
             controller.detachManagedSkillOwner(owner)
         }
         managedSkillOwner = null
+        protection.setTurnRunning(false)
         methods.setMethodCallHandler(null)
         events.setStreamHandler(null)
         sink?.let { controller.removeSink(it) }
@@ -101,6 +104,7 @@ class RuntimePlugin :
     override fun onDetachedFromActivity() {
         activity?.removeRequestPermissionsResultListener(this)
         activity = null
+        finishLocationRequest()
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -209,6 +213,13 @@ class RuntimePlugin :
                 result.success(pm.isIgnoringBatteryOptimizations(appContext.packageName))
             }
             "requestBatteryExempt" -> result.success(requestBatteryExempt())
+            "backgroundProtection" -> result.success(protection.status())
+            "setBackgroundProtection" -> setBackgroundProtection(call, result)
+            "openBackgroundProtectionSettings" -> result.success(openBackgroundProtectionSettings())
+            "turnRunning" -> {
+                protection.setTurnRunning(call.argument<Boolean>("running") == true)
+                result.success(null)
+            }
             "backgroundSettings" -> result.success(
                 mapOf(
                     "vendor" to VendorSettings.vendorOf(Build.MANUFACTURER, Build.BRAND),
@@ -301,7 +312,49 @@ class RuntimePlugin :
         )
     }
 
+    private fun setBackgroundProtection(call: MethodCall, result: MethodChannel.Result) {
+        val locationEnabled = call.argument<Boolean>("locationEnabled")
+        protection.setEnabled(call.argument<Boolean>("audioEnabled"), locationEnabled)
+        val host = activity?.activity
+        if (locationEnabled != true || protection.hasCoarseLocation() || host == null) {
+            result.success(protection.status())
+            return
+        }
+        // With target 28, the system may offer background access as part of the coarse request.
+        // Otherwise the user can grant it separately in the app's system settings.
+        if (pendingLocationResult != null) {
+            result.error("location_request_pending", null, null)
+            return
+        }
+        pendingLocationResult = result
+        try {
+            host.requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), LOCATION_REQUEST)
+        } catch (_: RuntimeException) {
+            pendingLocationResult = null
+            result.error("location_request_failed", null, null)
+        }
+    }
+
+    private fun finishLocationRequest() {
+        val pending = pendingLocationResult ?: return
+        pendingLocationResult = null
+        protection.refresh()
+        pending.success(protection.status())
+    }
+
+    private fun openBackgroundProtectionSettings(): Boolean {
+        val host = activity?.activity ?: return false
+        val intent = if (protection.status()["error"] == AndroidBackgroundProtection.LOCATION_DISABLED) {
+            Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+        } else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${appContext.packageName}"))
+        return runCatching { host.startActivity(intent) }.isSuccess
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray): Boolean {
+        if (requestCode == LOCATION_REQUEST) {
+            finishLocationRequest()
+            return true
+        }
         if (requestCode != STORAGE_REQUEST) return false
         pendingStorageResult?.success(PhoneStorage.status(appContext))
         pendingStorageResult = null
@@ -323,5 +376,6 @@ class RuntimePlugin :
 
     companion object {
         private const val STORAGE_REQUEST = 0x5d5
+        private const val LOCATION_REQUEST = 0x5d9
     }
 }
