@@ -7144,6 +7144,47 @@ class L10nZh extends L10n {
   String get companionLegacyConversation => '旧对话（角色未记录）';
 
   @override
+  String get companionScreen => '陪你看屏幕';
+
+  @override
+  String get companionScreenHint => '隔一会儿看一眼屏幕，有值得说的才开口；看到的不会记下来';
+
+  @override
+  String get companionScreenNeedsAccess => '要先打开手机操控的无障碍，或者允许她录屏';
+
+  @override
+  String get companionScreenAllowProjection => '允许录屏';
+
+  @override
+  String get companionScreenFrequency => '多久开口';
+
+  @override
+  String get companionScreenQuiet => '安静';
+
+  @override
+  String get companionScreenQuietHint => '很少开口，只说要紧的';
+
+  @override
+  String get companionScreenNormal => '正常';
+
+  @override
+  String get companionScreenNormalHint => '看到有意思的会说一句';
+
+  @override
+  String get companionScreenChatty => '话多';
+
+  @override
+  String get companionScreenChattyHint => '多陪你聊几句';
+
+  @override
+  String get companionScreenUsageAccess => '让她知道你在用哪个 App';
+
+  @override
+  String companionScreenCost(String amount) {
+    return '今天大概花了 ¥$amount';
+  }
+
+  @override
   String get automaticDiagnosticsRecover => '恢复本地记录';
 
   @override

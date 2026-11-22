@@ -7585,6 +7585,49 @@ class L10nEn extends L10n {
   String get companionLegacyConversation => 'Earlier conversation (character not recorded)';
 
   @override
+  String get companionScreen => 'Watch the screen with me';
+
+  @override
+  String get companionScreenHint =>
+      'She glances at the screen now and then and only speaks up when something is worth saying; nothing she sees is kept';
+
+  @override
+  String get companionScreenNeedsAccess =>
+      'Turn on phone control\'s accessibility service first, or let her record the screen';
+
+  @override
+  String get companionScreenAllowProjection => 'Allow screen recording';
+
+  @override
+  String get companionScreenFrequency => 'How often she speaks';
+
+  @override
+  String get companionScreenQuiet => 'Quiet';
+
+  @override
+  String get companionScreenQuietHint => 'Rarely, only when it matters';
+
+  @override
+  String get companionScreenNormal => 'Normal';
+
+  @override
+  String get companionScreenNormalHint => 'A word when something catches her eye';
+
+  @override
+  String get companionScreenChatty => 'Chatty';
+
+  @override
+  String get companionScreenChattyHint => 'Talks with you more often';
+
+  @override
+  String get companionScreenUsageAccess => 'Let her know which app you\'re using';
+
+  @override
+  String companionScreenCost(String amount) {
+    return 'About ¥$amount today';
+  }
+
+  @override
   String get automaticDiagnosticsRecover => 'Recover local records';
 
   @override

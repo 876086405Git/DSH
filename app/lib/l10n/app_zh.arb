@@ -4276,6 +4276,26 @@
   "companionReceiptKeepOutput": "仍放原来的文件夹",
   "companionReceiptPriorResult": "此前约定写出的表已找到；新的约定尚未完成。",
   "companionLegacyConversation": "旧对话（角色未记录）",
+  "companionScreen": "陪你看屏幕",
+  "companionScreenHint": "隔一会儿看一眼屏幕，有值得说的才开口；看到的不会记下来",
+  "companionScreenNeedsAccess": "要先打开手机操控的无障碍，或者允许她录屏",
+  "companionScreenAllowProjection": "允许录屏",
+  "companionScreenFrequency": "多久开口",
+  "companionScreenQuiet": "安静",
+  "companionScreenQuietHint": "很少开口，只说要紧的",
+  "companionScreenNormal": "正常",
+  "companionScreenNormalHint": "看到有意思的会说一句",
+  "companionScreenChatty": "话多",
+  "companionScreenChattyHint": "多陪你聊几句",
+  "companionScreenUsageAccess": "让她知道你在用哪个 App",
+  "companionScreenCost": "今天大概花了 ¥{amount}",
+  "@companionScreenCost": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "automaticDiagnosticsRecover": "恢复本地记录",
   "automaticDiagnosticsRecoverHint": "仅在本机恢复分析记录，跳过已留存故障，不重新发送旧请求。",
   "automaticDiagnosticsTitle": "自动故障分析",

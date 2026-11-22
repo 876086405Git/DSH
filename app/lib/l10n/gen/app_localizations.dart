@@ -13266,6 +13266,84 @@ abstract class L10n {
   /// **'旧对话（角色未记录）'**
   String get companionLegacyConversation;
 
+  /// No description provided for @companionScreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'陪你看屏幕'**
+  String get companionScreen;
+
+  /// No description provided for @companionScreenHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'隔一会儿看一眼屏幕，有值得说的才开口；看到的不会记下来'**
+  String get companionScreenHint;
+
+  /// No description provided for @companionScreenNeedsAccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'要先打开手机操控的无障碍，或者允许她录屏'**
+  String get companionScreenNeedsAccess;
+
+  /// No description provided for @companionScreenAllowProjection.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许录屏'**
+  String get companionScreenAllowProjection;
+
+  /// No description provided for @companionScreenFrequency.
+  ///
+  /// In zh, this message translates to:
+  /// **'多久开口'**
+  String get companionScreenFrequency;
+
+  /// No description provided for @companionScreenQuiet.
+  ///
+  /// In zh, this message translates to:
+  /// **'安静'**
+  String get companionScreenQuiet;
+
+  /// No description provided for @companionScreenQuietHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'很少开口，只说要紧的'**
+  String get companionScreenQuietHint;
+
+  /// No description provided for @companionScreenNormal.
+  ///
+  /// In zh, this message translates to:
+  /// **'正常'**
+  String get companionScreenNormal;
+
+  /// No description provided for @companionScreenNormalHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'看到有意思的会说一句'**
+  String get companionScreenNormalHint;
+
+  /// No description provided for @companionScreenChatty.
+  ///
+  /// In zh, this message translates to:
+  /// **'话多'**
+  String get companionScreenChatty;
+
+  /// No description provided for @companionScreenChattyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'多陪你聊几句'**
+  String get companionScreenChattyHint;
+
+  /// No description provided for @companionScreenUsageAccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'让她知道你在用哪个 App'**
+  String get companionScreenUsageAccess;
+
+  /// No description provided for @companionScreenCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'今天大概花了 ¥{amount}'**
+  String companionScreenCost(String amount);
+
   /// No description provided for @automaticDiagnosticsRecover.
   ///
   /// In zh, this message translates to:
