@@ -1,0 +1,10 @@
+--- a/node_modules/@deepseek-ai/dsh-tool-fs/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tool-fs/lib/index.js
+@@ -346 +346,2 @@
+-			const window = await buildWindow(info.size === void 0 || info.size >= caps.streamMinSize ? await ctx.fs.streamText(target, exec.signal) : [await ctx.fs.readText(target, exec.signal)], {
++			const source = info.size === void 0 || info.size >= caps.streamMinSize ? await ctx.fs.streamText(target, exec.signal) : await ctx.fs.readText(target, exec.signal);
++			const window = await buildWindow(typeof source === "string" ? [source] : source, {
+@@ -355 +356,2 @@
+-				lines: window.lines,
++				// Whole-file slices in retained UI rows would also keep the unshown source alive.
++				lines: typeof source === "string" && source.length > caps.maxBytes ? structuredClone(window.lines) : window.lines,
