@@ -190,7 +190,7 @@ List<TrajectoryRow> trajectoryRows(TurnTrace trace) {
 
 /// 一组工具调用的摘要("执行 2 条命令 · 读了 3 个文件")。
 String groupLabel(List<TraceSpan> spans, Map<String, ToolChatItem> tools) =>
-    summarizeTools([for (final span in spans) viewOfSpan(span, tools[span.callId]).item]).label;
+    summarizeTools([for (final span in spans) tools[span.callId] ?? viewOfSpan(span).item]).label;
 
 /// 列表里的工具调用,按 callId。
 Map<String, ToolChatItem> toolsById(List<ChatItem> items) => {
