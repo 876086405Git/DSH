@@ -175,6 +175,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   // What's on screen.
   String? _bubble;
+  String? _bubbleReplyId;
   List<({String taskId, String placeName})> _lookupResults = const [];
   List<String> _notesResults = const [];
   List<String> _mapResults = const [];
@@ -287,6 +288,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         if (state != AppLifecycleState.resumed) {
           _notesForegroundEpoch++;
           _mapHandoff.close();
+        } else if (mounted) {
+          // A reply can finish while this window is paused. Its next actual
+          // frame, even without another Agent notification, may present it.
+          setState(() {});
         }
         _observeInitiative();
         _observeLateUse();
@@ -1383,12 +1388,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     }
   }
 
-  void _showBubble(String text, {Duration? hold, bool error = false, bool clearTasks = true}) {
+  void _showBubble(String text, {Duration? hold, bool error = false, bool clearTasks = true, String? replyId}) {
     _retireGreeting();
     _bubbleTimer?.cancel();
     _memoryFollowupTicket = null;
     setState(() {
       _bubble = text;
+      _bubbleReplyId = replyId;
       _bubbleIsError = error;
       if (clearTasks) {
         _lookupResults = const [];
@@ -1616,7 +1622,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _bubbleIsError = false;
     } else {
       _myLine = null;
-      _showBubble(words, clearTasks: false);
+      _showBubble(words, clearTasks: false, replyId: _baselineUser);
     }
   }
 
@@ -1716,21 +1722,38 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _running = running;
       _needsAttention = attention;
     });
-    if (user != null && reply.words.isNotEmpty && error == null) {
-      final attachment = _attachment;
-      final current = attachment.captureCurrent();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            current() &&
-            identical(_attachment, attachment) &&
-            _notesForegroundHere &&
-            _baselineUser == user &&
-            !_bubbleIsError &&
-            _bubble == reply.words) {
-          attachment.presentedReply(user, text);
-        }
-      });
-    }
+  }
+
+  /// Capture the reply rendered by this frame. Returning to this room can
+  /// show words whose Agent notifications all finished while it was hidden.
+  void _queueReplyPresentation() {
+    final attachment = _attachment;
+    final user = attachment.replyId;
+    final text = attachment.text;
+    if (!attachment.isAttached || user == null || _baselineUser != user || attachment.error != null) return;
+    final reply = parseCompanionReply(
+      text,
+      streaming: attachment.running,
+      emotions: _moves.emotionLabels,
+      actions: _moves.actionLabels,
+    );
+    if (reply.words.isEmpty || _bubbleReplyId != user || _bubbleIsError || _bubble != reply.words) return;
+    final current = attachment.captureCurrent();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          current() &&
+          identical(_attachment, attachment) &&
+          _notesForegroundHere &&
+          _phase == _Phase.stage &&
+          _stageReady &&
+          _baselineUser == user &&
+          _bubbleReplyId == user &&
+          attachment.error == null &&
+          !_bubbleIsError &&
+          _bubble == reply.words) {
+        attachment.presentedReply(user, text);
+      }
+    });
   }
 
   Future<void> _send() async {
@@ -2633,6 +2656,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     final padding = MediaQuery.paddingOf(context);
     final store = _store;
     final showStage = _phase == _Phase.stage && store != null;
+    if (showStage && _stageReady) _queueReplyPresentation();
     final name = _name(l10n);
     // Shown only while it still belongs here and nothing else has the floor,
     // in this very frame (the owner hears about it right after).
