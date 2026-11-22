@@ -59,7 +59,10 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
     const claim = await store.claimStep(id, rev, key, {reserveMs,
       retryKnownSafe: step(store.read(id), key, rev)?.state === 'waiting'});
     const start = performance.now(), clock = new AbortController();
-    const timeout = setTimeout(() => clock.abort(new NotesTaskError('execution_budget_exhausted', 'failed')), claim.reserveMs);
+    // The reserve is capped at the deadline, so both can fire together; the deadline is the real reason.
+    const timeout = setTimeout(() => clock.abort(new NotesTaskError(
+      claim.deadlineAtMs !== null && Date.now() >= claim.deadlineAtMs ? 'deadline_expired' : 'execution_budget_exhausted',
+      'failed')), claim.reserveMs);
     timeout.unref?.();
     const signal = AbortSignal.any([controller.signal, clock.signal]);
     const current = () => guard(id, rev, signal, owner);

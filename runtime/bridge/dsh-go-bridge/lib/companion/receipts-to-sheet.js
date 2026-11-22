@@ -59,7 +59,10 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
     const claim = await store.claimStep(id, rev, key, {reserveMs,
       retryKnownSafe: stepOf(store.read(id), key, rev)?.state === 'waiting'});
     const clock = new AbortController();
-    const timer = setTimeout(() => clock.abort(new ReceiptTaskError('execution_budget_exhausted')), claim.reserveMs);
+    // The reserve is capped at the deadline, so both can fire together; the deadline is the real reason.
+    const timer = setTimeout(() => clock.abort(new ReceiptTaskError(
+      claim.deadlineAtMs !== null && Date.now() >= claim.deadlineAtMs ? 'deadline_expired' : 'execution_budget_exhausted')),
+    claim.reserveMs);
     timer.unref?.();
     const signal = AbortSignal.any([controller.signal, clock.signal]);
     const current = () => {
