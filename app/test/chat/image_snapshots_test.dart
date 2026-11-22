@@ -115,6 +115,7 @@ void main() {
 
   test('a replacement store reads persisted references, not current source bytes', () async {
     final first = await get(text: 'saved');
+    ImageSnapshots.forgetHeldIndexes(); // as a restart: read what the disk has
     final reopened = ImageSnapshots(root: () async => root);
     final again = await get(from: reopened, load: _unexpectedLoad);
     expect(again.path, first.path);
@@ -136,6 +137,7 @@ void main() {
     final a = await get(turn: 1, text: 'aaaa');
     final b = await get(turn: 2, text: 'bbbb');
     await get(turn: 1, load: _unexpectedLoad);
+    ImageSnapshots.forgetHeldIndexes(); // as a restart: read what the disk has
     final reopened = ImageSnapshots(root: () async => root, maxBytes: 8);
     final c = await get(from: reopened, turn: 3, text: 'cccc');
 
@@ -147,6 +149,7 @@ void main() {
     // Reintroducing the same hash is safe for a new turn, not for the old key.
     final replacement = await get(from: reopened, turn: 4, text: 'bbbb');
     expect(await replacement.readAsString(), 'bbbb');
+    ImageSnapshots.forgetHeldIndexes(); // as a restart: read what the disk has
     final again = ImageSnapshots(root: () async => root, maxBytes: 8);
     await expectLater(get(from: again, turn: 2, load: _unexpectedLoad), throwsA(isA<ImageSnapshotMissing>()));
     final sizes = await Future.wait((await contents()).map((file) => file.length()));
@@ -203,6 +206,7 @@ void main() {
   test('external content removal reports missing without falling back to the loader', () async {
     final first = await get();
     await first.delete();
+    ImageSnapshots.forgetHeldIndexes(); // as a restart: read what the disk has
     final reopened = ImageSnapshots(root: () async => root);
     await expectLater(get(from: reopened, load: _unexpectedLoad), throwsA(isA<ImageSnapshotMissing>()));
   });
@@ -222,6 +226,7 @@ void main() {
     expect(await otherHost.readAsString(), 'host');
     expect(await unrelated.readAsString(), 'keep');
 
+    ImageSnapshots.forgetHeldIndexes(); // as a restart: read what the disk has
     final reopened = ImageSnapshots(root: () async => root);
     final newSession = await get(from: reopened, text: 'new');
     expect(await newSession.readAsString(), 'new');

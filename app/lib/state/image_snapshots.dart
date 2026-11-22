@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -47,12 +47,17 @@ class ImageSnapshots {
   static final _digestPattern = RegExp(r'^[a-f0-9]{64}$');
 
   // Each directory's index as this process last read or wrote it. Every change
-  // goes through a transaction below, so a directory is read from disk once; a
-  // change whose write fails is dropped with the whole entry ([_forget]).
+  // goes through a transaction below, so a directory is read from disk once.
+  // Set by [_indexOf]; dropped by [_forget] when a change fails to be written,
+  // so the next transaction reads what the disk has.
   static final _indexes = <String, _SnapshotIndex>{};
   // Directories whose access order moved (a hit) since their index was written.
+  // Set by [_find]; cleared by [_write] or [_forget]. While a write keeps
+  // failing it stays set: each run of transactions tries once more, and only
+  // the eviction order waits for it.
   static final _touched = <String>{};
-  // Transactions queued or running per directory.
+  // Transactions queued or running per directory: +1 as one joins the line,
+  // −1 as it leaves, so the one that sees 1 is the last.
   static final _queued = <String, int>{};
 
   static Future<T> _exclusive<T>(String directory, Future<T> Function() action) {
@@ -100,8 +105,9 @@ class ImageSnapshots {
     _touched.remove(directory);
   }
 
-  /// Writes the access order hits moved. Best effort: it is only the order, and
-  /// a failure stays marked for the next transaction to write.
+  /// Writes the access order hits moved. A failure does not fail the image
+  /// that was found: it is only the eviction order, still marked for the next
+  /// transaction to write.
   static Future<void> _writeTouches(String directory) async {
     if (!_touched.contains(directory)) return;
     final index = _indexes[directory];
@@ -111,7 +117,9 @@ class ImageSnapshots {
     }
     try {
       await _write(directory, index);
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('Image snapshot access order not written: ${error.runtimeType}');
+    }
   }
 
   /// Writes the whole of [index], the access order hits moved included.
