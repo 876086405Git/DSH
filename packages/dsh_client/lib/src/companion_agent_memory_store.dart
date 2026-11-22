@@ -110,15 +110,16 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           effect = _agentRevise(turn, source, input);
         case 'quiet':
           effect = _agentQuiet(turn, input);
-        case 'cancel':
+        case 'cancel' || 'postpone':
           final card = _agentCard(turn, _agentText(input, 'card'));
           final id = card['id']! as String;
+          final state = toolName == 'cancel' ? 'cancelled' : 'postponed';
           _agentBudget(turn, {id});
           _db.execute(
-            "UPDATE memory_cards SET plan_state='cancelled',followup=NULL,row_rev=row_rev+1,updated_at_ms=? WHERE id=?",
-            [_checkedNow(), id],
+            'UPDATE memory_cards SET plan_state=?,followup=NULL,row_rev=row_rev+1,updated_at_ms=? WHERE id=?',
+            [state, _checkedNow(), id],
           );
-          _closeAgentFollowups(id, 'cancelled');
+          _closeAgentFollowups(id, state);
           _bumpMemory();
           _bumpControl();
           effect = (changed: {id}, target: id);
