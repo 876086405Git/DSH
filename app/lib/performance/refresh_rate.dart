@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:clock/clock.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -56,9 +57,11 @@ class RefreshRateService {
   bool _started = false;
   Timer? _idle;
 
-  /// The frame [_idle] was set from, and the latest one held since: one timer per
-  /// idle stretch, which on firing waits out whatever is left.
-  Duration _idleFrom = Duration.zero;
+  /// One timer per idle stretch, not one per frame: a held frame's time stamp, the
+  /// clock's time for it, and the latest frame held since. On firing the timer
+  /// waits out whatever is left after that latest frame.
+  Duration _anchor = Duration.zero;
+  DateTime _anchorAt = DateTime(0);
   Duration _heldAt = Duration.zero;
   Duration _lastFrame = Duration.zero;
   Duration _renewedAt = Duration.zero;
@@ -117,15 +120,19 @@ class RefreshRateService {
   void _hold(Duration timeStamp) {
     _heldAt = timeStamp;
     if (_idle != null) return;
-    _idleFrom = timeStamp;
+    _anchor = timeStamp;
+    _anchorAt = clock.now();
     _idle = Timer(idleAfter, _idleCheck);
   }
 
+  /// Measured from now, so a timer that ran late doesn't add its delay.
   void _idleCheck() {
-    final later = _heldAt - _idleFrom;
-    if (later > Duration.zero) {
-      _idleFrom = _heldAt;
-      _idle = Timer(later, _idleCheck);
+    final lastAt = _anchorAt.add(_heldAt - _anchor);
+    final left = idleAfter - clock.now().difference(lastAt);
+    if (left > Duration.zero) {
+      _anchor = _heldAt;
+      _anchorAt = lastAt;
+      _idle = Timer(left, _idleCheck);
       return;
     }
     _idle = null;
