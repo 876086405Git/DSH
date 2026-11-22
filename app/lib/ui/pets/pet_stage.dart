@@ -866,10 +866,14 @@ class PetLayerState extends ConsumerState<PetLayer> with TickerProviderStateMixi
       final next = pet.state;
       WidgetsBinding.instance.addPostFrameCallback((_) => _onState(next));
     }
-    if (pack != null && !identical(pack, _pinned)) {
+    if (!identical(pack, _pinned)) {
       _pinned = pack;
-      PetSheets.instance.pin(pack, pack.animFor(PetStateName.idle));
-      _ready = false;
+      if (pack == null) {
+        PetSheets.instance.unpin();
+      } else {
+        PetSheets.instance.pin(pack, pack.animFor(PetStateName.idle));
+        _ready = false;
+      }
     }
     _armUnhide(prefs);
     _schedulePoll();
