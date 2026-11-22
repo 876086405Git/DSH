@@ -120,6 +120,13 @@ void main() {
       expect(forkPointAfterReply(events, 20), 22);
     });
 
+    test('a reply is looked up from its own event on', () {
+      final transcript = ChatTranscript();
+      _twoTurns().forEach(transcript.apply);
+      expect(transcript.eventsFrom(20).map((event) => event.seq), [20, 21, 22]);
+      expect(forkPointAfterReply(transcript.eventsFrom(20), 20), 22);
+    });
+
     test('an aborted turn still branches after its last reply', () {
       final events = [_prompt(1, 'go'), _reply(2, 'partial'), _turnEnd(3, 'aborted')];
       expect(forkPointAfterReply(events, 2), 3);

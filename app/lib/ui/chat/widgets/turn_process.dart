@@ -52,7 +52,7 @@ class TurnProcess extends StatefulWidget {
 
 /// 摘要:`已完成 · 12 次工具调用 · 2 条消息`;只有几段思考时 `已完成 · 3 段思考`。
 String turnProcessLabel(TurnProcessRow row) {
-  final thoughts = row.rows.whereType<AssistantRow>().where((r) => r.item.reasoning.trim().isNotEmpty).length;
+  late final thoughts = row.rows.whereType<AssistantRow>().where((r) => r.item.reasoning.trim().isNotEmpty).length;
   return [
     appL10n.commonCompleted,
     if (row.toolCalls > 0) appL10n.chatTurnToolCalls(row.toolCalls),

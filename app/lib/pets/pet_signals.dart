@@ -524,15 +524,16 @@ class PetFocusController extends Notifier<PetFocus?> {
 
 final petFocusProvider = NotifierProvider<PetFocusController, PetFocus?>(PetFocusController.new);
 
-/// What the conversation [s] is doing, for the pet.
-PetFocus petFocusOf(HostRef host, String sessionId, ChatState s, {bool compacting = false}) {
+/// What the conversation [s] is doing, for the pet; [activity] is
+/// [runActivityOf] of [s].
+PetFocus petFocusOf(HostRef host, String sessionId, ChatState s, RunActivity? activity, {bool compacting = false}) {
   final approval = s.openApproval;
   final question = approval == null ? s.questions.firstOrNull : null;
   return PetFocus(
     host: host,
     sessionId: sessionId,
     title: s.title,
-    activity: petActivityOf(runActivityOf(s)?.kind),
+    activity: petActivityOf(activity?.kind),
     compacting: compacting,
     waitingKey: approval?.eventId ?? question?.eventId,
     waitingQuestion: question != null,
