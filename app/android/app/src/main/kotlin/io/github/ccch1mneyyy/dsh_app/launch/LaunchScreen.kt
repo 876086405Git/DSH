@@ -315,7 +315,7 @@ object LaunchScreen {
                 val px = LaunchGeometry.iconPx(metrics.density)
                 val variant = runCatching { LauncherIconPlugin.current(context) }.getOrDefault(LauncherIcons.MIST)
                 val dark = LaunchThemeSync.dark(context)
-                val next = if (sdk >= 33) LaunchThemes.next(variant, LaunchThemeSync.custom(context), dark) else null
+                val next = if (sdk >= 33) LaunchThemes.next(LaunchThemeSync.custom(context), dark) { variant } else null
                 val res = mipmapOf(variant)
                 mapOf(
                     "active" to true,
