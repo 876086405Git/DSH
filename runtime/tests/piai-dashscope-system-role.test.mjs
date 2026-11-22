@@ -65,6 +65,7 @@ const beijing = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const openai = 'https://api.openai.com/v1';
 for (const [name, url, compat, role] of [
   ['Beijing endpoint', beijing, undefined, 'system'],
+  ['issue 1139 Qianwen endpoint', 'https://cn-beijing.maas.qianwenaiapi.com/compatible-mode/v1', undefined, 'system'],
   // The workspace label is synthetic; the official endpoint uses workspace.region.
   ['workspace endpoint', 'https://sample-workspace.cn-beijing.maas.aliyuncs.com/compatible-mode/v1', undefined, 'system'],
   ['explicit supportsDeveloperRole true', beijing, { supportsDeveloperRole: true }, 'developer'],
