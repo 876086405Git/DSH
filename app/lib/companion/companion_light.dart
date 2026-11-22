@@ -288,6 +288,23 @@ Stream<String> streamCompanionAgentReply({
   );
 }
 
+/// The exact Messages body used for dispatch and preflight accounting. This
+/// does not send, choose a route, or create another conversational protocol.
+Map<String, Object?> companionAgentRequestBody({
+  required String system,
+  required List<Map<String, Object?>> messages,
+  List<CompanionAgentTool> tools = const [],
+  int maxTokens = 800,
+}) => {
+  'model': companionLightModel,
+  'stream': true,
+  'max_tokens': maxTokens,
+  'thinking': {'type': 'disabled'},
+  'system': system,
+  'messages': messages,
+  if (tools.isNotEmpty) 'tools': [for (final tool in tools) tool.toJson()],
+};
+
 Stream<String> _streamCompanionMessage({
   required http.Client client,
   required String apiKey,
@@ -308,15 +325,9 @@ Stream<String> _streamCompanionMessage({
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
     })
-    ..body = jsonEncode({
-      'model': companionLightModel,
-      'stream': true,
-      'max_tokens': maxTokens,
-      'thinking': {'type': 'disabled'},
-      'system': system,
-      'messages': messages,
-      if (tools.isNotEmpty) 'tools': [for (final tool in tools) tool.toJson()],
-    });
+    ..body = jsonEncode(
+      companionAgentRequestBody(system: system, messages: messages, tools: tools, maxTokens: maxTokens),
+    );
   Map<String, Object?>? startUsage;
   Map<String, Object?>? finalUsage;
   String? stopReason;

@@ -771,20 +771,21 @@ void main() {
   testWidgets('B03 actual auxiliary usage exhausting the shared output budget suppresses the Page wording POST', (
     tester,
   ) async {
+    var maintenanceCalls = 0;
     final room = _Room(tester, root)
       ..answer = (body) async {
         final messages = body['messages']! as List;
         final input = jsonDecode((messages.single as Map)['content'] as String) as Map;
-        return _generated(
-          jsonEncode({
-            'schema_version': 2,
-            'batch_id': input['batch_id'],
-            'covered_message_ids': [for (final source in input['source'] as List) (source as Map)['id']],
-            'operations': [],
-            'completion': 'complete',
-          }),
-          outputTokens: 720,
-        );
+        expect(input['type'], 'memory_maintenance_context');
+        expect(input['kind'], 'extract');
+        expect((input['sources'] as List).map((source) => (source as Map)['id']), [
+          'budget-source-${maintenanceCalls++}',
+        ]);
+        expect((body['tools'] as List).map((tool) => (tool as Map)['name']), contains('remember'));
+        expect(body['max_tokens'], 800);
+        // A real complete end_turn with no tool calls finishes this source;
+        // each physical Messages request reports its actual fixed usage.
+        return _generated('这轮没有新增记忆。', outputTokens: 720);
       };
     await room.open(seed: _seedFollowup);
     // The room's worker belongs to its process-level visit, which a test cannot
@@ -804,13 +805,23 @@ void main() {
         saidAtUtc: room.wallStart,
         offsetMinutes: 0,
       );
-      await settleMixed(tester, room.memory.extract(standIn, forceTail: true));
+      await settleMixed(tester, room.memory.extract(standIn, forceTail: true, offsetMinutes: 0));
+      expect(
+        room.memory.store.messages().singleWhere((source) => source['id'] == 'budget-source-$i')['extraction_state'],
+        'done',
+      );
     }
     room.memory.leave(standIn);
     await room.close();
     await room.open();
+    expect(maintenanceCalls, 4);
     expect(room.requests, hasLength(4));
-    expect(room.requests.map((body) => body['system']), everyElement(companionMemoryExtractionPrompt));
+    expect(
+      room.requests.map((body) => body['system']),
+      everyElement(contains('phone memory using the supplied memory tools')),
+    );
+    expect(room.memory.store.requests().map((row) => row['id']).toSet(), hasLength(4));
+    expect(room.memory.store.requests().map((row) => row['state']), everyElement('finished'));
     expect(room.memory.store.requests().map((row) => row['category']), everyElement('extract'));
     expect(room.memory.store.requests().map((row) => (row['raw_usage']! as Map)['output_tokens']), everyElement(720));
     await room.wait(const Duration(minutes: 2));

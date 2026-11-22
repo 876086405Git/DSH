@@ -1,10 +1,14 @@
-// r2 fixture 2: real store -> worker -> light HTTP/SSE adapter -> receipt.
-// Proposals below are fixed test data. Passing proves the outbound clocks and
-// acceptance path, not that a model understands relative dates.
+// r2 fixture 2: real store -> shared tool loop -> light HTTP/SSE -> receipts.
+// Fixed tool bytes prove outbound clocks, validation and storage, not model
+// understanding of relative dates. Each physical continuation owns a receipt.
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:dsh_app/companion/companion_agent_tools.dart';
 import 'package:dsh_app/companion/companion_context.dart';
 import 'package:dsh_app/companion/companion_light.dart';
+import 'package:dsh_app/companion/companion_local.dart';
+import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_memory_worker.dart';
 import 'package:dsh_client/companion.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,18 +26,15 @@ const _afternoon = {'local_date': '2026-11-03', 'precision': 'part_of_day', 'wor
 const _tuesday = {'local_date': '2026-11-03', 'precision': 'day', 'wording': '明天'};
 const _thursday = {'local_date': '2026-11-05', 'precision': 'day', 'wording': '明天'};
 
-MemoryRow _exhibition(String id, String quote, String text, MemoryRow time) => {
-  'op': 'create',
+MemoryRow _exhibition(String id, String text, MemoryRow time) => {
+  'source': id,
   'kind': 'episode',
   'text': text,
   'keywords': ['纸展'],
-  'evidence': <MemoryRow>[
-    {'message_id': id, 'quote': quote},
-  ],
   'event_time': time,
 };
 
-http.Response _reply(String proposal) => http.Response.bytes(
+http.Response _reply({MemoryRow? input, String? callId}) => http.Response.bytes(
   utf8.encode(
     [
       {
@@ -42,13 +43,27 @@ http.Response _reply(String proposal) => http.Response.bytes(
           'usage': {'input_tokens': 900},
         },
       },
-      {
-        'type': 'content_block_delta',
-        'delta': {'type': 'text_delta', 'text': proposal},
-      },
+      if (input != null) ...[
+        {
+          'type': 'content_block_start',
+          'index': 0,
+          'content_block': {'type': 'tool_use', 'id': callId, 'name': 'remember', 'input': <String, Object?>{}},
+        },
+        {
+          'type': 'content_block_delta',
+          'index': 0,
+          'delta': {'type': 'input_json_delta', 'partial_json': jsonEncode(input)},
+        },
+        {'type': 'content_block_stop', 'index': 0},
+      ] else
+        {
+          'type': 'content_block_delta',
+          'index': 0,
+          'delta': {'type': 'text_delta', 'text': '已按原话保存。'},
+        },
       {
         'type': 'message_delta',
-        'delta': {'stop_reason': 'end_turn'},
+        'delta': {'stop_reason': input == null ? 'end_turn' : 'tool_use'},
         'usage': _finalUsage,
       },
       {'type': 'message_stop'},
@@ -58,56 +73,87 @@ http.Response _reply(String proposal) => http.Response.bytes(
   headers: {'content-type': 'text/event-stream; charset=utf-8'},
 );
 
+// Compare actual outbound source values, without rebuilding the old envelope.
+List<MemoryRow> _sourceClocks(MemoryRow input) => [
+  for (final source in (input['sources'] as List).cast<MemoryRow>())
+    {
+      'id': source['id'],
+      'first_seq': source['first_seq'],
+      'source_rev': source['source_rev'],
+      'said_at_utc': source['said_at_utc'],
+      'offset_minutes': source['offset_minutes'],
+      'text': source['text'],
+      if (source['edited_at_utc'] != null) 'edited_at_utc': source['edited_at_utc'],
+    },
+];
+
 class _Phone {
   _Phone(this.now) {
     store = CompanionMemoryStore(sqlite3.openInMemory(), nowMilliseconds: () => now);
+    owner = CompanionMemoryOwner(
+      store,
+      CompanionLocal.at(Directory('/unused-dates-replay')),
+      nowMilliseconds: () => now,
+    );
     addTearDown(() async {
       await worker?.stop();
-      store.close();
+      owner.dispose();
     });
   }
 
   int now;
   late final CompanionMemoryStore store;
+  late final CompanionMemoryOwner owner;
   CompanionMemoryWorker? worker;
   final inputs = <MemoryRow>[];
 
   MemoryRow say(String id, String text) =>
       store.submitMessage(id: id, sessionId: 'light', text: text, saidAtUtc: now, offsetMinutes: 480);
 
-  Future<void> extract(MemoryRow fixedOperation) async {
-    final callsBefore = inputs.length;
+  Future<void> extract(MemoryRow fixedInput) async {
+    final inputsBefore = inputs.length;
+    final requestIdsBefore = store.requests().map((row) => row['id']).toSet();
+    final sentIds = <String>[];
+    final callId = 'date-$inputsBefore';
+    var posts = 0;
     final route = CompanionLightMemoryTransport(
       apiKey: () => 'offline-replay-placeholder',
       client: () => MockClient((request) async {
+        posts++;
         expect(request.method, 'POST');
         expect(request.url.toString(), companionLightEndpoint);
         final body = jsonDecode(request.body) as MemoryRow;
         expect(body['model'], companionLightModel);
-        expect(body['system'], companionMemoryExtractionPrompt);
+        expect(body['system'], contains('phone memory using the supplied memory tools'));
         expect(body['thinking'], {'type': 'disabled'});
         expect(body['stream'], isTrue);
         expect(body['max_tokens'], 800);
-        expect(body.containsKey('tools'), isFalse);
+        expect((body['tools'] as List).map((tool) => (tool as Map)['name']), contains('remember'));
         final messages = (body['messages'] as List).cast<MemoryRow>();
-        expect(messages, hasLength(1));
-        expect(messages.single['role'], 'user');
-        final input = jsonDecode(messages.single['content'] as String) as MemoryRow;
-        inputs.add(input);
-        // Observe the production onSent callback before returning any bytes.
-        final sent = store.requests().last;
-        expect(sent['state'], 'sent');
+        expect(messages.first['role'], 'user');
+        final input = jsonDecode(messages.first['content'] as String) as MemoryRow;
+        expect(input['type'], 'memory_maintenance_context');
+        expect(input['kind'], 'extract');
+        expect((input['sources'] as List).cast<MemoryRow>().every((source) => source['scope'] == 'real'), isTrue);
+        expect(input['processed_at_utc'], DateTime.fromMillisecondsSinceEpoch(now, isUtc: true).toIso8601String());
+        // Observe production onSent before returning any provider bytes.
+        final sent = store.requests().singleWhere((row) => row['state'] == 'sent' && row['terminal'] == null);
         expect(sent['sent_at_ms'], now);
-        expect(sent['batch_id'], input['batch_id']);
-        return _reply(
-          jsonEncode({
-            'schema_version': 2,
-            'batch_id': input['batch_id'],
-            'covered_message_ids': [(fixedOperation['evidence'] as List<MemoryRow>).single['message_id']],
-            'operations': <MemoryRow>[fixedOperation],
-            'completion': 'complete',
-          }),
-        );
+        expect(requestIdsBefore, isNot(contains(sent['id'])));
+        sentIds.add(sent['id'] as String);
+        if (posts == 1) {
+          expect(messages, hasLength(1));
+          inputs.add(input);
+          return _reply(input: fixedInput, callId: callId);
+        }
+        expect(posts, 2);
+        expect(messages, hasLength(3));
+        final results = (messages.last['content'] as List).cast<MemoryRow>();
+        expect(results, hasLength(1));
+        expect(results.single['type'], 'tool_result');
+        expect(results.single['tool_use_id'], callId);
+        expect((jsonDecode(results.single['content'] as String) as Map)['applied'], isTrue);
+        return _reply();
       }),
     );
     worker = CompanionMemoryWorker(
@@ -115,10 +161,24 @@ class _Phone {
       transport: () => route,
       nowMilliseconds: () => now,
       estimateTokens: estimateCompanionMemoryTokens,
+      maintenanceTools: (turn, current, committed) => CompanionAgentMemoryTools.maintenance(
+        memory: owner,
+        turn: turn,
+        isCurrent: current,
+        forgottenNotice: '',
+        onMaintenanceCommitted: ({required memory, required turnId, required beforeRevision, required revision}) {
+          committed(memory: memory, turnId: turnId, beforeRevision: beforeRevision, revision: revision);
+        },
+      ),
     );
     // These opportunities are already beyond the production tail threshold.
-    expect(await worker!.extract(), CompanionMemoryWork.committed);
-    expect(inputs, hasLength(callsBefore + 1));
+    expect(await worker!.extract(offsetMinutes: 480), CompanionMemoryWork.committed);
+    expect(inputs, hasLength(inputsBefore + 1));
+    expect(posts, 2);
+    expect(sentIds.toSet(), hasLength(2));
+    final receipts = store.requests().where((row) => sentIds.contains(row['id'])).toList();
+    expect(receipts, hasLength(2));
+    expect(receipts.map((row) => row['batch_id']).toSet(), hasLength(1));
     expect(store.messages().every((message) => message['extraction_state'] == 'done'), isTrue);
   }
 }
@@ -173,29 +233,29 @@ void main() {
     expect(first.store.requests(), isEmpty);
     expect(later.store.requests(), isEmpty);
     first.now = firstCall;
-    await first.extract(_exhibition('paper', '明天下午去看纸展', '你计划在11月3日下午去看纸展。', _afternoon));
+    await first.extract(_exhibition('paper', '你计划在11月3日下午去看纸展。', _afternoon));
     expect(later.inputs, isEmpty);
     expect(later.store.requests(), isEmpty);
     expect(later.store.messages().single['extraction_state'], 'pending');
     later.now = laterCall;
-    await later.extract(_exhibition('paper', '明天下午去看纸展', '你计划在11月3日下午去看纸展。', _afternoon));
+    await later.extract(_exhibition('paper', '你计划在11月3日下午去看纸展。', _afternoon));
 
     for (var i = 0; i < 2; i++) {
       final phone = [first, later][i];
       final input = phone.inputs.single;
-      expect(input['scope'], 'real');
+      expect((input['sources'] as List).cast<MemoryRow>().single['scope'], 'real');
       expect(input['processed_at_utc'], i == 0 ? '2026-11-02T15:58:00.000Z' : '2026-11-03T00:00:00.000Z');
-      expect(input['source'], [
+      expect(_sourceClocks(input), [
         {
           'id': 'paper',
           'first_seq': original[i]['first_seq'],
           'source_rev': 1,
-          'said_at_utc': '2026-11-02T15:55:00.000Z',
+          'said_at_utc': DateTime.utc(2026, 11, 2, 15, 55).millisecondsSinceEpoch,
           'offset_minutes': 480,
           'text': '明天下午去看纸展',
         },
       ]);
-      expect(input['existing'], isEmpty);
+      expect(input['cards'], isEmpty);
       final card = phone.store.cards().single;
       expect(card['event_time'], _afternoon); // Exact three keys: no invented clock hour.
       expect(card['text'], '你计划在11月3日下午去看纸展。');
@@ -204,7 +264,10 @@ void main() {
       expect(proof['offset_minutes'], 480);
       expect(proof['source_rev'], 1);
       _noFollowup(phone);
-      _receipt(phone.store.requests().single, i == 0 ? firstCall : laterCall, i == 0 ? '2026-11-02' : '2026-11-03');
+      expect(phone.store.requests(), hasLength(2));
+      for (final receipt in phone.store.requests()) {
+        _receipt(receipt, i == 0 ? firstCall : laterCall, i == 0 ? '2026-11-02' : '2026-11-03');
+      }
     }
   });
 
@@ -219,7 +282,7 @@ void main() {
     for (final phone in [edited, fresh]) {
       originals.add(phone.say('monday', '小鹿，明天去看纸展'));
       phone.now = mondayCall;
-      await phone.extract(_exhibition('monday', '小鹿，明天去看纸展', '你计划在11月3日去看纸展。', _tuesday));
+      await phone.extract(_exhibition('monday', '你计划在11月3日去看纸展。', _tuesday));
       expect(phone.store.cards().single['event_time'], _tuesday);
     }
 
@@ -237,27 +300,27 @@ void main() {
     expect(newSource['edited_at_utc'], isNull);
 
     edited.now = wednesdayCall;
-    await edited.extract(_exhibition('monday', '小露，明天去看纸展', '你计划在11月3日去看纸展。', _tuesday));
+    await edited.extract(_exhibition('monday', '你计划在11月3日去看纸展。', _tuesday));
     fresh.now = wednesdayCall;
-    await fresh.extract(_exhibition('wednesday', '小露，明天去看纸展', '你计划在11月5日去看纸展。', _thursday));
+    await fresh.extract(_exhibition('wednesday', '你计划在11月5日去看纸展。', _thursday));
 
-    expect(edited.inputs.last['source'], [
+    expect(_sourceClocks(edited.inputs.last), [
       {
         'id': 'monday',
         'first_seq': originals[0]['first_seq'],
         'source_rev': 2,
-        'said_at_utc': '2026-11-02T15:55:00.000Z',
+        'said_at_utc': DateTime.utc(2026, 11, 2, 15, 55).millisecondsSinceEpoch,
         'offset_minutes': 480,
         'text': '小露，明天去看纸展',
-        'edited_at_utc': '2026-11-04T00:00:00.000Z',
+        'edited_at_utc': DateTime.utc(2026, 11, 4).millisecondsSinceEpoch,
       },
     ]);
-    expect(fresh.inputs.last['source'], [
+    expect(_sourceClocks(fresh.inputs.last), [
       {
         'id': 'wednesday',
         'first_seq': newSource['first_seq'],
         'source_rev': 1,
-        'said_at_utc': '2026-11-04T00:00:00.000Z',
+        'said_at_utc': DateTime.utc(2026, 11, 4).millisecondsSinceEpoch,
         'offset_minutes': 480,
         'text': '小露，明天去看纸展',
       },
@@ -272,22 +335,25 @@ void main() {
     expect(added['event_time'], _thursday);
     for (final phone in [edited, fresh]) {
       expect(phone.inputs, hasLength(2));
-      expect(phone.inputs.first['source'], [
+      expect(_sourceClocks(phone.inputs.first), [
         {
           'id': 'monday',
           'first_seq': originals[phone == edited ? 0 : 1]['first_seq'],
           'source_rev': 1,
-          'said_at_utc': '2026-11-02T15:55:00.000Z',
+          'said_at_utc': DateTime.utc(2026, 11, 2, 15, 55).millisecondsSinceEpoch,
           'offset_minutes': 480,
           'text': '小鹿，明天去看纸展',
         },
       ]);
       expect(phone.inputs.last['processed_at_utc'], '2026-11-04T00:03:00.000Z');
       final receipts = phone.store.requests();
-      expect(receipts, hasLength(2));
-      expect(receipts.first['id'], isNot(receipts.last['id']));
-      _receipt(receipts.first, mondayCall, '2026-11-02');
-      _receipt(receipts.last, wednesdayCall, '2026-11-04');
+      expect(receipts, hasLength(4));
+      expect(receipts.map((row) => row['id']).toSet(), hasLength(4));
+      expect(receipts.map((row) => row['batch_id']).toSet(), hasLength(2));
+      for (final receipt in receipts) {
+        final first = receipt['sent_at_ms'] == mondayCall;
+        _receipt(receipt, first ? mondayCall : wednesdayCall, first ? '2026-11-02' : '2026-11-04');
+      }
       _noFollowup(phone);
     }
   });

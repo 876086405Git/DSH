@@ -5600,6 +5600,40 @@ class L10nEn extends L10n {
   String get companionMemoryTitle => 'What she remembers';
 
   @override
+  String get companionMemoryCard => 'Card';
+
+  @override
+  String get companionMemoryPerson => 'Person';
+
+  @override
+  String get companionMemoryDiary => 'Diary';
+
+  @override
+  String get companionMemoryImpression => 'Her impression of you';
+
+  @override
+  String get companionMemorySearchTitle => 'Memory search';
+
+  @override
+  String get companionMemorySearchDescription =>
+      'Download an approximately 24 MB model to find related memories on this phone.';
+
+  @override
+  String get companionMemorySearchDownload => 'Download model';
+
+  @override
+  String get companionMemorySearchReady => 'Local model is ready';
+
+  @override
+  String get companionMemorySearchDownloading => 'Downloading…';
+
+  @override
+  String get companionMemorySearchFailed => 'Could not prepare the local model. Try downloading it again.';
+
+  @override
+  String get companionMemorySearchUnavailable => 'Local memory search is not available on this device.';
+
+  @override
   String companionMemoryScope(String host) {
     return 'Saved on $host, shared by both modes. You can edit or forget these anytime.';
   }
@@ -5798,13 +5832,19 @@ class L10nEn extends L10n {
   String get companionBond0 => 'Just met';
 
   @override
-  String get companionBond1 => 'Getting to know each other';
+  String get companionBond1 => 'Familiar';
 
   @override
-  String get companionBond2 => 'Close';
+  String get companionBond2 => 'Friends';
 
   @override
-  String get companionBond3 => 'Very close';
+  String get companionBond3 => 'Close';
+
+  @override
+  String get companionBond4 => 'Very close';
+
+  @override
+  String get companionBond5 => 'Inseparable';
 
   @override
   String get companionCloser1 => 'I think... I\'m not so nervous anymore.';
@@ -5814,6 +5854,12 @@ class L10nEn extends L10n {
 
   @override
   String get companionCloser3 => 'Keep coming back, okay? I\'ll miss you.';
+
+  @override
+  String get companionCloser4 => 'Even sitting quietly feels nice with you here.';
+
+  @override
+  String get companionCloser5 => 'Somewhere along the way, having you here became part of my day.';
 
   @override
   String get companionPatClose => 'I love it when you pat my head.';
@@ -7500,6 +7546,9 @@ class L10nEn extends L10n {
   @override
   String get companionReceiptPriorResult =>
       'The workbook from the earlier agreement was found; the new agreement has not been completed.';
+
+  @override
+  String get companionLegacyConversation => 'Earlier conversation (character not recorded)';
 
   @override
   String get automaticDiagnosticsRecover => 'Recover local records';

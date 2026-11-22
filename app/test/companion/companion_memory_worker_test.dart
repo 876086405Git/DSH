@@ -2,7 +2,12 @@
 // These tests use no keys, model, host, or real clock.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:dsh_app/companion/companion_agent_tools.dart';
+import 'package:dsh_app/companion/companion_context.dart';
+import 'package:dsh_app/companion/companion_local.dart';
+import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_memory_worker.dart';
 import 'package:dsh_client/companion.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +32,7 @@ http.Response _reply(String text, {String stop = 'end_turn', bool complete = tru
     },
     {
       'type': 'content_block_delta',
+      'index': 0,
       'delta': {'type': 'text_delta', 'text': text},
     },
     {
@@ -44,60 +50,78 @@ Map<String, Object?> _input(http.Request request) {
   final body = jsonDecode(request.body) as Map<String, Object?>;
   expect(body['thinking'], {'type': 'disabled'});
   expect(body['max_tokens'], 800);
-  expect(body.containsKey('tools'), isFalse);
+  expect((body['tools'] as List).map((tool) => (tool as Map)['name']), containsAll(['remember', 'merge']));
   final messages = body['messages']! as List;
-  expect(messages, hasLength(1));
-  return jsonDecode((messages.single as Map)['content'] as String) as Map<String, Object?>;
+  return jsonDecode((messages.first as Map)['content'] as String) as Map<String, Object?>;
 }
 
-String _empty(Map<String, Object?> input) => jsonEncode({
-  'schema_version': 2,
-  'batch_id': input['batch_id'],
-  'covered_message_ids': [for (final source in input['source']! as List) (source as Map)['id']],
-  'operations': [],
-  'completion': 'complete',
-});
+http.Response _tool(String name, String arguments) => http.Response(
+  [
+    {
+      'type': 'message_start',
+      'message': {
+        'usage': {'input_tokens': 900},
+      },
+    },
+    {
+      'type': 'content_block_start',
+      'index': 0,
+      'content_block': {'type': 'tool_use', 'id': 'maintenance-call', 'name': name, 'input': <String, Object?>{}},
+    },
+    {
+      'type': 'content_block_delta',
+      'index': 0,
+      'delta': {'type': 'input_json_delta', 'partial_json': arguments},
+    },
+    {'type': 'content_block_stop', 'index': 0},
+    {
+      'type': 'message_delta',
+      'delta': {'stop_reason': 'tool_use'},
+      'usage': _usage,
+    },
+    {'type': 'message_stop'},
+  ].map((event) => 'data: ${jsonEncode(event)}\n\n').join(),
+  200,
+  headers: {'content-type': 'text/event-stream; charset=utf-8'},
+);
 
-String _merge(Map<String, Object?> input, {bool empty = false}) {
-  final rows = (input['rows']! as List).cast<Map>();
-  return jsonEncode({
-    'schema_version': 2,
-    'batch_id': input['batch_id'],
-    'completion': 'complete',
-    'operations': empty
-        ? []
-        : [
-            {
-              'op': 'merge',
-              'target_id': rows.first['id'],
-              'expected_row_rev': rows.first['row_rev'],
-              'from': [
-                {'id': rows.last['id'], 'expected_row_rev': rows.last['row_rev']},
-              ],
-              'text': rows.first['text'],
-              'evidence': [
-                for (final row in rows)
-                  for (final proof in (row['evidence'] as List).cast<Map>())
-                    {'message_id': proof['message_id'], 'quote': proof['quote']},
-              ],
-            },
-          ],
-  });
+http.Response _merge(Map<String, Object?> input) {
+  final rows = (input['cards']! as List).cast<Map>();
+  return _tool(
+    'merge',
+    jsonEncode({
+      'card': rows.first['id'],
+      'from': [rows.last['id']],
+    }),
+  );
 }
 
 class _Phone {
   _Phone() {
     store = CompanionMemoryStore(db, nowMilliseconds: () => now);
+    memory = CompanionMemoryOwner(
+      store,
+      CompanionLocal.at(Directory('/unused-memory-worker-test')),
+      nowMilliseconds: () => now,
+    );
     addTearDown(() async {
       await worker?.stop();
-      store.close();
+      dispose();
     });
   }
 
   final db = sqlite3.openInMemory();
   int now = DateTime.utc(2026, 11, 21, 1).millisecondsSinceEpoch;
   late final CompanionMemoryStore store;
+  late final CompanionMemoryOwner memory;
   CompanionMemoryWorker? worker;
+  bool disposed = false;
+
+  void dispose() {
+    if (disposed) return;
+    disposed = true;
+    memory.dispose();
+  }
 
   void say(String id, String text) =>
       store.submitMessage(id: id, sessionId: 'light', text: text, saidAtUtc: now, offsetMinutes: 480);
@@ -169,13 +193,31 @@ class _Phone {
     expect(store.cards(), hasLength(2));
   }
 
-  CompanionMemoryWorker withHttp(Future<http.Response> Function(http.Request) answer, {String key = 'test'}) {
+  CompanionMemoryWorker withHttp(
+    Future<http.Response> Function(http.Request) answer, {
+    String key = 'test',
+    int Function(String)? estimate,
+  }) {
     final route = CompanionLightMemoryTransport(apiKey: () => key, client: () => MockClient(answer));
     return worker = CompanionMemoryWorker(
       store: store,
       transport: () => route,
       nowMilliseconds: () => now,
-      estimateTokens: (text) => text.runes.length,
+      estimateTokens: estimate ?? estimateCompanionMemoryTokens,
+      maintenanceTools: (turn, current, committed) => CompanionAgentMemoryTools.maintenance(
+        memory: memory,
+        turn: turn,
+        isCurrent: current,
+        forgottenNotice: '',
+        onMaintenanceCommitted: ({required memory, required turnId, required beforeRevision, required revision}) {
+          committed(memory: memory, turnId: turnId, beforeRevision: beforeRevision, revision: revision);
+          expect(
+            worker!.acceptsControl(revision),
+            isTrue,
+            reason: 'the real own commit advances this live claim before changed',
+          );
+        },
+      ),
     );
   }
 }
@@ -287,238 +329,418 @@ void main() {
     expect(phone.store.isFollowupCurrent(capture, nowMs: phone.now), isTrue);
   });
 
-  test('exact local consolidation works without credentials and sends no request', () async {
-    final phone = _Phone()..pair(exact: true);
+  test('A2 safe exact local consolidation needs no credentials and an oversized model envelope leaves other cards untouched', () async {
+    final exact = _Phone()..pair(exact: true);
     var calls = 0;
-    final worker = phone.withHttp((_) async {
+    Future<http.Response> unexpected(http.Request _) async {
       calls++;
-      throw StateError('no cloud request expected');
-    }, key: '');
-    await worker.consolidate();
-    expect(phone.store.cards(), hasLength(1));
+      throw StateError('no request expected');
+    }
+
+    final noKey = exact.withHttp(unexpected, key: '');
+    expect(await noKey.consolidate(), CompanionMemoryWork.committed);
+    expect(exact.store.cards(), hasLength(1));
+    expect(exact.store.requests(), isEmpty);
+    expect(exact.db.select('SELECT * FROM memory_agent_maintenance_claims'), isEmpty);
+    final phone = _Phone()..pair();
+    final tooLarge = phone.withHttp(unexpected, estimate: (_) => memoryBatchInputTokens + 1);
+    expect(await tooLarge.consolidate(), CompanionMemoryWork.idle);
+    expect(phone.store.cards(), hasLength(2), reason: 'different wording is not a local exact merge');
     expect(phone.store.requests(), isEmpty);
+    expect(phone.db.select('SELECT * FROM memory_agent_maintenance_claims'), isEmpty);
     expect(calls, 0);
   });
 
-  test('consolidation sends the exact prompt and retains raw usage without triggering itself again', () async {
+  test('A2 organize uses completed tool results, one parent, and one receipt for each physical request', () async {
     final phone = _Phone()..pair();
+    phone.now += const Duration(days: 1).inMilliseconds;
     var calls = 0;
     final worker = phone.withHttp((request) async {
       calls++;
-      expect((jsonDecode(request.body) as Map)['system'], companionMemoryConsolidationPrompt);
-      expect(phone.store.requests().single['category'], 'organize');
-      expect(phone.store.requests().single['state'], 'sent');
-      return _reply(_merge(_input(request)));
+      final input = _input(request);
+      expect(input['kind'], 'organize');
+      final sent = phone.store.requests().singleWhere((row) => row['state'] == 'sent');
+      expect(sent['category'], 'organize');
+      expect(
+        sent['reserved_input'],
+        estimateCompanionMemoryTokens(request.body),
+        reason: 'accounting measures the very same complete body that was dispatched',
+      );
+      if (calls == 1) return _merge(input);
+      if (calls == 2) {
+        final messages = (jsonDecode(request.body) as Map)['messages'] as List;
+        final result = ((messages.last as Map)['content'] as List).single as Map;
+        expect(result['tool_use_id'], 'maintenance-call');
+        expect((jsonDecode(result['content'] as String) as Map)['applied'], isTrue);
+        expect((input['cards'] as List), hasLength(1), reason: 'own commit was reread, not cancelled by its notice');
+      }
+      return _reply('Done.');
     });
     expect(await worker.consolidate(), CompanionMemoryWork.committed);
     expect(phone.store.cards(), hasLength(1));
-    final receipt = phone.store.requests().single;
-    final raw = receipt['raw_usage'] is String ? jsonDecode(receipt['raw_usage'] as String) : receipt['raw_usage'];
-    expect((raw as Map)['final_usage'], _usage);
-    phone.now += 86400001;
+    final receipts = phone.store.requests();
+    expect(receipts, hasLength(2));
+    expect(receipts.map((row) => row['id']).toSet(), hasLength(2));
+    expect(receipts.map((row) => row['batch_id']).toSet(), hasLength(1));
+    for (final row in receipts) {
+      expect(row['state'], 'finished');
+      expect((row['raw_usage']! as Map)['final_usage'], _usage);
+    }
+    expect(phone.db.select('SELECT closed FROM memory_agent_turns').single['closed'], 1);
+    final card = phone.store.cards().single;
+    phone.store.setPinned(id: card['id'] as String, expectedRowRev: card['row_rev'] as int, pinned: true);
     expect(await worker.consolidate(), CompanionMemoryWork.idle);
-    expect(calls, 1);
+    expect(calls, 2, reason: 'a changed card cannot buy a second daily parent');
+    phone.now += 86400001;
+    expect(await worker.consolidate(), CompanionMemoryWork.committed);
+    expect(calls, 3);
   });
 
   test(
-    'extract and consolidate share the active request and a cancelled late merge only settles its receipt',
+    'A2 organize does not trigger itself across an unchanged day but accepts a later day with real new sources',
     () async {
       final phone = _Phone()..pair();
-      final started = Completer<Map<String, Object?>>();
-      final response = Completer<http.Response>();
-      final worker = phone.withHttp((request) {
-        started.complete(_input(request));
-        return response.future;
-      });
-      final running = worker.consolidate();
-      final input = await started.future;
-      phone.say('s3', '今天练了一会儿琴。');
-      expect(await worker.extract(forceTail: true), CompanionMemoryWork.idle);
-      expect(await worker.consolidate(), CompanionMemoryWork.idle);
-      expect(phone.db.select("SELECT state FROM memory_events WHERE message_id='s3'").single['state'], 'pending');
-      final stop = worker.stop();
-      phone.store.deleteMessage(id: 's1', expectedSourceRev: 1);
-      // Deleting a source advances the archive history boundary before the
-      // provider returns. The unrelated raw message remains, not its old job.
-      final skipped = phone.db.select("SELECT state,reason FROM memory_events WHERE message_id='s3'").single;
-      expect(skipped['state'], 'skipped');
-      expect(skipped['reason'], 'history_cutoff');
-      response.complete(_reply(_merge(input)));
-      expect(await running, CompanionMemoryWork.stale);
-      await stop;
-      expect(phone.store.cards(), hasLength(1));
-      expect(phone.store.requests(), hasLength(1));
-      expect(phone.store.requests().single['state'], 'finished');
-      final after = phone.db.select("SELECT state,reason FROM memory_events WHERE message_id='s3'").single;
-      expect(after['state'], 'skipped');
-      expect(after['reason'], 'history_cutoff');
-      expect(phone.store.messages().singleWhere((row) => row['id'] == 's3')['text'], '今天练了一会儿琴。');
-    },
-  );
-
-  test(
-    'a new change waits for the same rolling organize allowance rather than opening another model request',
-    () async {
-      final phone = _Phone()..pair();
+      // The first organization covers an already complete source day. Merely
+      // moving today's raw sources into yesterday would be legitimate new work.
+      phone.now += const Duration(days: 1).inMilliseconds;
       var calls = 0;
       final worker = phone.withHttp((request) async {
         calls++;
-        return _reply(_merge(_input(request), empty: true));
+        final input = _input(request);
+        if (calls == 1) return _merge(input);
+        if (calls == 3) {
+          expect((input['sources']! as List).map((row) => (row as Map)['id']), ['new-day-source']);
+        }
+        return _reply('Done.');
       });
       expect(await worker.consolidate(), CompanionMemoryWork.committed);
-      final row = phone.store.cards().first;
-      phone.store.setPinned(id: row['id'] as String, expectedRowRev: row['row_rev'] as int, pinned: true);
-      expect(await worker.consolidate(), CompanionMemoryWork.waiting);
-      expect(calls, 1);
-      phone.now += 86400001;
-      expect(await worker.consolidate(), CompanionMemoryWork.committed);
+      expect(phone.store.cards(), hasLength(1));
       expect(calls, 2);
+      final unchanged = Map<String, Object?>.from(phone.store.cards().single);
+      phone.now += 86400001;
+      expect(await worker.consolidate(), CompanionMemoryWork.idle);
+      expect(calls, 2, reason: 'the date and the prior maintenance write are not new evidence');
+      expect(phone.store.cards().single, unchanged);
+      expect(phone.db.select('SELECT id FROM memory_agent_maintenance_claims'), hasLength(1));
+      phone.say('new-day-source', '今天练了新的一首小曲。');
+      expect(await worker.consolidate(), CompanionMemoryWork.idle, reason: 'the new source day is not complete yet');
+      expect(calls, 2);
+      phone.now += const Duration(days: 1).inMilliseconds;
+      expect(await worker.consolidate(), CompanionMemoryWork.committed);
+      expect(calls, 3, reason: 'an unprocessed completed day with a real source is a new diary opportunity');
+      expect(phone.db.select('SELECT id FROM memory_agent_maintenance_claims'), hasLength(2));
+      final receipts = phone.store.requests();
+      expect(receipts, hasLength(3));
+      expect(receipts.map((row) => row['batch_id']).toSet(), hasLength(2));
+      expect(receipts.every((row) => row['state'] == 'finished'), isTrue);
     },
   );
 
-  test('a complete invalid consolidation is examined once and does not become an automatic format retry', () async {
+  test('A2 extract and organize share the lane and cancellation preserves the original receipt', () async {
     final phone = _Phone()..pair();
-    var calls = 0;
-    final worker = phone.withHttp((request) async {
-      calls++;
-      _input(request);
-      return _reply('{broken');
-    });
-    expect(await worker.consolidate(), CompanionMemoryWork.invalid);
-    phone.now += 86400001;
-    expect(await worker.consolidate(), CompanionMemoryWork.idle);
-    expect(phone.store.cards(), hasLength(2));
-    expect(calls, 1);
-  });
-
-  test('complete empty result commits the exact saved source and raw final receipt', () async {
-    final phone = _Phone();
-    phone.say('u1', '  今天就随便聊聊。\n');
-    final worker = phone.withHttp((request) async {
-      expect(phone.store.requests().single['state'], 'sent');
-      final input = _input(request);
-      final source = (input['source']! as List).single as Map;
-      expect(source['id'], 'u1');
-      expect(source['text'], '  今天就随便聊聊。\n');
-      expect(source['said_at_utc'], DateTime.fromMillisecondsSinceEpoch(phone.now, isUtc: true).toIso8601String());
-      expect(source['offset_minutes'], 480);
-      return _reply(_empty(input));
-    });
-    expect(await worker.extract(forceTail: true), CompanionMemoryWork.committed);
-    expect(phone.db.select('SELECT state FROM memory_events').single['state'], 'done');
-    expect(phone.store.cards(), isEmpty);
-    final receipt = phone.store.requests().single;
-    final raw = receipt['raw_usage'] is String ? jsonDecode(receipt['raw_usage'] as String) : receipt['raw_usage'];
-    expect((raw as Map)['final_usage'], _usage);
-    expect(raw['input_uncached'], 20);
-    expect(raw['start_usage'], {'input_tokens': 900});
-  });
-
-  test('two complete malformed replies skip only their stable batch despite a newer input', () async {
-    final phone = _Phone();
-    phone.say('u1', '今天咖啡喝无糖。');
-    final batches = <Object?>[];
-    final worker = phone.withHttp((request) async {
-      final input = _input(request);
-      batches.add(input['batch_id']);
-      expect((input['source']! as List).map((s) => (s as Map)['id']), ['u1']);
-      return _reply('{broken');
-    });
-    expect(await worker.extract(forceTail: true), CompanionMemoryWork.invalid);
-    phone.say('u2', '我还开始学手风琴。');
-    expect(await worker.extract(forceTail: true), CompanionMemoryWork.invalid);
-    expect(batches[0], batches[1]);
-    final rows = phone.db.select('SELECT message_id,state,format_failures FROM memory_events ORDER BY seq');
-    expect(rows[0]['state'], 'skipped');
-    expect(rows[0]['format_failures'], 2);
-    expect(rows[1]['state'], 'pending');
-    expect(rows[1]['format_failures'], 0);
-    expect(phone.store.requests(), hasLength(2));
-  });
-
-  test('401 counts a sent request but consumes no format retry; empty key sends nothing', () async {
-    final phone = _Phone();
-    phone.say('u1', '我的咖啡喝无糖。');
-    final worker = phone.withHttp((_) async => http.Response('unauthorized', 401));
-    expect(await worker.extract(forceTail: true), CompanionMemoryWork.configuration);
-    expect(phone.store.requests().single['sent_at_ms'], phone.now);
-    expect(phone.db.select('SELECT format_failures FROM memory_events').single['format_failures'], 0);
-    expect(phone.store.archive['cursor_seq'], 0);
-    final noKey = phone.withHttp((_) async => throw StateError('must not send'), key: ' ');
-    expect(await noKey.extract(forceTail: true), CompanionMemoryWork.configuration);
-    expect(phone.store.requests(), hasLength(1));
-  });
-
-  test('missing message_stop preserves usage and leaves the batch waiting', () async {
-    final phone = _Phone();
-    phone.say('u1', '聊两句吧。');
-    final worker = phone.withHttp((request) async => _reply(_empty(_input(request)), complete: false));
-    expect(await worker.extract(forceTail: true), CompanionMemoryWork.waiting);
-    expect(phone.store.requests().single['terminal'], 'incomplete');
-    expect(phone.db.select('SELECT state,format_failures FROM memory_events').single, containsPair('state', 'pending'));
-    expect(phone.db.select('SELECT format_failures FROM memory_events').single['format_failures'], 0);
-  });
-
-  test('unsupported model or request parameters are configuration, not network or bad JSON', () async {
-    for (final status in [400, 404, 422]) {
-      final phone = _Phone();
-      phone.say('u1', '咖啡不要糖。');
-      final worker = phone.withHttp((_) async => http.Response('unsupported request', status));
-      expect(await worker.extract(forceTail: true), CompanionMemoryWork.configuration);
-      expect(phone.store.requests().single['sent_at_ms'], phone.now);
-      expect(phone.db.select('SELECT format_failures FROM memory_events').single['format_failures'], 0);
-      expect(phone.store.archive['cursor_seq'], 0);
-    }
-  });
-
-  test('a source edit while the provider is away discards even a malformed old answer', () async {
-    final phone = _Phone();
-    phone.say('u1', '明天面试。');
-    final started = Completer<void>();
-    final answer = Completer<http.Response>();
-    final worker = phone.withHttp((_) {
-      started.complete();
-      return answer.future;
-    });
-    final result = worker.extract(forceTail: true);
-    await started.future;
-    phone.now += const Duration(days: 2).inMilliseconds;
-    phone.store.editMessage(id: 'u1', expectedSourceRev: 1, text: '明天上午面试。');
-    answer.complete(_reply('{bad'));
-    expect(await result, CompanionMemoryWork.stale);
-    final message = phone.store.messages().single;
-    expect(message['first_seq'], 1);
-    expect(message['source_rev'], 2);
-    expect(message['said_at_utc'], phone.now - const Duration(days: 2).inMilliseconds);
-    expect(phone.db.select('SELECT SUM(format_failures) AS n FROM memory_events').single['n'], 0);
-    expect(phone.store.cards(), isEmpty);
-  });
-
-  test('max_tokens with message_stop is a failed proposal, never empty success', () async {
-    final phone = _Phone();
-    phone.say('u1', '咖啡不要糖。');
-    final worker = phone.withHttp((request) async => _reply(_empty(_input(request)), stop: 'max_tokens'));
-    expect(await worker.extract(forceTail: true), CompanionMemoryWork.invalid);
-    expect(phone.store.archive['cursor_seq'], 0);
-    expect(phone.db.select('SELECT format_failures FROM memory_events').single['format_failures'], 1);
-  });
-
-  test('room cancellation fences a late valid answer and retains its sent receipt', () async {
-    final phone = _Phone();
-    phone.say('u1', '你好。');
     final started = Completer<Map<String, Object?>>();
     final answer = Completer<http.Response>();
     final worker = phone.withHttp((request) {
       started.complete(_input(request));
       return answer.future;
     });
-    final result = worker.extract(forceTail: true);
+    final running = worker.consolidate();
+    addTearDown(() async {
+      if (!answer.isCompleted) answer.complete(_reply('Stopped.'));
+      await running;
+    });
     final input = await started.future;
-    worker.cancel();
-    answer.complete(_reply(_empty(input)));
-    expect(await result, CompanionMemoryWork.stale);
+    phone.say('s3', '今天练了一会儿琴。');
+    expect(await worker.extract(forceTail: true), CompanionMemoryWork.idle);
+    expect(await worker.consolidate(), CompanionMemoryWork.idle);
+    final stop = worker.stop();
+    phone.store.deleteMessage(id: 's1', expectedSourceRev: 1);
+    answer.complete(_merge(input));
+    expect(await running, CompanionMemoryWork.stale);
+    await stop;
+    expect(phone.store.cards(), hasLength(1));
+    expect(phone.store.requests().single['state'], 'finished');
     expect(phone.store.requests().single['sent_at_ms'], phone.now);
-    expect(phone.store.archive['cursor_seq'], 0);
-    expect(phone.db.select('SELECT format_failures FROM memory_events').single['format_failures'], 0);
+    final later = phone.db.select("SELECT state,reason FROM memory_events WHERE message_id='s3'").single;
+    expect(later['state'], 'skipped');
+    expect(later['reason'], 'history_cutoff');
+    expect(phone.store.messages().singleWhere((row) => row['id'] == 's3')['text'], '今天练了一会儿琴。');
+  });
+
+  test('A2 a sent malformed tool turn closes without an automatic format retry or mutation', () async {
+    final phone = _Phone()..pair();
+    var calls = 0;
+    final worker = phone.withHttp((request) async {
+      calls++;
+      _input(request);
+      return _tool('merge', '{broken');
+    });
+    expect(await worker.consolidate(), CompanionMemoryWork.waiting);
+    expect(phone.store.cards(), hasLength(2));
+    expect(phone.db.select('SELECT closed FROM memory_agent_turns').single['closed'], 1);
+    phone.say('new-source', '我还开始学手风琴。');
+    expect(await worker.consolidate(), CompanionMemoryWork.idle);
+    expect(calls, 1);
+    expect(
+      phone.db.select("SELECT state,format_failures FROM memory_events WHERE message_id='new-source'").single,
+      allOf(containsPair('state', 'pending'), containsPair('format_failures', 0)),
+    );
+  });
+
+  test(
+    'A2 a failed held extract retires only its captured event while a newer source gets a distinct request',
+    () async {
+      final phone = _Phone();
+      phone.say('u1', '今天咖啡喝无糖。');
+      final original = phone.store.messages().single;
+      final reached = Completer<void>();
+      final answer = Completer<http.Response>();
+      var calls = 0;
+      MemoryRow? newer;
+      final worker = phone.withHttp((request) async {
+        calls++;
+        final sources = (_input(request)['sources']! as List).cast<Map>();
+        expect(sources, hasLength(1));
+        final expected = calls == 1 ? original : newer!;
+        expect(sources.single['id'], expected['id']);
+        expect(sources.single['source_rev'], expected['source_rev']);
+        expect(sources.single['event_seq'], expected['event_seq']);
+        if (calls == 1) {
+          reached.complete();
+          return answer.future;
+        }
+        return _reply('There is nothing durable to save.');
+      });
+      final first = worker.extract(forceTail: true);
+      addTearDown(() async {
+        if (!answer.isCompleted) answer.complete(_reply('Stopped.'));
+        await first;
+      });
+      await reached.future;
+      phone.say('u2', '我还开始学手风琴。');
+      newer = phone.store.messages().singleWhere((row) => row['id'] == 'u2');
+      expect(newer['source_rev'], 1);
+      expect(newer['event_seq'], greaterThan(original['event_seq']! as int));
+      answer.complete(_tool('remember', '{broken'));
+      expect(await first, CompanionMemoryWork.waiting);
+      final events = phone.db.select('SELECT * FROM memory_events ORDER BY seq');
+      expect(events, hasLength(2));
+      expect(
+        events[0],
+        allOf(
+          containsPair('message_id', 'u1'),
+          containsPair('seq', original['event_seq']),
+          containsPair('source_rev', original['source_rev']),
+          containsPair('state', 'skipped'),
+          containsPair('reason', 'maintenance_incomplete'),
+          containsPair('format_failures', 0),
+        ),
+      );
+      expect(
+        events[1],
+        allOf(
+          containsPair('message_id', 'u2'),
+          containsPair('seq', newer['event_seq']),
+          containsPair('source_rev', newer['source_rev']),
+          containsPair('state', 'pending'),
+          containsPair('format_failures', 0),
+        ),
+      );
+      expect(phone.store.archive['cursor_seq'], original['event_seq']);
+      expect(phone.store.requests().single['state'], 'finished');
+      expect(calls, 1, reason: 'failure does not automatically replan either source');
+      expect(await worker.extract(forceTail: true), CompanionMemoryWork.committed);
+      expect(calls, 2);
+      final receipts = phone.store.requests();
+      expect(receipts, hasLength(2));
+      expect(receipts.map((row) => row['id']).toSet(), hasLength(2));
+      expect(receipts.map((row) => row['batch_id']).toSet(), hasLength(2));
+      expect(receipts.every((row) => row['state'] == 'finished'), isTrue);
+      expect(phone.db.select('SELECT id FROM memory_agent_maintenance_claims'), hasLength(2));
+      expect(phone.db.select('SELECT closed FROM memory_agent_turns').every((row) => row['closed'] == 1), isTrue);
+      final later = phone.db.select("SELECT * FROM memory_events WHERE message_id='u2'").single;
+      expect(
+        later,
+        allOf(
+          containsPair('seq', newer['event_seq']),
+          containsPair('source_rev', newer['source_rev']),
+          containsPair('state', 'done'),
+        ),
+      );
+      expect(phone.store.archive['cursor_seq'], newer['event_seq']);
+      expect(phone.store.cards(), isEmpty);
+      expect(phone.store.messages().map((row) => row['text']).toList(), ['今天咖啡喝无糖。', '我还开始学手风琴。']);
+    },
+  );
+
+  test('A2 a complete no-tool answer processes the exact original sources and preserves provider usage', () async {
+    final phone = _Phone();
+    phone.say('u1', '  今天就随便聊聊。\n');
+    final worker = phone.withHttp((request) async {
+      final input = _input(request);
+      final source = (input['sources']! as List).single as Map;
+      expect(source['id'], 'u1');
+      expect(source['text'], '  今天就随便聊聊。\n');
+      expect(source['said_at_utc'], phone.now);
+      expect(source['offset_minutes'], 480);
+      expect(input['presentations'], isEmpty);
+      expect(phone.store.requests().single['reserved_input'], estimateCompanionMemoryTokens(request.body));
+      return _reply('There is nothing durable to save.');
+    });
+    expect(await worker.extract(forceTail: true), CompanionMemoryWork.committed);
+    expect(phone.db.select('SELECT state FROM memory_events').single['state'], 'done');
+    expect(phone.store.cards(), isEmpty);
+    expect(phone.store.messages(), hasLength(1), reason: 'maintenance output is not fabricated user/assistant chat');
+    final raw = phone.store.requests().single['raw_usage']! as Map;
+    expect(raw['final_usage'], _usage);
+    expect(raw['input_uncached'], 20);
+    expect(raw['start_usage'], {'input_tokens': 900});
+  });
+
+  for (final status in [401, 400, 404, 413, 422]) {
+    test('A2 HTTP $status configuration failure settles its sent receipt without a format retry', () async {
+      final phone = _Phone();
+      phone.say('u1', '我的咖啡喝无糖。');
+      final worker = phone.withHttp((_) async => http.Response('unsupported or unauthorized', status));
+      expect(await worker.extract(forceTail: true), CompanionMemoryWork.configuration);
+      expect(phone.store.requests().single['sent_at_ms'], phone.now);
+      expect(phone.store.requests().single['state'], 'finished');
+      expect(
+        phone.db.select('SELECT state,reason,format_failures FROM memory_events').single,
+        allOf(
+          containsPair('state', 'skipped'),
+          containsPair('reason', 'maintenance_incomplete'),
+          containsPair('format_failures', 0),
+        ),
+      );
+      expect(phone.store.archive['cursor_seq'], 1);
+      expect(
+        await worker.extract(forceTail: true),
+        CompanionMemoryWork.idle,
+        reason: 'a sent failed scope is not automatically replanned with a new claim',
+      );
+      final noKey = phone.withHttp((_) async => throw StateError('must not send'), key: ' ');
+      expect(await noKey.extract(forceTail: true), CompanionMemoryWork.configuration);
+      expect(phone.store.requests(), hasLength(1));
+    });
+  }
+
+  for (final terminal in ['incomplete', 'max_tokens', 'refusal']) {
+    test('A2 $terminal keeps its actual usage and cannot complete source processing', () async {
+      final phone = _Phone();
+      phone.say('u1', '聊两句吧。');
+      final worker = phone.withHttp((request) async {
+        _input(request);
+        return _reply(
+          'Not a completed maintenance decision.',
+          complete: terminal != 'incomplete',
+          stop: terminal == 'incomplete' ? 'end_turn' : terminal,
+        );
+      });
+      expect(
+        await worker.extract(forceTail: true),
+        terminal == 'incomplete' ? CompanionMemoryWork.waiting : CompanionMemoryWork.invalid,
+      );
+      expect(phone.store.requests().single['terminal'], terminal);
+      expect(
+        phone.db.select('SELECT state,reason,format_failures FROM memory_events').single,
+        allOf(
+          containsPair('state', 'skipped'),
+          containsPair('reason', 'maintenance_incomplete'),
+          containsPair('format_failures', 0),
+        ),
+      );
+      expect(phone.store.archive['cursor_seq'], 1);
+      expect(await worker.extract(forceTail: true), CompanionMemoryWork.idle);
+      expect(phone.store.requests(), hasLength(1), reason: 'no automatic second physical request for this source');
+      expect(phone.store.cards(), isEmpty);
+    });
+  }
+
+  test('A2 editing an original source retires a late tool response without changing its original clock', () async {
+    final phone = _Phone();
+    phone.say('u1', '明天面试。');
+    final started = Completer<void>();
+    final answer = Completer<http.Response>();
+    final worker = phone.withHttp((request) {
+      _input(request);
+      started.complete();
+      return answer.future;
+    });
+    final running = worker.extract(forceTail: true);
+    addTearDown(() async {
+      if (!answer.isCompleted) answer.complete(_reply('Stopped.'));
+      await running;
+    });
+    await started.future;
+    phone.now += const Duration(days: 2).inMilliseconds;
+    phone.store.editMessage(id: 'u1', expectedSourceRev: 1, text: '明天上午面试。');
+    answer.complete(_tool('remember', jsonEncode({'text': '明天面试', 'source': 'u1'})));
+    expect(await running, CompanionMemoryWork.stale);
+    final source = phone.store.messages().single;
+    expect(source['first_seq'], 1);
+    expect(source['source_rev'], 2);
+    expect(source['said_at_utc'], phone.now - const Duration(days: 2).inMilliseconds);
+    expect(phone.store.cards(), isEmpty);
+    expect(phone.store.requests().single['state'], 'finished');
+    expect(phone.db.select('SELECT SUM(format_failures) AS n FROM memory_events').single['n'], 0);
+    expect(
+      phone.db.select('SELECT state,reason FROM memory_events WHERE source_rev=2').single,
+      allOf(containsPair('state', 'pending'), containsPair('reason', isNull)),
+      reason: 'retiring the original scope cannot retire a newly edited source revision',
+    );
+  });
+
+  test('A2 owner disposal waits for the first cancellation drain before closing its receipt database', () async {
+    final phone = _Phone();
+    phone.say('u1', '你好。');
+    final listening = Completer<void>();
+    final cancelling = Completer<void>();
+    final release = Completer<void>();
+    late final StreamController<List<int>> wire;
+    wire = StreamController<List<int>>(
+      onListen: () {
+        wire.add(
+          utf8.encode(
+            'data: ${jsonEncode({
+              'type': 'content_block_delta',
+              'index': 0,
+              'delta': {'type': 'text_delta', 'text': 'Still considering.'},
+            })}\n\n',
+          ),
+        );
+        listening.complete();
+      },
+      onCancel: () {
+        cancelling.complete();
+        return release.future;
+      },
+    );
+    final route = CompanionLightMemoryTransport(
+      apiKey: () => 'test',
+      client: () => MockClient.streaming((request, body) async {
+        await body.drain<void>();
+        return http.StreamedResponse(wire.stream, 200);
+      }),
+    );
+    final room = Object();
+    phone.memory.enter(room, transport: () => route, estimateTokens: estimateCompanionMemoryTokens);
+    var settled = false;
+    final running = phone.memory.extract(room, forceTail: true).whenComplete(() => settled = true);
+    addTearDown(() async {
+      if (!release.isCompleted) release.complete();
+      await running;
+      await wire.close();
+    });
+    await listening.future;
+    phone.dispose();
+    await cancelling.future;
+    await Future<void>.delayed(Duration.zero);
+    expect(settled, isFalse);
+    expect(phone.store.cards(), isEmpty, reason: 'the original SQLite owner is still draining');
+    expect(phone.store.requests().single['state'], 'sent');
+    release.complete();
+    expect(await running, CompanionMemoryWork.stale);
+    expect(settled, isTrue);
   });
 }

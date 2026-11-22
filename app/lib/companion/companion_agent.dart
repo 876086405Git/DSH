@@ -16,6 +16,7 @@ import '../notify/chat_alerts.dart' show companionHostKey;
 import '../state/connection_state.dart';
 import '../state/hosts_state.dart';
 import '../state/run_pulse.dart' show estimateTokens;
+import 'companion_agent_loop.dart';
 import 'companion_memory_id.dart';
 import 'companion_agent_task_tools.dart';
 import 'companion_agent_task_ui.dart';
@@ -182,88 +183,52 @@ class CompanionAgent extends ChangeNotifier {
       run.memory.store.archive['control_revision'] == run.controlRevision;
 
   Future<void> _loop(_CompanionAgentRun run) async {
-    while (_current(run)) {
-      final selection = run.memory.select(run.source['text'] as String);
-      run.onSelected?.call(selection);
-      if (!_current(run)) return;
+    await runCompanionAgentLoop(
+      tools: run.tools,
+      exchanges: run.exchanges,
+      isCurrent: () => _current(run),
+      controlRevision: () => run.controlRevision,
+      onToolDispatch: () => run.toolDispatchStarted = true,
+      onNotice: (requestId, callId, words) => _notice(run, requestId, callId, words),
+      request: () async {
+        final selection = await run.memory.selectForAgent(
+          run.source['text'] as String,
+          characterId: run.source['character_id'] as String?,
+          offsetMinutes: run.source['offset_minutes']! as int,
+          isCurrent: () => _current(run),
+        );
+        if (!_current(run)) return null;
+        run.onSelected?.call(selection);
 
-      // Current control has already filtered the historical raw lines. The
-      // active instruction is kept separately: forget can move it below the
-      // history cutoff to prevent extraction from recreating a deleted card.
-      final history = run.memory.store.messages(
-        sessionId: run.source['session_id'] as String,
-        forModel: true,
-        limit: CompanionLightHistory.window + run.savedRows,
-      );
-      final lines = companionLightContext([
-        for (final row in history)
-          if ((row['first_seq'] as int) < (run.source['first_seq'] as int))
-            row['role'] == 'user'
-                ? CompanionLine.user(row['text'] as String)
-                : CompanionLine.her(row['text'] as String),
-        CompanionLine.user(run.source['text'] as String),
-      ]);
-      final messages = companionRequestMessages(
-        [for (final line in lines) (role: line.role, text: line.text)],
-        context: run.context,
-        memory: selection,
-      );
-      for (final exchange in run.exchanges) {
-        messages.add({'role': 'assistant', 'content': exchange.assistant.content});
-        messages.add({'role': 'user', 'content': exchange.results});
-      }
+        // Current control has already filtered the historical raw lines. The
+        // active instruction is kept separately: forget can move it below the
+        // history cutoff to prevent extraction from recreating a deleted card.
+        final history = run.memory.store.modelMessages(
+          sessionId: run.source['session_id'] as String,
+          characterId: run.source['character_id'] as String?,
+          limit: CompanionLightHistory.window + run.savedRows,
+        );
+        final lines = companionLightContext([
+          for (final row in history)
+            if ((row['first_seq'] as int) < (run.source['first_seq'] as int))
+              row['role'] == 'user'
+                  ? CompanionLine.user(row['text'] as String)
+                  : CompanionLine.her(row['text'] as String),
+          CompanionLine.user(run.source['text'] as String),
+        ]);
+        final messages = companionRequestMessages(
+          [for (final line in lines) (role: line.role, text: line.text)],
+          context: run.context,
+          memory: selection,
+        );
+        for (final exchange in run.exchanges) {
+          messages.add({'role': 'assistant', 'content': exchange.assistant.content});
+          messages.add({'role': 'user', 'content': exchange.results});
+        }
 
-      final response = await _request(run, messages);
-      if (!_current(run) || response == null) return;
-      final calls = response.message.calls;
-      if (response.message.stopReason != 'tool_use' || calls.isEmpty) return;
-
-      final results = <Map<String, Object?>>[];
-      for (final call in calls) {
-        if (!_current(run)) return;
-        // Even an unavailable/read-only call retires the no-tool retry path.
-        // Record entry before lookup or an executor can synchronously commit.
-        run.toolDispatchStarted = true;
-        final before = run.controlRevision;
-        final binding = run.tools.where((tool) => tool.definition.name == call.name).firstOrNull;
-        CompanionAgentToolResult result;
-        if (binding == null) {
-          result = const CompanionAgentToolResult(
-            content: '{"ok":false,"error":"unavailable_tool","message":"This tool is not available in this turn."}',
-            isError: true,
-          );
-        } else {
-          try {
-            result = await binding.execute(call);
-          } on Object {
-            result = const CompanionAgentToolResult(
-              content:
-                  '{"ok":false,"error":"tool_failed","message":"The operation did not return a confirmed result."}',
-              isError: true,
-            );
-          }
-        }
-        if (result.notice case final notice?) {
-          _notice(run, response.requestId, call.id, notice);
-        }
-        if (!_current(run)) return;
-        if (run.controlRevision != before) {
-          // Keep this assistant's matching IDs while retiring any earlier
-          // result body in the same batch (for example recall, then forget).
-          for (final previous in results) {
-            previous['content'] =
-                'This earlier result was retired after memory changed. Use the current memory context.';
-          }
-        }
-        results.add({
-          'type': 'tool_result',
-          'tool_use_id': call.id,
-          'content': result.content,
-          if (result.isError) 'is_error': true,
-        });
-      }
-      run.exchanges.add((assistant: response.message, results: results));
-    }
+        return _request(run, messages);
+      },
+    );
   }
 
   Future<({CompanionAgentMessage message, String requestId})?> _request(
@@ -272,6 +237,7 @@ class CompanionAgent extends ChangeNotifier {
   ) async {
     final key = _apiKey().trim();
     if (key.isEmpty) throw const CompanionLightError(CompanionLightFailure.noKey);
+    final system = '${run.system}${run.memory.relationshipContext(run.source['character_id'] as String?)}';
     final definitions = [for (final tool in run.tools) tool.definition];
     final requestId = run.memory.store.reserveRequest(
       category: 'chat',
@@ -279,7 +245,7 @@ class CompanionAgent extends ChangeNotifier {
       model: companionLightModel,
       inputTokens: estimateTokens(
         jsonEncode({
-          'system': run.system,
+          'system': system,
           'messages': messages,
           'tools': [for (final tool in definitions) tool.toJson()],
         }),
@@ -289,49 +255,43 @@ class CompanionAgent extends ChangeNotifier {
     final request = _CompanionAgentRequest(requestId);
     run.request = request;
     run.memory.retainReceipt(request.settled.future);
-    CompanionAgentMessage? message;
     try {
       final client = request.client = _client();
-      final stream = request.stream = StreamIterator(
-        streamCompanionAgentReply(
-          client: client,
-          apiKey: key,
-          system: run.system,
-          messages: messages,
-          tools: definitions,
-          onMessage: (value) => message = value,
-          onSent: () {
-            if (!_current(run)) throw const DshClosedException('Companion turn changed');
-            run.memory.store.markRequestSent(requestId);
-            request.sent = true;
-          },
-          onUsage: (usage) {
-            // These identities never come from current UI/turn fields.
-            run.memory.store.recordUsage(requestId, usage.toJson());
-            run.memory.store.finishRequest(requestId, terminal: usage.terminal);
-            request.finalized = true;
-            run.memory.changed();
-            if (!_disposed) _onUsage?.call(usage);
-          },
-          onUsageSettled: (usage, {required partial}) {
-            if (!_disposed) _onUsageSettled?.call(usage, partial: partial);
-          },
-        ),
+      final message = await request.read(
+        client: client,
+        apiKey: key,
+        system: system,
+        messages: messages,
+        tools: definitions,
+        isCurrent: () => _current(run),
+        onText: (delta) {
+          if (request.text.isEmpty && run.text.isNotEmpty && delta.isNotEmpty) run.text += '\n';
+          request.text += delta;
+          run.text += delta;
+          notifyListeners();
+        },
+        onSent: () {
+          if (!_current(run)) throw const DshClosedException('Companion turn changed');
+          run.memory.store.markRequestSent(requestId);
+          request.sent = true;
+        },
+        onUsage: (usage) {
+          // These identities never come from current UI/turn fields.
+          run.memory.store.recordUsage(requestId, usage.toJson());
+          run.memory.store.finishRequest(requestId, terminal: usage.terminal);
+          request.finalized = true;
+          run.memory.changed();
+          if (!_disposed) _onUsage?.call(usage);
+        },
+        onUsageSettled: (usage, {required partial}) {
+          if (!_disposed) _onUsageSettled?.call(usage, partial: partial);
+        },
       );
-      while (await stream.moveNext()) {
-        if (!_current(run)) return null;
-        final delta = stream.current;
-        if (request.text.isEmpty && run.text.isNotEmpty && delta.isNotEmpty) run.text += '\n';
-        request.text += delta;
-        run.text += delta;
-        notifyListeners();
-      }
-      return message == null ? null : (message: message!, requestId: requestId);
+      return message == null ? null : (message: message, requestId: requestId);
     } finally {
       request.client?.close();
       try {
-        final stream = request.stream;
-        if (stream != null) await (request.cancellation ??= stream.cancel());
+        if (request.stream != null) await request.drain();
       } finally {
         try {
           if (!request.finalized) {
@@ -353,8 +313,10 @@ class CompanionAgent extends ChangeNotifier {
         run.memory.store.archive['control_revision'] != run.controlRevision) {
       return;
     }
-    _save(run, 'reply:${run.source['id']}:${request.id}', request.text);
+    final id = 'reply:${run.source['id']}:${request.id}';
+    _save(run, id, request.text);
     request.saved = true;
+    run.unpresentedReplies[id] = run.text.length;
   }
 
   void _save(_CompanionAgentRun run, String id, String words) {
@@ -366,6 +328,7 @@ class CompanionAgent extends ChangeNotifier {
       text: words,
       saidAtUtc: now.toUtc().millisecondsSinceEpoch,
       offsetMinutes: now.timeZoneOffset.inMinutes,
+      characterId: run.source['character_id'] as String?,
     );
     run.savedRows++;
     run.memory.changed();
@@ -373,12 +336,14 @@ class CompanionAgent extends ChangeNotifier {
 
   void _notice(_CompanionAgentRun run, String requestId, String callId, String words) {
     if (words.trim().isEmpty || run.memory.store.archive['control_revision'] != run.controlRevision) return;
-    _save(run, 'reply:${run.source['id']}:$requestId:notice:$callId', words);
+    final id = 'reply:${run.source['id']}:$requestId:notice:$callId';
+    _save(run, id, words);
     // A committed deletion keeps its acknowledgement in the original chat.
     // An old call never takes over another source's current bubble or speech.
     if (!_disposed && identical(_run, run) && !run.discard) {
       if (run.text.isNotEmpty) run.text += '\n';
       run.text += words;
+      run.unpresentedReplies[id] = run.text.length;
       notifyListeners();
     }
   }
@@ -403,8 +368,7 @@ class CompanionAgent extends ChangeNotifier {
       if (stream != null) {
         // StreamIterator clears its subscription on the first cancel. A second
         // call can finish early, so both paths must await this original drain.
-        request.cancellation ??= stream.cancel();
-        unawaited(request.cancellation!.catchError((Object _) {}));
+        unawaited(request.drain().catchError((Object _) {}));
       }
     }
     if (discard) run.text = '';
@@ -446,6 +410,9 @@ class _CompanionAgentRun {
   final void Function(MemorySelection)? onSelected;
   final settled = Completer<void>();
   final exchanges = <({CompanionAgentMessage assistant, List<Map<String, Object?>> results})>[];
+  // Only real Page frame acknowledgements turn these saved assistant sources
+  // into presentation facts. A saved reply alone is not a shown question.
+  final unpresentedReplies = <String, int>{};
   int controlRevision;
   bool running = true;
   bool cancelled = false;
@@ -457,16 +424,8 @@ class _CompanionAgentRun {
   _CompanionAgentRequest? request;
 }
 
-class _CompanionAgentRequest {
-  _CompanionAgentRequest(this.id);
+class _CompanionAgentRequest extends CompanionAgentModelRequest {
+  _CompanionAgentRequest(super.id);
 
-  final String id;
-  final settled = Completer<void>();
-  http.Client? client;
-  StreamIterator<String>? stream;
-  Future<void>? cancellation;
-  bool sent = false;
-  bool finalized = false;
   bool saved = false;
-  String text = '';
 }

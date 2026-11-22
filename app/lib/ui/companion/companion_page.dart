@@ -19,7 +19,6 @@ import '../../companion/companion_adapt.dart';
 import '../../companion/companion_agent.dart';
 import '../../companion/companion_agent_task_ui.dart';
 import '../../state/companion_agent_state.dart';
-import '../../companion/companion_bond.dart';
 import '../../companion/companion_initiative.dart';
 import '../../companion/companion_initiative_owner.dart';
 import '../../companion/companion_memory.dart';
@@ -69,6 +68,7 @@ import 'companion_draft_inputs.dart';
 import 'companion_receipt_inputs.dart';
 import 'companion_log.dart';
 import 'companion_memory_page.dart';
+import 'companion_memory_model_dialog.dart';
 import 'companion_persona_page.dart';
 import 'companion_voice_page.dart';
 import 'companion_stage.dart';
@@ -114,6 +114,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   late final VoiceInputController _voice;
 
   CompanionPackStore? _store;
+  String? _characterSourceKey;
+  String? _affinityCharacter;
+  int _bondTier = 0;
+  Object? _affinitySettledDay;
   CompanionCharacter _character = const CompanionCharacter();
   _Phase _phase = _Phase.checking;
 
@@ -340,17 +344,17 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   Future<void> _prepare() async {
     final store = widget.storeOverride ?? CompanionPackStore(await _packRoot);
     final installed = await store.installed();
-    final character = installed ? await store.character() : const CompanionCharacter();
+    final identity = await store.characterIdentity();
     final bundled = await _hasBundled();
     final removed = (await SharedPreferences.getInstance()).getBool(_packRemovedKey) ?? false;
     if (!mounted || !_attachment.isAttached) return;
     setState(() {
       _store = store;
-      _character = character;
+      _setCharacter(identity.character, identity.key);
       _bundledHere = bundled;
       _phase = installed ? _Phase.stage : _Phase.setup;
     });
-    _attachment.updateCharacter(_character, _moves);
+    _attachment.updateCharacter(_character, _moves, sourceKey: _characterSourceKey);
     unawaited(_prepareMemory());
     // The first time, the pack inside the app is unpacked while she swims over.
     // After the person removed it, it waits on the setup screen to be asked for.
@@ -398,7 +402,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     try {
       final memory = await _openMemory();
       if (!mounted || !_attachment.isAttached) return;
-      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CompanionMemoryPage(memory: memory)));
+      final characterId = _attachment.characterId;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => CompanionMemoryPage(memory: memory, characterId: characterId),
+        ),
+      );
     } on Object {
       if (mounted && _attachment.isAttached) _notice(context.l10n.companionMemoryLoadFailed);
     }
@@ -410,6 +419,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       if (!mounted || !_attachment.isAttached) return;
       await Navigator.of(context)
           .push(MaterialPageRoute<void>(builder: (_) => CompanionTasksPage(memory: memory, allSessions: true)));
+    } on Object {
+      if (mounted && _attachment.isAttached) _notice(context.l10n.companionMemoryLoadFailed);
+    }
+  }
+
+  Future<void> _openMemorySearch() async {
+    try {
+      final memory = await _openMemory();
+      if (!mounted || !_attachment.isAttached) return;
+      await showCompanionMemoryModelDialog(context, memory.embeddings);
     } on Object {
       if (mounted && _attachment.isAttached) _notice(context.l10n.companionMemoryLoadFailed);
     }
@@ -428,6 +447,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   void _onAgentChanged() {
     if (!mounted || !_attachment.isAttached) return;
     _sending = _attachment.preparing;
+    _syncAffinity();
     final id = _attachment.replyId;
     if (id == null) {
       setState(() {});
@@ -556,30 +576,52 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   Future<void> _arrive({bool greet = true}) => _attachment.arrive(greet: greet);
 
   void _applyVitals(CompanionSnapshot snapshot) {
-    final before = _vitals;
     _vitals = snapshot;
     final v = snapshot.vitals;
-    _stage.command('vitals', {'valence': v.valence, 'energy': v.energy, 'closeness': v.closeness});
+    _stage.command('vitals', {'valence': v.valence, 'energy': v.energy, 'closeness': _stageCloseness});
     _stage.command('activity', {'name': v.activity, 'remainingMs': snapshot.activityLeft.inMilliseconds});
     _widgetUpdate();
-    // A step closer while the person is here: a small moment, once, as it
-    // happens. Arriving with it already reached is not news.
-    if (before != null && before.storeId == snapshot.storeId) {
-      final step = companionBond(v.closeness);
-      if (step > companionBond(before.vitals.closeness)) _closer(step);
+  }
+
+  // These are display-only projections for the existing stage (0..1) and
+  // widget (four dots), never another score or source of relationship growth.
+  double get _stageCloseness => const [0.0, 0.03, 0.03, 0.10, 0.10, 0.30][_bondTier];
+  int get _widgetBond => const [0, 1, 1, 2, 2, 3][_bondTier];
+
+  void _syncAffinity() {
+    final role = _attachment.characterId;
+    final affinity = _attachment.affinity;
+    final tier = affinity?['tier'] as int? ?? 0;
+    final settledDay = affinity?['settled_through_day'];
+    final previousRole = _affinityCharacter;
+    final previousTier = _bondTier;
+    final previousDay = _affinitySettledDay;
+    if (role == previousRole && tier == previousTier && settledDay == previousDay) return;
+    _affinityCharacter = role;
+    _bondTier = tier;
+    _affinitySettledDay = settledDay;
+    if (role != null && role == previousRole && tier > previousTier && settledDay != null && settledDay != previousDay) {
+      _closer(tier);
     }
+    if (_vitals case final snapshot?) {
+      final vitals = snapshot.vitals;
+      _stage.command('vitals', {'valence': vitals.valence, 'energy': vitals.energy, 'closeness': _stageCloseness});
+    }
+    _widgetUpdate();
   }
 
   void _closer(int step) {
     _stage.command('emotion', {'name': 'happy', 'hold': 3200});
     _stage.command('action', {'name': 'hop'});
     _remember('pet', '你觉得和对方又亲近了一些');
-    if (!mounted || _running || _sending || _ttsPending.isNotEmpty) return;
+    if (!mounted || _attachment.running || _attachment.preparing || _ttsPending.isNotEmpty) return;
     final l10n = context.l10n;
     _say(switch (step) {
       1 => l10n.companionCloser1,
       2 => l10n.companionCloser2,
-      _ => l10n.companionCloser3,
+      3 => l10n.companionCloser3,
+      4 => l10n.companionCloser4,
+      _ => l10n.companionCloser5,
     });
   }
 
@@ -628,13 +670,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       unawaited(SharedPreferences.getInstance().then((p) => p.setBool(_hintDoneKey, true)));
     }
     final l10n = context.l10n;
-    // Once they're close she has a fonder word too.
-    final close = companionBond(_vitals?.vitals.closeness ?? 0) >= 2;
     final lines = switch ((zone, kind)) {
-      (_, 'hug') => [l10n.companionHug1, l10n.companionHug2, l10n.companionHug3, if (close) l10n.companionHugClose],
+      (_, 'hug') => [l10n.companionHug1, l10n.companionHug2, l10n.companionHug3, l10n.companionHugClose],
       (_, 'tease') => [l10n.companionTease1, l10n.companionTease2, l10n.companionTease3],
       (_, 'shake') => [l10n.companionShake1, l10n.companionShake2, l10n.companionShake3],
-      (_, 'pat') => [l10n.companionPat1, l10n.companionPat2, l10n.companionPat3, if (close) l10n.companionPatClose],
+      (_, 'pat') => [l10n.companionPat1, l10n.companionPat2, l10n.companionPat3, l10n.companionPatClose],
       ('head', _) => [l10n.companionTapHead1, l10n.companionTapHead2],
       ('face', _) => [l10n.companionTapFace1, l10n.companionTapFace2, l10n.companionTapFace3],
       ('tail', _) => [l10n.companionTapTail1, l10n.companionTapTail2, l10n.companionTapTail3],
@@ -973,7 +1013,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
             : DateTime.now().millisecondsSinceEpoch + snapshot.activityLeft.inMilliseconds,
         'statusAsleep': l10n.companionStatusSleeping,
         'statusWaiting': l10n.companionWidgetWaiting,
-        'bond': snapshot == null ? null : companionBond(snapshot.vitals.closeness),
+        'bond': _affinityCharacter == null ? null : _widgetBond,
         if (line != null) ...{'line': line, 'saidAt': DateTime.now().millisecondsSinceEpoch},
       }),
     );
@@ -1152,7 +1192,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _moves = CompanionMoves.from(info, saved);
       _rebaseMarks();
     });
-    _attachment.updateCharacter(_character, _moves);
+    _attachment.updateCharacter(_character, _moves, sourceKey: _characterSourceKey);
   }
 
   /// Her own moves just became known: marks already in the reply on screen
@@ -1171,7 +1211,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   void _changeMove(CompanionMove next) {
     setState(() => _moves = _moves.replaced(next));
-    _attachment.updateCharacter(_character, _moves);
+    _attachment.updateCharacter(_character, _moves, sourceKey: _characterSourceKey);
     unawaited(companionMovesSave(_movesKey, _moves));
   }
 
@@ -1521,6 +1561,17 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   /// Work belongs to this visit to this host and client, even after A→B→A.
   bool Function() _currentRoom() => _attachment.captureCurrent();
 
+  void _setCharacter(CompanionCharacter character, String? sourceKey) {
+    if (_characterSourceKey != sourceKey) {
+      _affinityCharacter = null;
+      _affinitySettledDay = null;
+      _bondTier = 0;
+      _resetConversation();
+    }
+    _character = character;
+    _characterSourceKey = sourceKey;
+  }
+
   void _resetConversation() {
     _mapHandoff.close();
     _bindingEpoch++;
@@ -1545,7 +1596,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _asleep = false;
     _stage.command('quiet');
     _stage.command('activity', {'name': 'idle', 'remainingMs': 0});
-    _stage.command('vitals', {'valence': 0.25, 'energy': 0.75, 'closeness': 0});
+    _stage.command('vitals', {'valence': 0.25, 'energy': 0.75, 'closeness': _stageCloseness});
     _refreshMood();
     // A new room for the gate: what the old one let in goes with it.
     _syncSignals();
@@ -1662,6 +1713,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _running = running;
       _needsAttention = attention;
     });
+    if (user != null && reply.words.isNotEmpty && error == null) {
+      final attachment = _attachment;
+      final current = attachment.captureCurrent();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            current() &&
+            identical(_attachment, attachment) &&
+            _notesForegroundHere &&
+            _baselineUser == user &&
+            !_bubbleIsError &&
+            _bubble == reply.words) {
+          attachment.presentedReply(user, text);
+        }
+      });
+    }
   }
 
   Future<void> _send() async {
@@ -1767,21 +1833,36 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _stage.command('covered', {'on': false});
   }
 
-  List<CompanionLine> get _visibleLightLines => [
-    ...?_lightHistory?.lines,
-    for (final row in _memoryOwner?.store.messages() ?? const <MemoryRow>[])
-      if ((row['session_id']! as String).startsWith('light:'))
-        row['role'] == 'user' ? CompanionLine.user(row['text']! as String) : CompanionLine.her(row['text']! as String),
-  ];
+  List<CompanionLogEntry> get _visibleLightEntries {
+    List<CompanionLogEntry> read(List<CompanionLine> lines, {bool legacy = false, String? speaking}) => [
+      for (final entry in companionLogFromLight(
+        lines,
+        emotions: _moves.emotionLabels,
+        actions: _moves.actionLabels,
+        speaking: speaking,
+      ))
+        if (legacy && entry.speaker == CompanionLogSpeaker.her)
+          CompanionLogEntry.her(entry.text, who: context.l10n.companionLegacyConversation)
+        else
+          entry,
+    ];
+    return [
+      ...read(_lightHistory?.lines ?? const [], legacy: true),
+      for (final row in _memoryOwner?.store.messages() ?? const <MemoryRow>[])
+        if ((row['session_id']! as String).startsWith('light:') &&
+            (row['character_id'] == null || row['character_id'] == _attachment.characterId))
+          ...read([
+            row['role'] == 'user'
+                ? CompanionLine.user(row['text']! as String)
+                : CompanionLine.her(row['text']! as String),
+          ], legacy: row['character_id'] == null),
+      ...read(const [], speaking: _attachment.pendingText),
+    ];
+  }
 
   Widget _log(String name) => CompanionLog(
     key: const ValueKey('log-phone'),
-    entries: companionLogFromLight(
-      _visibleLightLines,
-      emotions: _moves.emotionLabels,
-      actions: _moves.actionLabels,
-      speaking: _attachment.pendingText,
-    ),
+    entries: _visibleLightEntries,
     name: name,
     onClose: _closeLog,
     // An explicit action still reaches the saved Host conversation. It is not
@@ -1817,13 +1898,17 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   /// The pack inside the app, through the same checks as any other.
   /// [arriving]: the first time, she swims over while it unpacks.
-  Future<void> _installBundled({bool arriving = false}) => _installFrom((claim) async {
-    final bytes = await _bundled();
-    if (bytes == null) throw const CompanionPackException(CompanionPackProblem.notAPack);
-    final zip = claim('${_store!.root.parent.path}/companion-bundled-${DateTime.now().microsecondsSinceEpoch}.zip');
-    await zip.writeAsBytes(bytes, flush: true);
-    return zip;
-  }, arriving: arriving);
+  Future<void> _installBundled({bool arriving = false}) => _installFrom(
+    (claim) async {
+      final bytes = await _bundled();
+      if (bytes == null) throw const CompanionPackException(CompanionPackProblem.notAPack);
+      final zip = claim('${_store!.root.parent.path}/companion-bundled-${DateTime.now().microsecondsSinceEpoch}.zip');
+      await zip.writeAsBytes(bytes, flush: true);
+      return zip;
+    },
+    arriving: arriving,
+    builtIn: true,
+  );
 
   /// [bring] makes the zip to install, through `claim` for its temporary
   /// file: claimed before anything is written, so a write that fails halfway
@@ -1831,6 +1916,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   Future<void> _installFrom(
     Future<File?> Function(File Function(String path) claim) bring, {
     bool arriving = false,
+    bool builtIn = false,
   }) async {
     final store = _store;
     if (store == null || _installing) return;
@@ -1844,7 +1930,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       final zip = await bring((path) => temp = File(path));
       if (zip == null) return;
       try {
-        await store.install(zip.path);
+        if (builtIn) {
+          await store.installBundled(zip.path);
+        } else {
+          await store.install(zip.path);
+        }
       } on CompanionPackException catch (error) {
         // A model on its own needs the runtime, which the pack inside the app
         // brings: unpack that first, then the model over it.
@@ -1855,24 +1945,28 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         );
         try {
           await runtime.writeAsBytes(bundled, flush: true);
-          await store.install(runtime.path);
+          await store.installBundled(runtime.path);
         } finally {
           if (await runtime.exists()) await runtime.delete();
         }
-        await store.install(zip.path);
+        if (builtIn) {
+          await store.installBundled(zip.path);
+        } else {
+          await store.install(zip.path);
+        }
       }
-      final character = await store.character();
+      final identity = await store.characterIdentity();
       // She's back: the pack inside the app may come by itself again.
       unawaited(SharedPreferences.getInstance().then((p) => p.remove(_packRemovedKey)));
       if (!mounted) return;
       setState(() {
-        _character = character;
+        _setCharacter(identity.character, identity.key);
         _failure = null;
         _stageReady = false;
         _stageRun++;
         _phase = _Phase.stage;
       });
-      _attachment.updateCharacter(_character, _moves);
+      _attachment.updateCharacter(_character, _moves, sourceKey: _characterSourceKey);
     } on CompanionPackException catch (error) {
       if (mounted) setState(() => _installError = _problemText(error.problem));
     } on Object {
@@ -1903,16 +1997,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   Future<void> _retryStage() async {
     final store = _store;
     if (store == null) return;
-    final character = await store.character();
+    final identity = await store.characterIdentity();
     if (!mounted || _phase != _Phase.failed) return;
     setState(() {
-      _character = character;
+      _setCharacter(identity.character, identity.key);
       _failure = null;
       _stageReady = false;
       _stageRun++;
       _phase = _Phase.stage;
     });
-    _attachment.updateCharacter(_character, _moves);
+    _attachment.updateCharacter(_character, _moves, sourceKey: _characterSourceKey);
   }
 
   /// Back from the workshop. A companion installed or uninstalled there
@@ -1930,7 +2024,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _phase = _Phase.setup;
       _failure = null;
       _stageReady = false;
+      _setCharacter(const CompanionCharacter(), null);
     });
+    _attachment.updateCharacter(_character, _moves, sourceKey: _characterSourceKey);
     _syncSignals();
   }
 
@@ -2202,21 +2298,19 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                         _openMoves();
                       },
                     ),
-                    // Only where her state is kept: otherwise there is nothing to show.
-                    if (_vitals case final vitals?)
+                    if (_affinityCharacter != null)
                       SettingsTile(
                         icon: AppIcons.postLike,
                         tinted: false,
                         title: l10n.companionBondTitle,
-                        value: CompanionBondMeter(
-                          step: companionBond(vitals.vitals.closeness),
-                          label: switch (companionBond(vitals.vitals.closeness)) {
-                            0 => l10n.companionBond0,
-                            1 => l10n.companionBond1,
-                            2 => l10n.companionBond2,
-                            _ => l10n.companionBond3,
-                          },
-                        ),
+                        value: Text(switch (_bondTier) {
+                          0 => l10n.companionBond0,
+                          1 => l10n.companionBond1,
+                          2 => l10n.companionBond2,
+                          3 => l10n.companionBond3,
+                          4 => l10n.companionBond4,
+                          _ => l10n.companionBond5,
+                        }),
                       ),
                     SettingsTile(
                       icon: light ? AppIcons.engineStarting : AppIcons.engine,
@@ -2235,6 +2329,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                       onTap: () {
                         Navigator.of(sheet).pop();
                         unawaited(_openMemories());
+                      },
+                    ),
+                    SettingsTile(
+                      icon: AppIcons.search,
+                      tinted: false,
+                      title: l10n.companionMemorySearchTitle,
+                      onTap: () {
+                        Navigator.of(sheet).pop();
+                        unawaited(_openMemorySearch());
                       },
                     ),
                     SettingsTile(
@@ -2299,7 +2402,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                         _openSignals();
                       },
                     ),
-                    if (_visibleLightLines.isNotEmpty)
+                    if (_visibleLightEntries.isNotEmpty)
                       SettingsTile(
                         icon: AppIcons.newChat,
                         tinted: false,
@@ -2310,7 +2413,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                           unawaited(_restart());
                         },
                       ),
-                    if (_sessionId != null || _visibleLightLines.isNotEmpty)
+                    if (_sessionId != null || _visibleLightEntries.isNotEmpty)
                       SettingsTile(
                         icon: AppIcons.history,
                         tinted: false,
@@ -2426,6 +2529,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _syncSignals();
     try {
       await _store?.remove();
+      if (!mounted || !_attachment.isAttached) return;
+      setState(() => _setCharacter(const CompanionCharacter(), null));
+      _attachment.updateCharacter(_character, _moves, sourceKey: _characterSourceKey);
     } on CompanionPackException catch (error) {
       // Something still reads her files (a floating window that wouldn't let
       // go): they stay, and the setup screen says so.

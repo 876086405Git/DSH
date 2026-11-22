@@ -55,6 +55,12 @@ class CompanionAgentAttachment {
   }
 
   CompanionMemoryOwner? get memory => _visit.memory;
+  String? get characterId => _visit.characterId;
+  MemoryRow? get affinity {
+    final role = _visit.characterId;
+    return !_visit.active || role == null ? null : _visit.memory?.store.companionAffinity(characterId: role);
+  }
+
   CompanionSnapshot? get vitals => _visit.snapshot;
   bool get light => _visit.light;
   bool Function() captureCurrent() => _visit.captureCurrent();
@@ -67,11 +73,9 @@ class CompanionAgentAttachment {
   void remember(String kind, String? note) => _visit.remember(kind, note);
   void observe(CompanionInitiativeView view) => _visit.observe(view);
   void acted() => _visit.acted();
-  void updateCharacter(CompanionCharacter character, CompanionMoves moves) {
-    if (!_visit.active) return;
-    _visit.character = character;
-    _visit.moves = moves;
-  }
+  void presentedReply(String replyId, String text) => _visit.presentedReply(replyId, text);
+  void updateCharacter(CompanionCharacter character, CompanionMoves moves, {String? sourceKey}) =>
+      _visit.updateCharacter(character, moves, sourceKey);
 
   void detach() => _visit.close();
 }
@@ -113,6 +117,10 @@ class _CompanionAgentVisit {
   final subscriptions = <void Function()>[];
   CompanionCharacter character;
   CompanionMoves moves;
+  String? characterSourceKey;
+  String? characterId;
+  _CompanionPresence? presence;
+  int? affinitySettledDay;
   HostRef boundHost;
   DshClient? boundClient;
   late bool boundLight;
@@ -138,7 +146,8 @@ class _CompanionAgentVisit {
   DateTime? lastClockAt;
   List<CompanionContextEvent> events = const [];
   int eventSerial = 0;
-  String? followupAttempt;
+  String? followupWindow;
+  final followupAttempts = <String>{};
   bool followupRetired = false;
   static final farewell = RegExp(
     r'^(?:(?:晚安|再见)(?:[，,\s]+(?:我)?先走了)?|(?:我)?先走了|good ?night|goodbye|bye)[。.!！]*$',
@@ -160,6 +169,51 @@ class _CompanionAgentVisit {
     if (active) agent.changed();
   }
 
+  void updateCharacter(CompanionCharacter next, CompanionMoves nextMoves, String? sourceKey) {
+    if (!active) return;
+    character = next;
+    moves = nextMoves;
+    if (characterSourceKey == sourceKey) return;
+    finishPresence();
+    stop(discard: true);
+    memory?.cancelWork();
+    epoch++;
+    characterSourceKey = sourceKey;
+    bindCharacter();
+    retrySource = null;
+    run = null;
+    events = const [];
+    lastSpokenAt = null;
+    lastClockAt = null;
+    followupWindow = null;
+    followupAttempts.clear();
+    followupRetired = false;
+    phone = null;
+    keeper = null;
+    snapshot = null;
+    vitalsQueue = Future.value();
+    if (memory case final owner?) {
+      unawaited(
+        ref
+            .read(companionWidgetProvider)
+            .clearMemoryLine(
+              archiveId: owner.store.archive['id']! as String,
+              controlRevision: owner.store.archive['control_revision']! as int,
+            ),
+      );
+    }
+    changed();
+    observe(ui.initiativeView);
+  }
+
+  void bindCharacter() {
+    final owner = memory;
+    final key = characterSourceKey;
+    characterId = owner == null || key == null
+        ? null
+        : owner.store.ensureCompanionCharacter(sourceKey: key)['id']! as String;
+  }
+
   Future<CompanionMemoryOwner> openMemory() {
     final current = opening;
     if (current != null) return current;
@@ -179,6 +233,7 @@ class _CompanionAgentVisit {
     final owner = await ref.read(companionMemoryOwnerProvider(directory.absolute.path).future);
     if (!active) return owner;
     memory = owner;
+    bindCharacter();
     controlRevision = owner.store.archive['control_revision']! as int;
     owner.addListener(memoryChanged);
     await initiative.attachMemory(owner.store);
@@ -205,9 +260,10 @@ class _CompanionAgentVisit {
     if (!active || owner == null) return;
     final revision = owner.store.archive['control_revision']! as int;
     if (revision != controlRevision) {
-      final own = identical(run, agent._run) && agent.acceptsControl(owner, revision);
+      final maintenance = owner.acceptsMaintenanceControl(this, revision);
+      final own = maintenance || (identical(run, agent._run) && agent.acceptsControl(owner, revision));
       controlRevision = revision;
-      owner.cancelWork();
+      if (!maintenance) owner.cancelWork();
       quietTimer?.cancel();
       if (!own) {
         stop(discard: true);
@@ -237,9 +293,9 @@ class _CompanionAgentVisit {
 
   Future<void> extract({bool forceTail = false}) async {
     final owner = memory;
-    if (!active || owner == null) return;
+    if (!active || owner == null || preparing || run?.running == true) return;
     try {
-      await owner.extract(this, forceTail: forceTail);
+      await owner.extract(this, forceTail: forceTail, offsetMinutes: clock().offsetMinutes);
     } on Object {
       // The original batch remains queued for a later actual opportunity.
     }
@@ -258,7 +314,7 @@ class _CompanionAgentVisit {
     final view = ui.initiativeView;
     if (!view.visible || !view.resumed || view.blocked) return;
     try {
-      await owner.consolidate(this);
+      await owner.consolidate(this, offsetMinutes: clock().offsetMinutes);
     } on Object {
       // Existing cards remain available when optional maintenance cannot run.
     }
@@ -266,6 +322,7 @@ class _CompanionAgentVisit {
 
   Future<void> submit(String raw) async {
     if (!active || raw.trim().isEmpty || preparing) return;
+    memory?.cancelWork();
     final previous = retrySource;
     // Take only this visit's drained, no-tool retry before stop retires other
     // pending work. A new wrapper must capture the new submission below.
@@ -288,6 +345,7 @@ class _CompanionAgentVisit {
       final submittedAt = DateTime.now();
       final owner = await openMemory();
       if (!current()) return;
+      owner.cancelWork();
       settled = Completer<void>();
       owner.retainReceipt(settled.future);
       final sessionId = owner.store.lightSessionId;
@@ -295,6 +353,7 @@ class _CompanionAgentVisit {
           previous != null &&
           previous['text'] == raw &&
           previous['session_id'] == sessionId &&
+          previous['character_id'] == characterId &&
           (previous['first_seq']! as int) > (owner.store.archive['history_after_seq']! as int);
       if (reuse && (inheritedRetry == null || !identical(inheritedRetry.memory, owner))) {
         // A closed/used turn is not a new model-planning opportunity. Its
@@ -329,7 +388,9 @@ class _CompanionAgentVisit {
                   : sourceClock.offsetSeconds ~/ 60,
               zoneId: sourceClock?.zoneId,
               offsetSeconds: sourceClock?.offsetSeconds,
+              characterId: characterId,
             );
+      recordInteraction('chat', source: source);
       if (farewell.hasMatch(raw.trim())) followupRetired = true;
       ui.committed(raw);
       final now = DateTime.now();
@@ -357,6 +418,11 @@ class _CompanionAgentVisit {
         isCurrent: current,
         onCommitted: agent.confirmControlRevision,
         forgottenNotice: ui.forgottenNotice,
+        semanticRecall: (query) => owner.recallIds(
+          query,
+          characterId: source['character_id'] as String?,
+          isCurrent: () => current() && memoryTools?.isCurrent == true,
+        ),
       );
       // beginAgentTurn has read the same open source/revision/turn. Calling
       // close on the obsolete wrapper would close the new wrapper's turn too.
@@ -499,29 +565,78 @@ class _CompanionAgentVisit {
 
   Future<CompanionSnapshot?> refreshKeeper() async {
     final current = captureCurrent();
-    final client = ref.read(activeConnectionProvider).value?.client;
+    final owner = await openMemory();
+    if (!current()) return null;
+    final role = characterId;
+    if (role == null) return null;
     final directory = await root;
-    if (!current()) return null;
-    final CompanionKeeper? next = light
-        ? (phone ??= ref.read(companionPhoneKeeperProvider)(directory))
-        : client == null
-        ? null
-        : HostKeeper(client);
+    if (!current() || role != characterId) return null;
+    // Immediate activity still uses the existing phone calculation. Its
+    // compatibility closeness field is never imported or used as v2 affinity.
+    // Activity no longer writes the original root file in either room mode.
+    final next = phone ??= ref.read(companionPhoneKeeperProvider)(Directory('${directory.path}/activity/$role'));
+    unawaited(importLegacyAffinity(owner, role, current));
     CompanionSnapshot? value;
-    if (next != null) {
-      try {
-        value = await next.snapshot().timeout(const Duration(seconds: 3));
-      } on Object {
-        // A missing keeper never prevents phone conversation.
-      }
+    try {
+      value = await next.snapshot().timeout(const Duration(seconds: 3));
+    } on Object {
+      // A missing keeper never prevents phone conversation.
     }
-    if (!current()) return null;
+    if (!current() || role != characterId) return null;
     if (value != null) {
       keeper = next;
       snapshot = value;
       ui.vitalsChanged(value);
     }
     return value;
+  }
+
+  Future<void> importLegacyAffinity(CompanionMemoryOwner owner, String role, bool Function() current) async {
+    final settled = Completer<void>();
+    owner.retainReceipt(settled.future);
+    bool here() => current() && identical(memory, owner) && characterId == role;
+    void importSeed(String kind, CompanionSnapshot value) {
+      if (!here()) return;
+      final now = clock();
+      if (owner.store.importCompanionAffinity(
+        characterId: role,
+        sourceKind: kind,
+        sourceId: value.storeId,
+        closeness: value.vitals.closeness,
+        observedAtMs: now.wallMs,
+        offsetMinutes: now.offsetMinutes,
+      )) {
+        owner.changed();
+      }
+    }
+
+    try {
+      // probeForMigration does not create a missing legacy file. The actual
+      // snapshot must still be from that same store before its value is used.
+      try {
+        final existing = await owner.legacy.probeForMigration();
+        if (!here()) return;
+        if (existing != null) {
+          final previous = await owner.legacy.companionSnapshot();
+          if (previous.storeId == existing.storeId) importSeed('phone', previous);
+        }
+      } on Object {
+        // A corrupt or unavailable source remains untouched for later review.
+      }
+      if (!here() || light) return;
+      final client = ref.read(activeConnectionProvider).value?.client;
+      if (client == null) return;
+      try {
+        final previous = await client.companionSnapshot().timeout(const Duration(seconds: 3));
+        if (previous != null && here() && identical(ref.read(activeConnectionProvider).value?.client, client)) {
+          importSeed('host', previous);
+        }
+      } on Object {
+        // This GET is a possible legacy seed, never a Host activity write.
+      }
+    } finally {
+      settled.complete();
+    }
   }
 
   Future<void> arrive({bool greet = true}) async {
@@ -533,6 +648,7 @@ class _CompanionAgentVisit {
   }
 
   void event(String type) {
+    if (const {'pet', 'snack', 'play'}.contains(type)) recordInteraction(type);
     final owner = keeper;
     if (!active || owner == null) return;
     final current = captureCurrent();
@@ -560,6 +676,8 @@ class _CompanionAgentVisit {
 
   void observe(CompanionInitiativeView view) {
     if (!active) return;
+    observePresence(view);
+    settleAffinity();
     if (entered) {
       initiative.observe(ui.initiativeRoom, view);
     } else {
@@ -569,33 +687,137 @@ class _CompanionAgentVisit {
     requestFollowup(view);
   }
 
+  void settleAffinity() {
+    final owner = memory;
+    if (!active || owner == null) return;
+    final now = clock();
+    final day = (now.wallMs + now.offsetMinutes * 60000) ~/ 86400000;
+    if (affinitySettledDay == day) return;
+    final segment = presence;
+    if (segment != null &&
+        flushPresence(segment, now, force: true) &&
+        segment.persistedMs < now.monoMs - segment.monoMs) {
+      // Do not close yesterday over a failed checkpoint of a measured live
+      // segment. A later observation can retry the same cumulative identity.
+      return;
+    }
+    try {
+      final settled = owner.store.settleCompanionAffinity(nowMs: now.wallMs, offsetMinutes: now.offsetMinutes);
+      affinitySettledDay = day;
+      if (settled.isNotEmpty) owner.changed();
+    } on Object {
+      // The SDK watermark remains authoritative; another actual observation
+      // can retry without inventing activity or requiring a model request.
+    }
+  }
+
+  void recordInteraction(String kind, {MemoryRow? source}) {
+    final owner = memory;
+    final role = characterId;
+    if (!active || owner == null || role == null) return;
+    final stamp = clock();
+    if (source == null && stamp.monoMs < 0) return;
+    try {
+      owner.store.recordCompanionInteraction(
+        characterId: role,
+        eventId: source?['id'] as String? ?? companionMemoryId(),
+        kind: kind,
+        atMs: source?['said_at_utc'] as int? ?? stamp.wallMs,
+        offsetMinutes: source?['offset_minutes'] as int? ?? stamp.offsetMinutes,
+        sourceId: source?['id'] as String?,
+      );
+    } on Object {
+      // Optional relationship accounting never fabricates a successful write
+      // and never turns an already committed chat into a new submission.
+    }
+  }
+
+  void observePresence(CompanionInitiativeView view) {
+    final owner = memory;
+    final role = characterId;
+    final now = clock();
+    if (!view.visible || !view.resumed || owner == null || role == null || now.monoMs < 0) {
+      finishPresence(now);
+      return;
+    }
+    final previous = presence;
+    if (previous != null &&
+        (!identical(previous.memory, owner) ||
+            previous.characterId != role ||
+            previous.offsetMinutes != now.offsetMinutes ||
+            !flushPresence(previous, now))) {
+      finishPresence(now);
+    }
+    presence ??= _CompanionPresence(owner, role, companionMemoryId(), now);
+  }
+
+  bool flushPresence(_CompanionPresence segment, CompanionInitiativeClock now, {bool force = false}) {
+    final elapsed = now.monoMs - segment.monoMs;
+    // A clock discontinuity supplies no evidence for the unobserved interval.
+    // The existing sampler/controller uses the same one-second wall tolerance.
+    if (now.monoMs < 0 ||
+        elapsed < segment.persistedMs ||
+        ((now.wallMs - segment.startedAtMs) - elapsed).abs() > 1000) {
+      return false;
+    }
+    if (!force && elapsed - segment.persistedMs < 60000) return true;
+    if (elapsed == segment.persistedMs) return true;
+    try {
+      segment.memory.store.recordCompanionPresence(
+        characterId: segment.characterId,
+        segmentId: segment.id,
+        startedAtMs: segment.startedAtMs,
+        elapsedMs: elapsed,
+        offsetMinutes: segment.offsetMinutes,
+      );
+      segment.persistedMs = elapsed;
+    } on Object {
+      // The next checkpoint can submit the same cumulative segment again.
+      // A failed final write is not reconstructed from a later wall clock.
+    }
+    return true;
+  }
+
+  void finishPresence([CompanionInitiativeClock? now]) {
+    final previous = presence;
+    presence = null;
+    if (previous != null) flushPresence(previous, now ?? clock(), force: true);
+  }
+
   static bool presentable(CompanionInitiativeView view) =>
       view.visible && view.resumed && !view.blocked && view.enabled;
 
   void requestFollowup(CompanionInitiativeView view) {
     final owner = memory;
-    if (owner == null || followupRetired || !presentable(view) || initiative.fault != null) return;
+    if (owner == null || owner.working || followupRetired || !presentable(view) || initiative.fault != null) return;
     final now = clock();
+    final role = characterId;
+    final window = '${view.contextKey}:$controlRevision';
+    if (followupWindow != window) {
+      followupWindow = window;
+      followupAttempts.clear();
+    }
     MemoryRow? opportunity;
     try {
-      opportunity = owner.store.nextFollowup(nowMs: now.wallMs);
+      opportunity = owner.store.nextAgentFollowup(nowMs: now.wallMs, characterId: role, excludedIds: followupAttempts);
     } on Object {
       return;
     }
     if (opportunity == null) return;
     final captured = opportunity;
-    final attempt = '${view.contextKey}:${captured['id']}:${captured['row_rev']}:${captured['control_revision']}';
-    if (followupAttempt == attempt) return;
+    final visitCurrent = captureCurrent();
     final candidate = CompanionInitiativeSignal(
       id: 'followup:${captured['id']}:${captured['row_rev']}:${captured['control_revision']}',
       contextKey: view.contextKey,
       expiresAtMonoMs: now.monoMs + math.min(120000, (captured['expires_at_ms']! as int) - now.wallMs),
     );
     bool current() =>
-        active &&
+        visitCurrent() &&
+        identical(owner, memory) &&
+        characterId == role &&
         !followupRetired &&
         candidate.contextKey == ui.initiativeView.contextKey &&
-        owner.store.isFollowupCurrent(captured, nowMs: clock().wallMs);
+        owner.store.isAgentFollowupCurrent(captured, nowMs: clock().wallMs, characterId: role);
     String? line;
     initiative.requestSignal(
       ui.initiativeRoom,
@@ -604,18 +826,22 @@ class _CompanionAgentVisit {
       followupId: captured['id']! as String,
       isCurrent: current,
       prepare: () async {
-        followupAttempt = attempt;
+        // A failed preparation is skipped for this opportunity, not marked
+        // asked. The next observation may consider another eligible card.
+        followupAttempts.add(captured['id']! as String);
         await ref.read(companionPersonaProvider.notifier).ready;
         if (!current() || !presentable(ui.initiativeView)) return false;
         final persona = ref.read(companionPersonaProvider);
         line = await owner.followup(
           this,
           captured,
-          persona: companionPersonaPart(
-            custom: persona.custom,
-            name: ref.read(companionNameProvider) ?? character.name,
-            callMe: persona.callMe,
-          ),
+          persona:
+              companionPersonaPart(
+                custom: persona.custom,
+                name: ref.read(companionNameProvider) ?? character.name,
+                callMe: persona.callMe,
+              ) +
+              owner.relationshipContext(role, forInitiative: true),
           offsetMinutes: clock().offsetMinutes,
           isCurrent: () {
             final now = clock();
@@ -627,15 +853,74 @@ class _CompanionAgentVisit {
         );
         return line != null;
       },
-      present: (display) => current() && line != null && ui.presentFollowup(display, line!),
+      present: (display) {
+        if (!current() || line == null || !ui.presentFollowup(display, line!)) return false;
+        if (role != null) {
+          // The initiative owner settles its real shown receipt synchronously
+          // after this callback. Record only after that settlement, while the
+          // original phone database is still retained.
+          final receipt = Future<void>.microtask(() {
+            try {
+              final shown = owner.store.followups().singleWhere((row) => row['id'] == captured['id']);
+              if (shown['state'] != 'asked' || shown['presented_at_ms'] is! int) return;
+              owner.store.recordCompanionPresentation(
+                characterId: role,
+                presentationId: display.ticket.id,
+                kind: 'followup',
+                presentedAtMs: shown['presented_at_ms']! as int,
+                opportunityId: captured['id']! as String,
+              );
+            } on Object {
+              // A missing/unknown shown receipt does not become an affinity fact.
+            }
+          });
+          owner.retainReceipt(receipt);
+        }
+        return true;
+      },
       hide: ui.hideFollowup,
     );
   }
 
   void acted() {
     if (!active) return;
-    followupAttempt = null;
+    followupWindow = null;
+    followupAttempts.clear();
     initiative.activate(ui.initiativeRoom);
+  }
+
+  void presentedReply(String replyId, String text) {
+    final shown = run;
+    final owner = memory;
+    final role = characterId;
+    if (!active ||
+        owner == null ||
+        role == null ||
+        shown == null ||
+        shown.discard ||
+        !identical(shown.memory, owner) ||
+        shown.source['character_id'] != role ||
+        shown.replyId != replyId ||
+        shown.text != text) {
+      return;
+    }
+    final at = clock().wallMs;
+    for (final entry in shown.unpresentedReplies.entries.toList()) {
+      if (entry.value > text.length) continue;
+      try {
+        owner.store.recordCompanionPresentation(
+          characterId: role,
+          presentationId: 'assistant:${entry.key}',
+          kind: 'assistant',
+          presentedAtMs: at,
+          assistantSourceId: entry.key,
+        );
+        shown.unpresentedReplies.remove(entry.key);
+      } on Object {
+        // No fabricated presentation on an unavailable/deleted source. A
+        // later actual frame may retry; leaving never fabricates a frame.
+      }
+    }
   }
 
   void connectionChanged() {
@@ -787,6 +1072,7 @@ class _CompanionAgentVisit {
 
   void close() {
     if (closed) return;
+    finishPresence();
     ui.detached();
     closed = true;
     stop(discard: true);
@@ -803,4 +1089,19 @@ class _CompanionAgentVisit {
     unawaited(companionMarkSeen(DateTime.now()));
     if (identical(agent._visit, this)) agent._visit = null;
   }
+}
+
+class _CompanionPresence {
+  _CompanionPresence(this.memory, this.characterId, this.id, CompanionInitiativeClock now)
+    : startedAtMs = now.wallMs,
+      monoMs = now.monoMs,
+      offsetMinutes = now.offsetMinutes;
+
+  final CompanionMemoryOwner memory;
+  final String characterId;
+  final String id;
+  final int startedAtMs;
+  final int monoMs;
+  final int offsetMinutes;
+  int persistedMs = 0;
 }

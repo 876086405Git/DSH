@@ -12,6 +12,13 @@ typedef CompanionAgentMemoryCommit = void Function({
   required int revision,
 });
 
+typedef CompanionAgentMaintenanceCommit = void Function({
+  required CompanionMemoryOwner memory,
+  required String turnId,
+  required int beforeRevision,
+  required int revision,
+});
+
 /// The original SQLite source owns this turn and its durable three-card budget.
 /// A model HTTP continuation does not create another turn or another allowance.
 class CompanionAgentMemoryTools {
@@ -21,26 +28,67 @@ class CompanionAgentMemoryTools {
     required this._isCurrent,
     required this._onCommitted,
     required this.forgottenNotice,
-  }) : sourceId = source['id']! as String {
+    this.semanticRecall,
+  }) : sourceId = source['id']! as String,
+       _onMaintenanceCommitted = null {
     final turn = memory.store.beginAgentTurn(
-      messageId: sourceId,
+      messageId: source['id']! as String,
       expectedSourceRev: source['source_rev']! as int,
       shownCardRevisions: const {},
     );
     turnId = turn['id']! as String;
     _knownControlRevision = turn['control_revision']! as int;
     _closed = turn['closed'] != 0;
+    _originKind = 'chat';
+    _characterId = turn['character_id'] as String?;
+  }
+
+  CompanionAgentMemoryTools.maintenance({
+    required this.memory,
+    required MemoryRow turn,
+    required this._isCurrent,
+    required this._onMaintenanceCommitted,
+    required this.forgottenNotice,
+    this.semanticRecall,
+  }) : sourceId = null,
+       _onCommitted = null {
+    if (!const ['extract', 'organize'].contains(turn['origin_kind'])) {
+      throw ArgumentError('A maintenance adapter needs an actual maintenance turn');
+    }
+    turnId = turn['id']! as String;
+    _knownControlRevision = turn['control_revision']! as int;
+    _closed = turn['closed'] != 0;
+    _originKind = turn['origin_kind'] as String;
+    _characterId = turn['character_id'] as String?;
   }
 
   final CompanionMemoryOwner memory;
-  final String sourceId, forgottenNotice;
+  final String? sourceId;
+  final String forgottenNotice;
+  final Future<List<String>?> Function(String query)? semanticRecall;
   final bool Function() _isCurrent;
-  final CompanionAgentMemoryCommit _onCommitted;
+  final CompanionAgentMemoryCommit? _onCommitted;
+  final CompanionAgentMaintenanceCommit? _onMaintenanceCommitted;
   late final String turnId;
+  late final String _originKind;
+  late final String? _characterId;
   late int _knownControlRevision;
   bool _closed = false;
 
-  bool get isCurrent => !_closed && _isCurrent() && memory.store.archive['control_revision'] == _knownControlRevision;
+  bool get isCurrent =>
+      !_closed &&
+      _isCurrent() &&
+      memory.store.archive['control_revision'] == _knownControlRevision &&
+      memory.store.isAgentTurnCurrent(turnId);
+
+  /// The caller supplies exactly the cards placed in its current model input.
+  void grantCards(List<MemoryRow> cards) {
+    if (!isCurrent) return;
+    memory.store.grantAgentCards(
+      turnId: turnId,
+      cardRevisions: {for (final card in cards) card['id']! as String: card['row_rev']! as int},
+    );
+  }
 
   /// Wire this to the Agent's actual onSelected callback, including each new
   /// selection after one of this turn's own control commits.
@@ -60,16 +108,45 @@ class CompanionAgentMemoryTools {
   void close() {
     if (_closed) return;
     _closed = true;
-    memory.store.closeAgentTurn(turnId);
+    if (sourceId == null) {
+      memory.store.finishAgentMaintenance(turnId: turnId, complete: false);
+    } else {
+      memory.store.closeAgentTurn(turnId);
+    }
   }
 
+  static List<CompanionAgentTool> definitionsFor({required String originKind, required String? characterId}) => [
+    for (final definition in definitions)
+      if ((definition.name != 'diary' || originKind == 'organize') &&
+          (definition.name != 'impression' || characterId != null) &&
+          (definition.name != 'relationship' || (originKind != 'chat' && characterId != null)))
+        definition,
+  ];
+
   List<({CompanionAgentTool definition, Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute})>
-  get bindings => [for (final definition in definitions) (definition: definition, execute: execute)];
+  get bindings => [
+    for (final definition in definitionsFor(originKind: _originKind, characterId: _characterId))
+      (definition: definition, execute: execute),
+  ];
 
-  Future<CompanionAgentToolResult> execute(CompanionAgentToolCall call) =>
-      Future<CompanionAgentToolResult>.value(_execute(call));
+  Future<CompanionAgentToolResult> execute(CompanionAgentToolCall call) async {
+    if (!isCurrent) return _failure('turn_not_current');
+    List<String>? rankedRecallIds;
+    final rank = semanticRecall;
+    final query = call.input['query'];
+    if (call.name == 'recall' && rank != null && query is String) {
+      try {
+        rankedRecallIds = await rank(query);
+      } on Object {
+        return _failure('recall_unavailable');
+      }
+    }
+    // A ranker may await a local model. The original turn is checked again
+    // before Store reads/grants actual current IDs; rank is never permission.
+    return _execute(call, rankedRecallIds: rankedRecallIds);
+  }
 
-  CompanionAgentToolResult _execute(CompanionAgentToolCall call) {
+  CompanionAgentToolResult _execute(CompanionAgentToolCall call, {List<String>? rankedRecallIds}) {
     if (!isCurrent) return _failure('turn_not_current');
     final CompanionAgentMemoryResult receipt;
     try {
@@ -80,6 +157,7 @@ class CompanionAgentMemoryTools {
         callId: call.id,
         toolName: call.name,
         input: call.input,
+        rankedRecallIds: rankedRecallIds,
       );
     } on DshRemoteException catch (error) {
       return _failure(error.code);
@@ -89,12 +167,21 @@ class CompanionAgentMemoryTools {
     if (!receipt.applied) return _failure(receipt.code ?? 'not_applied');
     if (!receipt.replayed && receipt.controlRevision != receipt.beforeControlRevision) {
       try {
-        _onCommitted(
-          memory: memory,
-          sourceId: sourceId,
-          beforeRevision: receipt.beforeControlRevision,
-          revision: receipt.controlRevision,
-        );
+        if (sourceId case final id?) {
+          _onCommitted!(
+            memory: memory,
+            sourceId: id,
+            beforeRevision: receipt.beforeControlRevision,
+            revision: receipt.controlRevision,
+          );
+        } else {
+          _onMaintenanceCommitted!(
+            memory: memory,
+            turnId: turnId,
+            beforeRevision: receipt.beforeControlRevision,
+            revision: receipt.controlRevision,
+          );
+        }
         _knownControlRevision = receipt.controlRevision;
       } finally {
         // The commit is real even if a caller rejects its presentation context.
@@ -109,13 +196,17 @@ class CompanionAgentMemoryTools {
       'targetId': receipt.targetId,
     };
     if (call.name == 'recall') {
-      final selection = memory.select(call.input['query']! as String);
-      grantSelection(selection);
+      final selection = receipt.recallSelection;
+      if (selection == null) return _failure('recall_not_current');
       result['selection'] = jsonDecode(selection.block);
+    }
+    if (call.name == 'related') {
+      if (receipt.relatedCards == null) return _failure('related_not_current');
+      result['cards'] = receipt.relatedCards;
     }
     return CompanionAgentToolResult(
       content: jsonEncode(result),
-      notice: call.name == 'forget' ? forgottenNotice : null,
+      notice: receipt.code == 'forgotten' && !receipt.replayed ? forgottenNotice : null,
     );
   }
 
@@ -134,19 +225,73 @@ class CompanionAgentMemoryTools {
     'description': 'An exact card ID supplied in this turn or a successful recall.',
   };
   static const _text = {'type': 'string', 'minLength': 1};
+  static const _source = {
+    'type': 'string',
+    'description': 'For maintenance, one exact source ID in this context. A chat tool already owns its user source.',
+  };
+  static const _writeProperties = {
+    'card': _card,
+    'text': _text,
+    'source': _source,
+    'sources': {'type': 'array', 'items': _source},
+    'references': {
+      'type': 'array',
+      'items': _card,
+      'description': 'Supplied cards on which this wording depends. Revisions are captured by Store, not invented.',
+    },
+    'keywords': {'type': 'array', 'items': _text},
+    'aliases': {'type': 'array', 'items': _text},
+    'event_time': {
+      'type': 'object',
+      'description': 'Copy first-source wording. Use its said_at_utc + offset_minutes, not edit/processing time. Unknown date is null; omit without evidence.',
+      'properties': {
+        'local_date': {
+          'type': ['string', 'null'],
+          'pattern': r'^\d{4}-\d{2}-\d{2}$',
+        },
+        'precision': {
+          'type': 'string',
+          'enum': ['day', 'part_of_day', 'clock', 'unspecified'],
+        },
+        'wording': _text,
+      },
+      'required': ['local_date', 'precision', 'wording'],
+      'additionalProperties': false,
+    },
+  };
+  static const _change = {
+    'type': 'object',
+    'properties': {
+      ..._writeProperties,
+      'forget': {'type': 'boolean'},
+    },
+    'required': ['card'],
+    'anyOf': [
+      {
+        'required': ['text'],
+      },
+      {
+        'required': ['forget'],
+      },
+    ],
+    'additionalProperties': false,
+  };
   static const definitions = <CompanionAgentTool>[
     CompanionAgentTool(
       name: 'remember',
-      description: 'Save a fact, preference or episode the user wants remembered. Supply concise retrieval keywords; without them only exact-text retrieval is available. At most three distinct cards may change in one user turn.',
+      description: 'Save a concise fact, preference or episode. about_you is shared; our_story is private to the captured character. Maintenance must use actual supplied source IDs or reference IDs. At most three distinct entries change in one turn (one parent across maintenance roles).',
       inputSchema: {
         'type': 'object',
         'properties': {
-          'text': _text,
+          ..._writeProperties,
+          'collection': {
+            'type': 'string',
+            'enum': ['about_you', 'our_story'],
+          },
           'kind': {
             'type': 'string',
             'enum': ['fact', 'preference', 'episode'],
           },
-          'keywords': {'type': 'array', 'items': _text},
         },
         'required': ['text'],
         'additionalProperties': false,
@@ -154,25 +299,121 @@ class CompanionAgentMemoryTools {
     ),
     CompanionAgentTool(
       name: 'forget',
-      description: 'Forget a supplied card and its actual dependent cards. Original chat stays. Tell the user when deletion succeeds.',
+      description: 'First use related to inspect same-source candidates: sharing a source does not mean the same fact. Forget the intended entries atomically; changes must explicitly include all true literal/reference dependencies and preserve independent facts by nonempty rewrites. Original chat stays. Tell the user when deletion succeeds.',
       inputSchema: {
         'type': 'object',
-        'properties': {'card': _card},
-        'required': ['card'],
+        'properties': {
+          'card': _card,
+          'changes': {'type': 'array', 'minItems': 1, 'items': _change},
+        },
+        'anyOf': [
+          {
+            'required': ['card'],
+          },
+          {
+            'required': ['changes'],
+          },
+        ],
         'additionalProperties': false,
       },
     ),
     CompanionAgentTool(
       name: 'revise',
-      description: 'Replace a supplied card with the new nonempty wording and retrieval keywords. Use the same card ID for a later correction in this turn.',
+      description: 'Correct a supplied entry or an entire explicit changes group in one transaction. Inspect related candidates before changing a shared original. Preserve independent clauses in composite cards. References within this group bind to planned final revisions. A later correction uses the same ID and its new revision.',
+      inputSchema: {
+        'type': 'object',
+        'properties': {
+          ..._writeProperties,
+          'changes': {'type': 'array', 'minItems': 1, 'items': _change},
+        },
+        'anyOf': [
+          {
+            'required': ['card', 'text'],
+          },
+          {
+            'required': ['changes'],
+          },
+        ],
+        'additionalProperties': false,
+      },
+    ),
+    CompanionAgentTool(
+      name: 'related',
+      description: 'Read and grant actual same-source candidates and required literal/reference effects for a supplied card. Decide meaning from their text; do not equate a shared proof with the same fact. With no card, return only stale cleanup IDs without obsolete text.',
+      inputSchema: {
+        'type': 'object',
+        'properties': {'card': _card},
+        'additionalProperties': false,
+      },
+    ),
+    CompanionAgentTool(
+      name: 'merge',
+      description: 'Merge entries you have determined describe the same fact/person. Preserve original AND/OR proofs, aliases and followup consumption. Keep card as target; from are supplied IDs. Include retained dependency rewrites in updates. Never merge merely because a source or alias is shared.',
       inputSchema: {
         'type': 'object',
         'properties': {
           'card': _card,
+          'from': {'type': 'array', 'minItems': 1, 'items': _card},
           'text': _text,
           'keywords': {'type': 'array', 'items': _text},
+          'updates': {
+            'type': 'array',
+            'items': {
+              'type': 'object',
+              'properties': _writeProperties,
+              'required': ['card', 'text'],
+              'additionalProperties': false,
+            },
+          },
         },
-        'required': ['card', 'text'],
+        'required': ['card', 'from'],
+        'additionalProperties': false,
+      },
+    ),
+    CompanionAgentTool(
+      name: 'person',
+      description: 'Create or update a shared profile of a real person using the supplied sources. Record known names/relationships/recent facts in text and actual aliases separately. Choose an existing supplied card when updating; use merge only when the people are actually the same.',
+      inputSchema: {
+        'type': 'object',
+        'properties': _writeProperties,
+        'required': ['text', 'aliases'],
+        'additionalProperties': false,
+      },
+    ),
+    CompanionAgentTool(
+      name: 'diary',
+      description: 'Write a short shared summary for this actual completed-day maintenance claim. Require at least one selected original user message from this exact completed day; shared references may only supplement it. Do not claim complete coverage. The day and timezone come from the claim, not tool arguments. Supply the existing diary for this day to update it; use generic revise/forget for a justified correction of an older diary while preserving its date and evidence.',
+      inputSchema: {
+        'type': 'object',
+        'properties': _writeProperties,
+        'required': ['text'],
+        'additionalProperties': false,
+      },
+    ),
+    CompanionAgentTool(
+      name: 'impression',
+      description: 'Update a few concise sentences about your relationship with this captured character. Use shared/current-character references and real supplied sources. Supply the existing impression ID when one is present; never use another character’s private material.',
+      inputSchema: {
+        'type': 'object',
+        'properties': _writeProperties,
+        'required': ['text'],
+        'additionalProperties': false,
+      },
+    ),
+    CompanionAgentTool(
+      name: 'relationship',
+      description: 'Classify an actual shown assistant question or a real user confiding/answer event in this maintenance context. Use supplied source and presentation IDs; no inferred display, invented time, or score. The Store rejects already settled days and deduplicates original sources.',
+      inputSchema: {
+        'type': 'object',
+        'properties': {
+          'kind': {
+            'type': 'string',
+            'enum': ['question', 'confiding', 'answered_question', 'answered_followup'],
+          },
+          'source': _source,
+          'presentation': {'type': 'string', 'description': 'An exact actual-display ticket in this context.'},
+        },
+        'required': ['kind'],
         'additionalProperties': false,
       },
     ),
@@ -209,6 +450,7 @@ class CompanionAgentMemoryTools {
         'type': 'object',
         'properties': {
           'card': _card,
+          'source': _source,
           'whenMs': {'type': 'integer', 'minimum': 0},
         },
         'required': ['card', 'whenMs'],
