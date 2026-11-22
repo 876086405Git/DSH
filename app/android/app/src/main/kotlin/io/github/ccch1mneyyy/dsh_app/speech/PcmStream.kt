@@ -131,6 +131,7 @@ class PcmStream(
         var carry: Byte? = null
         val frameBytes = rate * 2 * LEVEL_MS / 1000
         val pending = ByteArray(frameBytes)
+        val samples = if (levels) ShortArray(frameBytes / 2) else null
         var pendingLength = 0
         var failed: String? = null
         try {
@@ -156,7 +157,7 @@ class PcmStream(
                         break
                     }
                     if (n == 0) Thread.sleep(5)
-                    if (levels) {
+                    if (samples != null) {
                         // Levels per 40 ms of what was just written, posted for when it will be heard.
                         var i = offset
                         while (i < offset + n) {
@@ -165,7 +166,7 @@ class PcmStream(
                             pendingLength += take
                             i += take
                             if (pendingLength == frameBytes) {
-                                val value = loudness(pending, pendingLength)
+                                val value = loudness(pending, samples)
                                 // Frames queued ahead of this one: written before it, less what has played.
                                 val ahead = (frames + (i - offset) / 2 - t.playbackHeadPosition.toLong()).coerceAtLeast(0)
                                 main.postDelayed({ if (!stopped) listener.onLevel(this, value) }, ahead * 1000 / rate)
@@ -213,8 +214,7 @@ class PcmStream(
         }
     }
 
-    private fun loudness(bytes: ByteArray, length: Int): Double {
-        val samples = ShortArray(length / 2)
+    private fun loudness(bytes: ByteArray, samples: ShortArray): Double {
         for (k in samples.indices) {
             samples[k] = ((bytes[2 * k].toInt() and 0xFF) or (bytes[2 * k + 1].toInt() shl 8)).toShort()
         }
