@@ -804,7 +804,7 @@ void main() {
       expect((lastRequest['payload']! as Map)['preferredTransports'], ['p2p', 'turn', 'relay']);
     });
 
-    for (final code in ['CONNECTION_REPLACED', 'INVALID_MESSAGE']) {
+    for (final code in ['CONNECTION_REPLACED', 'PROTOCOL_MISMATCH']) {
       test('a pending capability probe preserves terminal $code without reconnecting', () async {
         host.stallDescribe = true;
         final rejected = expectLater(
@@ -817,11 +817,13 @@ void main() {
         );
         await _eventually(() => host.rpcMethods.contains('harness.transport.describe'));
         final id = await clientId();
-        if (code == 'CONNECTION_REPLACED') {
-          server.disconnectPeer(id, code);
-        } else {
-          server.peers[id]!.ws.add('{');
-        }
+        // Keep the data plane alive so this exercises the Control failure,
+        // not a race with a separate Host DataChannel close.
+        server.peers[id]!.ws.add(
+          code == 'CONNECTION_REPLACED'
+              ? jsonEncode(ControlFrame('error', {'code': code, 'message': code, 'retryable': false}).toJson())
+              : '{',
+        );
         await rejected.timeout(const Duration(seconds: 5));
         expect(host.rpcMethods, ['harness.transport.describe']);
         expect(host.handshakes, hasLength(1));

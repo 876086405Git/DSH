@@ -315,7 +315,8 @@ class RelayTransport implements LeaseAwareTransport {
       _recoverAuthentication();
       return;
     }
-    final semantics = classifyControlClose(code, reason);
+    // dart:io reports an empty Close frame as a synthetic 1005.
+    final semantics = classifyControlClose(code == WebSocketStatus.noStatusReceived ? null : code, reason);
     final semanticCode = semantics.replaced
         ? 'CONNECTION_REPLACED'
         : semantics.serverShutdown
