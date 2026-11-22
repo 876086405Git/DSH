@@ -49,7 +49,7 @@ function selectContext(doc, query, limit, now) {
   // Expiry changes retrieval without a write/revision. Clients should fetch each turn;
   // this boundary also prevents a revision-only cache from serving expired records.
   const expiries = candidates.map(({ memory }) => memory.expiresAt).filter((at) => at !== null);
-  return { ...envelope(doc), memories: copy(memories), truncated, textCodePoints,
+  return { ...envelope(doc), memories, truncated, textCodePoints,
     nextExpiryAt: expiries.length === 0 ? null : Math.min(...expiries) };
 }
 
@@ -69,7 +69,7 @@ export function createCompanionStore({ filePath, now = Date.now, io = fs } = {})
     const data = JSON.stringify(doc);
     if (Buffer.byteLength(data) > MAX_FILE_BYTES) throw new CompanionError(413, "too-large", "Companion store size limit reached");
     const directory = dirname(path);
-    const temporary = join(directory, `.state-${randomUUID()}.tmp`);
+    let temporary = join(directory, `.state-${randomUUID()}.tmp`);
     let handle;
     try {
       await io.mkdir(directory, { recursive: true, mode: 0o700 });
@@ -79,11 +79,12 @@ export function createCompanionStore({ filePath, now = Date.now, io = fs } = {})
       await handle.close();
       handle = undefined;
       await io.rename(temporary, path);
+      temporary = undefined;
     } catch {
       throw ioError();
     } finally {
       if (handle !== undefined) await handle.close().catch(() => {});
-      await io.unlink(temporary).catch(() => {});
+      if (temporary !== undefined) await io.unlink(temporary).catch(() => {});
     }
   }
 
@@ -94,12 +95,17 @@ export function createCompanionStore({ filePath, now = Date.now, io = fs } = {})
       const stat = await handle.stat();
       if (!stat.isFile() || stat.size > MAX_FILE_BYTES) throw corrupt();
       // Bounded even if an external editor grows the file after stat().
-      const buffer = Buffer.alloc(MAX_FILE_BYTES + 1);
+      let buffer = Buffer.alloc(stat.size + 1);
       let size = 0;
       while (size < buffer.length) {
         const { bytesRead } = await handle.read(buffer, size, buffer.length - size, size);
         if (bytesRead === 0) break;
         size += bytesRead;
+        if (size === buffer.length && size <= MAX_FILE_BYTES) {
+          const expanded = Buffer.alloc(MAX_FILE_BYTES + 1);
+          buffer.copy(expanded);
+          buffer = expanded;
+        }
       }
       if (size > MAX_FILE_BYTES) throw corrupt();
       let doc;
@@ -150,14 +156,14 @@ export function createCompanionStore({ filePath, now = Date.now, io = fs } = {})
         asOf: at, ...selectRecallContext(doc.memories, at) }));
     },
     getSnapshot() { return transaction((doc, at) => snapshot(doc, at)); },
-    getMemories() { return transaction((doc) => ({ ...envelope(doc), memories: copy(doc.memories) })); },
+    getMemories() { return transaction((doc) => ({ ...envelope(doc), memories: doc.memories })); },
     getContext(input) {
       const { query, limit } = validateContext(input);
       return transaction((doc, at) => selectContext(doc, query, limit, at));
     },
     exportData() {
       return transaction((doc, at) => ({ schema: "dsh-go/companion-export", ...snapshot(doc, at),
-        exportedAt: at, memories: copy(doc.memories) }));
+        exportedAt: at, memories: doc.memories }));
     },
     event(input) {
       validateWrite(input, ["type"]);

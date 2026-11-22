@@ -66,6 +66,16 @@ test('budget counts reservations; rid replay cannot reserve or submit twice', as
   await assert.rejects(ledger.releaseUnsent(rid, identity), code('submission_may_have_happened'));
 });
 
+test('snapshots hand out the rows parsed for that transaction without another copy', async t => {
+  const { ledger } = await fixture(t);
+  await ledger.reserve(reservation());
+  const clone = t.mock.method(globalThis, 'structuredClone');
+  const first = await ledger.snapshot();
+  first.requests[0].state = 'changed';
+  assert.equal((await ledger.snapshot()).requests[0].state, 'reserved');
+  assert.equal(clone.mock.calls.filter(call => Array.isArray(call.arguments[0]?.requests)).length, 0);
+});
+
 test('only a request that has not crossed the submission gate may be released', async t => {
   const { ledger } = await fixture(t);
   const { record } = await ledger.reserve(reservation());

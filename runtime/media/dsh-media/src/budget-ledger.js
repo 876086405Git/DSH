@@ -35,7 +35,6 @@ function text(value, max = 256) {
     || /[\u0000-\u001f]/.test(value)) fail('invalid_record');
   return value;
 }
-function copy(value) { return structuredClone(value); }
 function validDay(value) {
   if (typeof value !== 'string' || !DAY.test(value)) return false;
   const date = new Date(value + 'T00:00:00Z');
@@ -235,7 +234,7 @@ export function createBudgetLedger(trustedDirectory, { clock = Date.now, checkpo
           validateState(state);
           await durableReplace(filename, state, outcome.label);
         }
-        return copy(outcome.result(state));
+        return outcome.result(state); // state was parsed for this transaction alone
       }, { signal });
     } catch (error) {
       if (error instanceof BudgetError) throw error;

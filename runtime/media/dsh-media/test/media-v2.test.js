@@ -259,6 +259,28 @@ test('explicit video resolution reaches the provider and returned metadata', asy
   assert.equal(f.wires[0].body.resolution, '720p');
   assert.equal(result.meta.request.resolution, '720p');
 });
+test('polling releases captured sources and leaves the provider input intact', async t => {
+  const f = await fixture(t, 'ark-video');
+  const sources = Object.freeze(['data:image/png;base64,' + PNG.toString('base64')]);
+  const references = { pins: [], sources };
+  let providerSources, queries = 0;
+  const client = {
+    async prepareCreate(_request, refs) {
+      providerSources = refs;
+      return async () => ({ taskId: 'task-1' });
+    },
+    async query() {
+      queries++;
+      assert.equal(references.sources, undefined);
+      assert.equal(providerSources, sources);
+      assert.equal(providerSources.length, 1);
+      return { state: 'failed' };
+    },
+  };
+  await assert.rejects(generateMedia(request('ark-video'), { ...f.context, references, client }), { code: 'generation_failed' });
+  assert.equal(queries, 1);
+});
+
 for (const profile of ['ark-video', 'ali-video', 'silicon-video']) {
   test(`${profile}: real HTTP async video downloads bounded MP4 and derives actual metadata`, async t => {
     const f = await fixture(t, profile), req = request(profile);
