@@ -298,12 +298,13 @@ class ChatTranscript {
     if (_items case final cached?) return cached;
     // A draft shares its step's row key with the message it commits to; keys stay unique when a step
     // is already committed or has more than one live attempt (the latest keeps the key).
-    final used = {for (final item in durable) item.key};
     final latest = {for (final draft in _drafts.values) draft.rowKey: draft};
+    for (final item in durable.whereType<AssistantChatItem>()) {
+      latest.remove(item.key);
+    }
     return _items = [
       ...durable,
-      for (final draft in _drafts.values)
-        ...draft.items(useRowKey: !used.contains(draft.rowKey) && identical(latest[draft.rowKey], draft)),
+      for (final draft in _drafts.values) ...draft.items(useRowKey: identical(latest[draft.rowKey], draft)),
     ];
   }
 
