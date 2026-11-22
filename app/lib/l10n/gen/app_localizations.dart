@@ -25518,6 +25518,18 @@ abstract class L10n {
   /// **'收成小球，点按展开'**
   String get phoneAutoCollapseHint;
 
+  /// No description provided for @phoneEdgeGlow.
+  ///
+  /// In zh, this message translates to:
+  /// **'屏幕边缘光效'**
+  String get phoneEdgeGlow;
+
+  /// No description provided for @phoneEdgeGlowHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'操控时屏幕四周的流光'**
+  String get phoneEdgeGlowHint;
+
   /// No description provided for @phoneDeveloperOptions.
   ///
   /// In zh, this message translates to:
@@ -34283,6 +34295,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'悬浮条,收起,悬浮球'**
   String get searchKwPhoneAutoCollapse;
+
+  /// No description provided for @searchKwPhoneEdgeGlow.
+  ///
+  /// In zh, this message translates to:
+  /// **'边缘光,光效,流光,特效,边框'**
+  String get searchKwPhoneEdgeGlow;
 
   /// No description provided for @searchKwPhoneReturn.
   ///

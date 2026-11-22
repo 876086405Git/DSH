@@ -792,6 +792,13 @@ abstract final class Spots {
     keywords: (l) => l.searchKwPhoneAutoCollapse,
     condition: SpotCondition.phoneControlOn,
   );
+  static final phoneEdgeGlow = SettingSpot(
+    'phone-edge-glow',
+    page: SettingsPageId.phone,
+    title: (l) => l.phoneEdgeGlow,
+    keywords: (l) => l.searchKwPhoneEdgeGlow,
+    condition: SpotCondition.phoneControlOn,
+  );
   static final phoneReturn = SettingSpot(
     'phone-return',
     page: SettingsPageId.phone,
@@ -1249,6 +1256,7 @@ final _rows = <SettingSpot>[
   Spots.phoneA11yRestore,
   Spots.phoneConfirm,
   Spots.phoneAutoCollapse,
+  Spots.phoneEdgeGlow,
   Spots.phoneReturn,
   Spots.phoneBackgroundGuide,
   Spots.pluginsMarket,

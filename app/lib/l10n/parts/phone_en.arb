@@ -441,6 +441,8 @@
   "phoneIdleOpacity": "Idle opacity",
   "phoneAutoCollapse": "Collapse when idle",
   "phoneAutoCollapseHint": "Shrinks to a ball; tap to open",
+  "phoneEdgeGlow": "Screen edge glow",
+  "phoneEdgeGlowHint": "Light round the screen while DSH works",
   "phoneDeveloperOptions": "Developer options",
   "phoneDirectEngine": "Direct local engine launch",
   "phoneDirectHint": "Experimental and off by default; applies on the next start. Some phones (Android 16, for one) block a direct start, and the app then goes back to compatible launch on its own. Your data isn’t affected.",

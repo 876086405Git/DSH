@@ -656,6 +656,8 @@
   "phoneIdleOpacity": "闲置时不透明度",
   "phoneAutoCollapse": "闲置时自动收起",
   "phoneAutoCollapseHint": "收成小球，点按展开",
+  "phoneEdgeGlow": "屏幕边缘光效",
+  "phoneEdgeGlowHint": "操控时屏幕四周的流光",
   "phoneDeveloperOptions": "开发者选项",
   "phoneDirectEngine": "直接启动本机引擎",
   "phoneDirectHint": "实验功能，默认关闭，下次启动生效。部分手机（例如 Android 16）会拦截直接启动，届时自动改用兼容启动，数据不受影响。",

@@ -523,6 +523,7 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
               initiallyOpen: [
                 Spots.phoneA11yRestore,
                 Spots.phoneAutoCollapse,
+                Spots.phoneEdgeGlow,
                 Spots.phoneReturn,
                 Spots.phoneBackgroundGuide,
               ].any((spot) => spot.id == targetSpot),
@@ -783,7 +784,9 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
 
   Future<void> _setAutoCollapse(bool on) => ref.read(phoneOverlayPrefsProvider.notifier).setAutoCollapse(on);
 
-  /// 悬浮条: 闲置时不透明度, 闲置时自动收起, 完成后返回 dsh-go.
+  Future<void> _setEdgeGlow(bool on) => ref.read(phoneOverlayPrefsProvider.notifier).setEdgeGlow(on);
+
+  /// 悬浮条: 闲置时不透明度, 闲置时自动收起, 屏幕边缘光效, 完成后返回 dsh-go.
   Widget _floatingBar() {
     final overlay = ref.watch(phoneOverlayPrefsProvider);
     final returnAfterDone = ref.watch(phoneReturnPrefProvider);
@@ -801,6 +804,15 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
             subtitle: context.l10n.phoneAutoCollapseHint,
             onTap: () => unawaited(_setAutoCollapse(!overlay.autoCollapse)),
             trailing: Switch.adaptive(value: overlay.autoCollapse, onChanged: (v) => unawaited(_setAutoCollapse(v))),
+          ),
+        ),
+        MergeSemantics(
+          child: ListPageRow(
+            icon: AppIcons.edgeGlow,
+            spot: Spots.phoneEdgeGlow,
+            subtitle: context.l10n.phoneEdgeGlowHint,
+            onTap: () => unawaited(_setEdgeGlow(!overlay.edgeGlow)),
+            trailing: Switch.adaptive(value: overlay.edgeGlow, onChanged: (v) => unawaited(_setEdgeGlow(v))),
           ),
         ),
         MergeSemantics(

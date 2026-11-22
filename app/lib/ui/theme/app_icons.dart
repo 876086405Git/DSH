@@ -444,6 +444,7 @@ abstract final class AppIcons {
   static const backgroundPrompt = DshGlyphs.bell;
   static const overlayOpacity = DshGlyphs.slidersHorizontal;
   static const overlayBall = DshGlyphs.radioButton;
+  static const edgeGlow = DshGlyphs.sparkle;
 
   /// 解除限制, its 「已解除限制」 tag, and its three rules.
   static const unlocks = DshGlyphs.lockSimpleOpen;

@@ -14462,6 +14462,12 @@ class L10nEn extends L10n {
   String get phoneAutoCollapseHint => 'Shrinks to a ball; tap to open';
 
   @override
+  String get phoneEdgeGlow => 'Screen edge glow';
+
+  @override
+  String get phoneEdgeGlowHint => 'Light round the screen while DSH works';
+
+  @override
   String get phoneDeveloperOptions => 'Developer options';
 
   @override
@@ -19648,6 +19654,9 @@ class L10nEn extends L10n {
 
   @override
   String get searchKwPhoneAutoCollapse => 'floating bar,collapse,bubble';
+
+  @override
+  String get searchKwPhoneEdgeGlow => 'edge glow,glow,light,effect,border';
 
   @override
   String get searchKwPhoneReturn => 'return,come back';
