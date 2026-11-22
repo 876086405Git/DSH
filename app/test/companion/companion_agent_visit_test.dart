@@ -115,8 +115,7 @@ Map _context(Map<String, Object?> request) {
           if (block['type'] == 'text') block['text']! as String,
   ];
   final text = texts.singleWhere((text) => text.startsWith('<companion_context>'));
-  return jsonDecode(text.substring('<companion_context>'.length, text.length - '</companion_context>'.length))
-      as Map;
+  return jsonDecode(text.substring('<companion_context>'.length, text.length - '</companion_context>'.length)) as Map;
 }
 
 class _Host extends ActiveHostController {
@@ -417,10 +416,7 @@ void main() {
       expect(visit.calls('wake'), 1);
       expect(visit.requests, hasLength(3));
       final retryContext = _context(visit.requests[1]);
-      expect(retryContext['originalMessage'], {
-        'localTime': '2026-11-22T18:00+08:00',
-        'zoneId': 'Asia/Shanghai',
-      });
+      expect(retryContext['originalMessage'], {'localTime': '2026-11-22T18:00+08:00', 'zoneId': 'Asia/Shanghai'});
       expect(_context(visit.requests.last)['originalMessage'], retryContext['originalMessage']);
       final currentClock = DateTime.parse(retryContext['localTime']! as String).millisecondsSinceEpoch;
       // The wire clock has minute precision and must remain the current clock.
