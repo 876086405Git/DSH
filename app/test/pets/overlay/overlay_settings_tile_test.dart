@@ -286,6 +286,44 @@ void main() {
     expect(find.text('去开悬浮窗'), findsOneWidget);
   });
 
+  testWidgets('failed accessibility overlay offers permission and recovers', (tester) async {
+    final native = FakeOverlayNative(permission: 'accessibility', enabled: true, sdk: 32)..install();
+    await _pump(tester);
+    // A normally hidden window (the fake reports showing=false) still has permission.
+    expect(_switchOn(tester), isTrue);
+    expect(find.text('未授权'), findsNothing);
+
+    native.permission = 'denied';
+    await native.emitStatus();
+    await settlePhone(tester);
+    await tester.pumpAndSettle();
+    expect(_switchOn(tester), isFalse);
+    expect(find.text('未授权'), findsOneWidget);
+    expect(native.enabled, isTrue);
+    expect(native.methods, isNot(contains('requestPermission')));
+
+    // The existing cooldown ending or a service reconnect clears the refusal.
+    native.permission = 'accessibility';
+    await native.emitStatus();
+    await settlePhone(tester);
+    await tester.pumpAndSettle();
+    expect(_switchOn(tester), isTrue);
+    expect(find.text('未授权'), findsNothing);
+
+    native.permission = 'denied';
+    await native.emitStatus();
+    await settlePhone(tester);
+    await tester.pumpAndSettle();
+    await _turnOnThroughNotice(tester);
+    expect(native.methods, contains('requestPermission'));
+    expect(native.methods, isNot(contains('openAppDetails')));
+    native.permission = 'granted';
+    await leaveAndResume(tester);
+    await tester.pumpAndSettle();
+    expect(_switchOn(tester), isTrue);
+    expect(find.text('未授权'), findsNothing);
+  });
+
   testWidgets('no restricted-settings row before Android 13 or for a vendor block', (tester) async {
     final native = FakeOverlayNative(sdk: 32)..install();
     await _pump(tester);

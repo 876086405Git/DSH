@@ -57,6 +57,7 @@ class _PetOverlaySettingsSectionState extends ConsumerState<PetOverlaySettingsSe
     if (!s.native) return const SizedBox.shrink();
     final overlay = ref.read(petOverlayProvider.notifier);
     final on = s.working;
+    final refused = s.refused || (s.enabled && !s.permission.usable);
     // Sideloaded on Android 13+: the system switch may be greyed out until
     // 「允许受限制的设置」. Offered once a trip there came back empty.
     final restricted = s.refused && s.sdk >= 33 && s.permission != PetOverlayPermission.blocked;
@@ -64,7 +65,7 @@ class _PetOverlaySettingsSectionState extends ConsumerState<PetOverlaySettingsSe
       children: [
         SettingsSwitchTile(
           spot: Spots.petOutsideApp,
-          subtitle: s.refused ? l10n.botsPetNotAuthorized : null,
+          subtitle: refused ? l10n.botsPetNotAuthorized : null,
           value: on,
           onChanged: (v) => unawaited(v ? _turnOn(s) : overlay.turnOff()),
         ),
