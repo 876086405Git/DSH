@@ -1149,7 +1149,10 @@ void main() {
         final world = _World()
           ..capabilities(previews: _bothPreviews)
           ..sources = [publishSource, _companion]
-          ..pickCover = () async => pick++ == 0 ? workshopPng(512, 512) : workshopPng(513, 1);
+          ..pickCover = () async {
+            if (pick++ == 0) return workshopPng(512, 512);
+            throw const WorkshopException('workshop_preview_dimensions');
+          };
         await _open(tester, world, size: const Size(360, 740), textScale: 1.3);
         if (kind == 'pet') {
           await _tapVisible(tester, find.text('Cat'));
@@ -1162,7 +1165,7 @@ void main() {
           expect(find.byType(WorkshopCoverThumb), findsOneWidget);
           // The cover with a refusal under it is the tallest this group gets.
           await _tapVisible(tester, find.text('换一张'));
-          expect(find.textContaining('每边最多 512 像素'), findsOneWidget);
+          expect(find.text('图片分辨率过高，缩小后再选。'), findsOneWidget);
           await _tapVisible(tester, find.text('移除'));
           await _tapVisible(tester, find.text('选一张封面'));
         }
