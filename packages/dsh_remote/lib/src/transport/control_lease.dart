@@ -75,8 +75,9 @@ class ControlLease {
     if (!isValid || ack['connectionId'] != connectionId) return false;
     final sent = _sent;
     if (sent == null || sent.id != ack['requestId']) return false;
-    if (_clock.elapsedMilliseconds - sent.mono >= 30000 || DateTime.now().millisecondsSinceEpoch - sent.wall >= 30000)
+    if (_clock.elapsedMilliseconds - sent.mono >= 30000 || DateTime.now().millisecondsSinceEpoch - sent.wall >= 30000) {
       return false;
+    }
     _sent = null;
     _ticket = ack['ticket']! as String;
     _confirmed = true;

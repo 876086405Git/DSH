@@ -686,7 +686,7 @@ void main() {
     test('when the fresh TURN attempt negotiates Relay only, it attaches once', () async {
       server.relayAttach = true;
       server.iceServersForRequest = (_) async {
-        server.webrtcTransports = const ['p2p'];
+        server.webrtcTransports = const {'p2p'};
         return [];
       };
       network.outcome = FakeRtcOutcome.fail;

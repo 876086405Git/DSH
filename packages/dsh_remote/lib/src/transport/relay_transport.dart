@@ -581,8 +581,9 @@ class RelayTransport implements LeaseAwareTransport {
         if (identical(_data, socket)) _onDataMessage(raw);
       },
       onError: (Object _) {
-        if (identical(_data, socket))
+        if (identical(_data, socket)) {
           _fail(const RemoteTransportClosed('CONNECTION_FAILED', 'Relay data socket failed.'));
+        }
       },
       onDone: () {
         if (identical(_data, socket)) {
@@ -771,7 +772,7 @@ class RelayTransport implements LeaseAwareTransport {
       }
     });
     try {
-      final token = _refreshAccessToken == null ? _accessToken : await _refreshAccessToken!(forceRefresh);
+      final token = _refreshAccessToken == null ? _accessToken : await _refreshAccessToken(forceRefresh);
       if (!current() || _lease?.canDetach != true) return;
       if (forceRefresh) _authRecoveryAttempted = true;
       needsRefresh = false;
