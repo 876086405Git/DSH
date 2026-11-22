@@ -111,7 +111,7 @@ export class CompanionTaskStore {
     const keys = [...this.table.keys()].sort().filter(id => id > after);
     const page = keys.slice(0, 50);
     const tasks = page.map(id => {
-      const {taskId, hostExecutionId, taskRev, runnerReceiptSeq, kind, state, waitReason, updatedAtMs} = this.read(id);
+      const {taskId, hostExecutionId, taskRev, runnerReceiptSeq, kind, state, waitReason, updatedAtMs} = this.table.get(id);
       return {taskId, hostExecutionId, taskRev, runnerReceiptSeq, kind, state, waitReason, updatedAtMs};
     });
     return {v: 1, hostStoreId: this.hostStoreId, tasks, nextCursor: keys.length > page.length
