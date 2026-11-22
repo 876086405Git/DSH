@@ -227,7 +227,7 @@ class _InlineScan {
       } else if (c == _closeBracket && brackets.isNotEmpty) {
         final label = brackets.removeLast();
         if (i + 1 < n && text.codeUnitAt(i + 1) == _openParen) {
-          final close = text.indexOf(_linkTargetEnd, i + 2);
+          final close = _linkTargetEnd.allMatches(text, i + 2).firstOrNull?.start ?? -1;
           if (close == -1 || text[close] == '\n') {
             if (label > 0 && text[label - 1] == '!') {
               openImage = label - 1;
