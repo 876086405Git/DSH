@@ -717,15 +717,14 @@ class ForumTopicDetail {
   int get replies => postsCount > 0 ? postsCount - 1 : 0;
 
   /// Ids in [stream] not loaded yet, in order.
-  List<int> get missing {
+  List<int> get missing => _missing.toList();
+
+  Iterable<int> get _missing {
     final loaded = {for (final p in posts) p.id};
-    return [
-      for (final id in stream)
-        if (!loaded.contains(id)) id,
-    ];
+    return stream.where((id) => !loaded.contains(id));
   }
 
-  bool get hasMore => missing.isNotEmpty;
+  bool get hasMore => _missing.isNotEmpty;
 
   ForumTopicDetail copyWith({List<ForumPost>? posts, List<int>? stream, int? postsCount}) => ForumTopicDetail(
     id: id,
