@@ -1,5 +1,6 @@
 package io.github.ccch1mneyyy.dsh_app.runtime
 
+import org.tukaani.xz.BasicArrayCache
 import org.tukaani.xz.MemoryLimitException
 import org.tukaani.xz.SeekableInputStream
 import org.tukaani.xz.SeekableXZInputStream
@@ -104,8 +105,9 @@ internal class ParallelXZInputStream private constructor(
         fun open(factory: () -> SeekableInputStream, onProgress: (Long) -> Unit = {}): InputStream {
             var first: SeekableXZInputStream? = null
             var second: SeekableXZInputStream? = null
+            val cache = BasicArrayCache()
             try {
-                first = decoder(factory)
+                first = decoder(factory, cache)
                 val count = first.blockCount
                 if (count < 2 || (0 until count).any { first.getBlockSize(it) !in 1..MAX_BLOCK_BYTES }) {
                     first.close()
@@ -118,7 +120,7 @@ internal class ParallelXZInputStream private constructor(
                 // Block filter/dictionary memory is only known when a read initializes
                 // that block. Check every header before tar can write anything.
                 repeat(count) { block -> first.seekToBlock(block); first.read() }
-                second = decoder(factory)
+                second = decoder(factory, cache)
                 return ParallelXZInputStream(arrayOf(first, second), sizes, progress, onProgress)
             } catch (_: MemoryLimitException) {
                 first?.close()
@@ -131,9 +133,9 @@ internal class ParallelXZInputStream private constructor(
             }
         }
 
-        private fun decoder(factory: () -> SeekableInputStream): SeekableXZInputStream {
+        private fun decoder(factory: () -> SeekableInputStream, cache: BasicArrayCache): SeekableXZInputStream {
             val raw = factory()
-            try { return SeekableXZInputStream(raw, DECODER_MEMORY_KIB) }
+            try { return SeekableXZInputStream(raw, DECODER_MEMORY_KIB, true, cache) }
             catch (e: Throwable) {
                 try { raw.close() } catch (cleanup: Exception) { e.addSuppressed(cleanup) }
                 throw e
