@@ -33,6 +33,16 @@ class OverlayAccessTest {
         assertEquals(OverlayHost.APPLICATION, OverlayAccess.host(false, null))
     }
 
+    @Test fun onlyAnAccessibilityFailureChecksSystemOverlayPermissionForTheHost() {
+        var checks = 0
+        val permission = { checks++; false }
+        assertEquals(OverlayHost.ACCESSIBILITY, OverlayAccess.host(true, null, canDraw = permission))
+        assertEquals(OverlayHost.APPLICATION, OverlayAccess.host(false, null, canDraw = permission))
+        assertEquals(0, checks)
+        assertEquals(OverlayHost.NONE, OverlayAccess.host(true, null, a11yFailed = true, canDraw = permission))
+        assertEquals(1, checks)
+    }
+
     @Test fun retriesAfterAFailure() {
         val failedAt = 1_000L
         // Nothing failed: nothing to forget.
@@ -51,10 +61,10 @@ class OverlayAccessTest {
     }
 
     @Test fun accessibilityFailureOnlyFallsBackWithExplicitPermission() {
-        assertEquals(OverlayHost.NONE, OverlayAccess.host(true, AddResult.OK, a11yFailed = true, canDraw = false))
-        assertEquals(OverlayHost.APPLICATION, OverlayAccess.host(true, null, a11yFailed = true, canDraw = true))
-        assertEquals(OverlayHost.NONE, OverlayAccess.host(true, AddResult.FAILED, a11yFailed = true, canDraw = true))
-        assertEquals(OverlayHost.ACCESSIBILITY, OverlayAccess.host(true, AddResult.FAILED, a11yFailed = false, canDraw = true))
+        assertEquals(OverlayHost.NONE, OverlayAccess.host(true, AddResult.OK, a11yFailed = true, canDraw = { false }))
+        assertEquals(OverlayHost.APPLICATION, OverlayAccess.host(true, null, a11yFailed = true, canDraw = { true }))
+        assertEquals(OverlayHost.NONE, OverlayAccess.host(true, AddResult.FAILED, a11yFailed = true, canDraw = { true }))
+        assertEquals(OverlayHost.ACCESSIBILITY, OverlayAccess.host(true, AddResult.FAILED, a11yFailed = false, canDraw = { true }))
     }
 
     @Test fun failedAccessibilityPermissionRecoversWithTheExistingCooldown() {
