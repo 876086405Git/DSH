@@ -1104,14 +1104,15 @@ class _CompanionAgentVisit {
       final CompanionAgentNotificationUi notify => notify,
       _ => null,
     };
-    void recordPresented(String ticketId) {
+    void recordPresented() {
       if (role == null) return;
       try {
         final shown = owner.store.followups().singleWhere((row) => row['id'] == captured['id']);
         if (shown['state'] != 'asked' || shown['presented_at_ms'] is! int) return;
         owner.store.recordCompanionPresentation(
           characterId: role,
-          presentationId: ticketId,
+          // UI ticket counters restart; the shown opportunity is durable.
+          presentationId: 'followup:${captured['id']}',
           kind: 'followup',
           presentedAtMs: shown['presented_at_ms']! as int,
           opportunityId: captured['id']! as String,
@@ -1162,7 +1163,7 @@ class _CompanionAgentVisit {
           // after this callback. Record only after that settlement, while the
           // original phone database is still retained.
           final receipt = Future<void>.microtask(() {
-            recordPresented(display.ticket.id);
+            recordPresented();
           });
           owner.retainReceipt(receipt);
         }
@@ -1178,7 +1179,7 @@ class _CompanionAgentVisit {
       retainDelivery: (future) {
         owner.retainReceipt(
           future.then((_) {
-            if (notificationTicket case final id?) recordPresented(id);
+            if (notificationTicket != null) recordPresented();
           }),
         );
       },
