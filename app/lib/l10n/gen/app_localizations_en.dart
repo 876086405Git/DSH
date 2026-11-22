@@ -5899,6 +5899,21 @@ class L10nEn extends L10n {
   String get companionMenuSignals => 'What she brings up';
 
   @override
+  String get companionAlwaysOn => 'Stay with me';
+
+  @override
+  String get companionAlwaysOnHint => 'She stays when you leave the room, in a notification you can reply to';
+
+  @override
+  String get companionAlwaysOnRunning => 'She\'s with you in the notifications';
+
+  @override
+  String get companionAlwaysOnNoNotify => 'Notifications are off; turn them on to reply to her there';
+
+  @override
+  String get companionAlwaysOnFailed => 'She couldn\'t stay this time; try turning it on again';
+
+  @override
   String get companionSignalsHint =>
       'These are said only to you, here in her room; nothing goes to the model. How often follows How often she speaks up, shared with invitations, and never late at night. On Quiet she says nothing.';
 

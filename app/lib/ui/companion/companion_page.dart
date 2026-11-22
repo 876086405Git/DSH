@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../companion/companion_residency.dart';
 import '../../companion/companion_adapt.dart';
 import '../../companion/companion_agent.dart';
 import '../../companion/companion_agent_task_ui.dart';
@@ -600,7 +601,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _affinityCharacter = role;
     _bondTier = tier;
     _affinitySettledDay = settledDay;
-    if (role != null && role == previousRole && tier > previousTier && settledDay != null && settledDay != previousDay) {
+    if (role != null &&
+        role == previousRole &&
+        tier > previousTier &&
+        settledDay != null &&
+        settledDay != previousDay) {
       _closer(tier);
     }
     if (_vitals case final snapshot?) {
@@ -2394,6 +2399,26 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                           _choosePace();
                         },
                       ),
+                    ),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final status = ref.watch(companionResidencyProvider);
+                        if (!status.available) return const SizedBox.shrink();
+                        return SettingsSwitchTile(
+                          icon: AppIcons.pet,
+                          tinted: false,
+                          title: l10n.companionAlwaysOn,
+                          subtitle: switch (status) {
+                            CompanionAlwaysOnStatus(failure: _?) => l10n.companionAlwaysOnFailed,
+                            CompanionAlwaysOnStatus(enabled: true, notificationAvailable: false) =>
+                              l10n.companionAlwaysOnNoNotify,
+                            CompanionAlwaysOnStatus(enabled: true, running: true) => l10n.companionAlwaysOnRunning,
+                            _ => l10n.companionAlwaysOnHint,
+                          },
+                          value: status.enabled,
+                          onChanged: (on) => unawaited(ref.read(companionResidencyProvider.notifier).setEnabled(on)),
+                        );
+                      },
                     ),
                     SettingsTile(
                       icon: AppIcons.notifications,

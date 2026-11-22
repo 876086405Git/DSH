@@ -10304,6 +10304,36 @@ abstract class L10n {
   /// **'她会提起什么'**
   String get companionMenuSignals;
 
+  /// No description provided for @companionAlwaysOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'她一直在'**
+  String get companionAlwaysOn;
+
+  /// No description provided for @companionAlwaysOnHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'离开小屋她也在。通知栏里留着她，可以直接回她一句'**
+  String get companionAlwaysOnHint;
+
+  /// No description provided for @companionAlwaysOnRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'她在通知栏里陪着你'**
+  String get companionAlwaysOnRunning;
+
+  /// No description provided for @companionAlwaysOnNoNotify.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知被关了，打开后才能在通知栏里回她'**
+  String get companionAlwaysOnNoNotify;
+
+  /// No description provided for @companionAlwaysOnFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次没能留下来，再开一次试试'**
+  String get companionAlwaysOnFailed;
+
   /// No description provided for @companionSignalsHint.
   ///
   /// In zh, this message translates to:
