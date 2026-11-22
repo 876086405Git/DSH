@@ -8,6 +8,14 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.Executors
 
+/** Fit the requested raster within both limits without stretching a tall page. */
+internal fun pdfPageBitmapSize(pageWidth: Int, pageHeight: Int, requestedWidth: Int): Pair<Int, Int> {
+    val width = requestedWidth.coerceIn(64, 2400)
+    val height = width.toLong() * pageHeight / pageWidth.coerceAtLeast(1)
+    if (height <= 4800) return width to height.toInt().coerceAtLeast(1)
+    return (4800L * pageWidth / pageHeight).toInt().coerceAtLeast(1) to 4800
+}
+
 /**
  * In-app PDF preview pages (the official Web client previews PDFs in its
  * sidebar). One document stays open at a time; [PdfRenderer] is not
@@ -31,12 +39,11 @@ class PdfPages {
         }
     }
 
-    /** Page [index] as PNG, [width] pixels wide, on white. */
+    /** Page [index] as PNG, fitting the requested [width] and raster limits, on white. */
     fun render(path: String, index: Int, width: Int): ByteArray {
         val doc = open(path)
         doc.openPage(index).use { page ->
-            val w = width.coerceIn(64, 2400)
-            val h = (w.toLong() * page.height / page.width.coerceAtLeast(1)).toInt().coerceIn(1, 4800)
+            val (w, h) = pdfPageBitmapSize(page.width, page.height, width)
             val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             try {
                 bitmap.eraseColor(Color.WHITE)
