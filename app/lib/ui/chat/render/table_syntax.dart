@@ -24,7 +24,7 @@ String boldTableHeaders(String source) {
       fence = marker;
       continue;
     }
-    if (!line.contains('|') || !_isDelimiterRow(lines[i + 1], _cellsOf(_unquoted(line)).length)) continue;
+    if (!line.contains('|') || !_isDelimiterRow(lines[i + 1], line)) continue;
     final bolded = _boldRow(line);
     if (bolded != line) {
       lines[i] = bolded;
@@ -44,11 +44,11 @@ String _unquoted(String line) => line.trim().replaceFirst(RegExp(r'^(?:>[ \t]?)*
 
 /// A GFM delimiter row with as many cells as the header (`a | b` over `---`
 /// is a heading, not a table).
-bool _isDelimiterRow(String line, int headerCells) {
+bool _isDelimiterRow(String line, String header) {
   final t = _unquoted(line);
   if (!t.contains('-')) return false;
   final cells = _cellsOf(t);
-  return cells.length == headerCells && cells.every(_delimiterCell.hasMatch);
+  return cells.length == _cellsOf(_unquoted(header)).length && cells.every(_delimiterCell.hasMatch);
 }
 
 List<String> _cellsOf(String row) {
@@ -90,7 +90,7 @@ String blankLineBeforeTables(String source) {
     }
     if (i + 1 < lines.length &&
         line.contains('|') &&
-        _isDelimiterRow(lines[i + 1], _cellsOf(_unquoted(line)).length) &&
+        _isDelimiterRow(lines[i + 1], line) &&
         _needsBreakAbove(out.isEmpty ? null : out.last, line)) {
       out.add(_quotePrefix(line));
       changed = true;
