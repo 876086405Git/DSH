@@ -216,6 +216,20 @@ class TavernCanvasCalls {
     if (answer['requestId'] case final String id) pages?.invoked(id, answer);
   }
 
+  /// The page is up: its context opens now, so the host reaches it even
+  /// with no script of its own on it (a preset's SPreset functions run
+  /// here). One that fails to open is opened again by the next call.
+  void pageReady() {
+    if (_context != null) return;
+    final opening = _context = _open();
+    opening.then<void>(
+      (_) {},
+      onError: (Object _) {
+        if (identical(_context, opening)) _context = null;
+      },
+    );
+  }
+
   /// The page's answer to an SPreset evaluation it ran.
   void spreset(Map<Object?, Object?> answer) => pages?.spresetAnswered(answer);
 

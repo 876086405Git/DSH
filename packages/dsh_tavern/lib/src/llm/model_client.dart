@@ -536,7 +536,8 @@ Map<String, Object?> _object(Object? value) {
 
 // The transport boundary also covers custom callers of TavernModelClient.
 // Copy message/tool maps without mutating the caller's inspected body.
-void _normalizeOpenAiBody(Map<String, Object?> body) {
+// OpenRouter keeps an assistant message's reasoning (ST sends it there).
+void _normalizeOpenAiBody(Map<String, Object?> body, {bool keepReasoning = false}) {
   body.remove('thinking');
   if (body['messages'] case final List<Object?> messages) {
     body['messages'] = [
@@ -545,7 +546,7 @@ void _normalizeOpenAiBody(Map<String, Object?> body) {
           Map<String, Object?>.of(message)
             ..remove('prefix')
             ..remove('reasoning_content')
-            ..remove('reasoning')
+            ..removeWhere((key, _) => key == 'reasoning' && !keepReasoning)
         else
           message,
     ];
@@ -766,7 +767,8 @@ Map<String, Object?> prepareModelRequestBody(TavernModelConfig config, Map<Strin
   if (config.deepseek) {
     payload.putIfAbsent('thinking', () => {'type': config.thinking ? 'enabled' : 'disabled'});
   } else {
-    _normalizeOpenAiBody(payload);
+    final host = Uri.tryParse(config.baseUrl)?.host.toLowerCase() ?? '';
+    _normalizeOpenAiBody(payload, keepReasoning: host == 'openrouter.ai' || host.endsWith('.openrouter.ai'));
   }
   return payload;
 }

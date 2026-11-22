@@ -248,6 +248,9 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
       return;
     }
     _loaded = key;
+    // What the old page was running (events, filters, SPreset functions)
+    // will not be answered by the new one.
+    widget.calls?.pageLost();
     _document++;
     _ready = false;
     _rendered = null;
@@ -335,6 +338,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
         _streamSent = null;
         _avatars.reset();
         widget.calls?.hostButtons.value = const [];
+        widget.calls?.pageReady();
         _audio?.report(null);
         if (_hidden) _suspendAudio(true);
         _pushPersonas();
