@@ -163,6 +163,73 @@ class _Settings extends SettingsController {
   AppSettings build() => const AppSettings(loaded: true, apiKey: 'sk-test');
 }
 
+// Controlled I/O at the existing phone-keeper boundary. The Page/Agent,
+// epoch retirement, event queue, SQLite owner and role identity stay real.
+class _Phone extends FakePhoneKeeper {
+  _Phone() : super(state: FakePhoneKeeper.snapshotOf(closeness: 0));
+
+  final firstRead = Completer<void>();
+  final firstWrite = Completer<void>();
+  final writes = <Map<String, Object?>>[];
+  final pendingReads = <Completer<CompanionSnapshot?>>[];
+  final pendingWrites = <Completer<CompanionSnapshot>>[];
+  Future<CompanionSnapshot?> Function()? nextRead;
+  Future<CompanionSnapshot> Function(CompanionSnapshot, String)? nextEvent;
+  int reads = 0;
+
+  static CompanionSnapshot value({int revision = 0, double valence = 0.35}) => CompanionSnapshot.fromJson({
+    'storeId': 'd0a90d66-ff37-4f2a-b31c-194c791ec651',
+    'revision': revision,
+    'memoryRevision': 0,
+    'asOf': 1793899800000,
+    'state': {'valence': valence, 'energy': 0.75, 'closeness': 0, 'activity': 'idle'},
+  })!;
+
+  Completer<CompanionSnapshot?> holdRead() {
+    final gate = Completer<CompanionSnapshot?>();
+    pendingReads.add(gate);
+    nextRead = () => gate.future;
+    return gate;
+  }
+
+  Completer<CompanionSnapshot> holdWrite() {
+    final gate = Completer<CompanionSnapshot>();
+    pendingWrites.add(gate);
+    nextEvent = (_, _) => gate.future;
+    return gate;
+  }
+
+  @override
+  Future<CompanionSnapshot?> snapshot() {
+    reads++;
+    if (!firstRead.isCompleted) firstRead.complete();
+    final handler = nextRead;
+    nextRead = null;
+    return handler == null ? super.snapshot() : handler();
+  }
+
+  @override
+  Future<CompanionSnapshot> event(CompanionSnapshot read, String type) async {
+    writes.add({'storeId': read.storeId, 'expectedRevision': read.revision, 'type': type});
+    if (!firstWrite.isCompleted) firstWrite.complete();
+    final handler = nextEvent;
+    nextEvent = null;
+    if (handler == null) return super.event(read, type);
+    final result = await handler(read, type);
+    state = result;
+    return result;
+  }
+
+  void releaseGates() {
+    for (final gate in pendingReads) {
+      if (!gate.isCompleted) gate.complete(state);
+    }
+    for (final gate in pendingWrites) {
+      if (!gate.isCompleted) gate.complete(state!);
+    }
+  }
+}
+
 class _Room {
   _Room(this.root) {
     final bridge = _Bridge('store-a');
@@ -176,6 +243,8 @@ class _Room {
     File('${root.path}/pack/character/index.json').writeAsStringSync('[]');
   }
   final Directory root;
+  final phone = _Phone();
+  Directory? phoneDirectory;
   late final _Bridge a;
   final host = _Host();
   final sessions = _Sessions();
@@ -226,7 +295,10 @@ class _Room {
       chatProvider.overrideWith2((id) => chats.putIfAbsent(id, () => _Chat(id))),
       settingsProvider.overrideWith(_Settings.new),
       companionLightClientProvider.overrideWithValue(() => light),
-      companionPhoneKeeperProvider.overrideWithValue((_) => FakePhoneKeeper()),
+      companionPhoneKeeperProvider.overrideWithValue((directory) {
+        phoneDirectory = directory;
+        return phone;
+      }),
     ],
     child: MaterialApp(
       theme: buildDarkTheme(),
@@ -237,7 +309,8 @@ class _Room {
     ),
   );
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(WidgetTester tester, {bool waitForVisit = true}) async {
+    addTearDown(() => close(tester));
     await tester.pumpWidget(
       app(
         CompanionPage(
@@ -256,16 +329,27 @@ class _Room {
     }
     expect(events, isNotNull);
     container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
-    final memory = await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+    final memory = await settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
     await tester.pump();
-    await settleMixed(tester, memory!.migrateLocal());
+    await settleMixed(tester, memory.migrateLocal());
     await tester.pump();
     events!.onReady();
+    await settleMixed(tester, phone.firstRead.future);
+    final directory = phoneDirectory!;
+    expect(directory.parent.path, '${root.path}/activity');
+    final role = directory.uri.pathSegments.where((part) => part.isNotEmpty).last;
+    expect(memory.store.companionCharacter(role)?['source_key'], startsWith('local:'));
+    if (waitForVisit) await settleMixed(tester, phone.firstWrite.future);
     await flush(tester);
   }
 
+  bool closed = false;
+
   Future<void> close(WidgetTester tester) async {
+    if (closed) return;
+    closed = true;
     await tester.pumpWidget(app(const SizedBox()));
+    phone.releaseGates();
     await tester.pump(const Duration(seconds: 15));
     for (final client in clients) {
       await client.close();
@@ -289,17 +373,22 @@ void main() {
 
   testWidgets('a late snapshot from the old host cannot replace the new host', (tester) async {
     final room = _Room(temporary);
-    final oldRead = Completer<DshHttpResponse>();
-    room.a.nextGet = () => oldRead.future;
+    final oldRead = room.phone.holdRead();
     const nextHost = HostRef.ssh('b');
     final b = room.connect(nextHost)..valence = 0.55;
-    await room.open(tester);
+    await room.open(tester, waitForVisit: false);
+    expect(room.phone.reads, 1);
+    expect(room.phone.writes, isEmpty);
     room.host.change(nextHost);
+    await settleMixed(tester, room.phone.firstWrite.future);
     await flush(tester);
-    expect(room.commands.where((c) => c.$1 == 'vitals').last.$2['valence'], b.valence);
+    expect(room.phone.reads, 2);
+    // Host B is only a possible legacy seed; current vitals come from phone.
+    expect(room.commands.where((c) => c.$1 == 'vitals').last.$2['valence'], room.phone.state!.vitals.valence);
+    expect(room.a.posts, isEmpty);
+    expect(b.posts, isEmpty);
     room.commands.clear();
-    room.a.valence = 0.9;
-    oldRead.complete(room.a.snapshot());
+    oldRead.complete(_Phone.value(valence: 0.9));
     await flush(tester);
     expect(room.commands.where((c) => c.$1 == 'vitals'), isEmpty);
     await room.close(tester);
@@ -307,35 +396,36 @@ void main() {
 
   testWidgets('an event queued on A is not sent to B after an old write fails', (tester) async {
     final room = _Room(temporary);
-    final oldWrite = Completer<DshHttpResponse>();
-    room.a.nextPost = (_) => oldWrite.future;
+    final oldWrite = room.phone.holdWrite();
     const nextHost = HostRef.ssh('b');
     final b = room.connect(nextHost);
     await room.open(tester);
-    expect(room.a.posts.single['type'], 'visit');
+    expect(room.phone.writes.single['type'], 'visit');
     room.events!.onObject('snack');
     room.host.change(nextHost);
     await flush(tester);
-    oldWrite.completeError(const DshClosedException('old connection closed'));
+    oldWrite.completeError(const DshClosedException('old visit write failed'));
     await flush(tester);
-    expect(b.posts.where((post) => post['type'] == 'snack'), isEmpty);
-    expect(b.posts.where((post) => post['type'] == 'visit'), hasLength(1));
+    expect(room.phone.writes.where((write) => write['type'] == 'snack'), isEmpty);
+    expect(room.phone.writes.where((write) => write['type'] == 'visit'), hasLength(2));
+    expect(room.a.posts, isEmpty);
+    expect(b.posts, isEmpty);
     await room.close(tester);
   });
 
   testWidgets('a failed conflict refresh does not poison later events', (tester) async {
     final room = _Room(temporary);
     await room.open(tester);
-    room.a.nextPost = (_) async => _json({
-      'error': {'code': 'companion/conflict'},
-    }, 409);
-    room.a.nextGet = () async => throw const DshClosedException('lost refresh');
+    room.phone.nextEvent = (_, _) async => throw const DshRemoteException('companion/conflict', 'conflict');
+    room.phone.nextRead = () async => throw const DshClosedException('lost refresh');
     room.events!.onObject('snack');
     await flush(tester);
     expect(tester.takeException(), isNull);
     room.events!.onObject('play');
     await flush(tester);
-    expect(room.a.posts.where((post) => post['type'] == 'play'), hasLength(1));
+    expect(room.phone.writes.where((write) => write['type'] == 'snack'), hasLength(1));
+    expect(room.phone.writes.where((write) => write['type'] == 'play'), hasLength(1));
+    expect(room.a.posts, isEmpty);
     await room.close(tester);
   });
 
@@ -343,13 +433,21 @@ void main() {
     final room = _Room(temporary);
     await room.open(tester);
     room.commands.clear();
-    final replacement = room.connect(HostRef.local)..valence = 0.7;
+    final replacement = room.connect(HostRef.local)..valence = 0.9;
+    room.phone.state = _Phone.value(revision: 1, valence: 0.7);
+    final nextVisit = room.phone.holdWrite();
     room.container.invalidate(activeConnectionProvider);
     await flush(tester);
-    expect(room.commands.where((c) => c.$1 == 'vitals').last.$2['valence'], replacement.valence);
+    expect(room.phone.reads, 2);
+    expect(room.commands.where((c) => c.$1 == 'vitals').last.$2['valence'], 0.7);
+    expect(room.phone.writes.map((write) => write['type']), ['visit', 'visit']);
+    nextVisit.complete(_Phone.value(revision: 2, valence: 0.7));
+    await flush(tester);
     room.events!.onObject('play');
     await flush(tester);
-    expect(replacement.posts.where((post) => post['type'] == 'play'), hasLength(1));
+    expect(room.phone.writes.where((write) => write['type'] == 'play'), hasLength(1));
+    expect(room.a.posts, isEmpty);
+    expect(replacement.posts, isEmpty);
     await room.close(tester);
   });
 
@@ -391,15 +489,16 @@ void main() {
 
   testWidgets('queued events become inert after the page is disposed', (tester) async {
     final room = _Room(temporary);
-    final oldWrite = Completer<DshHttpResponse>();
-    room.a.nextPost = (_) => oldWrite.future;
+    final oldWrite = room.phone.holdWrite();
     await room.open(tester);
+    expect(room.phone.writes.single['type'], 'visit');
     room.events!.onObject('snack');
     await tester.pumpWidget(room.app(const SizedBox()));
-    oldWrite.complete(room.a.snapshot());
+    oldWrite.complete(_Phone.value(revision: 1));
     await flush(tester);
     expect(tester.takeException(), isNull);
-    expect(room.a.posts.where((post) => post['type'] == 'snack'), isEmpty);
+    expect(room.phone.writes.where((write) => write['type'] == 'snack'), isEmpty);
+    expect(room.a.posts, isEmpty);
     await room.close(tester);
   });
 
@@ -420,36 +519,39 @@ void main() {
   testWidgets('a successful old event cannot repaint the new host', (tester) async {
     final room = _Room(temporary);
     await room.open(tester);
-    final oldWrite = Completer<DshHttpResponse>();
-    room.a.nextPost = (_) => oldWrite.future;
+    final oldWrite = room.phone.holdWrite();
     room.events!.onObject('snack');
     await flush(tester);
+    expect(room.phone.writes.last['type'], 'snack');
     const nextHost = HostRef.ssh('b');
-    room.connect(nextHost);
+    final b = room.connect(nextHost);
     room.host.change(nextHost);
     await flush(tester);
+    expect(room.phone.writes.where((write) => write['type'] == 'visit'), hasLength(2));
     room.commands.clear();
-    room.a.valence = 0.95;
-    oldWrite.complete(room.a.snapshot());
+    oldWrite.complete(_Phone.value(revision: 2, valence: 0.95));
     await flush(tester);
     expect(room.commands.where((command) => command.$1 == 'vitals'), isEmpty);
+    expect(room.a.posts, isEmpty);
+    expect(b.posts, isEmpty);
     await room.close(tester);
   });
 
   testWidgets('returning A to B to A does not revive the first A read', (tester) async {
     final room = _Room(temporary);
-    final firstRead = Completer<DshHttpResponse>();
-    room.a.nextGet = () => firstRead.future;
+    final firstRead = room.phone.holdRead();
     const nextHost = HostRef.ssh('b');
     room.connect(nextHost);
-    await room.open(tester);
+    await room.open(tester, waitForVisit: false);
     room.host.change(nextHost);
+    await settleMixed(tester, room.phone.firstWrite.future);
     await flush(tester);
     room.host.change(HostRef.local);
     await flush(tester);
+    expect(room.phone.reads, 3);
+    expect(room.phone.writes.where((write) => write['type'] == 'visit'), hasLength(2));
     room.commands.clear();
-    room.a.valence = 0.95;
-    firstRead.complete(room.a.snapshot());
+    firstRead.complete(_Phone.value(valence: 0.95));
     await flush(tester);
     expect(room.commands.where((command) => command.$1 == 'vitals'), isEmpty);
     await room.close(tester);
@@ -458,35 +560,34 @@ void main() {
   testWidgets('events in one room stay serial and use the preceding revision', (tester) async {
     final room = _Room(temporary);
     await room.open(tester);
-    final firstWrite = Completer<DshHttpResponse>();
-    room.a.nextPost = (_) => firstWrite.future;
+    final firstWrite = room.phone.holdWrite();
     room.events!.onObject('snack');
     room.events!.onObject('play');
     await flush(tester);
-    expect(room.a.posts.map((post) => post['type']), ['visit', 'snack']);
-    final previousRevision = room.a.posts.last['expectedRevision']! as int;
-    room.a.revision++;
-    firstWrite.complete(room.a.snapshot());
+    expect(room.phone.writes.map((write) => write['type']), ['visit', 'snack']);
+    final previousRevision = room.phone.writes.last['expectedRevision']! as int;
+    firstWrite.complete(_Phone.value(revision: previousRevision + 1));
     await flush(tester);
-    expect(room.a.posts.map((post) => post['type']), ['visit', 'snack', 'play']);
-    expect(room.a.posts.last['expectedRevision'], previousRevision + 1);
+    expect(room.phone.writes.map((write) => write['type']), ['visit', 'snack', 'play']);
+    expect(room.phone.writes.last['expectedRevision'], previousRevision + 1);
+    expect(room.a.posts, isEmpty);
     await room.close(tester);
   });
 
   testWidgets('conflicts read again without replaying the rejected event', (tester) async {
     final room = _Room(temporary);
     await room.open(tester);
-    room.a.nextPost = (_) async => _json({
-      'error': {'code': 'companion/conflict'},
-    }, 409);
-    room.a.revision = 7;
+    room.phone.nextEvent = (_, _) async => throw const DshRemoteException('companion/conflict', 'conflict');
+    room.phone.state = _Phone.value(revision: 7);
     room.events!.onObject('snack');
     await flush(tester);
+    expect(room.phone.reads, 2);
     room.events!.onObject('play');
     await flush(tester);
-    expect(room.a.posts.where((post) => post['type'] == 'snack'), hasLength(1));
-    expect(room.a.posts.last['type'], 'play');
-    expect(room.a.posts.last['expectedRevision'], 7);
+    expect(room.phone.writes.where((write) => write['type'] == 'snack'), hasLength(1));
+    expect(room.phone.writes.last['type'], 'play');
+    expect(room.phone.writes.last['expectedRevision'], 7);
+    expect(room.a.posts, isEmpty);
     await room.close(tester);
   });
 

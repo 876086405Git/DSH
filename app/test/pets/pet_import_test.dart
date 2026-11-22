@@ -162,7 +162,9 @@ void main() {
     expect(find.text('小猫'), findsOneWidget);
     expect(container.read(petPrefsProvider).packId, 'user-cat');
     expect(find.textContaining('阿周 · CC0'), findsOneWidget);
-    // The picked copy is tidied away.
+    // Success is visible before the asynchronous picked-copy cleanup ends.
+    // Keep the deletion oracle; the original bounded helper waits for the file.
+    await settle(tester, () => !file.existsSync());
     expect(file.existsSync(), isFalse);
     // The overlay reads it from disk, not from what it had under that id.
     expect(overlay.reloaded, ['user-cat']);

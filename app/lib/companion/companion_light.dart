@@ -191,11 +191,20 @@ class CompanionAgentToolCall {
 }
 
 class CompanionAgentToolResult {
-  const CompanionAgentToolResult({required this.content, this.isError = false, this.notice});
+  const CompanionAgentToolResult({
+    required this.content,
+    this.isError = false,
+    this.notice,
+    this.externalWebContent = false,
+  });
 
   /// Includes a truthful failure explanation: DeepSeek ignores is_error.
   final String content;
   final bool isError;
+
+  /// The adapter actually returned public-web text or a report containing it.
+  /// This is application provenance, never a field trusted from model input.
+  final bool externalWebContent;
 
   /// A committed deletion's short natural acknowledgement, even if the next
   /// model request fails. This is spoken text, not a tool log.

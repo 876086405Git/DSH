@@ -184,6 +184,48 @@ void main() {
     expect(store.agentToolCall(turnId: attempt, callId: 'ambiguous-write')!.state, 'ignored');
   });
 
+  for (final mode in const ['less', 'never']) {
+    test('a remembered shared topic keeps $mode across reopen without quieting another clause', () {
+      final first = begin(say('controlled-first', '我在周末骑行。'));
+      final saved = call(first, 'remember-first', 'remember', {
+        'text': '你在周末骑行。',
+        'keywords': ['骑行'],
+      });
+      expect(saved.applied, isTrue);
+      expect(call(first, 'quiet-first', 'quiet', {'card': saved.targetId, 'mode': mode}).applied, isTrue);
+      final topic = actualCard(saved.targetId!)['topic_id'];
+      reopen();
+
+      final later = begin(say('controlled-later', '我会在河边骑行，也想做面包。'));
+      final related = call(later, 'remember-related', 'remember', {
+        'text': '你会在河边骑行。',
+        'keywords': ['骑行'],
+      });
+      final unrelated = call(later, 'remember-unrelated', 'remember', {
+        'text': '你想做面包。',
+        'keywords': ['面包'],
+      });
+      expect(related.applied, isTrue);
+      expect(unrelated.applied, isTrue);
+      expect(actualCard(related.targetId!)['topic_id'], topic);
+      expect(actualCard(related.targetId!)['topic_mode'], mode);
+      expect(actualCard(unrelated.targetId!)['topic_id'], isNot(topic));
+      expect(actualCard(unrelated.targetId!)['topic_mode'], 'normal');
+      expect(
+        call(later, 'ask-muted', 'ask_later', {'card': related.targetId, 'whenMs': now}).code,
+        'topic_quiet',
+      );
+      expect(
+        (actualCard(related.targetId!)['evidence'] as List).single,
+        containsPair('message_id', 'controlled-later'),
+      );
+      reopen();
+      expect(actualCard(related.targetId!)['topic_id'], topic);
+      expect(actualCard(related.targetId!)['topic_mode'], mode);
+      expect(actualCard(unrelated.targetId!)['topic_mode'], 'normal');
+    });
+  }
+
   test('unknown and empty calls write no cards and one source keeps its three-card budget', () {
     final source = say('source', '我们慢慢聊就好。');
     final turn = begin(source);

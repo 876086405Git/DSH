@@ -15,6 +15,7 @@ import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_memory_worker.dart';
 import 'package:dsh_app/companion/companion_moves.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
+import 'package:dsh_app/companion/companion_public_lookup.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/companion/companion_widget.dart';
 import 'package:dsh_app/state/connection_state.dart';
@@ -35,7 +36,19 @@ const _preamble = '我来看看这条提醒。';
 const _reminders = MethodChannel('dsh/companion_reminders');
 const _widget = MethodChannel('dsh/companion_widget');
 
-http.Response _message({bool tool = false, String? words}) {
+http.Response _message({
+  bool tool = false,
+  String? words,
+  List<(String, String, Map<String, Object?>)> calls = const [],
+}) {
+  final pending = [
+    if (tool)
+      (_callId, 'reminder', <String, Object?>{
+        'operation': 'create', 'text': '带伞', 'localDate': '2026-11-23',
+        'localTime': '09:00', 'zoneId': 'Asia/Shanghai',
+      }),
+    ...calls,
+  ];
   var index = 0;
   final events = <Map<String, Object?>>[
     {
@@ -60,31 +73,22 @@ http.Response _message({bool tool = false, String? words}) {
       },
       {'type': 'content_block_stop', 'index': index++},
     ],
-    if (tool) ...[
+    for (final (id, name, input) in pending) ...[
       {
         'type': 'content_block_start',
         'index': index,
-        'content_block': {'type': 'tool_use', 'id': _callId, 'name': 'reminder', 'input': <String, Object?>{}},
+        'content_block': {'type': 'tool_use', 'id': id, 'name': name, 'input': <String, Object?>{}},
       },
       {
         'type': 'content_block_delta',
         'index': index,
-        'delta': {
-          'type': 'input_json_delta',
-          'partial_json': jsonEncode({
-            'operation': 'create',
-            'text': '带伞',
-            'localDate': '2026-11-23',
-            'localTime': '09:00',
-            'zoneId': 'Asia/Shanghai',
-          }),
-        },
+        'delta': {'type': 'input_json_delta', 'partial_json': jsonEncode(input)},
       },
-      {'type': 'content_block_stop', 'index': index},
+      {'type': 'content_block_stop', 'index': index++},
     ],
     {
       'type': 'message_delta',
-      'delta': {'stop_reason': tool ? 'tool_use' : 'end_turn'},
+      'delta': {'stop_reason': pending.isEmpty ? 'end_turn' : 'tool_use'},
       'usage': {'input_tokens': 12, 'cache_read_input_tokens': 0, 'cache_creation_input_tokens': 0, 'output_tokens': 8},
     },
     {'type': 'message_stop'},
@@ -243,7 +247,10 @@ class _Visit {
   int clockAt = _now;
   bool _closed = false;
 
-  static Future<_Visit> open(List<http.Response> replies) async {
+  static Future<_Visit> open(
+    List<http.Response> replies, {
+    http.Response? Function(http.Request request)? auxiliary,
+  }) async {
     final root = await Directory.systemTemp.createTemp('agent-public-visit-');
     final database = sqlite3.openInMemory();
     final memory = CompanionMemoryOwner(
@@ -284,6 +291,7 @@ class _Visit {
         host: () => null,
         apiKey: () => 'controlled-test-key',
         client: () => MockClient((request) async {
+          if (auxiliary?.call(request) case final response?) return response;
           visit.requests.add(Map<String, Object?>.from(jsonDecode(request.body) as Map));
           final index = visit.requests.length - 1;
           return index < replies.length ? replies[index] : http.Response('Unexpected extra model request', 503);
@@ -455,6 +463,201 @@ void main() {
         visit.ui.failures.last.error,
         isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/agent-retry-closed'),
       );
+    } finally {
+      await visit.close();
+    }
+  });
+
+  for (final sameBatch in [true, false]) {
+    test('public attachment keeps reminder and memory outcomes across a control commit: sameBatch=$sameBatch', () async {
+      const reminder = ('kept-reminder', 'reminder', <String, Object?>{
+        'operation': 'create', 'text': '带伞', 'localDate': '2026-11-23',
+        'localTime': '09:00', 'zoneId': 'Asia/Shanghai',
+      });
+      const remember = ('kept-preference', 'remember', <String, Object?>{
+        'kind': 'preference', 'text': '我喜欢简短回答。', 'keywords': ['简短'],
+      });
+      final visit = await _Visit.open([
+        if (sameBatch)
+          _message(calls: [reminder, remember])
+        else ...[_message(calls: [reminder]), _message(calls: [remember])],
+        _message(words: '提醒已记下，也记住了回答偏好。'),
+      ]);
+      try {
+        await visit.attachment.submit('明天九点提醒我带伞；我喜欢简短回答。');
+        expect(visit.attachment.error, isNull);
+        final task = visit.memory.store.tasks().single;
+        final card = visit.memory.store.cards().single;
+        expect(task['reminder_text'], '带伞');
+        expect(card['text'], '我喜欢简短回答。');
+        expect(visit.calls('wake'), 1);
+        final resultRows = <Map>[
+          for (final message in (visit.requests.last['messages']! as List).cast<Map>())
+            if (message['role'] == 'user' && message['content'] is List)
+              for (final row in (message['content']! as List).cast<Map>())
+                if (row['type'] == 'tool_result') row,
+        ];
+        expect(resultRows.map((row) => row['tool_use_id']), ['kept-reminder', 'kept-preference']);
+        final reminded = jsonDecode(resultRows.first['content']! as String) as Map;
+        final remembered = jsonDecode(resultRows.last['content']! as String) as Map;
+        expect(reminded['accepted'], isTrue);
+        expect(remembered['applied'], isTrue);
+        expect(remembered['targetId'], card['id']);
+        final retainedTask = reminded['task'] as Map;
+        for (final key in ['task_id', 'task_rev', 'kind', 'state', 'local_date', 'local_time', 'zone_id', 'epoch_ms']) {
+          expect(retainedTask[key], task[key], reason: key);
+        }
+        expect(retainedTask['reminder_text'], task['reminder_text']);
+        expect(visit.requests, hasLength(sameBatch ? 2 : 3));
+        expect(visit.memory.store.requests(), hasLength(visit.requests.length));
+        expect(visit.memory.store.requests().every((row) => row['state'] == 'finished' && row['terminal'] == 'complete'), isTrue);
+      } finally {
+        await visit.close();
+      }
+    });
+  }
+
+  test('public attachment keeps the actual lookup report after adding a new memory', () async {
+    final lookupPaths = <String>[];
+    late final _Visit visit;
+    http.Response jsonResponse(Object value) => http.Response.bytes(
+      utf8.encode(jsonEncode(value)), 200,
+      headers: {'content-type': 'application/json; charset=utf-8'},
+    );
+    visit = await _Visit.open([
+      _message(calls: [
+        ('actual-lookup', 'public_lookup', {
+          'operation': 'create', 'placeName': '青桥美术馆',
+          'localDate': '2026-11-21', 'question': '青桥美术馆是否开放？',
+        }),
+        ('new-preference', 'remember', {
+          'kind': 'preference', 'text': '我喜欢简短回答。', 'keywords': ['简短'],
+        }),
+      ]),
+      _message(words: '所问日期闭馆；也记住了你的回答偏好。'),
+    ], auxiliary: (request) {
+      if (request.url.path.endsWith('/search')) {
+        lookupPaths.add(request.url.path);
+        return jsonResponse({
+          'results': [
+            {'url': 'https://museum.example/notice', 'title': '青桥美术馆馆方公告', 'snippet': '搜索摘要', 'date': '2026-11-20'},
+          ],
+        });
+      }
+      if (request.url.path.endsWith('/fetch')) {
+        lookupPaths.add(request.url.path);
+        return jsonResponse({'title': '馆方公告', 'content': '2026-11-21临时闭馆一天。'});
+      }
+      final body = jsonDecode(request.body) as Map;
+      if (body['system'] != companionLookupAnswerPrompt) return null;
+      lookupPaths.add(request.url.path);
+      final task = visit.memory.store.tasks().single;
+      final fetch = visit.memory.store.lookupAttempts(task['task_id']! as String)
+          .singleWhere((row) => row['kind'] == 'fetch');
+      return _message(words: jsonEncode({
+        'status': 'done', 'conclusion': '所问日期临时闭馆。', 'applicable_date': '2026-11-21',
+        'evidence': [{'fetchRequestId': fetch['request_id'], 'quote': '2026-11-21临时闭馆一天。'}],
+      }));
+    });
+    try {
+      await visit.attachment.submit('查青桥美术馆昨天是否开放；我喜欢简短回答。');
+      expect(visit.attachment.error, isNull);
+      expect(visit.requests, hasLength(2));
+      expect(lookupPaths, ['/v1/tools/search', '/v1/tools/fetch', '/anthropic/v1/messages']);
+      final task = visit.memory.store.lookupTask(visit.memory.store.tasks().single['task_id']! as String)!;
+      expect(task['state'], 'done');
+      expect(visit.memory.store.cards().single['text'], '我喜欢简短回答。');
+      final results = (((visit.requests.last['messages']! as List).last as Map)['content']! as List).cast<Map>();
+      expect(results.map((row) => row['tool_use_id']), ['actual-lookup', 'new-preference']);
+      final lookup = jsonDecode(results.first['content']! as String) as Map;
+      expect(lookup['accepted'], isTrue);
+      expect((lookup['task']! as Map)['task_id'], task['task_id']);
+      expect((lookup['task']! as Map)['result'], task['result']);
+      expect(((lookup['task']! as Map)['result']! as Map)['evidence'], isNotEmpty);
+      expect(jsonEncode(lookup), contains('所问日期临时闭馆。'));
+      expect((jsonDecode(results.last['content']! as String) as Map)['applied'], isTrue);
+      expect(visit.memory.store.lookupAttempts(task['task_id']! as String), hasLength(3));
+    } finally {
+      await visit.close();
+    }
+  });
+
+  test('public attachment keeps outcome IDs but retires recalled text and old revise arguments after forget', () async {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const oldText = '凭证的旧私密正文：BLUE-ORIGINAL。';
+    const newText = '凭证的改后私密正文：GREEN-REVISED。';
+    final visit = await _Visit.open([
+      _message(calls: [('private-recall', 'recall', {'query': '凭证'})]),
+      _message(calls: [('private-revise', 'revise', {'card': id, 'text': newText, 'keywords': ['凭证']})]),
+      _message(calls: [('private-forget', 'forget', {'card': id})]),
+      _message(words: '已经处理好了。'),
+    ]);
+    try {
+      visit.memory.store.saveManual(
+        const CompanionMemory(id: id, text: oldText, keywords: ['凭证']),
+        expectedRowRev: null,
+        currentValueChange: true,
+        realityKnown: true,
+      );
+      visit.memory.changed();
+      await visit.attachment.submit('请查看凭证，改正后忘掉。');
+      expect(visit.attachment.error, isNull);
+      expect(visit.requests, hasLength(4));
+      expect(jsonEncode(visit.requests[1]), contains(oldText));
+      expect(jsonEncode(visit.requests[2]), isNot(contains(oldText)));
+      expect(jsonEncode(visit.requests[2]), contains(newText));
+      final finalBody = jsonEncode(visit.requests.last);
+      expect(finalBody, isNot(contains(oldText)));
+      expect(finalBody, isNot(contains(newText)));
+      expect(visit.memory.store.cards(), isEmpty);
+      final results = <Map>[
+        for (final message in (visit.requests.last['messages']! as List).cast<Map>())
+          if (message['role'] == 'user' && message['content'] is List)
+            for (final row in (message['content']! as List).cast<Map>())
+              if (row['type'] == 'tool_result') row,
+      ];
+      expect(results.map((row) => row['tool_use_id']), ['private-recall', 'private-revise', 'private-forget']);
+      for (final result in results) {
+        expect((jsonDecode(result['content']! as String) as Map)['applied'], isTrue);
+      }
+      for (final message in (visit.requests.last['messages']! as List).cast<Map>()) {
+        if (message['role'] != 'assistant' || message['content'] is! List) continue;
+        for (final block in (message['content']! as List).cast<Map>()) {
+          if (block['type'] == 'tool_use') {
+            expect(block['input'], {'_retired_after_memory_change': true});
+          }
+        }
+      }
+    } finally {
+      await visit.close();
+    }
+  });
+
+  test('two nearby public submissions each send their actual date time offset and zone', () async {
+    final visit = await _Visit.open([_message(words: '我在。'), _message(words: '明天是二十三日。')]);
+    try {
+      await visit.attachment.submit('今天你好。');
+      visit.clockAt += const Duration(minutes: 5).inMilliseconds;
+      await visit.attachment.submit('明天是哪一天？');
+      expect(visit.requests, hasLength(2));
+      Map context(Map<String, Object?> request) {
+        final texts = <String>[
+          for (final message in (request['messages']! as List).cast<Map>())
+            if (message['role'] == 'user' && message['content'] is List)
+              for (final block in (message['content']! as List).cast<Map>())
+                if (block['type'] == 'text') block['text']! as String,
+        ];
+        final text = texts.singleWhere((text) => text.startsWith('<companion_context>'));
+        return jsonDecode(text.substring('<companion_context>'.length, text.length - '</companion_context>'.length)) as Map;
+      }
+      expect(context(visit.requests.first)['localTime'], '2026-11-22T18:00+08:00');
+      expect(context(visit.requests.last)['localTime'], '2026-11-22T18:05+08:00');
+      expect(context(visit.requests.first)['zoneId'], 'Asia/Shanghai');
+      expect(context(visit.requests.last)['zoneId'], 'Asia/Shanghai');
+      expect(visit.calls('clock'), 2);
+      final sources = visit.memory.store.messages().where((row) => row['role'] == 'user').toList();
+      expect(sources.map((row) => row['said_at_utc']), [_now, _now + 300000]);
+      expect(sources.map((row) => row['text']), ['今天你好。', '明天是哪一天？']);
     } finally {
       await visit.close();
     }

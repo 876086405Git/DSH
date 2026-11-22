@@ -530,9 +530,81 @@ Map<String, Object?> _maintenanceContext(String kind, MemoryRow turn) => {
   'local_day': turn['local_day'],
   'zone_id': turn['zone_id'],
   'source_coverage': 'selected_original_messages',
-  'sources': turn['sources'],
-  'cards': turn['cards'],
+  // These are new wire maps. The full Store rows remain the source of scope,
+  // revision grants and writes; database bookkeeping is not model context.
+  'sources': [
+    for (final source in (turn['sources']! as List).cast<MemoryRow>())
+      {
+        ..._maintenanceFields(source, const [
+          'id',
+          'source_rev',
+          'first_seq',
+          'event_seq',
+          'role',
+          'scope',
+          'text',
+          'said_at_utc',
+          'offset_minutes',
+          'edited_at_utc',
+          'zone_id',
+          'offset_seconds',
+        ]),
+        'character_id': source['character_id'],
+      },
+  ],
+  'cards': [
+    for (final card in (turn['cards']! as List).cast<MemoryRow>())
+      {
+        ..._maintenanceFields(card, const [
+          'id',
+          'row_rev',
+          'kind',
+          'text',
+          'keywords',
+          'collection',
+          'scope',
+          'eligible',
+          'status',
+          'manual',
+          'pinned',
+          'topic_mode',
+          'source_at_ms',
+          'event_time',
+          'followup',
+          'plan_state',
+          'expires_at_ms',
+          'local_day',
+          'day_zone_id',
+          'aliases',
+        ]),
+        'character_id': card['character_id'],
+        'current_basis_seq': card['current_basis_seq'],
+        if (card['reality_unconfirmed'] == true) 'reality_unconfirmed': true,
+        // Keep every full quote and its original AND/OR group. Only the
+        // repeated outer card_id is omitted from each proof row.
+        'evidence': [
+          for (final proof in (card['evidence']! as List).cast<MemoryRow>())
+            _maintenanceFields(proof, const [
+              'support_group',
+              'message_id',
+              'source_rev',
+              'quote',
+              'role',
+              'scope',
+              'first_seq',
+              'said_at_utc',
+              'offset_minutes',
+              'edited_at_utc',
+            ]),
+        ],
+      },
+  ],
   'presentations': turn['presentations'],
+};
+
+MemoryRow _maintenanceFields(MemoryRow row, List<String> fields) => {
+  for (final field in fields)
+    if (row[field] != null) field: row[field],
 };
 
 const _maintenancePrompt = '''

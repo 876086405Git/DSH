@@ -25,6 +25,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'companion_test_settle.dart';
+
 const _store = '33333333-3333-4333-8333-333333333333';
 const _epoch = '44444444-4444-4444-8444-444444444444';
 const _binding = '22222222-2222-4222-8222-222222222222';
@@ -403,7 +405,7 @@ class _Room {
     }
     expect(events, isNotNull);
     final container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
-    memory = (await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future)))!;
+    memory = await settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
     events!.onReady();
     await settle(tester);
     await tester.pump(const Duration(seconds: 8));
@@ -422,7 +424,7 @@ class _Room {
   Future<void> close(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 10));
-    await tester.runAsync(client.closeAll);
+    await settleMixed(tester, client.closeAll());
   }
 }
 
@@ -533,7 +535,7 @@ void main() {
     await room.open(tester);
     try {
       expect(
-        await tester.runAsync(() => room.memory.migrateHost(room.client).timeout(const Duration(seconds: 2))),
+        await settleMixed(tester, room.memory.migrateHost(room.client), limit: const Duration(seconds: 2)),
         isTrue,
         reason: 'a finished host migration must release its shared Future and allow a fresh complete read',
       );

@@ -164,7 +164,7 @@ const _offlineQueueGap = true;
 /// map_open calls ui.accepted (adding the pill) when the task is created,
 /// before mapHandoff.execute; the old Page only presented a map result if the
 /// window and handoff generation were still current at the end.
-const _routeMapPillGap = true;
+const _routeMapPillGap = false;
 
 /// What her model asks for when told [receiptSpokenExample]: the four chosen
 /// receipts into a new 差旅小表.xlsx by eight tonight, carrying on after she leaves.

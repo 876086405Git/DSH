@@ -57,7 +57,7 @@ class CompanionAgent extends ChangeNotifier {
 
   final Ref? _ref;
   final CompanionMemoryTransport Function()? _memoryTransport;
-  final ({HostRef host, DshClient client})? Function()? _host;
+  final ({HostRef host, DshClient? client})? Function()? _host;
   _CompanionAgentVisit? _visit;
 
   /// The Page keeps this particular attachment. Old window actions never
@@ -126,7 +126,8 @@ class CompanionAgent extends ChangeNotifier {
         memory.store.archive['control_revision'] != revision) {
       return;
     }
-    if (revision != beforeRevision) run.exchanges.clear();
+    // The actual returning tool decides whether this own change revoked text.
+    // Merely adding a fact must not discard an earlier lookup report.
     run.controlRevision = revision;
   }
 
@@ -182,9 +183,60 @@ class CompanionAgent extends ChangeNotifier {
       run.isCurrent() &&
       run.memory.store.archive['control_revision'] == run.controlRevision;
 
+  // Only the explicitly allowed additive/read paths remain after web data.
+  // These names are the current memory adapter's mutators, not task commands.
+  static const _afterWebMemoryChanges = {
+    'forget', 'revise', 'quiet', 'cancel', 'postpone',
+    'merge', 'person', 'diary', 'impression', 'relationship',
+  };
+
+  bool _toolAvailable(_CompanionAgentRun run, CompanionAgentToolCall call) =>
+      !run.externalWebContent ||
+      (!_afterWebMemoryChanges.contains(call.name) &&
+          !(call.name == 'remember' && call.input['card'] != null));
+
+  List<CompanionAgentTool> _definitions(_CompanionAgentRun run) => [
+    for (final tool in run.tools)
+      if (!run.externalWebContent || !_afterWebMemoryChanges.contains(tool.definition.name))
+        if (run.externalWebContent && tool.definition.name == 'remember')
+          CompanionAgentTool(
+            name: tool.definition.name,
+            description: tool.definition.description,
+            inputSchema: {
+              ...tool.definition.inputSchema,
+              'properties': {
+                for (final entry in (tool.definition.inputSchema['properties']! as Map).entries)
+                  if (entry.key != 'card') (entry.key as String): entry.value,
+              },
+            },
+          )
+        else
+          tool.definition,
+  ];
+
   Future<void> _loop(_CompanionAgentRun run) async {
     await runCompanionAgentLoop(
-      tools: run.tools,
+      tools: [
+        for (final binding in run.tools)
+          (
+            definition: binding.definition,
+            execute: (call) async {
+              // The execution gate is checked for every call, including a
+              // later call in the same already-decoded model response.
+              if (!_toolAvailable(run, call)) {
+                return const CompanionAgentToolResult(
+                  content: '{"applied":false,"code":"memory_change_after_web","message":"This memory change is unavailable for the rest of this turn after public web content. It was not applied."}',
+                  isError: true,
+                );
+              }
+              if (call.name == 'public_lookup') run.externalWebContent = true;
+              final result = await binding.execute(call);
+              if (result.externalWebContent) run.externalWebContent = true;
+              return result;
+            },
+          ),
+      ],
+      retainToolOutcomes: true,
       exchanges: run.exchanges,
       isCurrent: () => _current(run),
       controlRevision: () => run.controlRevision,
@@ -238,7 +290,7 @@ class CompanionAgent extends ChangeNotifier {
     final key = _apiKey().trim();
     if (key.isEmpty) throw const CompanionLightError(CompanionLightFailure.noKey);
     final system = '${run.system}${run.memory.relationshipContext(run.source['character_id'] as String?)}';
-    final definitions = [for (final tool in run.tools) tool.definition];
+    final definitions = _definitions(run);
     final requestId = run.memory.store.reserveRequest(
       category: 'chat',
       provider: 'deepseek',
@@ -409,7 +461,7 @@ class _CompanionAgentRun {
   final bool Function() isCurrent;
   final void Function(MemorySelection)? onSelected;
   final settled = Completer<void>();
-  final exchanges = <({CompanionAgentMessage assistant, List<Map<String, Object?>> results})>[];
+  final exchanges = <CompanionAgentExchange>[];
   // Only real Page frame acknowledgements turn these saved assistant sources
   // into presentation facts. A saved reply alone is not a shown question.
   final unpresentedReplies = <String, int>{};
@@ -418,6 +470,8 @@ class _CompanionAgentRun {
   bool cancelled = false;
   bool discard = false;
   bool toolDispatchStarted = false;
+  // This capability narrowing belongs only to this original user run.
+  bool externalWebContent = false;
   int savedRows = 0;
   String text = '';
   CompanionLightError? error;

@@ -62,11 +62,19 @@ class CompanionAgentTaskTools {
   bool get _current => !_closed && memoryTools.isCurrent;
   bool get _here => _current && ui.isCurrent;
   bool get _mapHere => _here && ui.mapIsCurrent && mapHandoff.generation == _mapGeneration;
-  bool get _hasHost => roomMode == 'full' && host != null && host!.isCurrent();
+  bool get _hasHost => host != null && host!.isCurrent() && (roomMode == 'full' || host!.client == null);
+  bool get _connectedHost => _hasHost && host!.client != null;
+  List<CompanionAgentTool> get _availableHostDefinitions => [
+    if (_hasHost)
+      for (final definition in hostDefinitions)
+        if (host!.client != null ||
+            const ['find_draft', 'compare_drafts', 'receipts_to_sheet'].contains(definition.name))
+          definition,
+  ];
 
   List<({CompanionAgentTool definition, Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute})>
   get bindings => [
-    for (final definition in [...phoneDefinitions, if (_hasHost) ...hostDefinitions])
+    for (final definition in [...phoneDefinitions, ..._availableHostDefinitions])
       (definition: definition, execute: execute),
   ];
 
@@ -75,7 +83,7 @@ class CompanionAgentTaskTools {
   /// The Page checks its original opportunity again before the actual push.
   void close() {
     if (_closed) return;
-    final canPresent = _here && _hasHost;
+    final canPresent = _here && _connectedHost;
     final captures = <CompanionNotesForegroundCapture>[];
     if (canPresent) {
       for (final capture in _foregrounds) {
@@ -109,7 +117,7 @@ class CompanionAgentTaskTools {
 
   Future<CompanionAgentToolResult> execute(CompanionAgentToolCall call) {
     if (!_current) return Future.value(_failure('turn_not_current'));
-    final definitions = [...phoneDefinitions, if (_hasHost) ...hostDefinitions];
+    final definitions = [...phoneDefinitions, ..._availableHostDefinitions];
     final matching = definitions.where((entry) => entry.name == call.name).toList();
     if (matching.length != 1 || !_shape(call.input, matching.single.inputSchema)) {
       return Future.value(_failure('invalid_or_unavailable_tool'));
@@ -198,12 +206,14 @@ class CompanionAgentTaskTools {
         for (final task in tasks) {
           _show(task);
         }
+        final summaries = [for (final task in tasks) _summary(_readTask(task))];
         return CompanionAgentToolResult(
+          externalWebContent: summaries.any(_hasExternalWebContent),
           content: jsonEncode({
             'readOnly': true,
             'sourceSessionId': _sessionId,
             'limited': tasks.length == 100,
-            'tasks': [for (final task in tasks) _summary(_readTask(task))],
+            'tasks': summaries,
             'message': 'This is a bounded list of original receipts, not proof that no older matching task exists.',
           }),
         );
@@ -211,17 +221,22 @@ class CompanionAgentTaskTools {
       var task = _store.task(id);
       if (task == null || task['source_session_id'] != _sessionId) return _failure('task_not_in_this_room');
       task = _readTask(task);
-      if (input['refresh'] == true && _hasHost && task['host_key'] == host!.key) {
+      final client = host?.client;
+      if (input['refresh'] == true && _connectedHost && client != null && task['host_key'] == host!.key) {
         if ((task['kind']! as String).startsWith('host.')) {
-          task = await memoryTools.memory.hostTasks.run(task, client: host!.client, hostKey: host!.key);
+          task = await memoryTools.memory.hostTasks.run(task, client: client, hostKey: host!.key);
         } else if (task['kind'] == 'public.lookup') {
-          await memoryTools.memory.lookups.readReceipts(task, host: host!.client, hostKey: host!.key);
+          await memoryTools.memory.lookups.readReceipts(task, host: client, hostKey: host!.key);
           task = _store.lookupTask(id)!;
         }
       }
       _requireCurrent();
       _show(task);
-      return CompanionAgentToolResult(content: jsonEncode({'readOnly': true, 'task': _summary(task)}));
+      final summary = _summary(task);
+      return CompanionAgentToolResult(
+        content: jsonEncode({'readOnly': true, 'task': summary}),
+        externalWebContent: _hasExternalWebContent(summary),
+      );
     } on Object catch (error) {
       return _failure(_errorCode(error));
     }
@@ -294,6 +309,23 @@ class CompanionAgentTaskTools {
     _time(time!);
     final offset = input['selectedOffsetSeconds'];
     if (offset != null && offset is! int) throw const _TaskFailure('invalid_offset');
+    if (previous != null &&
+        date == previous['local_date'] &&
+        time == previous['local_time'] &&
+        zone == previous['zone_id'] &&
+        (offset == null || offset == previous['offset_seconds']) &&
+        previous['epoch_ms'] is int &&
+        previous['offset_seconds'] is int) {
+      // A wording edit keeps the already chosen occurrence of a repeated time.
+      return CompanionReminderSpec(
+        text: text,
+        localDate: date,
+        localTime: time,
+        zoneId: zone,
+        epochMs: previous['epoch_ms']! as int,
+        offsetSeconds: previous['offset_seconds']! as int,
+      );
+    }
     final resolved = await reminders.resolve(date, time, zone!, selectedOffsetSeconds: offset as int?);
     if (resolved['kind'] != 'unique') {
       return CompanionReminderSpec(
@@ -437,7 +469,9 @@ class CompanionAgentTaskTools {
               map: selected,
             );
     }
-    _accepted(call, task);
+    // The command is durable before native work, but its room button belongs
+    // only to the original opportunity after the handoff has finished.
+    _accepted(call, task, present: operation == 'cancel');
     if (operation != 'cancel') {
       final id = task['task_id']! as String;
       final revision = task['task_rev'];
@@ -452,6 +486,8 @@ class CompanionAgentTaskTools {
         _usingMap = false;
         memoryTools.memory.changed();
       }
+      final current = _store.mapTask(id)!;
+      if (_mapHere && current['task_rev'] == revision) ui.accepted(current);
     }
     return _store.mapTask(task['task_id']! as String)!;
   }
@@ -462,17 +498,20 @@ class CompanionAgentTaskTools {
     final kind = 'host.${call.name}';
     final previous = operation == 'create' ? null : _target(input, kind);
     _requireHost();
+    final client = host!.client;
     if (previous != null && previous['host_key'] != host!.key) throw const _TaskFailure('original_host_required');
     CompanionTasksCapability? capability;
     MemoryRow task;
     if (operation == 'cancel') {
       task = _cancelHost(kind, previous!, itemNo);
     } else {
-      capability = await host!.client.readCompanionTasksCapability();
-      _requireHost();
-      if (capability == null || !_supports(capability, kind)) throw const _TaskFailure('host_capability_unavailable');
+      if (client != null) {
+        capability = await client.readCompanionTasksCapability();
+        _requireHost();
+        if (capability == null || !_supports(capability, kind)) throw const _TaskFailure('host_capability_unavailable');
+      }
       final originalStore = previous?['host_store_id'] as String?;
-      if (originalStore != null && originalStore != capability.hostStoreId) {
+      if (originalStore != null && capability != null && originalStore != capability.hostStoreId) {
         throw const _TaskFailure('original_host_store_required');
       }
       final oldAgreement = previous?['agreement'] as MemoryRow?;
@@ -484,27 +523,47 @@ class CompanionAgentTaskTools {
       String? directoryStore;
       if (kind == 'host.notes_to_todo' || kind == 'host.find_draft') {
         final date = _optionalText(input, 'localDate') ?? oldArgs?['localDate'] as String?;
-        final zone = source['zone_id'] as String?;
-        if (date == null || zone == null || source['offset_seconds'] is! int) {
+        final keepDateWindow = kind == 'host.find_draft' && previous != null && date == oldArgs?['localDate'];
+        final zone = (keepDateWindow ? oldArgs?['timeZone'] : source['zone_id']) as String?;
+        if (date == null || zone == null || (!keepDateWindow && source['offset_seconds'] is! int)) {
           throw const _TaskFailure('original_date_zone_missing');
         }
         _date(date);
         final choose = previous == null || input['chooseDirectory'] == true;
         String folder;
         if (choose) {
-          final path = await ui.chooseDirectory(
-            kind: kind,
-            directoryHint: _optionalText(input, 'directoryHint'),
-            isCurrent: () => _here && _hasHost,
-            onRouteChanged: _selectionRoute,
-          );
-          _requireHost();
-          if (path == null) throw const _TaskFailure('selection_cancelled');
-          final bound = await host!.client.bindCompanionNotesDirectory(capability, path);
-          _requireHost();
+          final MemoryRow bound;
+          if (client == null) {
+            final saved = _store
+                .hostTaskDirectories(hostKey: host!.key)
+                .where((row) => originalStore == null || row['hostStoreId'] == originalStore)
+                .toList();
+            if (saved.isEmpty) throw const _TaskFailure('saved_original_directory_required');
+            final selected = await ui.chooseSavedDirectory(
+              saved,
+              isCurrent: () => _here && _hasHost,
+              onRouteChanged: _selectionRoute,
+            );
+            _requireHost();
+            if (selected == null) throw const _TaskFailure('selection_cancelled');
+            bound = selected;
+          } else {
+            final path = await ui.chooseDirectory(
+              kind: kind,
+              directoryHint: _optionalText(input, 'directoryHint'),
+              isCurrent: () => _here && _hasHost,
+              onRouteChanged: _selectionRoute,
+            );
+            _requireHost();
+            if (path == null) throw const _TaskFailure('selection_cancelled');
+            bound = await client.bindCompanionNotesDirectory(capability!, path);
+            _requireHost();
+          }
           folder = bound['folderRef']! as String;
           directoryStore = bound['hostStoreId']! as String;
-          if (directoryStore != capability.hostStoreId) throw const _TaskFailure('original_host_store_required');
+          if (capability != null && directoryStore != capability.hostStoreId) {
+            throw const _TaskFailure('original_host_store_required');
+          }
           labels = {'source': bound['displayPath'], if (kind == 'host.notes_to_todo') 'output': bound['displayPath']};
         } else {
           folder = oldArgs!['folderRef']! as String;
@@ -533,7 +592,7 @@ class CompanionAgentTaskTools {
             ? await ui.chooseDrafts(
                 store: _store,
                 hostKey: host!.key,
-                client: host!.client,
+                client: client,
                 capability: capability,
                 isCurrent: () => _here && _hasHost,
                 onRouteChanged: _selectionRoute,
@@ -557,7 +616,7 @@ class CompanionAgentTaskTools {
             ? await ui.chooseReceipts(
                 store: _store,
                 hostKey: host!.key,
-                client: host!.client,
+                client: client,
                 capability: capability,
                 isCurrent: () => _here && _hasHost,
                 onRouteChanged: _selectionRoute,
@@ -581,16 +640,19 @@ class CompanionAgentTaskTools {
       }
       final agreement = <String, Object?>{'args': args, ...terms};
       String? session = previous?['host_session_id'] as String?;
-      if (previous == null) session = await host!.ensureSession();
+      if (previous == null && client != null) session = await host!.ensureSession();
       _requireHost();
       task = previous == null
           ? _createHost(kind, itemNo, agreement, labels, directoryStore, session)
           : _amendHost(kind, previous, itemNo, agreement, labels);
     }
     _accepted(call, task);
+    // Saved refs already bind the original Host store. Only resumeNotes (or an
+    // explicit original-task action) may dispatch after a real reconnection.
+    if (client == null) return task;
     task = await memoryTools.memory.hostTasks.run(
       task,
-      client: host!.client,
+      client: client,
       hostKey: host!.key,
       initialOpportunity: true,
       submitPending: true,
@@ -607,7 +669,7 @@ class CompanionAgentTaskTools {
         task['cancel_requested'] == 0 &&
         task['host_execution_id'] is String &&
         task['host_store_id'] == capability.hostStoreId) {
-      _foregrounds.add((task: Map<String, Object?>.unmodifiable(task), client: host!.client, capability: capability));
+      _foregrounds.add((task: Map<String, Object?>.unmodifiable(task), client: client, capability: capability));
     }
     return task;
   }
@@ -667,7 +729,7 @@ class CompanionAgentTaskTools {
           messageId: _sourceId,
           expectedSourceRev: _sourceRevision,
           itemNo: itemNo,
-          roomMode: 'full',
+          roomMode: roomMode,
           hostKey: host!.key,
           hostSessionId: session,
           agreement: agreement,
@@ -678,7 +740,7 @@ class CompanionAgentTaskTools {
           messageId: _sourceId,
           expectedSourceRev: _sourceRevision,
           itemNo: itemNo,
-          roomMode: 'full',
+          roomMode: roomMode,
           hostKey: host!.key,
           hostSessionId: session,
           directoryHostStoreId: storeId!,
@@ -690,7 +752,7 @@ class CompanionAgentTaskTools {
           messageId: _sourceId,
           expectedSourceRev: _sourceRevision,
           itemNo: itemNo,
-          roomMode: 'full',
+          roomMode: roomMode,
           hostKey: host!.key,
           hostSessionId: session,
           agreement: agreement,
@@ -701,7 +763,7 @@ class CompanionAgentTaskTools {
           messageId: _sourceId,
           expectedSourceRev: _sourceRevision,
           itemNo: itemNo,
-          roomMode: 'full',
+          roomMode: roomMode,
           hostKey: host!.key,
           hostSessionId: session,
           agreement: agreement,
@@ -804,11 +866,11 @@ class CompanionAgentTaskTools {
     }
   }
 
-  void _accepted(CompanionAgentToolCall call, MemoryRow task) {
+  void _accepted(CompanionAgentToolCall call, MemoryRow task, {bool present = true}) {
     _store.finishAgentTaskCall(turnId: memoryTools.turnId, callId: call.id, taskId: task['task_id']! as String);
     _show(task);
     memoryTools.memory.changed();
-    if (ui.isCurrent) ui.accepted(task);
+    if (present && ui.isCurrent) ui.accepted(task);
   }
 
   void _show(MemoryRow task) => _shownTasks[task['task_id']! as String] = task['task_rev']! as int;
@@ -840,16 +902,21 @@ class CompanionAgentTaskTools {
 
   CompanionAgentToolResult _result(MemoryRow task, {bool replayed = false, String? error}) {
     _show(task);
+    final summary = _summary(task);
     return CompanionAgentToolResult(
+      externalWebContent: _hasExternalWebContent(summary),
       content: jsonEncode({
         'accepted': true,
         'replayed': replayed,
-        'task': _summary(task),
+        'task': summary,
         'receiptError': ?error,
         'message': 'The original command is saved. Only the reported state and receipts establish its effects; cancellation is not proof that an earlier effect stopped.',
       }),
     );
   }
+
+  static bool _hasExternalWebContent(MemoryRow summary) =>
+      summary['kind'] == 'public.lookup' && (summary['result'] != null || summary['report'] != null);
 
   static MemoryRow _summary(MemoryRow task) => {
     for (final key in const [

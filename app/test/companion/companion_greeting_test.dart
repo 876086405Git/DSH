@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_pack.dart';
+import 'package:dsh_app/companion/companion_keeper.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
@@ -28,6 +29,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'companion_test_settle.dart';
+import 'phone_keeper_fake.dart';
 
 const _session = 'synthetic-greeting-session';
 const _now = 1793937600000;
@@ -148,10 +150,40 @@ class _Settings extends SettingsController {
   AppSettings build() => const AppSettings(loaded: true, apiKey: 'synthetic-test-key');
 }
 
+// Only the public phone storage boundary is held. The real Page/Agent still
+// decides when to greet, retires newer intent, and serializes its visit event.
+class _Phone extends FakePhoneKeeper {
+  _Phone() : super(state: FakePhoneKeeper.snapshotOf(closeness: 0.33));
+
+  final readStarted = Completer<void>();
+  final initialRead = Completer<CompanionSnapshot?>();
+  final writes = <(CompanionSnapshot, String)>[];
+  int reads = 0;
+
+  @override
+  Future<CompanionSnapshot?> snapshot() {
+    reads++;
+    if (!readStarted.isCompleted) readStarted.complete();
+    return initialRead.future;
+  }
+
+  void release() {
+    if (!initialRead.isCompleted) initialRead.complete(state);
+  }
+
+  @override
+  Future<CompanionSnapshot> event(CompanionSnapshot read, String type) {
+    writes.add((read, type));
+    return super.event(read, type);
+  }
+}
+
 class _Room {
   _Room(this.root);
   final Directory root;
   final bridge = _Bridge();
+  final phone = _Phone();
+  Directory? phoneDirectory;
   late final client = _Client(bridge);
   final commands = <(String, Map<String, Object?>)>[];
   CompanionStageEvents? events;
@@ -215,20 +247,23 @@ class _Room {
   L10n l10n(WidgetTester tester) => L10n.of(tester.element(find.byType(CompanionPage)));
 
   void expectVisitAndVitals() {
-    expect(bridge.getPaths, [dshGoCompanionPath]);
-    expect(bridge.postPaths, ['$dshGoCompanionPath/events']);
-    expect(bridge.posts, [
-      {'storeId': 'synthetic-greeting-store', 'expectedRevision': 0, 'type': 'visit'},
-    ]);
+    expect(phone.reads, 1);
+    expect(phone.writes.map((write) => write.$2), ['visit']);
+    expect(phone.writes.single.$1.revision, 0);
+    expect(phone.state!.revision, 1);
+    expect(bridge.posts, isEmpty);
+    final vitals = phone.state!.vitals;
     expect(commands.where((command) => command.$1 == 'vitals').last.$2, {
-      'valence': 0.81,
-      'energy': 0.42,
-      'closeness': 0.33,
+      'valence': vitals.valence,
+      'energy': vitals.energy,
+      // The keeper's compatibility closeness is not the phone DB's v2 tier.
+      'closeness': 0.0,
     });
   }
 
   Future<void> open(WidgetTester tester, {void Function(CompanionMemoryOwner)? seed}) async {
     this.tester = tester;
+    addTearDown(() => close(tester));
     Directory('${root.path}/pack/runtime').createSync(recursive: true);
     Directory('${root.path}/pack/character').createSync(recursive: true);
     File('${root.path}/pack/runtime/live2dcubismcore.min.js').writeAsStringSync('core');
@@ -240,6 +275,10 @@ class _Room {
           activeConnectionProvider.overrideWithValue(AsyncData(HostConnection(client: client, isLocal: true))),
           settingsProvider.overrideWith(_Settings.new),
           companionLightClientProvider.overrideWithValue(newClient),
+          companionPhoneKeeperProvider.overrideWithValue((directory) {
+            phoneDirectory = directory;
+            return phone;
+          }),
         ],
         child: MaterialApp(
           theme: buildDarkTheme(),
@@ -264,22 +303,31 @@ class _Room {
     expect(events, isNotNull);
     container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
     container.read(companionSessionsProvider);
-    memory = (await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future)))!;
+    memory = await settleMixed(tester, container.read(companionMemoryOwnerProvider(root.absolute.path).future));
     await tester.pump();
     await settleMixed(tester, memory.migrateLocal());
     seed?.call(memory);
     await flush(tester);
     expect(container.read(companionSessionsProvider.notifier).of(HostRef.local)?.sessionId, _session);
     events!.onReady();
+    await settleMixed(tester, phone.readStarted.future);
     await flush(tester);
-    // The room no longer watches the Host chat; the delayed arrival read is
-    // still the actual Host keeper's first snapshot.
-    expect(bridge.getCount, 1);
+    expect(phone.reads, 1);
+    expect(phone.initialRead.isCompleted, isFalse);
+    final directory = phoneDirectory!;
+    expect(directory.parent.path, '${root.path}/activity');
+    final role = directory.uri.pathSegments.where((part) => part.isNotEmpty).last;
+    expect(memory.store.companionCharacter(role)?['source_key'], startsWith('local:'));
     commands.clear();
   }
 
+  bool closed = false;
+
   Future<void> close(WidgetTester tester) async {
+    if (closed) return;
+    closed = true;
     await tester.pumpWidget(const SizedBox());
+    phone.release();
     await tester.pump();
     bridge.release();
     final read = client.projectionRead;
@@ -328,7 +376,7 @@ void main() {
     await room.open(tester);
     try {
       expect(room.speech(tester), isNull);
-      room.bridge.release();
+      room.phone.release();
       await flush(tester);
       // This pack has no name: she introduces herself without one.
       expect(room.speech(tester), room.l10n(tester).companionGreetFirstNameless);
@@ -347,7 +395,7 @@ void main() {
       await tester.pump();
       final line = room.speech(tester);
       expect(line, isNotNull);
-      room.bridge.release();
+      room.phone.release();
       await flush(tester);
       room.expectVisitAndVitals();
       expect(room.speech(tester), line);
@@ -365,14 +413,14 @@ void main() {
       room.events!.onObject('snack');
       await tester.pump(const Duration(milliseconds: 100));
       expect(room.speech(tester), isNull);
-      room.bridge.release();
+      room.phone.release();
       await flush(tester);
       final afterRead = room.speech(tester);
       room.expectVisitAndVitals();
       await tester.pump(const Duration(milliseconds: 1700));
       await tester.pump();
       debugPrint(
-        '[C442 SNACK] ${jsonEncode({'afterRead': afterRead, 'afterTimer': room.speech(tester), 'posts': room.bridge.posts})}',
+        '[C442 SNACK] ${jsonEncode({'afterRead': afterRead, 'afterTimer': room.speech(tester), 'phoneEvents': room.phone.writes.map((write) => write.$2).toList()})}',
       );
       expect(room.speech(tester), isIn([l10n.companionSnack1, l10n.companionSnack2, l10n.companionSnack3]));
       expect(afterRead, isNull);
@@ -391,7 +439,7 @@ void main() {
     try {
       await room.send('稍等这一句');
       expect(room.running, isTrue);
-      room.bridge.release();
+      room.phone.release();
       await flush(tester);
       room.expectVisitAndVitals();
       expect(room.speech(tester), isNull);
@@ -415,7 +463,7 @@ void main() {
       expect(find.text(room.l10n(tester).companionSendFailed), findsNothing);
       expect(find.text(room.l10n(tester).companionAgentRetryClosed), findsNothing);
       expect(room.speech(tester), isNull);
-      room.bridge.release();
+      room.phone.release();
       await flush(tester);
       room.expectVisitAndVitals();
       expect(room.speech(tester), isNull);
@@ -437,7 +485,7 @@ void main() {
         '[表情:担心]',
       ]);
       expect(room.speech(tester), isNull);
-      room.bridge.release();
+      room.phone.release();
       await flush(tester);
       room.expectVisitAndVitals();
       expect(room.speech(tester), isNull);
@@ -475,7 +523,7 @@ void main() {
       // The process-level agent repeats its unchanged idle state to the window.
       room.container.read(companionAgentProvider).changed();
       await flush(tester);
-      room.bridge.release();
+      room.phone.release();
       await flush(tester);
       room.expectVisitAndVitals();
       // This pack has no name: she introduces herself without one.

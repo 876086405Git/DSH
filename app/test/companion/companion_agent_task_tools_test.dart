@@ -30,6 +30,9 @@ class _Ui implements CompanionAgentTaskUi {
   final foregroundBatches = <List<CompanionNotesForegroundCapture>>[];
   final foregroundCurrent = <bool>[];
   Future<void> Function()? beforeDirectory;
+  MemoryRow? offlineDrafts;
+  ({List<MemoryRow> inputs, MemoryRow outputDirectory})? offlineReceipts;
+  final offlinePickers = <String>[];
   var directories = 0;
   @override
   bool get isCurrent => current;
@@ -68,6 +71,7 @@ class _Ui implements CompanionAgentTaskUi {
     CompanionAgentSelectionRoute? onRouteChanged,
   }) async {
     routes.add(onRouteChanged);
+    offlinePickers.add('directory');
     return directories.single;
   }
 
@@ -82,7 +86,12 @@ class _Ui implements CompanionAgentTaskUi {
     String? originalStoreId,
   }) async {
     routes.add(onRouteChanged);
-    final connected = client!;
+    if (client == null) {
+      expect(capability, isNull);
+      offlinePickers.add('drafts');
+      return offlineDrafts;
+    }
+    final connected = client;
     final supported = capability!;
     final folder = await connected.bindCompanionNotesDirectory(supported, '/person-selected/drafts');
     return {
@@ -108,7 +117,12 @@ class _Ui implements CompanionAgentTaskUi {
     MemoryRow? keptOutput,
   }) async {
     routes.add(onRouteChanged);
-    final connected = client!;
+    if (client == null) {
+      expect(capability, isNull);
+      offlinePickers.add('receipts');
+      return offlineReceipts;
+    }
+    final connected = client;
     final supported = capability!;
     final folder = await connected.bindCompanionNotesDirectory(supported, '/person-selected/receipts');
     final inputs = <MemoryRow>[
@@ -391,6 +405,75 @@ void main() {
     },
   );
 
+  test('a reminder wording amendment preserves its selected repeated-time occurrence', () async {
+    messenger.setMockMethodCallHandler(reminderChannel, (call) async {
+      if (call.method != 'resolve') return defaultReminder(call);
+      nativeCalls.add(call);
+      final args = call.arguments! as Map;
+      expect(args['zoneId'], 'America/New_York');
+      final selected = args['selectedOffsetSeconds'] as int?;
+      final offsets = selected == null ? [-14400, -18000] : [selected];
+      return {
+        'kind': selected == null ? 'overlap' : 'unique',
+        'moments': [
+          for (final offset in offsets)
+            {
+              'epochMs': DateTime.parse('${args['localDate']}T${args['localTime']}Z').millisecondsSinceEpoch - offset * 1000,
+              'offsetSeconds': offset,
+            },
+        ],
+      };
+    });
+    final tools = archive.bind();
+    final created = await tools.execute(const CompanionAgentToolCall(
+      id: 'overlap-create', name: 'reminder',
+      input: {
+        'operation': 'create', 'text': '带伞', 'localDate': '2027-11-07',
+        'localTime': '01:30', 'zoneId': 'America/New_York', 'selectedOffsetSeconds': -18000,
+      },
+    ));
+    expect(created.isError, isFalse);
+    final before = archive.memory.store.tasks().single;
+    final id = before['task_id']! as String;
+    expect(before['state'], 'queued');
+    expect(before['offset_seconds'], -18000);
+    expect(before['epoch_ms'], DateTime.utc(2027, 11, 7, 6, 30).millisecondsSinceEpoch);
+    final wording = CompanionAgentToolCall(
+      id: 'overlap-wording', name: 'reminder',
+      input: {'operation': 'amend', 'taskId': id, 'expectedTaskRev': 1, 'text': '带钥匙'},
+    );
+    final amended = await tools.execute(wording);
+    expect(amended.isError, isFalse);
+    expect(amended.externalWebContent, isFalse);
+    expect(_body(amended)['receiptError'], isNull);
+    final after = archive.memory.store.task(id)!;
+    expect(after['task_rev'], 2);
+    expect(after['reminder_text'], '带钥匙');
+    expect(after['state'], 'queued');
+    expect(after['wait_reason'], isNull);
+    for (final field in ['local_date', 'local_time', 'zone_id', 'offset_seconds', 'epoch_ms']) {
+      expect(after[field], before[field], reason: 'Wording does not choose another occurrence: $field');
+    }
+    expect(nativeCalls.where((call) => call.method == 'resolve'), hasLength(1));
+    expect(nativeCalls.where((call) => call.method == 'wake'), hasLength(2));
+    expect(archive.memory.store.agentToolCall(turnId: archive.memoryTools.turnId, callId: wording.id)!.state, 'accepted');
+    expect(_body(await tools.execute(wording))['replayed'], isTrue);
+    expect(archive.memory.store.task(id)!['task_rev'], 2);
+    expect(nativeCalls.where((call) => call.method == 'wake'), hasLength(2));
+    // Selecting the other occurrence is a time edit and must resolve again.
+    final retimed = await tools.execute(CompanionAgentToolCall(
+      id: 'overlap-retime', name: 'reminder',
+      input: {'operation': 'amend', 'taskId': id, 'expectedTaskRev': 2, 'selectedOffsetSeconds': -14400},
+    ));
+    expect(retimed.isError, isFalse);
+    final revised = archive.memory.store.task(id)!;
+    expect(revised['task_rev'], 3);
+    expect(revised['offset_seconds'], -14400);
+    expect(revised['epoch_ms'], DateTime.utc(2027, 11, 7, 5, 30).millisecondsSinceEpoch);
+    expect(nativeCalls.where((call) => call.method == 'resolve'), hasLength(2));
+    expect(archive.memory.store.tasks(), hasLength(1));
+  });
+
   test('a retired resolve and an unresolved old call cannot create a task', () async {
     final entered = Completer<void>();
     final release = Completer<void>();
@@ -433,11 +516,18 @@ void main() {
   for (final mode in ['light', 'full']) {
     test('$mode public lookup uses actual phone search fetch answer and original source without Host', () async {
       final requests = <http.Request>[];
-      final tools = archive.bind(
+      late final CompanionAgentTaskTools tools;
+      tools = archive.bind(
         mode: mode,
         client: () => MockClient((request) async {
           requests.add(request);
           if (request.url.path.endsWith('/search')) {
+            final pending = await tools.execute(CompanionAgentToolCall(
+              id: 'lookup-pending-status', name: 'task_status',
+              input: {'taskId': archive.memory.store.tasks().single['task_id']},
+            ));
+            expect(pending.externalWebContent, isFalse);
+            expect((_body(pending)['task']! as Map)['result'], isNull);
             return _json({
               'results': [
                 {'url': 'https://museum.example/notice', 'title': '青桥美术馆馆方公告', 'snippet': '搜索摘要', 'date': '2026-11-20'},
@@ -485,6 +575,17 @@ void main() {
       expect(attempts, hasLength(3));
       expect(attempts.every((row) => row['execution_mode'] == 'phone' && row['dispatched'] == 1), isTrue);
       expect((saved['result']! as Map)['evidence'], isNotEmpty);
+      expect(result.externalWebContent, isTrue);
+      final read = await tools.execute(CompanionAgentToolCall(
+        id: 'lookup-result-status', name: 'task_status', input: {'taskId': saved['task_id']},
+      ));
+      expect(read.externalWebContent, isTrue);
+      expect((_body(read)['task']! as Map)['result'], saved['result']);
+      final listed = await tools.execute(const CompanionAgentToolCall(
+        id: 'lookup-results-list', name: 'task_status', input: {},
+      ));
+      expect(listed.externalWebContent, isTrue);
+      expect(((_body(listed)['tasks']! as List).single as Map)['result'], saved['result']);
       final replay = await tools.execute(
         const CompanionAgentToolCall(
           id: 'lookup',
@@ -493,6 +594,7 @@ void main() {
         ),
       );
       expect(_body(replay)['replayed'], isTrue);
+      expect(replay.externalWebContent, isTrue);
       expect(requests, hasLength(3));
     });
   }
@@ -622,6 +724,7 @@ void main() {
     try {
       await entered.future;
       final before = archive.memory.store.mapTask(archive.memory.store.tasks().single['task_id']! as String)!;
+      expect(archive.ui.acceptedTasks, isEmpty);
       tools.close();
       release.complete();
       await work;
@@ -630,6 +733,7 @@ void main() {
       final after = archive.memory.store.mapTask(before['task_id']! as String)!;
       expect(after['task_rev'], before['task_rev']);
       expect(after['state'], isNot('done'));
+      expect(archive.ui.acceptedTasks, isEmpty);
       expect(archive.ui.routes, [same(archive.ui.onSelectionRoute)]);
       expect(archive.ui.foregroundBatches, isEmpty);
     } finally {
@@ -637,6 +741,217 @@ void main() {
       await work;
     }
   });
+
+  for (final retired in [false, true]) {
+    test('a map button waits for its original handoff opportunity: retired=$retired', () async {
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      messenger.setMockMethodCallHandler(mapChannel, (call) async {
+        nativeCalls.add(call);
+        if (call.method == 'capabilities') return {'executorId': 'actual-phone'};
+        if (call.method == 'openScope') return {'scopeId': 'original-scope'};
+        if (call.method == 'handoff') {
+          entered.complete();
+          await release.future;
+        }
+        return null;
+      });
+      final tools = archive.bind();
+      final work = tools.execute(
+        const CompanionAgentToolCall(
+          id: 'held-map',
+          name: 'map_open',
+          input: {'operation': 'create', 'address': '上海市黄浦区人民大道 201 号'},
+        ),
+      );
+      try {
+        await entered.future;
+        final before = archive.memory.store.mapTask(archive.memory.store.tasks().single['task_id']! as String)!;
+        expect(archive.memory.store.agentToolCall(turnId: archive.memoryTools.turnId, callId: 'held-map')!.state, 'accepted');
+        expect(archive.ui.acceptedTasks, isEmpty);
+        if (retired) {
+          archive.ui.current = false;
+          archive.handoff.close();
+          // Coming back does not revive the captured handoff generation.
+          archive.ui.current = true;
+        }
+        release.complete();
+        final result = _body(await work);
+        expect(result['accepted'], isTrue);
+        final after = archive.memory.store.mapTask(before['task_id']! as String)!;
+        expect(after['task_rev'], before['task_rev']);
+        expect(after['cancel_requested'], 0);
+        expect(after['state'], before['state'], reason: 'This channel fixture writes no physical-effect receipt');
+        expect(archive.ui.acceptedTasks, hasLength(retired ? 0 : 1));
+        if (!retired) expect(archive.ui.acceptedTasks.single['task_id'], before['task_id']);
+        expect(nativeCalls.where((call) => call.method == 'handoff'), hasLength(1));
+      } finally {
+        if (!release.isCompleted) release.complete();
+        await work;
+      }
+    });
+  }
+
+  for (final kind in ['find_draft', 'compare_drafts', 'receipts_to_sheet']) {
+    test('$kind queues saved originals offline and reconnects only the original durable command', () async {
+      final peer = await NotesPeer.open();
+      final posts = <MemoryRow>[];
+      final snapshots = <String, MemoryRow>{};
+      peer.capability = {
+        ...receiptsCapability,
+        'sourceRead': true,
+        'kinds': ['host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'],
+      };
+      peer.respond = (request, body) async {
+        if (request.uri.path == '$notesPath/folders') {
+          return NotesPeer.json(request, {
+            'v': 1,
+            'hostStoreId': 'original-store',
+            'folderRef': body!['path'] == '/selected/output' ? 'saved-output' : 'saved-input',
+            'displayPath': body['path'],
+          });
+        }
+        if (request.uri.path == '$notesPath/inputs') {
+          return NotesPeer.json(request, {
+            'v': 1,
+            'hostStoreId': 'original-store',
+            'sourceRef': 'saved-${body!['name']}',
+            'displayName': body['name'],
+            'version': 'original-v1',
+            'size': 12,
+            'mediaType': 'text/plain',
+          });
+        }
+        if (request.method == 'POST' && request.uri.path == notesPath) {
+          posts.add(body!);
+          final snapshot = notesSnapshot(body, state: 'running');
+          snapshots[body['taskId']! as String] = snapshot;
+          return NotesPeer.json(request, snapshot, status: 201);
+        }
+        final snapshot = snapshots[request.uri.pathSegments.last];
+        return snapshot == null
+            ? NotesPeer.json(request, {'error': {'code': 'companion/task-not-found'}}, status: 404)
+            : NotesPeer.json(request, snapshot);
+      };
+      try {
+        final store = archive.memory.store;
+        final capability = (await peer.client.readCompanionTasksCapability())!;
+        final folder = await peer.client.bindCompanionNotesDirectory(capability, '/selected/input');
+        final selected = <MemoryRow>[];
+        for (var index = 0; index < (kind == 'compare_drafts' ? 2 : kind == 'receipts_to_sheet' ? 4 : 0); index++) {
+          selected.add(kind == 'compare_drafts'
+              ? await peer.client.bindCompanionDraftInput(capability, folderRef: folder['folderRef']! as String, name: 'draft-$index.txt')
+              : await peer.client.bindCompanionReceiptInput(capability, folderRef: folder['folderRef']! as String, name: 'receipt-$index.txt'));
+        }
+        final output = kind == 'receipts_to_sheet'
+            ? await peer.client.bindCompanionNotesDirectory(capability, '/selected/output')
+            : null;
+        final oldSource = store.submitMessage(
+          id: 'earlier-selected-originals',
+          sessionId: 'light:earlier-room',
+          text: 'Use the originals I selected on this computer.',
+          saidAtUtc: _now,
+          offsetMinutes: 480,
+          zoneId: 'Asia/Shanghai',
+          offsetSeconds: 28800,
+        );
+        final args = <String, Object?>{
+          if (kind == 'find_draft') ...{
+            'folderRef': folder['folderRef'], 'scope': 'currentLevel', 'localDate': '2026-11-21',
+            'timeZone': 'Asia/Shanghai', 'dateBy': 'modified', 'extensions': ['md', 'txt'],
+          },
+          if (kind == 'compare_drafts') ...{
+            'a': {'sourceRef': selected[0]['sourceRef'], 'version': selected[0]['version']},
+            'b': {'sourceRef': selected[1]['sourceRef'], 'version': selected[1]['version']},
+            'maxHighlights': 3,
+          },
+          if (kind == 'receipts_to_sheet') ...{
+            'inputs': [for (final row in selected) {'sourceRef': row['sourceRef'], 'version': row['version']}],
+            'outputDirRef': output!['folderRef'], 'outputName': '本人小表.xlsx', 'writeMode': 'createNew',
+          },
+        };
+        final agreement = <String, Object?>{'args': args, 'deadlineAtMs': null, 'afterExit': 'continue', 'allowQueue': true};
+        final previous = switch (kind) {
+          'find_draft' => store.createFindDraftTaskFromMessage(
+            messageId: oldSource['id']! as String, expectedSourceRev: 1, itemNo: 0, roomMode: 'light',
+            hostKey: 'captured-host', directoryHostStoreId: 'original-store', agreement: agreement,
+            directoryLabels: {'source': folder['displayPath']},
+          ),
+          'compare_drafts' => store.createCompareDraftTaskFromMessage(
+            messageId: oldSource['id']! as String, expectedSourceRev: 1, itemNo: 0, roomMode: 'light',
+            hostKey: 'captured-host', agreement: agreement, inputs: {'a': selected[0], 'b': selected[1]},
+          ),
+          _ => store.createReceiptsTaskFromMessage(
+            messageId: oldSource['id']! as String, expectedSourceRev: 1, itemNo: 0, roomMode: 'light',
+            hostKey: 'captured-host', agreement: agreement, inputs: selected, outputDirectory: output!,
+          ),
+        };
+        final labels = store.hostTask(previous['task_id']! as String)!['directory_labels']! as MemoryRow;
+        if (kind == 'compare_drafts') archive.ui.offlineDrafts = labels['inputs']! as MemoryRow;
+        if (kind == 'receipts_to_sheet') {
+          archive.ui.offlineReceipts = (
+            inputs: [for (final row in labels['inputs']! as List) Map<String, Object?>.from(row as Map)],
+            outputDirectory: labels['outputDirectory']! as MemoryRow,
+          );
+        }
+        peer.calls.clear();
+        final tools = archive.bind(
+          mode: 'light',
+          host: CompanionAgentTaskHost(
+            key: 'captured-host', client: null, isCurrent: () => true,
+            ensureSession: () async => throw StateError('Offline selection must not ensure a Host session'),
+          ),
+        );
+        expect(tools.bindings.map((entry) => entry.definition.name), [
+          'task_status', 'reminder', 'public_lookup', 'map_open',
+          'find_draft', 'compare_drafts', 'receipts_to_sheet',
+        ]);
+        final rejected = await tools.execute(const CompanionAgentToolCall(
+          id: 'not-offline', name: 'notes_to_todo', input: {'operation': 'create'},
+        ));
+        expect(rejected.isError, isTrue);
+        final accepted = await tools.execute(CompanionAgentToolCall(
+          id: 'offline', name: kind,
+          input: {
+            'operation': 'create', 'afterExit': 'continue', 'allowQueue': true,
+            if (kind == 'find_draft') ...{'localDate': '2026-11-21', 'extensions': ['md', 'txt']},
+            if (kind == 'receipts_to_sheet') 'outputName': '本人小表.xlsx',
+          },
+        ));
+        expect(accepted.isError, isFalse);
+        final task = store.hostTask(store.tasks(sourceSessionId: archive.memory.store.lightSessionId).single['task_id']! as String)!;
+        final id = task['task_id']! as String;
+        expect(task['state'], 'queued');
+        expect(task['source_message_id'], archive.source['id']);
+        expect(task['room_mode'], 'light');
+        expect(task['host_session_id'], isNull);
+        expect(task['host_store_id'], 'original-store');
+        expect(task['directory_labels'], labels);
+        expect((task['agreement']! as MemoryRow)['args'], args);
+        expect(store.hostTaskCommands(id).single['possible_sent_at_ms'], isNull);
+        expect(store.agentToolCall(turnId: archive.memoryTools.turnId, callId: 'offline')!.state, 'accepted');
+        expect(archive.ui.offlinePickers, [kind == 'find_draft' ? 'directory' : kind == 'compare_drafts' ? 'drafts' : 'receipts']);
+        expect(peer.calls, isEmpty);
+        expect(nativeCalls, isEmpty);
+        // The real reconnect executor is exercised here; the Page callback and
+        // its >100-task discovery remain the separate owner Widget regressions.
+        final resumed = await archive.memory.hostTasks.run(task, client: peer.client, hostKey: 'captured-host', submitPending: true);
+        expect(resumed['state'], 'running');
+        expect(posts, hasLength(1));
+        expect(posts.single['origin'], {'sourceSessionId': archive.source['session_id'], 'messageId': archive.source['id'], 'itemNo': 0});
+        expect(posts.single['hostSessionId'], isNull);
+        expect(posts.single['args'], args);
+        await archive.memory.hostTasks.run(resumed, client: peer.client, hostKey: 'captured-host', submitPending: true);
+        expect(posts, hasLength(1), reason: 'A possibly sent command is read, not first-delivered again');
+        expect(peer.calls.where((call) => call.uri.path.endsWith('/inputs') || call.uri.path.endsWith('/folders')), isEmpty);
+        expect(peer.calls.where((call) => call.uri.path.contains('/session') || call.uri.path.contains('/prompt') || call.uri.path.contains('/auxiliary')), isEmpty);
+        expect(archive.ui.foregroundBatches, isEmpty);
+        expect(archive.ui.routes.every((route) => identical(route, archive.ui.onSelectionRoute)), isTrue);
+      } finally {
+        await peer.close();
+      }
+    });
+  }
 
   for (final kind in ['notes_to_todo', 'find_draft', 'compare_drafts', 'receipts_to_sheet']) {
     test('$kind binds real selected originals and sends only its durable command to the captured Host', () async {
@@ -767,6 +1082,122 @@ void main() {
       }
     });
   }
+
+  test('a find extension amendment keeps the original date window after the phone zone changes', () async {
+    final peer = await NotesPeer.open();
+    final snapshots = <String, MemoryRow>{};
+    final posts = <MemoryRow>[];
+    peer.capability = findCapability;
+    peer.respond = (request, body) async {
+      if (request.uri.path == '$notesPath/folders') {
+        return NotesPeer.json(request, {
+          'v': 1, 'hostStoreId': 'original-store',
+          'folderRef': 'selected-folder', 'displayPath': body!['path'],
+        });
+      }
+      if (request.method == 'POST' && request.uri.path == notesPath) {
+        posts.add(body!);
+        final snapshot = {...notesSnapshot(body, state: 'waiting'), 'waitReason': 'approval'};
+        snapshots[body['taskId']! as String] = snapshot;
+        return NotesPeer.json(request, snapshot, status: 201);
+      }
+      final snapshot = snapshots[request.uri.pathSegments.last];
+      return snapshot == null
+          ? NotesPeer.json(request, {'error': {'code': 'companion/task-not-found'}}, status: 404)
+          : NotesPeer.json(request, snapshot);
+    };
+    CompanionAgentMemoryTools? amendmentMemory;
+    CompanionAgentTaskTools? amendmentTools;
+    try {
+      final originalTools = archive.bind(host: CompanionAgentTaskHost(
+        key: 'captured-host', client: peer.client, isCurrent: () => true,
+        ensureSession: () async => 'original-host-session',
+      ));
+      final created = await originalTools.execute(const CompanionAgentToolCall(
+        id: 'find-original', name: 'find_draft',
+        input: {
+          'operation': 'create', 'localDate': '2026-11-21', 'extensions': ['md', 'txt'],
+          'afterExit': 'continue', 'allowQueue': true,
+        },
+      ));
+      expect(created.isError, isFalse);
+      expect(_body(created)['receiptError'], isNull);
+      final store = archive.memory.store;
+      final original = store.hostTask(store.tasks().single['task_id']! as String)!;
+      final id = original['task_id']! as String;
+      final agreement = original['agreement']! as MemoryRow;
+      final originalArgs = agreement['args']! as MemoryRow;
+      expect(originalArgs['timeZone'], 'Asia/Shanghai');
+      expect(posts, hasLength(1));
+      originalTools.close();
+      archive.memoryTools.close();
+      final source = store.submitMessage(
+        id: 'phone-zone-changed', sessionId: store.lightSessionId,
+        text: 'Only change the draft extensions to txt; keep its original date window.',
+        saidAtUtc: _now + 60000, offsetMinutes: 0, zoneId: 'Europe/London', offsetSeconds: 0,
+      );
+      final memoryTools = CompanionAgentMemoryTools(
+        memory: archive.memory, source: source, isCurrent: () => archive.current,
+        forgottenNotice: '已忘记。',
+        onCommitted: ({required memory, required sourceId, required beforeRevision, required revision}) {},
+      );
+      amendmentMemory = memoryTools;
+      final tools = CompanionAgentTaskTools(
+        memoryTools: memoryTools, source: source, roomMode: 'light',
+        reminders: archive.reminders, maps: archive.maps, mapHandoff: archive.handoff, ui: archive.ui,
+        apiKey: 'actual-test-key', lightClientFactory: () => MockClient((_) async => http.Response('not selected', 503)),
+        requestId: archive.nextId,
+        host: CompanionAgentTaskHost(
+          key: 'captured-host', client: null, isCurrent: () => true,
+          ensureSession: () async => throw StateError('An original offline amendment must not create a Host session'),
+        ),
+      );
+      amendmentTools = tools;
+      peer.calls.clear();
+      final status = await tools.execute(CompanionAgentToolCall(
+        id: 'read-original', name: 'task_status', input: {'taskId': id},
+      ));
+      expect(status.isError, isFalse);
+      expect((_body(status)['task']! as Map)['task_rev'], 1);
+      final call = CompanionAgentToolCall(
+        id: 'only-extensions', name: 'find_draft',
+        input: {'operation': 'amend', 'taskId': id, 'expectedTaskRev': 1, 'extensions': ['txt']},
+      );
+      final amended = await tools.execute(call);
+      expect(amended.isError, isFalse);
+      expect(_body(amended)['receiptError'], isNull);
+      final after = store.hostTask(id)!;
+      final revisedAgreement = after['agreement']! as MemoryRow;
+      expect(after['task_rev'], 2);
+      expect(after['state'], 'queued');
+      expect(after['source_zone_id'], 'Europe/London');
+      expect(after['source_offset_seconds'], 0);
+      expect(after['command_message_id'], source['id']);
+      expect(revisedAgreement['args'], {...originalArgs, 'extensions': ['txt']});
+      for (final field in ['deadlineAtMs', 'afterExit', 'allowQueue']) {
+        expect(revisedAgreement[field], agreement[field]);
+      }
+      expect(after['host_key'], original['host_key']);
+      expect(after['host_store_id'], original['host_store_id']);
+      expect(after['host_session_id'], original['host_session_id']);
+      expect(after['directory_labels'], original['directory_labels']);
+      final commands = store.hostTaskCommands(id);
+      expect(commands, hasLength(2));
+      expect(commands.last['possible_sent_at_ms'], isNull);
+      expect((commands.last['request']! as Map)['changes'], revisedAgreement);
+      expect(store.agentToolCall(turnId: memoryTools.turnId, callId: call.id)!.state, 'accepted');
+      expect(_body(await tools.execute(call))['replayed'], isTrue);
+      expect(store.hostTaskCommands(id), hasLength(2));
+      expect(peer.calls, isEmpty);
+      expect(archive.ui.directories, 1);
+      expect(archive.ui.offlinePickers, isEmpty);
+      expect(store.tasks(), hasLength(1));
+    } finally {
+      amendmentTools?.close();
+      amendmentMemory?.close();
+      await peer.close();
+    }
+  });
 
   test('an unrelated visit loss during actual folder selection creates no Host command', () async {
     final peer = await NotesPeer.open();

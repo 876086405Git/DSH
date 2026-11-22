@@ -393,14 +393,29 @@ class _CompanionAgentVisit {
       recordInteraction('chat', source: source);
       if (farewell.hasMatch(raw.trim())) followupRetired = true;
       ui.committed(raw);
-      final now = DateTime.now();
-      final turnContext = companionTurnContext(
+      final now = sourceClock == null
+          ? DateTime.now()
+          : DateTime.fromMillisecondsSinceEpoch(sourceClock.utcMs, isUtc: true);
+      // Every explicit user turn receives a current clock. A live retry keeps
+      // its stored source/clock identity and takes no second native sample.
+      final sampledContext = companionTurnContext(
         now: now,
-        utcOffsetMinutes: now.timeZoneOffset.inMinutes,
+        utcOffsetMinutes: sourceClock == null
+            ? now.timeZoneOffset.inMinutes
+            : sourceClock.offsetSeconds ~/ 60,
         lastSpokenAt: lastSpokenAt,
         lastClockAt: lastClockAt,
+        askTime: true,
         events: events,
       );
+      final turnContext = sourceClock == null
+          ? sampledContext
+          : CompanionTurnContext(
+              Map.unmodifiable({...sampledContext.data, 'zoneId': sourceClock.zoneId}),
+              sampledContext.eventIds,
+              sampledAt: sampledContext.sampledAt,
+              hasClock: sampledContext.hasClock,
+            );
       lastSpokenAt = now;
       final persona = ref.read(companionPersonaProvider);
       final system = companionLightSystem(
@@ -440,9 +455,9 @@ class _CompanionAgentVisit {
           key: companionHostKey(hostRef),
           client: client,
           isCurrent: hostCurrent,
-          sessionId: ref.read(companionSessionsProvider.notifier).of(hostRef)?.sessionId,
+          sessionId: client == null ? null : ref.read(companionSessionsProvider.notifier).of(hostRef)?.sessionId,
           ensureSession: () async {
-            if (!hostCurrent()) throw const DshClosedException('Companion Host changed');
+            if (client == null || !hostCurrent()) throw const DshClosedException('Companion Host changed');
             final binding = await ref
                 .read(companionSessionsProvider.notifier)
                 .ensure(
