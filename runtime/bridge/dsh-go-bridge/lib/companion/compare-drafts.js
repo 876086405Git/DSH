@@ -62,9 +62,10 @@ export function createCompareDraftRunner({ctx, store, execution}) {
   if (!compareDraftSupported(fs)) throw stopped('compare_filesystem_unavailable');
   const queue = new Set();
   let closed = false, drain = null, active = null;
-  function guard(id, rev, signal, owner) {
+  // read = store.stored for checks that discard the record (once per streamed model chunk).
+  function guard(id, rev, signal, owner, read = store.read) {
     signal?.throwIfAborted();
-    const record = store.read(id);
+    const record = read.call(store, id);
     if (closed || record.taskRev !== rev || record.cancelRequested || !record.originalCreate ||
         record.agreement?.afterExit !== 'continue') throw stopped('task_agreement_changed');
     if (record.agreement.deadlineAtMs !== null && store.now() >= record.agreement.deadlineAtMs)
@@ -90,7 +91,7 @@ export function createCompareDraftRunner({ctx, store, execution}) {
   async function segment(id, rev, stepKey, reserveMs, controller, job, owner) {
     const claim = await store.claimStep(id,rev,stepKey,{reserveMs});
     const timer = clock(claim,controller), start = performance.now();
-    const current = () => guard(id,rev,timer.signal,owner);
+    const current = read => guard(id,rev,timer.signal,owner,read);
     let completion, failure, entered = false;
     try {
       current();
@@ -164,7 +165,7 @@ export function createCompareDraftRunner({ctx, store, execution}) {
           a:{from:value.a.from,to:value.a.to},b:{from:value.b.from,to:value.b.to}}))});
       const body = JSON.stringify({system:compareSystem,messages:[{role:'user',content:[{type:'text',text:input}]}]});
       if (!compareInputEstimate(body).accepted) throw new NotesTaskError('model_input_limit');
-      const generated = await runTaskModel({store,claim,owner,signal,guard:current,system:compareSystem,input,
+      const generated = await runTaskModel({store,claim,owner,signal,guard:()=>current(store.stored),system:compareSystem,input,
         capability,inputEstimate:compareInputEstimate,outputTokens:4000});
       current();
       const candidate = {...proposal(generated.text,comparison),usage:generated.usage};

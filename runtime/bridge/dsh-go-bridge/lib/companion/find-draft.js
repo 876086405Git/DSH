@@ -48,13 +48,12 @@ export function createFindDraftRunner({ctx, store}) {
   function guard(id, rev, signal, reserveMs) {
     signal?.throwIfAborted();
     if (closed) throw stopped('task_owner_stopping');
-    const record = store.read(id);
+    const record = store.stored(id);
     if (record.taskRev !== rev || record.cancelRequested || !record.originalCreate || record.agreement?.afterExit !== 'continue')
       throw stopped('task_agreement_changed');
     if (record.agreement.deadlineAtMs !== null && store.now() >= record.agreement.deadlineAtMs)
       throw stopped('deadline_expired');
     if (reserveMs !== undefined && reserveMs <= 0) throw stopped('execution_budget_exhausted');
-    return record;
   }
   function clock(claim, controller) {
     const budget = new AbortController();

@@ -42,10 +42,11 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
   if (required.some(name => typeof fs?.[name] !== 'function'))
     throw new NotesTaskError('notes_filesystem_unavailable');
 
-  function guard(taskId, taskRev, signal, owner) {
+  // read = store.stored for checks that discard the record (once per streamed model chunk).
+  function guard(taskId, taskRev, signal, owner, read = store.read) {
     signal?.throwIfAborted();
     if (closed) throw new NotesTaskError('task_owner_stopping');
-    const record = store.read(taskId);
+    const record = read.call(store, taskId);
     if (record.taskRev !== taskRev || record.cancelRequested || !record.originalCreate ||
       !store.executionAllowed(record)) throw new NotesTaskError('task_agreement_changed');
     if (record.agreement.deadlineAtMs !== null && Date.now() >= record.agreement.deadlineAtMs)
@@ -65,14 +66,14 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
       'failed')), claim.reserveMs);
     timeout.unref?.();
     const signal = AbortSignal.any([controller.signal, clock.signal]);
-    const current = () => guard(id, rev, signal, owner);
+    const current = read => guard(id, rev, signal, owner, read);
     let jobEntered = false;
     try {
       current();
       const result = await owner.runTurn(turnSignal => {
         jobEntered = true;
         return job({claim, signal: AbortSignal.any([signal, turnSignal]),
-          guard: () => {turnSignal.throwIfAborted(); return current();}, elapsed: () => duration(start)});
+          guard: read => {turnSignal.throwIfAborted(); return current(read);}, elapsed: () => duration(start)});
       });
       const latest = store.read(id), original = step(latest, key, rev);
       if (original.finishedAtMs === null)
@@ -194,7 +195,7 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
     if (!capability || typeof owner.llm?.prepareCompanionAuxiliaryCall !== 'function')
       throw new NotesTaskError('model_channel_unavailable');
     return segment(id, rev, 'model', 180_000, controller, owner, async ({claim, signal, guard: current}) => {
-      const {text, inputBudget, usage} = await runTaskModel({store, claim, owner, signal, guard: current,
+      const {text, inputBudget, usage} = await runTaskModel({store, claim, owner, signal, guard: () => current(store.stored),
         system: notesSystem, input, capability, inputEstimate: notesInputEstimate, outputTokens: NOTES_LIMITS.outputTokens});
       const mediaType = current().agreement.args.outputName.toLowerCase().endsWith('.md') ? 'text/markdown' : 'text/plain';
       const page = renderNotesPage(readNotesProposal(text, inputs), inputs, mediaType);
