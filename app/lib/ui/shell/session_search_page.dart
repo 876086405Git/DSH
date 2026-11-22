@@ -336,7 +336,7 @@ class _SearchBody extends ConsumerWidget {
     }
     if (sessions.value == null) return _Notice(icon: AppIcons.loading, title: l10n.shellLoadingChatsEllipsis);
 
-    final archived = ref.read(sessionsProvider.notifier).archivedSessions;
+    late final archived = ref.read(sessionsProvider.notifier).archivedSessions;
     final results = !archivedOnly
         ? view.results
         : SessionSearchResults(
