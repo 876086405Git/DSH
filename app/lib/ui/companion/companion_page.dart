@@ -670,11 +670,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       unawaited(SharedPreferences.getInstance().then((p) => p.setBool(_hintDoneKey, true)));
     }
     final l10n = context.l10n;
+    // At the v2 Close tier she has a fonder word too.
+    final close = _bondTier >= 3;
     final lines = switch ((zone, kind)) {
-      (_, 'hug') => [l10n.companionHug1, l10n.companionHug2, l10n.companionHug3, l10n.companionHugClose],
+      (_, 'hug') => [l10n.companionHug1, l10n.companionHug2, l10n.companionHug3, if (close) l10n.companionHugClose],
       (_, 'tease') => [l10n.companionTease1, l10n.companionTease2, l10n.companionTease3],
       (_, 'shake') => [l10n.companionShake1, l10n.companionShake2, l10n.companionShake3],
-      (_, 'pat') => [l10n.companionPat1, l10n.companionPat2, l10n.companionPat3, l10n.companionPatClose],
+      (_, 'pat') => [l10n.companionPat1, l10n.companionPat2, l10n.companionPat3, if (close) l10n.companionPatClose],
       ('head', _) => [l10n.companionTapHead1, l10n.companionTapHead2],
       ('face', _) => [l10n.companionTapFace1, l10n.companionTapFace2, l10n.companionTapFace3],
       ('tail', _) => [l10n.companionTapTail1, l10n.companionTapTail2, l10n.companionTapTail3],

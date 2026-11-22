@@ -880,9 +880,9 @@ void main() {
       stageEvents!.onTouch('body', 'hug');
       await _settle(tester);
       expect(phone.events, ['visit', 'snack', 'pet']);
-      // Any of her four hug lines: since A2 the closer one is no longer gated
-      // on the keeper's activity closeness.
-      expect(find.textContaining(RegExp('抱抱|好安心|再抱一会儿|抱紧一点')), findsOneWidget);
+      // One of her three ordinary hug lines: the fonder one waits for the Close tier.
+      expect(find.textContaining(RegExp('抱抱|好安心|再抱一会儿')), findsOneWidget);
+      expect(find.textContaining('抱紧一点'), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 10));
