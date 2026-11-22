@@ -2,7 +2,6 @@
 import {createHmac, randomBytes} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {isDeepStrictEqual} from 'node:util';
-import {bundleEntrySources} from './config-source.js';
 const BASE='/dsh-go/v1/plugin-config';
 const BAD=new Set(['__proto__','prototype','constructor','__jsExpr']);
 const TYPES=new Set(['object','dict','array','string','number','boolean','const','union','intersect','transform']);
@@ -272,6 +271,7 @@ export function createPluginConfig(ctx,{readBody,send}){
   return {summary:{entryId:entry.options.id,package:origin.package,owner:origin.owner,bundle:origin.bundle,kind:origin.kind,source:origin.source,label:labelOf(origin.label,entry),state,configurable:!reason,writable,...reason?{reason}:!writable?{reason:service().dshGoAsyncChange===true?'overridden':'host-unavailable'}:{}},schema,graph,origin};
  }
  async function rows(targetId){
+  const {bundleEntrySources}=await import('./config-source.js');
   const editor=service(),manager=ctx.get('pluginManager');if(typeof manager?.listBundles!=='function')throw fault(503,'host-unavailable');
   const bundles=await manager.listBundles();if(serviceIdentity(ctx.get('pluginManager'))!==serviceIdentity(manager)||serviceIdentity(service())!==serviceIdentity(editor))throw fault(409,'conflict');
   const all=[...ctx.get('loader').entries()].filter(e=>typeof e.options.id==='string'),address=new Set(editor.entries()),sources=bundleEntrySources(ctx,all,bundles);const count=new Map();for(const e of all)count.set(e.options.id,(count.get(e.options.id)??0)+1);
