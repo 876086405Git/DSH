@@ -163,6 +163,21 @@ void main() {
       expect(out.alerts, hasLength(2));
     });
 
+    test('completed previews mask the whole reply and cap each line in code points', () async {
+      const key = 'sk-1234567890abcdefghijklmnopqrstuvwxyz';
+      final reply = '## **成**\n\n- $key ${'🙂' * 205}';
+      source.outcomes['s1'] = outcome(18, 'completed', reply: reply);
+      start();
+      source.emit(const SessionStatusEvent('s1', true));
+      source.emit(const SessionStatusEvent('s1', false));
+      await settle();
+
+      final alert = out.alerts.single;
+      const prefix = '成 sk-12345•••••• ';
+      expect(alert.text, '已完成 · $prefix${'🙂' * 103}…');
+      expect(alert.reply, '$prefix${'🙂' * 183}…');
+    });
+
     test('stopped and failed turns have their own words', () async {
       source.outcomes['s1'] = outcome(19, 'aborted', cause: 'user');
       source.outcomes['s2'] = outcome(

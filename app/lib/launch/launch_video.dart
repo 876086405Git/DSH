@@ -36,11 +36,11 @@ class LaunchClipChannel {
   static const _channel = MethodChannel('dsh/launch_clip');
   final _open = <int, LaunchClip>{};
 
-  Future<int?> open(String path) async {
+  Future<({int texture, int rotation})?> open(String path) async {
     try {
       final raw = await _channel.invokeMapMethod<String, Object?>('open', {'path': path});
       final id = raw?['texture'];
-      return id is int ? id : null;
+      return id is int ? (texture: id, rotation: raw?['rotation'] as int? ?? 0) : null;
     } on MissingPluginException {
       return null;
     } on PlatformException {
@@ -77,6 +77,7 @@ class LaunchClip extends LaunchMedia {
   final Duration _length;
 
   int? _texture;
+  int _rotation = 0;
   bool _shown = false;
   bool _wantPlay = false;
   bool _disposed = false;
@@ -105,13 +106,15 @@ class LaunchClip extends LaunchMedia {
   }
 
   Future<void> _prepare(String path) async {
-    final id = await LaunchClipChannel.instance.open(path);
-    if (id == null) return;
+    final opened = await LaunchClipChannel.instance.open(path);
+    if (opened == null) return;
+    final id = opened.texture;
     if (_disposed) {
       unawaited(LaunchClipChannel.instance.close(id));
       return;
     }
     _texture = id;
+    _rotation = opened.rotation;
     LaunchClipChannel.instance._open[id] = this;
     if (_wantPlay) unawaited(LaunchClipChannel.instance.play(id));
   }
@@ -139,7 +142,11 @@ class LaunchClip extends LaunchMedia {
       fit: StackFit.expand,
       children: [
         RawImage(image: _poster, fit: BoxFit.fill, filterQuality: FilterQuality.medium),
-        if (_texture != null && _shown) Texture(textureId: _texture!, filterQuality: FilterQuality.medium),
+        if (_texture != null && _shown)
+          RotatedBox(
+            quarterTurns: _rotation ~/ 90,
+            child: Texture(textureId: _texture!, filterQuality: FilterQuality.medium),
+          ),
       ],
     ),
   );

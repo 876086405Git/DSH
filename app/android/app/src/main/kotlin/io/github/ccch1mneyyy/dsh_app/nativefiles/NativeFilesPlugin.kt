@@ -199,7 +199,7 @@ class NativeFilesPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCall
             val count = input.read(buffer)
             check(count != 0) { "empty file chunk" }
             if (count < 0) { input.close(); entry.stream = null; entry.ended = true; null }
-            else { s.budget.accept(entry.handle, count); buffer.copyOf(count) }
+            else { s.budget.accept(entry.handle, count); if (count == buffer.size) buffer else buffer.copyOf(count) }
         }
     }
 

@@ -92,10 +92,30 @@ void main() {
           exempt: false,
           shown: none,
           blockedAt: before,
-          transportFailed: true,
+          transportFailed: () => true,
         ),
         BackgroundNetReason.failures,
       );
+    });
+
+    test('reads the conversation only when transport evidence can decide the reason', () {
+      var reads = 0;
+      BackgroundNetReason? reason(bool? exempt, {DateTime? blockedAt}) => BackgroundNetPolicy.onReturn(
+        since: since,
+        exempt: exempt,
+        shown: none,
+        blockedAt: blockedAt,
+        transportFailed: () {
+          reads++;
+          return true;
+        },
+      );
+      expect(reason(true), isNull);
+      expect(reason(null), isNull);
+      expect(reason(false, blockedAt: since), BackgroundNetReason.blocked);
+      expect(reads, 0);
+      expect(reason(false), BackgroundNetReason.failures);
+      expect(reads, 1);
     });
 
     test('each reason at most twice', () {
@@ -103,7 +123,7 @@ void main() {
       expect(BackgroundNetPolicy.onReturn(since: since, exempt: false, shown: twice, blockedAt: since), isNull);
       // Another reason still has its own two.
       expect(
-        BackgroundNetPolicy.onReturn(since: since, exempt: false, shown: twice, transportFailed: true),
+        BackgroundNetPolicy.onReturn(since: since, exempt: false, shown: twice, transportFailed: () => true),
         BackgroundNetReason.failures,
       );
     });

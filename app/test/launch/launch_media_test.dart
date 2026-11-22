@@ -3,15 +3,16 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:dsh_app/launch/custom_launch.dart';
 import 'package:dsh_app/launch/launch_media.dart';
 import 'package:dsh_app/launch/launch_motion.dart';
 import 'package:dsh_app/launch/launch_state.dart';
+import 'package:dsh_app/launch/launch_video.dart';
 import 'package:dsh_app/ui/launch/launch_overlay.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support.dart';
@@ -151,6 +152,59 @@ Future<LaunchController> _show(WidgetTester tester, _ObservedMedia media) async 
 }
 
 void main() {
+  testWidgets('video rotation turns only the texture and preserves displayed dimensions', (tester) async {
+    final dir = Directory.systemTemp.createTempSync('dsh-launch-rotation-');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final poster = File('${dir.path}/poster.gif')..writeAsBytesSync(_gif([10]));
+    const channel = MethodChannel('dsh/launch_clip');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    for (final rotation in <int?>[90, 270, null]) {
+      final calls = <String>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.method);
+        return call.method == 'open' ? {'texture': 42, 'rotation': ?rotation} : null;
+      });
+      final media = (await tester.runAsync(() async {
+        final opened = await LaunchClip.open(
+          CustomLaunch(
+            kind: LaunchMediaKind.video,
+            path: '${dir.path}/clip.mp4',
+            poster: poster.path,
+            width: 90,
+            height: 160,
+            durationMs: 1000,
+          ),
+        );
+        // The native `open` it started without waiting has answered.
+        await Future<void>.delayed(Duration.zero);
+        return opened;
+      }))!;
+      media.play();
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(child: SizedBox(width: 90, height: 160, child: media.view())),
+        ),
+      );
+      await messenger.handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(const MethodCall('showing', {'texture': 42})),
+        (_) {},
+      );
+      await tester.pump();
+      expect(media.size, const Size(90, 160));
+      expect(tester.widget<RotatedBox>(find.byType(RotatedBox)).quarterTurns, (rotation ?? 0) ~/ 90);
+      expect(tester.getSize(find.byType(RotatedBox)), const Size(90, 160));
+      expect(tester.getSize(find.byType(Texture)), rotation == null ? const Size(90, 160) : const Size(160, 90));
+      expect(find.byType(RawImage), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      media.dispose();
+      await tester.pump();
+      expect(calls, ['open', 'play', 'close']);
+    }
+  });
+
   testWidgets('two frames: 100 + 2000 ms, then exactly one completion', (tester) async {
     final media = await _open(tester, [10, 200]);
     expect(media.durations, [100, 2000]);

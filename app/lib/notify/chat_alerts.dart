@@ -170,11 +170,13 @@ class TurnOutcome {
   };
 
   /// The alert line, in the chat's own words (`NoticeRow`).
-  String get text {
+  String get text => _textWithFlatReply(reason.kind == 'completed' ? _flatSnippet(reply) : null);
+
+  String _textWithFlatReply(String? flatReply) {
     switch (reason.kind) {
       case 'completed':
-        final s = snippet(reply);
-        return s == null ? appL10n.stateAlertTurnDone : appL10n.stateAlertCompletedReply(s);
+        final preview = _clipSnippet(flatReply, 120);
+        return preview == null ? appL10n.stateAlertTurnDone : appL10n.stateAlertCompletedReply(preview);
       case 'max-tokens':
         return appL10n.stateAlertOutputLimit;
       case 'aborted':
@@ -195,7 +197,9 @@ class TurnOutcome {
 
 /// First [max] characters of [text] on one line, markdown markers dropped,
 /// credentials masked (before cutting, so no tail of one shows).
-String? snippet(String? text, {int max = 120}) {
+String? snippet(String? text, {int max = 120}) => _clipSnippet(_flatSnippet(text), max);
+
+String? _flatSnippet(String? text) {
   if (text == null) return null;
   final flat = _masked(text)
       .replaceAll(RegExp(r'```[a-zA-Z0-9_-]*'), ' ')
@@ -203,10 +207,14 @@ String? snippet(String? text, {int max = 120}) {
       .replaceAll(RegExp(r'\*\*|__|`'), '')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
-  if (flat.isEmpty) return null;
-  final chars = flat.runes.toList();
+  return flat.isEmpty ? null : flat;
+}
+
+String? _clipSnippet(String? flat, int max) {
+  if (flat == null || flat.length <= max) return flat;
+  final chars = flat.runes.take(max + 1).toList();
   if (chars.length <= max) return flat;
-  return '${String.fromCharCodes(chars.take(max)).trimRight()}…';
+  return '${String.fromCharCodes(chars, 0, max).trimRight()}…';
 }
 
 /// The approval line, with the same verbs as the approval card.
@@ -409,8 +417,9 @@ TurnOutcome? outcomeFromEvents(List<SessionLogEvent> events, {String? title}) {
     switch (event) {
       case TurnEndedEvent():
         end = event;
-      case AssistantMessageEvent(:final message) when message.text.trim().isNotEmpty:
-        reply = message.text;
+      case AssistantMessageEvent(:final message):
+        final text = message.text;
+        if (text.trim().isNotEmpty) reply = text;
       case TurnStartedEvent():
         end = null;
         reply = null;
@@ -785,15 +794,16 @@ class HostAlertTracker {
     if (outcome == null) return;
     if (!_turnsSeen.add('$sessionId@${outcome.seq}')) return;
     final title = alertTitle(outcome.title ?? info?.title);
+    final reply = outcome.kind == AlertKind.done ? _flatSnippet(outcome.reply) : null;
     final alert = ChatAlert(
       host: host,
       sessionId: sessionId,
       kind: outcome.kind,
       key: turnKey,
       title: title,
-      text: outcome.text,
+      text: outcome._textWithFlatReply(reply),
       turnEndKind: outcome.reason.kind,
-      reply: outcome.kind == AlertKind.done ? snippet(outcome.reply, max: 200) : null,
+      reply: _clipSnippet(reply, 200),
       endSeq: outcome.seq,
       turn: outcome.turn,
       sourceSessionId: sessionId,

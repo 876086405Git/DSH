@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import io.github.ccch1mneyyy.dsh_app.speech.CallCapture
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -153,10 +154,10 @@ class WavRecorder(
         synchronized(captureState) { captureError }?.let { throw it }
         val raw = synchronized(pcm) { pcm.toByteArray() }
         if (raw.size < 2) return null
+        if (rate == TARGET_RATE) return CallCapture.wav(raw)
         val samples = ShortArray(raw.size / 2)
         ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(samples)
-        val pcm16k = if (rate == TARGET_RATE) samples else resample(samples, rate, TARGET_RATE)
-        return wav(pcm16k)
+        return wav(resample(samples, rate, TARGET_RATE))
     }
 
     /** Stops capturing and drops the audio. */
