@@ -163,6 +163,24 @@ class _ReceiptMemory extends CompanionMemoryOwner {
   }
 }
 
+/// Also records the room the Page's visit entered: memory work now belongs to
+/// the process-level agent's visit, not to the Page's State (A1).
+class _RoomMemory2 extends _ReceiptMemory {
+  _RoomMemory2(super.store, super.legacy);
+
+  Object? room;
+
+  @override
+  void enter(
+    Object room, {
+    required CompanionMemoryTransport? Function() transport,
+    required int Function(String) estimateTokens,
+  }) {
+    this.room = room;
+    super.enter(room, transport: transport, estimateTokens: estimateTokens);
+  }
+}
+
 /// Both clocks for the initiative owner, moved by the test.
 class _Clock {
   int wall = DateTime.utc(2026, 11, 5, 10, 30).millisecondsSinceEpoch;
@@ -206,6 +224,88 @@ String _sse(List<String> words, {bool end = true}) => [
     })}\n\n',
   if (end) 'event: message_stop\ndata: {"type":"message_stop"}\n\n',
 ].join();
+
+/// One complete phone-model reply on the light Messages endpoint: optional
+/// words, then the model's own tool_use blocks (id, name, input) with the
+/// matching stop reason. Only the model plans tasks and memory changes now.
+http.Response _reply2({String? words, List<(String, String, Map<String, Object?>)> calls = const []}) {
+  var index = 0;
+  final events = <Map<String, Object?>>[
+    {
+      'type': 'message_start',
+      'message': {
+        'role': 'assistant',
+        'content': <Object?>[],
+        'usage': {'input_tokens': 10, 'output_tokens': 0},
+      },
+    },
+    if (words != null) ...[
+      {
+        'type': 'content_block_start',
+        'index': index,
+        'content_block': {'type': 'text', 'text': ''},
+      },
+      {
+        'type': 'content_block_delta',
+        'index': index,
+        'delta': {'type': 'text_delta', 'text': words},
+      },
+      {'type': 'content_block_stop', 'index': index++},
+    ],
+    for (final (id, name, input) in calls) ...[
+      {
+        'type': 'content_block_start',
+        'index': index,
+        'content_block': {'type': 'tool_use', 'id': id, 'name': name, 'input': <String, Object?>{}},
+      },
+      {
+        'type': 'content_block_delta',
+        'index': index,
+        'delta': {'type': 'input_json_delta', 'partial_json': jsonEncode(input)},
+      },
+      {'type': 'content_block_stop', 'index': index++},
+    ],
+    {
+      'type': 'message_delta',
+      'delta': {'stop_reason': calls.isEmpty ? 'end_turn' : 'tool_use'},
+      'usage': {'input_tokens': 10, 'output_tokens': 5},
+    },
+    {'type': 'message_stop'},
+  ];
+  return http.Response.bytes(
+    utf8.encode([for (final event in events) 'event: ${event['type']}\ndata: ${jsonEncode(event)}\n\n'].join()),
+    200,
+    headers: {'content-type': 'text/event-stream; charset=utf-8'},
+  );
+}
+
+/// The room's own chat turn (it always offers tools), not memory upkeep,
+/// lookup answers or adapter requests, which go to the same endpoint.
+bool _isChat2(Map<String, Object?> body) => body['tools'] is List;
+
+/// The tool results this continuation carries back to the model.
+List<Map<String, Object?>> _toolResults2(Map<String, Object?> body) {
+  final last = (body['messages']! as List).last as Map;
+  final content = last['content'];
+  if (last['role'] != 'user' || content is! List) return const [];
+  return [
+    for (final part in content.cast<Map>())
+      if (part['type'] == 'tool_result') Map<String, Object?>.from(part),
+  ];
+}
+
+/// The decoded body of the single tool result in this continuation.
+Map<String, Object?> _toolResult2(Map<String, Object?> body) =>
+    jsonDecode(_toolResults2(body).single['content']! as String) as Map<String, Object?>;
+
+/// Waits on real and fake time together until [done] holds, bounded.
+Future<void> _until2(WidgetTester tester, bool Function() done, {int rounds = 400}) async {
+  for (var i = 0; i < rounds && !done(); i++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  expect(done(), isTrue, reason: 'the awaited condition never held');
+}
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -3317,33 +3417,58 @@ void main() {
                   throw StateError('Unexpected reminder method ${call.method}');
               }
             });
+            // The phone model plans each turn (A1): scripted replies stand in
+            // for its tool calls; every other request (memory upkeep) is refused.
+            final script = <http.Response Function(Map<String, Object?>)>[];
+            final chats = <Map<String, Object?>>[];
             await openLight(
               tester,
-              apiKey: '',
-              client: MockClient((_) async {
+              apiKey: 'sk-test',
+              client: MockClient((request) async {
+                final body = jsonDecode(request.body) as Map<String, Object?>;
+                if (!_isChat2(body)) return http.Response('', 401);
                 posts++;
-                return http.Response('', 401);
+                chats.add(body);
+                return script.removeAt(0)(body);
               }),
               extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
             );
             expect(await memoryOf(tester), same(memory));
             await settleMixed(tester, memory.migrateLocal());
 
-            Future<void> sendReminder(String raw) async {
-              final retained = Completer<void>();
-              memory.receiptStarted = (_) => retained.complete();
+            Future<void> sendReminder(String raw, List<http.Response Function(Map<String, Object?>)> replies) async {
+              script.addAll(replies);
               await tester.enterText(find.byType(TextField), raw);
               await tester.pump();
               await tester.tap(find.byIcon(AppIcons.send).last);
-              await settleMixed(tester, retained.future);
-              memory.receiptStarted = null;
+              await _until2(
+                tester,
+                () => script.isEmpty && !tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running,
+              );
               await settleMixed(tester, memory.lastReceipt);
               await tester.pump();
               expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
             }
 
             const originalRaw = '2026-11-22 08:00 Asia/Shanghai提醒我带证件';
-            await sendReminder(originalRaw);
+            await sendReminder(originalRaw, [
+              (_) => _reply2(
+                calls: [
+                  (
+                    'r18-create',
+                    'reminder',
+                    {
+                      'operation': 'create',
+                      'text': '带证件',
+                      'localDate': '2026-11-22',
+                      'localTime': '08:00',
+                      'zoneId': 'Asia/Shanghai',
+                    },
+                  ),
+                ],
+              ),
+              (_) => _reply2(words: '好，到点叫你带证件。'),
+            ]);
             final original = memory.store.tasks().single;
             final id = original['task_id']! as String;
             final source = memory.store.messages().singleWhere((row) => row['text'] == originalRaw);
@@ -3408,7 +3533,54 @@ void main() {
             calls.clear();
             now++;
             final raw = operation == 'amend' ? '把带证件的提醒改到08:30' : '取消带证件的提醒';
-            await sendReminder(raw);
+            // The model, not a sentence parser, picks the target: it reads the
+            // original receipt by its exact ID before amending or cancelling.
+            // With a namesake in the room it reads the bounded list instead,
+            // which cannot prove the older one, and asks which one was meant.
+            const which = '你说的是哪一条？去「交代的事」里点给我看看。';
+            Map<String, Object?>? listed;
+            Map<String, Object?>? changedResult;
+            await sendReminder(raw, [
+              if (duplicate) ...[
+                (_) => _reply2(calls: [('r18-list', 'task_status', <String, Object?>{})]),
+                (body) {
+                  listed = _toolResult2(body);
+                  return _reply2(words: which);
+                },
+              ] else ...[
+                (_) => _reply2(
+                  calls: [
+                    ('r18-read', 'task_status', {'taskId': id}),
+                  ],
+                ),
+                (body) {
+                  expect(((_toolResult2(body)['task']! as Map)['task_id']), id);
+                  return _reply2(
+                    calls: [
+                      (
+                        'r18-change',
+                        'reminder',
+                        {
+                          'operation': operation,
+                          'taskId': id,
+                          'expectedTaskRev': 1,
+                          if (operation == 'amend') 'localTime': '08:30',
+                        },
+                      ),
+                    ],
+                  );
+                },
+                (body) {
+                  changedResult = _toolResult2(body);
+                  final task = changedResult!['task']! as Map;
+                  // Her words come only from the receipt the tool returned.
+                  final words = task['cancel_requested'] == 1 && task['state'] == 'queued'
+                      ? '${task['reminder_text']}：取消的要求已记下，还没确认这条提醒已撤下。'
+                      : '${task['reminder_text']}：改好了。';
+                  return _reply2(words: words);
+                },
+              ],
+            ]);
             final command = memory.store.messages().singleWhere((row) => row['text'] == raw);
             expect(command['session_id'], room);
             expect(command['id'], isNot(source['id']));
@@ -3431,8 +3603,17 @@ void main() {
               expect(headsAfter, headsBefore);
               expect(revisionsAfter, revisionsBefore);
               expect(calls.where((call) => const ['capabilities', 'resolve', 'wake'].contains(call.method)), isEmpty);
-              expect(find.text('你说的是哪一条？去「交代的事」里点给我看看。'), findsOneWidget);
+              expect(listed!['readOnly'], isTrue);
+              expect(listed!['limited'], isTrue);
+              final rows = (listed!['tasks']! as List).cast<Map>();
+              expect(rows.map((row) => row['task_id']), isNot(contains(id)));
+              expect(rows.where((row) => row['reminder_text'] == '带证件').map((row) => row['task_id']), [
+                other!['task_id'],
+              ]);
+              expect(find.text(which), findsOneWidget);
             } else {
+              expect(changedResult!['accepted'], isTrue);
+              expect((changedResult!['task']! as Map)['task_id'], id);
               expect(accepted!['task_id'], id);
               expect(accepted['task_rev'], 2);
               expect(accepted['source_message_id'], source['id']);
@@ -3457,13 +3638,16 @@ void main() {
               expect(wakes, hasLength(1));
               expect(wakes.single.arguments, {'taskId': id});
               expect(calls.where((call) => call.method == 'resolve'), hasLength(operation == 'amend' ? 1 : 0));
-              expect(find.text('你说的是哪一条？去「交代的事」里点给我看看。'), findsNothing);
+              expect(find.text(which), findsNothing);
             }
             expect(
               Map<String, Object?>.from(db.select('SELECT * FROM memory_messages WHERE id=?', [source['id']]).single),
               sourceBefore,
             );
-            expect(posts, 0);
+            // Only the scripted chat turns went out: two for the original
+            // reminder, then this instruction's reads, change and reply.
+            expect(posts, 2 + (duplicate ? 2 : 3));
+            expect((chats.first['tools']! as List).cast<Map>().map((tool) => tool['name']), contains('reminder'));
           });
         }
       }
@@ -3542,30 +3726,55 @@ void main() {
                   throw StateError('Unexpected reminder method ${call.method}');
               }
             });
+            // The phone model plans each turn (A1): scripted replies stand in
+            // for its tool calls; every other request (memory upkeep) is refused.
+            final script = <http.Response Function(Map<String, Object?>)>[];
             await openLight(
               tester,
-              apiKey: '',
-              client: MockClient((_) async {
+              apiKey: 'sk-test',
+              client: MockClient((request) async {
+                final body = jsonDecode(request.body) as Map<String, Object?>;
+                if (!_isChat2(body)) return http.Response('', 401);
                 posts++;
-                return http.Response('', 401);
+                return script.removeAt(0)(body);
               }),
               extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
             );
             expect(await memoryOf(tester), same(memory));
             await settleMixed(tester, memory.migrateLocal());
 
-            Future<void> say(String raw) async {
-              final retained = Completer<void>();
-              memory.receiptStarted = (_) => retained.complete();
+            Future<void> say(String raw, List<http.Response Function(Map<String, Object?>)> replies) async {
+              script.addAll(replies);
               await tester.enterText(find.byType(TextField), raw);
               await tester.pump();
               await tester.tap(find.byIcon(AppIcons.send).last);
-              await settleMixed(tester, retained.future);
-              memory.receiptStarted = null;
+              await _until2(
+                tester,
+                () => script.isEmpty && !tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running,
+              );
               await settleMixed(tester, memory.lastReceipt);
               await tester.pump();
               expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
             }
+
+            List<http.Response Function(Map<String, Object?>)> create(String date) => [
+              (_) => _reply2(
+                calls: [
+                  (
+                    'r22-create-$date',
+                    'reminder',
+                    {
+                      'operation': 'create',
+                      'text': '带证件',
+                      'localDate': date,
+                      'localTime': '08:00',
+                      'zoneId': 'Asia/Shanghai',
+                    },
+                  ),
+                ],
+              ),
+              (_) => _reply2(words: '好，到点叫你带证件。'),
+            ];
 
             List<MemoryRow> readRows(String sql) => [for (final row in db.select(sql)) Map<String, Object?>.from(row)];
             List<List<MemoryRow>> ledger() => [
@@ -3574,7 +3783,7 @@ void main() {
               readRows('SELECT * FROM companion_task_receipts ORDER BY runner_receipt_seq'),
             ];
             const originalRaw = '2026-11-23 08:00 Asia/Shanghai提醒我带证件';
-            await say(originalRaw);
+            await say(originalRaw, create('2026-11-23'));
             final original = memory.store.tasks().single;
             final id = original['task_id']! as String;
             final room = memory.store.lightSessionId;
@@ -3634,19 +3843,31 @@ void main() {
             if (!hostWindow) {
               now++;
               const otherRaw = '2026-11-24 08:00 Asia/Shanghai提醒我带证件';
-              await say(otherRaw);
+              await say(otherRaw, create('2026-11-24'));
               final source = memory.store.messages().singleWhere((row) => row['text'] == otherRaw);
               other = memory.store.taskForCommand(source['id']! as String, 0)!;
               expect(other['task_id'], isNot(id));
               final before = ledger();
               calls.clear();
               now++;
-              await say('取消带证件的提醒');
+              // The model reads only the bounded list, which shows the newer
+              // namesake and cannot prove the older one: it asks which (A1).
+              const which = '你说的是哪一条？去「交代的事」里点给我看看。';
+              Map<String, Object?>? listed;
+              await say('取消带证件的提醒', [
+                (_) => _reply2(calls: [('r22-list', 'task_status', <String, Object?>{})]),
+                (body) {
+                  listed = _toolResult2(body);
+                  return _reply2(words: which);
+                },
+              ]);
+              expect(listed!['limited'], isTrue);
+              expect((listed!['tasks']! as List).cast<Map>().map((row) => row['task_id']), isNot(contains(id)));
               ambiguousSource = memory.store.messages().singleWhere((row) => row['text'] == '取消带证件的提醒');
               expect(memory.store.taskForCommand(ambiguousSource['id']! as String, 0), isNull);
               expect(ledger(), before);
               expect(calls.where((call) => const ['capabilities', 'resolve', 'wake'].contains(call.method)), isEmpty);
-              expect(find.text('你说的是哪一条？去「交代的事」里点给我看看。'), findsOneWidget);
+              expect(find.text(which), findsOneWidget);
             }
             final defaultRows = memory.store.tasks(sourceSessionId: room);
             expect(defaultRows, hasLength(100));
@@ -3784,7 +4005,8 @@ void main() {
               ),
               sourceBefore,
             );
-            expect(posts, 0);
+            // Only the scripted chat turns: the errands page itself never asks the model.
+            expect(posts, hostWindow ? 2 : 6);
           },
         );
       }
@@ -3793,6 +4015,17 @@ void main() {
         testWidgets('E actual Page keeps reminder lookup and factual clause identities, sourceFailure=$rejectSource', (
           tester,
         ) async {
+          // A task reaches this room's result pills only while the app is in
+          // the foreground (the Agent's task UI checks it, A1).
+          final beforeLifecycle = tester.binding.lifecycleState;
+          tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+          addTearDown(() {
+            if (beforeLifecycle != null) {
+              tester.binding.handleAppLifecycleStateChanged(beforeLifecycle);
+            } else {
+              tester.binding.resetInternalState();
+            }
+          });
           const channel = MethodChannel('dsh/companion_reminders');
           final now = DateTime.utc(2026, 11, 21, 10).millisecondsSinceEpoch;
           final db = sqlite3.open('${root.path}/memory.sqlite');
@@ -3805,6 +4038,8 @@ void main() {
           final answerSent = Completer<void>();
           final calls = <String>[];
           final posts = <http.Request>[];
+          final chats = <Map<String, Object?>>[];
+          const rawText = '明天十四点提醒我带证件；帮我查今天青桥美术馆开不开，给我馆方公告；我午后练长笛';
           addTearDown(() async {
             await tester.pumpWidget(const SizedBox());
             memory.dispose();
@@ -3855,7 +4090,39 @@ void main() {
             } else if (request.url.toString() == companionLookupFetchEndpoint) {
               body = {'title': '青桥美术馆公告', 'content': '2026-11-21临时闭馆一天。'};
             } else {
-              final sent = jsonDecode(request.body) as Map;
+              final sent = jsonDecode(request.body) as Map<String, Object?>;
+              if (_isChat2(sent)) {
+                chats.add(sent);
+                // The phone model plans both clauses as its own tool calls in
+                // one message; the factual clause is left to memory (A1).
+                if (chats.length == 1) {
+                  expect(jsonEncode(sent['messages']), contains(rawText));
+                  return _reply2(
+                    calls: [
+                      (
+                        'e-reminder',
+                        'reminder',
+                        {'operation': 'create', 'text': '带证件', 'localDate': '2026-11-22', 'localTime': '14:00'},
+                      ),
+                      (
+                        'e-lookup',
+                        'public_lookup',
+                        {
+                          'operation': 'create',
+                          'placeName': '青桥美术馆',
+                          'localDate': '2026-11-21',
+                          'question': '今天开不开，给我馆方公告',
+                        },
+                      ),
+                    ],
+                  );
+                }
+                final results = _toolResults2(sent);
+                expect(results.map((result) => result['tool_use_id']), ['e-reminder', 'e-lookup']);
+                final lookup = (jsonDecode(results.last['content']! as String) as Map)['task']! as Map;
+                // Her words come only from the lookup receipt the tool returned.
+                return _reply2(words: '${(lookup['result'] as Map?)?['conclusion'] ?? '没查到。'}');
+              }
               if (sent['system'] == companionMemoryExtractionPrompt) {
                 return http.Response.bytes(
                   utf8.encode(_sse(['{"ops":[]}'])),
@@ -3864,7 +4131,7 @@ void main() {
                 );
               }
               expect(sent['system'], companionLookupAnswerPrompt);
-              final input = jsonDecode(sent['messages'][0]['content']) as Map;
+              final input = jsonDecode(((sent['messages']! as List)[0] as Map)['content'] as String) as Map;
               expect(input.keys.toSet(), {'task', 'sources'});
               expect(jsonEncode(input), isNot(contains('带证件')));
               expect(jsonEncode(input), isNot(contains('练长笛')));
@@ -3903,14 +4170,16 @@ void main() {
               "CREATE TRIGGER reject_lookup_source BEFORE INSERT ON memory_events BEGIN SELECT RAISE(ABORT,'fixture'); END",
             );
           }
-          const raw = '明天十四点提醒我带证件；帮我查今天青桥美术馆开不开，给我馆方公告；我午后练长笛';
+          const raw = rawText;
           await tester.enterText(find.byType(TextField), raw);
           await tester.pump();
           await tester.tap(find.byIcon(AppIcons.send).last);
           await settleMixed(tester, clockRead.future);
           if (rejectSource) {
             await tester.pumpAndSettle();
-            expect(find.text('刚才没记下来，你写的还在，再试一次？'), findsOneWidget);
+            // Nothing classifies the line before the model now (A1): a failed source
+            // commit is the room's ordinary send failure, with the draft kept.
+            expect(find.text('这句话没送出去，要不要再说一次？'), findsOneWidget);
             expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
             expect(memory.store.messages(), isEmpty);
             expect(memory.store.tasks(), isEmpty);
@@ -3919,6 +4188,10 @@ void main() {
             expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, raw);
           } else {
             await settleMixed(tester, answerSent.future);
+            await _until2(
+              tester,
+              () => chats.length == 2 && !tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running,
+            );
             await settleMixed(tester, memory.lastReceipt);
             await tester.pump();
             final original = memory.store.messages().singleWhere((message) => message['role'] == 'user');
@@ -3971,6 +4244,7 @@ void main() {
           var searches = 0;
           var fetches = 0;
           var answers = 0;
+          final chats = <Map<String, Object?>>[];
           addTearDown(() async {
             if (!release.isCompleted) {
               release.complete();
@@ -4017,7 +4291,47 @@ void main() {
                   headers: {'content-type': 'application/json; charset=utf-8'},
                 );
               }
-              final body = jsonDecode(request.body) as Map;
+              final body = jsonDecode(request.body) as Map<String, Object?>;
+              if (_isChat2(body)) {
+                // The phone model plans each instruction as its own tool call
+                // (A1); a cancel reads the original receipt before naming it.
+                chats.add(body);
+                final text = jsonEncode(body['messages']);
+                if (!text.contains('取消青桥美术馆的查询')) {
+                  return _reply2(
+                    calls: [
+                      (
+                        'e2-lookup',
+                        'public_lookup',
+                        {
+                          'operation': 'create',
+                          'placeName': '青桥美术馆',
+                          'localDate': '2026-11-21',
+                          'question': '今天开不开，给我馆方公告',
+                        },
+                      ),
+                    ],
+                  );
+                }
+                final results = _toolResults2(body);
+                if (results.isEmpty) {
+                  return _reply2(calls: [('e2-list', 'task_status', <String, Object?>{})]);
+                }
+                final result = _toolResult2(body);
+                if (result['tasks'] case final List listed) {
+                  final task = listed.cast<Map>().singleWhere((row) => row['kind'] == 'public.lookup');
+                  return _reply2(
+                    calls: [
+                      (
+                        'e2-cancel',
+                        'public_lookup',
+                        {'operation': 'cancel', 'taskId': task['task_id'], 'expectedTaskRev': task['task_rev']},
+                      ),
+                    ],
+                  );
+                }
+                return _reply2(words: '好，不查了。');
+              }
               if (body['system'] == companionMemoryExtractionPrompt) {
                 return http.Response.bytes(
                   utf8.encode(_sse(['{"ops":[]}'])),
@@ -4027,7 +4341,7 @@ void main() {
               }
               expect(body['system'], companionLookupAnswerPrompt);
               answers++;
-              final input = jsonDecode(body['messages'][0]['content']) as Map;
+              final input = jsonDecode(((body['messages']! as List)[0] as Map)['content'] as String) as Map;
               final answer = {
                 'status': 'done',
                 'conclusion': '馆方公告说明今天临时闭馆。',
@@ -4068,11 +4382,25 @@ void main() {
             await tester.tap(find.byIcon(AppIcons.send).last);
             await settleMixed(tester, cancelledTask.future);
             memory.removeListener(changed);
+            await _until2(
+              tester,
+              () => chats.length == 4 && !tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running,
+            );
             await settleMixed(tester, memory.lastReceipt);
             expect(memory.store.lookupTask(initial['task_id']! as String)!['cancel_requested'], 1);
           } else {
-            await tester.pumpWidget(const SizedBox());
+            // Leave the room while the app keeps running: the process-level
+            // agent and its phone client outlive the Page (A1). Tearing down
+            // the whole ProviderScope would end the app, not just the visit.
+            unawaited(
+              tester
+                  .state<NavigatorState>(find.byType(Navigator))
+                  .pushReplacement(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('新的页面')))),
+            );
             await tester.pump();
+            await tester.pump(const Duration(milliseconds: 500));
+            await tester.pump(const Duration(milliseconds: 500));
+            expect(find.byType(CompanionPage), findsNothing);
           }
           release.complete();
           await settleMixed(tester, originalDrain);
@@ -4083,6 +4411,8 @@ void main() {
           expect(searches, 1);
           expect([fetches, answers], after == 'cancel' ? [0, 0] : [1, 1]);
           expect(finalTask['state'], after == 'cancel' ? 'cancelled' : 'done');
+          // The interrupted first turn never continues with the late receipt.
+          expect(chats, hasLength(after == 'cancel' ? 4 : 1));
           expect(
             commands.where((command) => command.$1 == 'say' && jsonEncode(command.$2).contains('馆方公告说明今天临时闭馆')),
             isEmpty,
@@ -4138,12 +4468,37 @@ void main() {
                 _ => throw StateError('Unexpected reminder method ${call.method}'),
               };
             });
+            // The phone model plans each turn (A1): the first plans the
+            // reminders as tool calls; a later "不用提醒了" reads the room's
+            // receipts first. Every other request (memory upkeep) is refused.
+            Map<String, Object?> reminder(String text) => {
+              'operation': 'create',
+              'text': text,
+              'localDate': '2026-03-08',
+              'localTime': '03:10',
+              'zoneId': 'America/Los_Angeles',
+            };
+            Map<String, Object?>? listed;
             await openLight(
               tester,
               apiKey: 'sk-test',
-              client: MockClient((_) async {
+              client: MockClient((request) async {
+                final body = jsonDecode(request.body) as Map<String, Object?>;
+                if (!_isChat2(body)) return http.Response('', 401);
                 posts++;
-                return http.Response('', 401);
+                if (!jsonEncode(body['messages']).contains('不用提醒了')) {
+                  return _reply2(
+                    calls: [
+                      ('d-keys', 'reminder', reminder('带钥匙')),
+                      if (after == 'accepted then leave') ('d-papers', 'reminder', reminder('带证件')),
+                    ],
+                  );
+                }
+                if (_toolResults2(body).isEmpty) {
+                  return _reply2(calls: [('d-list', 'task_status', <String, Object?>{})]);
+                }
+                listed = _toolResult2(body);
+                return _reply2(words: '现在没有要撤的提醒。');
               }),
               extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
             );
@@ -4172,9 +4527,12 @@ void main() {
               }
 
               memory.addListener(changed);
+              // While her tool waits on the phone, any next line may go: it
+              // retires the pending turn instead of waiting behind it (A1; the
+              // old composer held ordinary text and let only controls through).
               await tester.enterText(find.byType(TextField), '我午后练长笛');
               await tester.pump();
-              expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isTrue);
+              expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
               await tester.enterText(find.byType(TextField), '不用提醒了');
               await tester.pump();
               expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
@@ -4183,8 +4541,14 @@ void main() {
               memory.removeListener(changed);
               final cancellation = memory.lastReceipt;
               expect(identical(cancellation, operation), isFalse);
-              await settleMixed(tester, cancellation);
+              await _until2(
+                tester,
+                () => listed != null && !tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running,
+              );
+              await settleMixed(tester, memory.lastReceipt);
               expect(memory.store.messages().where((row) => row['text'] == '不用提醒了'), hasLength(1));
+              // Nothing was accepted before the platform answered.
+              expect(listed!['tasks'], isEmpty);
             } else {
               await tester.pumpWidget(const SizedBox());
               await tester.pumpWidget(_app(const Scaffold(body: Text('新的页面'))));
@@ -4194,7 +4558,9 @@ void main() {
             await tester.pump();
             expect(memory.store.tasks(), hasLength(accepted.length));
             expect(calls.where((call) => call.method == 'wake'), hasLength(accepted.length));
-            expect(posts, 0);
+            // The retired first turn never continues once its platform call
+            // returns: only the planning request, plus the cancel turn's two.
+            expect(posts, after == 'cancel' ? 3 : 1);
             if (accepted.isNotEmpty) {
               final task = memory.store.tasks().single;
               expect(task['task_id'], accepted.single['task_id']);
@@ -4296,12 +4662,43 @@ void main() {
                 throw StateError('Unexpected reminder method ${call.method}');
             }
           });
+          // The phone model plans both clauses as its own reminder calls (A1)
+          // and then speaks only from the receipts the tools returned.
+          Map<String, Object?> reminder(String text) => {
+            'operation': 'create',
+            'text': text,
+            'localDate': '2026-03-08',
+            'localTime': '03:10',
+            'zoneId': 'America/Los_Angeles',
+          };
+          String line(Map<String, Object?> result) {
+            final task = result['task']! as Map;
+            final status = switch ((task['state'], task['wait_reason'])) {
+              ('done', _) => '设好了，到点我叫你。',
+              ('waiting', 'notifications_disabled') => '通知没开，这条还没设上。去系统设置里打开通知就好。',
+              _ => '还没确认。',
+            };
+            return '${task['reminder_text']}：$status';
+          }
+
           await openLight(
             tester,
             apiKey: 'sk-test',
-            client: MockClient((_) async {
+            client: MockClient((request) async {
+              final body = jsonDecode(request.body) as Map<String, Object?>;
+              if (!_isChat2(body)) return http.Response('', 401);
               posts++;
-              return http.Response('', 401);
+              final results = _toolResults2(body);
+              if (results.isEmpty) {
+                return _reply2(
+                  calls: [('d-keys', 'reminder', reminder('带钥匙')), ('d-papers', 'reminder', reminder('带证件'))],
+                );
+              }
+              return _reply2(
+                words: [
+                  for (final result in results) line(jsonDecode(result['content']! as String) as Map<String, Object?>),
+                ].join('\n'),
+              );
             }),
             extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
           );
@@ -4323,12 +4720,18 @@ void main() {
             expect(memory.store.tasks(), isEmpty);
             expect(calls.where((call) => call.method == 'resolve' || call.method == 'wake'), isEmpty);
             expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, raw);
-            expect(find.text('刚才没记下来，你写的还在，再试一次？'), findsOneWidget);
+            // Nothing classifies the line before the model now (A1): a failed source
+            // commit is the room's ordinary send failure, with the draft kept.
+            expect(find.text('这句话没送出去，要不要再说一次？'), findsOneWidget);
           } else {
             await settleMixed(tester, twoWakes.future);
+            await _until2(
+              tester,
+              () => posts == 2 && !tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running,
+            );
             await settleMixed(tester, memory.lastReceipt);
             await tester.pump();
-            final source = memory.store.messages().single;
+            final source = memory.store.messages().where((row) => row['role'] == 'user').single;
             final tasks = memory.store.tasks();
             expect(source['text'], raw);
             expect(tasks, hasLength(2));
@@ -4343,7 +4746,8 @@ void main() {
             expect(memory.store.taskReceipts(waiting['task_id']! as String).single['outcome'], 'not_performed');
             expect(find.text('带钥匙：设好了，到点我叫你。\n带证件：通知没开，这条还没设上。去系统设置里打开通知就好。'), findsOneWidget);
           }
-          expect(posts, 0);
+          // No model request before the source is committed; then one plan and one reply.
+          expect(posts, rejectSource ? 0 : 2);
         });
       }
 
@@ -4541,7 +4945,7 @@ void main() {
 
         // The phone owner lives across room visits, as in the app. The test
         // adds only a receipt observer; the Page still submits and extracts.
-        final memory = _ReceiptMemory(
+        final memory = _RoomMemory2(
           CompanionMemoryStore(
             sqlite3.open('${root.path}/memory.sqlite'),
             nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch,
@@ -4616,8 +5020,11 @@ void main() {
         final source = memory.store.messages().singleWhere((row) => row['role'] == 'user');
         expect(source['text'], realName);
         expect(source['scope'], 'real');
-        final page = tester.state(find.byType(CompanionPage));
-        expect(await tester.runAsync(() => memory.extract(page, forceTail: true)), CompanionMemoryWork.committed);
+        // The visit the Page attached owns this memory work now (A1).
+        expect(
+          await tester.runAsync(() => memory.extract(memory.room!, forceTail: true)),
+          CompanionMemoryWork.committed,
+        );
         expect(extracts, hasLength(1));
         final card = memory.store.cards().single;
         expect(card['text'], realName);
@@ -4929,6 +5336,9 @@ void main() {
                 },
                 {
                   'type': 'content_block_delta',
+                  // The Messages stream names each content block; the phone
+                  // agent reads tool blocks by this index (A1).
+                  'index': 0,
                   'delta': {'type': 'text_delta', 'text': answer},
                 },
                 {
@@ -4948,10 +5358,24 @@ void main() {
             headers: {'content-type': 'text/event-stream; charset=utf-8'},
           );
         });
-        await openLight(tester, apiKey: 'sk-test', client: client);
+        final owner = _RoomMemory2(
+          CompanionMemoryStore(
+            sqlite3.open('${root.path}/memory.sqlite'),
+            nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch,
+          ),
+          CompanionLocal.at(root),
+        );
+        addTearDown(owner.dispose);
+        await openLight(
+          tester,
+          apiKey: 'sk-test',
+          client: client,
+          extra: [companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => owner)],
+        );
         memory = await memoryOf(tester);
         await settleMixed(tester, memory.migrateLocal());
-        final page = tester.state(find.byType(CompanionPage));
+        // The visit the Page attached owns this memory work now (A1).
+        final page = owner.room!;
         // Use earlier real messages from another room with the Page's already
         // attached owner/transport. They remain memory sources without becoming
         // unanswered user turns in this room's ordinary chat history.
@@ -5976,9 +6400,27 @@ void main() {
             Future<bool>? clearSettled;
             Future<void>? chatSettled;
             int? clearedRevision;
+            // A correction is the model's own revise call now (A1), not a
+            // local sentence parser: the control turn is one planning request
+            // and one acknowledgment. A later question is held open here.
+            // Memory upkeep requests are refused and not counted.
             final client = MockClient.streaming((request, bytes) async {
+              final sent = jsonDecode(await bytes.transform(utf8.decoder).join()) as Map<String, Object?>;
+              if (!_isChat2(sent)) return http.StreamedResponse(const Stream<List<int>>.empty(), 401);
               destinations.add(request.url);
-              posts.add(jsonDecode(await bytes.transform(utf8.decoder).join()) as Map<String, Object?>);
+              posts.add(sent);
+              final reply = switch (posts.length) {
+                1 => _reply2(
+                  calls: [
+                    ('r21-revise', 'revise', {'card': memory.store.cards().single['id'], 'text': '我琴课一直在周五。'}),
+                  ],
+                ),
+                2 => _reply2(words: acknowledgment),
+                _ => null,
+              };
+              if (reply != null) {
+                return http.StreamedResponse(Stream.value(reply.bodyBytes), 200, headers: reply.headers);
+              }
               final response = body = StreamController<List<int>>();
               if (!requestEntered.isCompleted) requestEntered.complete();
               return http.StreamedResponse(response.stream, 200, headers: {'content-type': 'text/event-stream'});
@@ -6077,6 +6519,15 @@ void main() {
             // the real Widget queue stays held until its platform ACK arrives.
             final clearing = clearSettled = memory.clearWidget(widget);
             await tester.pump();
+            // Her acknowledgment is the model's next reply, made after the
+            // committed revision while the widget clear is still held.
+            await _until2(
+              tester,
+              () =>
+                  posts.length == 2 &&
+                  !tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running &&
+                  voiceCalls.any((call) => call.method == 'speak'),
+            );
             expect(releaseClear.isCompleted, isFalse);
             expect(memory.store.archive['control_revision'], clearedRevision);
             expect(memory.store.archive['widget_clear_pending'], 1);
@@ -6090,7 +6541,14 @@ void main() {
             expect(voiceCalls.where((call) => call.method == 'speak').map((call) => (call.arguments as Map)['text']), [
               acknowledgment,
             ]);
-            expect(posts, isEmpty, reason: 'the explicit correction is a local control, not a model request');
+            // The correction is the model's own revise call; its result body
+            // reports the committed card, and nothing else was asked of it.
+            expect(posts, hasLength(2));
+            expect(jsonEncode(posts.first['messages']), contains(correction));
+            expect((posts.first['tools']! as List).cast<Map>().map((tool) => tool['name']), contains('revise'));
+            final revised = _toolResult2(posts.last);
+            expect(revised['applied'], isTrue);
+            expect(revised['changedCardIds'], [memory.store.cards().single['id']]);
             expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
 
             if (newerChat) {
@@ -6099,9 +6557,9 @@ void main() {
               await tester.tap(find.byIcon(AppIcons.send).last);
               await settleMixed(tester, requestEntered.future);
               chatSettled = memory.lastReceipt;
-              expect(posts, hasLength(1));
-              expect(destinations.single.toString(), companionLightEndpoint);
-              expect(jsonEncode(posts.single['messages']), contains(question));
+              expect(posts, hasLength(3));
+              expect(destinations.toSet().single.toString(), companionLightEndpoint);
+              expect(jsonEncode(posts.last['messages']), contains(question));
               expect(memory.store.messages().singleWhere((row) => row['text'] == question)['role'], 'user');
               body!.add(utf8.encode(_sse([answer], end: false)));
               await settleMixed(tester, answerSpoken.future);
@@ -6152,8 +6610,13 @@ void main() {
                 callsBeforeAck,
                 reason: 'EOF must neither restore the old ACK nor repeat the new sentence',
               );
-              expect(memory.store.requests().singleWhere((row) => row['category'] == 'chat')['terminal'], 'complete');
-              expect(memory.store.messages().singleWhere((row) => row['role'] == 'assistant')['text'], answer);
+              final chatReceipts = memory.store.requests().where((row) => row['category'] == 'chat').toList();
+              expect(chatReceipts, hasLength(3));
+              expect(chatReceipts.every((row) => row['terminal'] == 'complete'), isTrue);
+              expect(memory.store.messages().where((row) => row['role'] == 'assistant').map((row) => row['text']), [
+                acknowledgment,
+                answer,
+              ]);
               expect(
                 await settleMixed(
                   tester,
@@ -6166,8 +6629,8 @@ void main() {
               );
               expect(widgetUpdates.where((value) => value['line'] != null).map((value) => value['line']), [answer]);
             } else {
-              expect(posts, isEmpty);
-              expect(memory.store.requests().where((row) => row['category'] == 'chat'), isEmpty);
+              expect(posts, hasLength(2));
+              expect(memory.store.requests().where((row) => row['category'] == 'chat'), hasLength(2));
               expect(widgetUpdates.where((value) => value['line'] != null), isEmpty);
             }
           },

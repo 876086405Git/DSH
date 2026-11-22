@@ -56,7 +56,7 @@
     },
     {
       "path": "app/test/companion/companion_page_test.dart",
-      "sha256": "d5db60ceebe410dcebe612e173127632dec8dd80c8a2a10899bf97825306d523"
+      "sha256": "e86e5e58413baaa448328e7c1e5caf96af86f15538798a103bef035a493ea065"
     },
     {
       "path": "app/test/companion/companion_recall_room_test.dart",
