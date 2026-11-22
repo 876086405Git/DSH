@@ -48,6 +48,7 @@ class ReplayFrames {
   final ReplayTimeline timeline;
 
   final Map<int, ChatItem> _done = {};
+  final Map<int, TurnTrace> _open = {};
   final Map<int, TurnTrace> _closed = {};
 
   /// The sequence number entry [i] gets (turns start just before their
@@ -77,7 +78,8 @@ class ReplayFrames {
           final end = timeline.turnEnds[i];
           final closed = end != null && time >= end;
           if (!closed) running = true;
-          turns.add(closed ? (_closed[i] ??= _trace(i, entry, done: true)) : _trace(i, entry, done: false));
+          final traces = closed ? _closed : _open;
+          turns.add(traces[i] ??= _trace(i, entry, done: closed));
         case UserEntry():
           items.add(_done[i] ??= _user(i, entry));
         case ReplyEntry():
@@ -192,9 +194,11 @@ class ReplayFrames {
     final start = _time(i);
     // The turn's parts: up to the next turn.
     var last = i;
-    for (var j = i + 1; j < share.entries.length && share.entries[j] is! TurnEntry; j++) {
-      if (e.d != null && share.entries[j].t > e.t + e.d!) break;
-      last = j;
+    if (done) {
+      for (var j = i + 1; j < share.entries.length && share.entries[j] is! TurnEntry; j++) {
+        if (e.d != null && share.entries[j].t > e.t + e.d!) break;
+        last = j;
+      }
     }
     final steps = e.steps ?? 0;
     return TurnTrace(

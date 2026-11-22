@@ -93,6 +93,9 @@ void main() {
     final end = frames.end;
     expect(end.running, isFalse);
     expect(end.turns.every((t) => t.end != null && t.endSeq != null), isTrue);
+    expect(frames.at(reply.start + 10).turns.first, same(thinking.turns.first));
+    expect(streaming.turns.first, same(thinking.turns.first));
+    expect(end.turns.first, isNot(same(thinking.turns.first)));
     expect(end.turns.first.steps, 2);
     expect(end.turns.first.usage.total, 2400);
     expect(end.commands.single.name, 'compact');
