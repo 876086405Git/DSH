@@ -1771,14 +1771,23 @@ class ChatController extends Notifier<ChatState> {
   }
 
   /// Resolves when 「正在停止」 is over: the stopped turn ended, the stop key
-  /// came back after ten seconds, or the follow started over.
+  /// came back after ten seconds, or the follow started over. Also when this
+  /// build goes away (its listeners and stop timer go with it); the caller's
+  /// operation is retired then.
   Future<void> _stopSettled() {
     if (!state.stopping) return Future.value();
     final settled = Completer<void>();
-    final remove = listenSelf((_, next) {
-      if (!next.stopping && !settled.isCompleted) settled.complete();
+    void done() {
+      if (!settled.isCompleted) settled.complete();
+    }
+    final unlisten = listenSelf((_, next) {
+      if (!next.stopping) done();
     });
-    return settled.future.whenComplete(remove);
+    final undispose = ref.onDispose(done);
+    return settled.future.whenComplete(() {
+      unlisten();
+      undispose();
+    });
   }
 
   /// The stop key. What waits in the inbox then goes right away, as if the
