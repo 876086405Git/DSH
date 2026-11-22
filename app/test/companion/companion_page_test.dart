@@ -157,15 +157,6 @@ List<Override> get _hostRoom => [
 /// window and handoff generation were still current at the end.
 const _routeMapPillGap = false;
 
-/// Skipped, product gap: a character-scoped extraction cannot finish after it
-/// remembers two originals. Its first request is already ~5650 of the 6000
-/// memoryBatchInputTokens (13 tool definitions + prompt); the continuation
-/// that carries the two tool results (or, one call per round, the new card in
-/// the context) no longer fits, CompanionMemoryWorker._maintenanceRequest
-/// throws _MemoryRequestBudget, the turn ends incomplete and both sources are
-/// marked skipped (maintenance_incomplete) although the cards were written.
-const _maintenanceContinuationBudgetGap = true;
-
 /// What her model asks for when told [receiptSpokenExample]: the four chosen
 /// receipts into a new 差旅小表.xlsx by eight tonight, carrying on after she leaves.
 const _receiptsCall = (
@@ -6347,7 +6338,7 @@ void main() {
         expect(chats, hasLength(2), reason: 'opening extracts the originals without resending either ordinary chat');
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(seconds: 20));
-      }, skip: _maintenanceContinuationBudgetGap);
+      });
 
       testWidgets('聊天记录: read back right here, over her; back closes it first', (tester) async {
         final client = MockClient.streaming(

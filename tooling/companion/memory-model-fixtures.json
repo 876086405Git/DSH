@@ -28,7 +28,7 @@
     },
     {
       "path": "app/test/companion/companion_memory_control_replay_test.dart",
-      "sha256": "c2d7acf592f77c80c11222ec6b0382bba96f35ac016a155389a830ad2567670a"
+      "sha256": "9a44d95eddc4b8c2468a0909753b3d74ce0b294d98a6c6cf33e29b9d07742485"
     },
     {
       "path": "app/test/companion/companion_memory_dates_replay_test.dart",
@@ -52,11 +52,11 @@
     },
     {
       "path": "app/test/companion/companion_memory_worker_test.dart",
-      "sha256": "4c59cf138c7911b51c1a8a808219fb309a19ce84da036efb11ee091585f3e26e"
+      "sha256": "c0bd48a8176b7bf5b28d0b18302e67c6df7eaf588a0076094fd179d349aabbcd"
     },
     {
       "path": "app/test/companion/companion_page_test.dart",
-      "sha256": "337ff8abd9ef108eb2b6bdccc0852bdfa0cef7aee0af2160268f97cee2f47be7"
+      "sha256": "2098096456fc5e9f657919a50beb54f76d5ecc317061c966086285f45cd3c099"
     },
     {
       "path": "app/test/companion/companion_recall_room_test.dart",
@@ -209,6 +209,10 @@
     {
       "path": "tooling/companion/offline_http.dart",
       "sha256": "b4b78e51ab9f88a083be5bd409ab5d1787f18faf65a9de48e910790113745f0e"
+    },
+    {
+      "path": "tooling/companion/fixtures/page-phone-context-v3.json",
+      "sha256": "842dd3f35617789bb63e2df69c690d5e48d0fc34238bd03a35527a7acf762e82"
     }
   ]
 }

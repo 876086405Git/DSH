@@ -450,7 +450,15 @@ class CompanionMemoryWorker {
     if (key.isEmpty) throw const CompanionLightError(CompanionLightFailure.noKey);
     final definitions = [for (final tool in tools.bindings) tool.definition];
     final inputTokens = _inputTokens(messages, definitions);
-    if (inputTokens > memoryBatchInputTokens) throw const _MemoryRequestBudget();
+    // The first request budgets the whole selected context. A continuation
+    // sends its fresh view again, so its allowance counts the added tool
+    // transcript. Compare complete wire bodies with the same current prefix;
+    // do not add estimates of fragments or subtract an obsolete context.
+    // The physical request still reserves its full input cost below.
+    final budgetTokens = messages.length == 1
+        ? inputTokens
+        : inputTokens - _inputTokens([messages.first], definitions);
+    if (budgetTokens > memoryBatchInputTokens) throw const _MemoryRequestBudget();
     final id = store.reserveAgentMaintenanceRequest(
       turnId: turnId,
       provider: route.provider,
@@ -612,6 +620,12 @@ You maintain the companion's phone memory using the supplied memory tools.
 This is a maintenance opportunity, not a new message from the person. Never
 invent a user source, a presentation, a task or an interaction. Use only the
 source IDs and actual card IDs/revisions supplied in this fixed data domain.
+Successful recall or related results can grant further actual IDs. For writes,
+source/sources name supplied original messages; references name supplied cards
+on which the wording depends. The Store binds their revisions; never invent them.
+For event_time, copy first-source wording and use its original said_at_utc and
+offset_minutes, never edit or processing time. Unknown local_date is null; omit
+event_time when there is no evidence.
 Decide meaning from the original context. Shared sources are candidates for
 comparison, not proof that independent facts are the same. Read related cards
 before a correction or deletion and prepare the complete effect set before

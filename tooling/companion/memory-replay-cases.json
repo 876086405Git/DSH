@@ -1,7 +1,7 @@
 {
   "fixture_version": 1,
   "ruleset": "09e-r2+r2.1",
-  "scope": "固定15组、编译进真实产品测试的合成提案和API夹具；不是原52段通用步骤DSL或任意模型回包注入器。 A2保留15组和52来源，更新Worker真实展开名、已迁移夹具及owner4974的真实phone/route机制说明；版本门不改。映射与哈希不等于执行，owner显式skip仍按原runner为NOT_RUN。",
+  "scope": "固定15组、编译进真实产品测试的合成提案和API夹具；不是原52段通用步骤DSL或任意模型回包注入器。 A2保留15组；ADD47纳入Page v3 golden后共53来源，更新Worker真实展开名、已迁移夹具及owner4974的真实phone/route机制说明；版本门不改。映射与哈希不等于执行，owner显式skip仍按原runner为NOT_RUN。 ADD47恢复四条延后检查并补维护增量边界，全部仍须运行，恢复active不等于通过。",
   "suites": {
     "sdk": {
       "cwd": "packages/dsh_client",
@@ -207,22 +207,40 @@
           "name": "test/companion/companion_memory_dates_replay_test.dart fixture 2 editing Monday text keeps Tuesday while a new Wednesday source stores Thursday",
           "file": "app/test/companion/companion_memory_dates_replay_test.dart",
           "scope": "真实 SQLite/Owner/Worker 与 maintenance tools、实际 phone Messages body/每 HTTP receipt；event_time 结构由原校验器校验，首 source 的 said_at_utc/offset_minutes/原 wording 与 processed_at_utc 分开断言。编辑保原时、独立新源另定日期；固定回包不证明模型会理解日期，未运行时区/native/后台调度。"
-        }
-      ],
-      "limits": [
-        "当前Log真实行为是连续同说话人只显示一次名字，正文仍为独立行；不声称产品有另一种拼成单行的UI功能。"
-      ],
-      "required_gaps": [],
-      "deferred_checks": [
+        },
         {
           "id": "ui-merged-lines-stable-source-ids-1",
           "suite": "app",
           "name": "test/companion/companion_page_test.dart page light mode fixture 2 grouped Log names keep two submitted originals after reopening SQLite",
           "file": "app/test/companion/companion_page_test.dart",
-          "scope": "Two actual failed chat HTTP attempts, real Log renders two originals with one speaker name, exact SQLite IDs/first_seq/original times survive reopen and actual background extraction. No invented merged UI source or successful chat.",
-          "deferred_reason": "A2 maintenance continuation exceeds memoryBatchInputTokens (tool definitions); restore after Pro fix (ADDENDUM-46/47)"
+          "scope": "Two actual failed chat HTTP attempts, real Log renders two originals with one speaker name, exact SQLite IDs/first_seq/original times survive reopen and actual background extraction. No invented merged UI source or successful chat."
+        },
+        {
+          "id": "worker-private-extraction-completes-two-originals",
+          "suite": "app",
+          "name": "test/companion/companion_memory_worker_test.dart ADD46 character extraction completes two remembered originals with a fully metered continuation",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "真实Owner/Worker/SQLite/HTTP工具续轮，保两条原话、原始时刻、完整proof、每次完整wire估算预留与独立结算；不替代Page/Log/重开回归，固定SSE非真模型，NOT_RUN。"
+        },
+        {
+          "id": "worker-maintenance-increment-6500",
+          "suite": "app",
+          "name": "test/companion/companion_memory_worker_test.dart ADD47 maintenance continuation input 6500 keeps full accounting and a bounded increment",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "沿现有estimate注入口，首体5500，续体6500可发且完整预留/11501因新增6001不发。受控估算器边界回归，不是真provider成本或实际预算观测；真实HTTP替身、工具、SQLite及usage路径，NOT_RUN。"
+        },
+        {
+          "id": "worker-maintenance-increment-11501",
+          "suite": "app",
+          "name": "test/companion/companion_memory_worker_test.dart ADD47 maintenance continuation input 11501 keeps full accounting and a bounded increment",
+          "file": "app/test/companion/companion_memory_worker_test.dart",
+          "scope": "沿现有estimate注入口，首体5500，续体6500可发且完整预留/11501因新增6001不发。受控估算器边界回归，不是真provider成本或实际预算观测；真实HTTP替身、工具、SQLite及usage路径，NOT_RUN。"
         }
-      ]
+      ],
+      "limits": [
+        "当前Log真实行为是连续同说话人只显示一次名字，正文仍为独立行；不声称产品有另一种拼成单行的UI功能。"
+      ],
+      "required_gaps": []
     },
     {
       "id": 3,
@@ -490,6 +508,20 @@
           "id": "never-old-mixed-edit-all-three-outbounds-1",
           "suite": "app",
           "name": "test/companion/companion_memory_control_replay_test.dart fixture 5 never survives editing old mixed source across reopen and all three actual request paths",
+          "file": "app/test/companion/companion_memory_control_replay_test.dart",
+          "scope": "真实 SQLite/Owner/Worker/CompanionAgentMemoryTools.maintenance 与 Messages tool_use/tool_result 续轮、原 light chat/usage；持续 never、显式公开 normal 解除、旧源 cutoff/重开/独立证明断言保留。卡写通过真实工具；本卡正文只匹配 exact character 域。固定模型回包，不是 Page 的控制意图识别或自然语义运行证明。"
+        },
+        {
+          "id": "never-old-mixed-edit-all-three-outbounds-2",
+          "suite": "app",
+          "name": "test/companion/companion_memory_control_replay_test.dart fixture 5 forget keeps the edited old source out but admits a new source across all three actual request paths",
+          "file": "app/test/companion/companion_memory_control_replay_test.dart",
+          "scope": "真实 SQLite/Owner/Worker/CompanionAgentMemoryTools.maintenance 与 Messages tool_use/tool_result 续轮、原 light chat/usage；持续 never、显式公开 normal 解除、旧源 cutoff/重开/独立证明断言保留。卡写通过真实工具；本卡正文只匹配 exact character 域。固定模型回包，不是 Page 的控制意图识别或自然语义运行证明。"
+        },
+        {
+          "id": "never-old-mixed-edit-all-three-outbounds-3",
+          "suite": "app",
+          "name": "test/companion/companion_memory_control_replay_test.dart fixture 5 natural normal command releases the saved control before new source extraction and actual chat",
           "file": "app/test/companion/companion_memory_control_replay_test.dart",
           "scope": "真实 SQLite/Owner/Worker/CompanionAgentMemoryTools.maintenance 与 Messages tool_use/tool_result 续轮、原 light chat/usage；持续 never、显式公开 normal 解除、旧源 cutoff/重开/独立证明断言保留。卡写通过真实工具；本卡正文只匹配 exact character 域。固定模型回包，不是 Page 的控制意图识别或自然语义运行证明。"
         },
@@ -835,36 +867,17 @@
           "name": "test/companion_memory_delete_lineage_test.dart editing another AND member marks an unchanged source even when it already has a separate Y role",
           "file": "packages/dsh_client/test/companion_memory_delete_lineage_test.dart",
           "scope": "新v10有限关系闭包已独立源码推导；真实存储/重开/迁移/AND-OR/manual测试仍须执行，旧丢失历史不得猜恢复。"
-        }
-      ],
-      "limits": [],
-      "required_gaps": [],
-      "deferred_checks": [
-        {
-          "id": "never-old-mixed-edit-all-three-outbounds-2",
-          "suite": "app",
-          "name": "test/companion/companion_memory_control_replay_test.dart fixture 5 forget keeps the edited old source out but admits a new source across all three actual request paths",
-          "file": "app/test/companion/companion_memory_control_replay_test.dart",
-          "scope": "真实 SQLite/Owner/Worker/CompanionAgentMemoryTools.maintenance 与 Messages tool_use/tool_result 续轮、原 light chat/usage；持续 never、显式公开 normal 解除、旧源 cutoff/重开/独立证明断言保留。卡写通过真实工具；本卡正文只匹配 exact character 域。固定模型回包，不是 Page 的控制意图识别或自然语义运行证明。",
-          "deferred_reason": "A2 maintenance continuation exceeds memoryBatchInputTokens (tool definitions); restore after Pro fix (ADDENDUM-46/47)"
-        },
-        {
-          "id": "never-old-mixed-edit-all-three-outbounds-3",
-          "suite": "app",
-          "name": "test/companion/companion_memory_control_replay_test.dart fixture 5 natural normal command releases the saved control before new source extraction and actual chat",
-          "file": "app/test/companion/companion_memory_control_replay_test.dart",
-          "scope": "真实 SQLite/Owner/Worker/CompanionAgentMemoryTools.maintenance 与 Messages tool_use/tool_result 续轮、原 light chat/usage；持续 never、显式公开 normal 解除、旧源 cutoff/重开/独立证明断言保留。卡写通过真实工具；本卡正文只匹配 exact character 域。固定模型回包，不是 Page 的控制意图识别或自然语义运行证明。",
-          "deferred_reason": "A2 maintenance continuation exceeds memoryBatchInputTokens (tool definitions); restore after Pro fix (ADDENDUM-46/47)"
         },
         {
           "id": "edited-source-cleanup-outbounds",
           "suite": "app",
           "name": "test/companion/companion_memory_control_replay_test.dart fixture 16 deleting edited raw source removes withdrawn facts before extraction consolidation and actual chat",
           "file": "app/test/companion/companion_memory_control_replay_test.dart",
-          "scope": "真实 SQLite/Owner/Worker/CompanionAgentMemoryTools.maintenance 与 Messages tool_use/tool_result 续轮、原 light chat/usage；持续 never、显式公开 normal 解除、旧源 cutoff/重开/独立证明断言保留。卡写通过真实工具；本卡正文只匹配 exact character 域。固定模型回包，不是 Page 的控制意图识别或自然语义运行证明。",
-          "deferred_reason": "A2 maintenance continuation exceeds memoryBatchInputTokens (tool definitions); restore after Pro fix (ADDENDUM-46/47)"
+          "scope": "真实 SQLite/Owner/Worker/CompanionAgentMemoryTools.maintenance 与 Messages tool_use/tool_result 续轮、原 light chat/usage；持续 never、显式公开 normal 解除、旧源 cutoff/重开/独立证明断言保留。卡写通过真实工具；本卡正文只匹配 exact character 域。固定模型回包，不是 Page 的控制意图识别或自然语义运行证明。"
         }
-      ]
+      ],
+      "limits": [],
+      "required_gaps": []
     },
     {
       "id": 6,
@@ -2289,7 +2302,8 @@
     "runtime/tests/fixtures/companion-phone-restart.mjs",
     "runtime/tests/fixtures/companion-recall-engine.mjs",
     "tooling/companion/fixtures/phone-context.json",
-    "tooling/companion/offline_http.dart"
+    "tooling/companion/offline_http.dart",
+    "tooling/companion/fixtures/page-phone-context-v3.json"
   ],
   "a2_worker_contract": {
     "status": "SOURCE_MAPPING_ONLY_ALL_NOT_RUN",
@@ -2312,7 +2326,7 @@
         "reason": "ADD38 explicitly adds diary and real role-scoped stories; old no-diary-product limit no longer describes A2."
       }
     ],
-    "new_a2_suites": "SDK agent-memory/tools and local embedding suites remain separately bound NOT_RUN; fixture_sources stays exactly52."
+    "new_a2_suites": "SDK agent-memory/tools and local embedding suites remain separately bound NOT_RUN; original A2 fixture_sources had52, ADD47 adds the current Page v3 golden for53."
   },
   "known_owner_skips": [
     {
