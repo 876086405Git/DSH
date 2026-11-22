@@ -162,7 +162,7 @@ void main() {
     test('control: the one section by its name opens it', () async {
       final out = await open(section([general, memo]));
       opened(out, cell: 'memo', content: 'memo');
-      expect(out['clicks'], ['open settings:general', 'section:memo']);
+      expect(out['clicks'], ['open settings:true', 'section:memo']);
     }, skip: skip);
 
     test('a longer name before it that starts with its name is another section', () async {
@@ -174,7 +174,7 @@ void main() {
         ]),
       );
       opened(out, cell: 'memo', content: 'memo');
-      expect(out['clicks'], ['open settings:general', 'section:memo']);
+      expect(out['clicks'], ['open settings:true', 'section:memo']);
     }, skip: skip);
 
     test('two sections by one name: nothing is pressed', () async {
@@ -186,7 +186,7 @@ void main() {
         ]),
       );
       fellBack(out);
-      expect(out['clicks'], ['open settings:general']);
+      expect(out['clicks'], ['open settings:true']);
     }, skip: skip);
 
     test('no section by its name: no ready over the first section', () async {
@@ -210,13 +210,157 @@ void main() {
         ),
       );
       fellBack(out);
-      expect(out['clicks'], ['open settings:general']);
+      expect(out['clicks'], ['open settings:true']);
     }, skip: skip);
 
     test('a click that does not take: no ready', () async {
       final out = await open(section([general, memo], {'ignoreClicks': true}));
       fellBack(out);
     }, skip: skip);
+
+    test('a boolean opener keeps the first section until the real section navigation', () async {
+      final out = await open(
+        section([
+          {'id': 'account', 'label': 'Account'},
+          general,
+          memo,
+        ]),
+      );
+      opened(out, cell: 'memo', content: 'memo');
+      expect(out['clicks'], ['open settings:true', 'section:memo']);
+    }, skip: skip);
+
+    for (final live in <Map<String, Object?>>[
+      {'label': '当前备忘'},
+      {'label': 'Live Memo', 'masked': false},
+      {'label': '  Live   Memo  ', 'masked': false},
+    ]) {
+      final label = (live['label']! as String).trim().replaceAll(RegExp(r'\s+'), ' ');
+      test('the same package and cell live label ($live) wins over stale names', () async {
+        final out = await open(
+          section(
+            [
+              general,
+              {'id': 'old-name-owner', 'label': 'Memo'},
+              {'id': 'wrong-package', 'label': 'Wrong package'},
+              {'id': 'memo', 'label': label},
+            ],
+            {
+              'package': '@acme/memo',
+              'occupants': {
+                'settings.section': [
+                  {'cell': 'memo', 'package': '@other/memo', 'label': 'Wrong package', 'active': true},
+                  {'cell': 'memo', 'package': '@acme/memo', 'active': true, ...live},
+                ],
+              },
+            },
+          ),
+        );
+        opened(out, cell: 'memo', content: 'memo');
+        expect(out['clicks'], ['open settings:true', 'section:memo']);
+      }, skip: skip);
+    }
+
+    test('without cfg.package the same cell live label still works', () async {
+      final out = await open(
+        section(
+          [
+            general,
+            {'id': 'memo', 'label': 'Live Memo'},
+          ],
+          {
+            'occupants': {
+              'settings.section': [
+                {'cell': 'memo', 'package': '@acme/memo', 'label': 'Live Memo'},
+              ],
+            },
+          },
+        ),
+      );
+      opened(out, cell: 'memo', content: 'memo');
+      expect(out['clicks'], ['open settings:true', 'section:memo']);
+    }, skip: skip);
+
+    for (final foreign in [
+      {'cell': 'other', 'package': '@acme/memo'},
+      {'cell': 'memo', 'package': '@other/memo'},
+    ]) {
+      test('a live name from $foreign is not borrowed', () async {
+        final out = await open(
+          section(
+            [
+              general,
+              {'id': 'other', 'label': 'Foreign live memo'},
+            ],
+            {
+              'package': '@acme/memo',
+              'occupants': {
+                'settings.section': [
+                  {...foreign, 'label': 'Foreign live memo', 'active': true, 'masked': false},
+                ],
+              },
+            },
+          ),
+        );
+        fellBack(out);
+        expect(out['shown'], 'general');
+        expect(out['clicks'], ['open settings:true']);
+      }, skip: skip);
+    }
+
+    for (final unavailable in [
+      {'active': false},
+      {'masked': true},
+    ]) {
+      test('a live entry marked $unavailable keeps the old names as fallback', () async {
+        final out = await open(
+          section(
+            [general, memo],
+            {
+              'package': '@acme/memo',
+              'occupants': {
+                'settings.section': [
+                  {'cell': 'memo', 'package': '@acme/memo', 'label': 'Unavailable live name', ...unavailable},
+                ],
+              },
+            },
+          ),
+        );
+        opened(out, cell: 'memo', content: 'memo');
+        expect(out['clicks'], ['open settings:true', 'section:memo']);
+      }, skip: skip);
+    }
+
+    test('a live name still shared by another cell cannot select the one drawn row', () async {
+      final out = await open(
+        section(
+          [
+            general,
+            {'id': 'memo', 'label': 'Live Memo'},
+          ],
+          {
+            'package': '@acme/memo',
+            'occupants': {
+              'settings.section': [
+                {'cell': 'memo', 'package': '@acme/memo', 'label': 'Live Memo'},
+                {'cell': 'other', 'package': '@other/memo', 'label': 'Live Memo'},
+              ],
+            },
+          },
+        ),
+      );
+      fellBack(out);
+      expect(out['clicks'], ['open settings:true']);
+    }, skip: skip);
+
+    for (final webOnly in [false, true]) {
+      test('a failed web opening with a drawn old slot never becomes ready (webOnly=$webOnly)', () async {
+        final out = await open(section([general, memo], {'webOpenOk': false, 'webOnly': webOnly}));
+        fellBack(out);
+        expect(out['shown'], 'general', reason: 'the old settings slot exists despite the failed opening');
+        expect(out['clicks'], ['open settings:true']);
+      }, skip: skip);
+    }
 
     test('a button inside the section shown that reads like it is not a section', () async {
       final out = await open(
@@ -228,7 +372,7 @@ void main() {
         ),
       );
       opened(out, cell: 'memo', content: 'memo');
-      expect(out['clicks'], ['open settings:general', 'section:memo']);
+      expect(out['clicks'], ['open settings:true', 'section:memo']);
     }, skip: skip);
   });
 

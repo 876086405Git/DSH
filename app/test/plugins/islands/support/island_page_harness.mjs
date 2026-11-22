@@ -38,7 +38,8 @@
 // panel:     panels [{id, label}], active, sessions [titles] (conversation
 //            rows in the sidebar), ignoreClicks
 // settings:  sections [{id, label}] (the first shows first), ignoreClicks,
-//            sectionButtons [texts] (buttons inside the section drawn)
+//            sectionButtons [texts] (buttons inside the section drawn),
+//            webOpenOk (false: opener reports failure), webOnly (no then step)
 // rightbar:  types [{id, kind, title}], open [kind] (tabs already in the
 //            pane), split kind (another pane, before ours, showing it),
 //            expanded, bridge 'openTab' | 'openTab-fail' (else none),
@@ -467,7 +468,7 @@ if (target === 'settings') {
   windowExtra.__dshAppOpen = (web) => {
     if (!web.settings || dialog) return;
     out.clicks.push('open settings:' + web.settings);
-    activeId = web.settings;
+    activeId = web.settings === true ? sections[0]?.id : web.settings;
     later(() => {
       dialog = new El('div', { 'data-shortcut-modal': 'settings', role: 'dialog', 'aria-modal': 'true' });
       const nav = new El('nav');
@@ -634,14 +635,23 @@ const window = {
   innerHeight: 760,
   devicePixelRatio: 2,
 };
-if (windowExtra.__dshAppOpen) window.__dshAppOpen = windowExtra.__dshAppOpen;
+if (windowExtra.__dshAppOpen) {
+  window.__dshAppOpen = (web) => {
+    windowExtra.__dshAppOpen(web);
+    window.__dshAppOpening = Promise.resolve(s.webOpenOk !== false);
+  };
+}
 if (s.occupants || windowExtra.openTab) {
   window.__dshGoBridge = {
     version: 1,
-    occupants: (slot) => ((s.occupants && s.occupants[slot]) || []).map((o) => ({
-      ...o,
-      masked: !!out.filters?.some((f) => f.slot === slot && !f.allow.some((a) => a.package === o.package && a.cell === o.cell)),
-    })),
+    occupants: (slot) => ((s.occupants && s.occupants[slot]) || []).map((o) => {
+      const filters = (out.filters || []).filter((f) => f.slot === slot);
+      if (!filters.length) return { ...o }; // Preserve a legacy entry with no masked field.
+      return {
+        ...o,
+        masked: !!o.masked || filters.some((f) => !f.allow.some((a) => a.package === o.package && a.cell === o.cell)),
+      };
+    }),
     ...(s.filter && s.filter !== 'missing' ? { filter: (slot, allow) => {
       (out.filters ||= []).push({ slot, allow });
       return s.filter === 'ok';
@@ -683,7 +693,7 @@ new vm.Script(fs.readFileSync(islandPath, 'utf8'), { filename: islandPath }).run
 const configs = {
   view: { slot: 'conversation.view', stretch: 'child', target: { session, then: { view: { id: s.cell, names: s.names } } } },
   panel: { slot: 'main', stretch: 'child', target: { then: { panel: s.names } } },
-  settings: { slot: 'settings.section', stretch: 'scroller', target: { web: { settings: 'general' }, then: { settings: s.names } } },
+  settings: { slot: 'settings.section', stretch: 'scroller', target: { web: { settings: true }, then: { settings: s.names } } },
   rightbar: { slot: 'sidebar.right.pane.tab', stretch: 'child', target: { session, then: { rightbar: s.names } } },
   overlay: { slot: 'shell.overlay', stretch: 'none', mode: 'overlay', target: {} },
   footer: { slot: 'sidebar.footer.action', stretch: 'parent', target: { web: { sidebar: true }, then: { sidebar: true } } },
@@ -692,6 +702,7 @@ const configs = {
 };
 window.__dshGoIsland.init({
   ...configs[target],
+  ...(s.webOnly ? { target: { web: { settings: true } } } : {}),
   cell: s.cell,
   mode: target === 'overlay' ? 'overlay' : 'page',
   package: s.package,
