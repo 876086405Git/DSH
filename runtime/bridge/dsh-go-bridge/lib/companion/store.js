@@ -94,12 +94,17 @@ export function createCompanionStore({ filePath, now = Date.now, io = fs } = {})
       const stat = await handle.stat();
       if (!stat.isFile() || stat.size > MAX_FILE_BYTES) throw corrupt();
       // Bounded even if an external editor grows the file after stat().
-      const buffer = Buffer.alloc(MAX_FILE_BYTES + 1);
+      let buffer = Buffer.alloc(stat.size + 1);
       let size = 0;
       while (size < buffer.length) {
         const { bytesRead } = await handle.read(buffer, size, buffer.length - size, size);
         if (bytesRead === 0) break;
         size += bytesRead;
+        if (size === buffer.length && size <= MAX_FILE_BYTES) {
+          const expanded = Buffer.alloc(MAX_FILE_BYTES + 1);
+          buffer.copy(expanded);
+          buffer = expanded;
+        }
       }
       if (size > MAX_FILE_BYTES) throw corrupt();
       let doc;

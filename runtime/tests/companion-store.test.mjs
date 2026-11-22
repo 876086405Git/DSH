@@ -145,6 +145,36 @@ test('rule values are clamped and public state omits persistence internals', () 
   for (const key of ['anchorAt', 'lastEvents', 'lastGainAt']) assert.equal(Object.hasOwn(visible, key), false);
 });
 
+test('small state reads follow the file size and keep reading if it grows after stat', async t => {
+  const f = await fixture(t);
+  const initial = await f.store.getSnapshot();
+  const size = (await fs.stat(f.filePath)).size;
+  const buffers = new Set();
+  let append = '';
+  const store = createCompanionStore({filePath: f.filePath, now: f.now, io: {...fs, async open(...args) {
+    const handle = await fs.open(...args);
+    return {
+      async stat() {
+        const info = await handle.stat();
+        if (append) await fs.appendFile(f.filePath, append);
+        return info;
+      },
+      read(buffer, offset, length, position) {
+        buffers.add(buffer.length);
+        return handle.read(buffer, offset, Math.min(length, 64 * 1024), position);
+      },
+      close: () => handle.close(),
+    };
+  }}});
+  assert.deepEqual(await store.getSnapshot(), initial);
+  assert.deepEqual([...buffers], [size + 1]);
+  append = '  ';
+  assert.deepEqual(await store.getSnapshot(), initial);
+  assert.deepEqual([...buffers], [size + 1, MAX_FILE_BYTES + 1]);
+  append = ' '.repeat(MAX_FILE_BYTES);
+  await rejects(() => store.getSnapshot(), 503, 'corrupt-store');
+});
+
 test('store identity, state and memories survive reopening the file', async (t) => {
   const f = await fixture(t);
   const initial = await f.store.getSnapshot();
