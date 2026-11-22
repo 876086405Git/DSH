@@ -207,7 +207,6 @@ SessionSearchResults deriveSessionSearchResults({
   }
 
   List<SessionSearchResult> section(List<SessionSummary> members, bool isArchived) {
-    final byId = {for (final s in members) s.sessionId: s};
     final local = <SessionSummary>[];
     for (final s in members) {
       final title = s.title?.trim() ?? '';
@@ -223,6 +222,8 @@ SessionSearchResults deriveSessionSearchResults({
       for (final s in local)
         SessionSearchResult(session: s, archived: isArchived, byTitle: true, snippet: snippets[s.sessionId]),
     ];
+    if (snippets.isEmpty) return results;
+    final byId = {for (final s in members) s.sessionId: s};
     final included = {for (final s in local) s.sessionId};
     for (final MapEntry(key: id, value: snippet) in snippets.entries) {
       final s = byId[id];
