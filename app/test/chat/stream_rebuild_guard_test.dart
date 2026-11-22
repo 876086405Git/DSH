@@ -114,8 +114,9 @@ List<Map<String, Object?>> _history() {
 }
 
 class _Guard {
-  _Guard() {
+  _Guard({List<ProviderObserver> observers = const []}) {
     container = ProviderContainer(
+      observers: observers,
       overrides: [
         activeConnectionProvider.overrideWithValue(AsyncData(HostConnection(client: client, isLocal: true))),
         settingsProvider.overrideWith(TestSettings.new),
@@ -225,6 +226,20 @@ class _Guard {
   }
 }
 
+final class _MediaPathsObserver extends ProviderObserver {
+  var builds = 0;
+
+  @override
+  void didAddProvider(ProviderObserverContext context, Object? value) {
+    if (context.provider == sessionMediaPathsProvider(_session)) builds++;
+  }
+
+  @override
+  void didUpdateProvider(ProviderObserverContext context, Object? previousValue, Object? newValue) {
+    if (context.provider == sessionMediaPathsProvider(_session)) builds++;
+  }
+}
+
 /// Builds of row widgets during [body], split into the row being written
 /// (a streaming reply or tool call) and every other row.
 Future<({int done, int live, int derivations})> _count(Future<void> Function() body) async {
@@ -331,6 +346,39 @@ void main() {
 
   testWidgets('a streaming reply with queued messages derives no rows per delta', (tester) async {
     await streamText(tester, queued: ['排队一', '排队二']);
+  });
+
+  testWidgets('plain streaming replies do not build the media path projection', (tester) async {
+    final media = _MediaPathsObserver();
+    final g = _Guard(observers: [media]);
+    addTearDown(g.dispose);
+    await g.mount(tester);
+    g.snapshot();
+    await g.settle(tester);
+    g.startStream();
+    g.chunk(const TextDeltaChunk(0, '开始'));
+    await g.settle(tester);
+    final initialMediaBuilds = media.builds;
+    media.builds = 0;
+    final counts = await _count(() async {
+      for (var delta = 0; delta < _deltas; delta++) {
+        g.chunk(TextDeltaChunk(0, ' 第$delta段'));
+        await tester.pump(const Duration(milliseconds: 32));
+      }
+    });
+    debugPrint(
+      '[GUARD] plain text, deltas=$_deltas: '
+      'initial media builds=$initialMediaBuilds streaming media builds=${media.builds} live=${counts.live}',
+    );
+    expect(counts.live, greaterThan(0));
+    expect(initialMediaBuilds, 0);
+    expect(media.builds, 0, reason: 'observe without keeping the auto-disposed projection alive');
+    // A literal image marker exercises the observer without loading an image.
+    g.chunk(const TextDeltaChunk(0, ' 这里有 ![未闭合'));
+    await g.settle(tester);
+    expect(media.builds, greaterThan(0));
+    expect(tester.takeException(), isNull);
+    await g.unmount(tester);
   });
 
   testWidgets('streaming tool arguments rebuild only the tool being written', (tester) async {

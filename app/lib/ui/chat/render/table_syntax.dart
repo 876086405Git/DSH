@@ -3,36 +3,63 @@
 // which the reply's explicit body weight overrides, so the header cells are
 // marked up as bold before parsing instead.
 
+/// Separate pipe tables from the preceding paragraph, then bold their headers.
+String prepareTables(String source) {
+  if (!_mayHaveTable(source)) return source;
+  final lines = source.split('\n');
+  final headers = _headerRows(lines).toList();
+  if (headers.isEmpty) return source;
+  final breaks = _breaksBeforeHeaders(lines, headers);
+  final bolded = _boldHeaders(lines, headers, breaks);
+  _insertBreaks(lines, breaks);
+  return bolded || breaks.isNotEmpty ? lines.join('\n') : source;
+}
+
+bool _mayHaveTable(String source) => source.contains('|') && source.contains('-');
+
 /// [source] with the header cells of every pipe table wrapped in `**…**`.
 ///
 /// Code fences are skipped; a cell that is empty or already carries
 /// emphasis markers is left as written.
 String boldTableHeaders(String source) {
-  if (!source.contains('|') || !source.contains('-')) return source;
+  if (!_mayHaveTable(source)) return source;
   final lines = source.split('\n');
+  return _boldHeaders(lines, _headerRows(lines), const {}) ? lines.join('\n') : source;
+}
+
+Iterable<int> _headerRows(List<String> lines) sync* {
   String? fence;
-  var changed = false;
   for (var i = 0; i + 1 < lines.length; i++) {
     final line = lines[i];
-    final marker = _fence.firstMatch(line)?.group(1);
     if (fence != null) {
       final close = _fenceClose.firstMatch(line)?.group(1);
       if (close != null && close[0] == fence[0] && close.length >= fence.length) fence = null;
       continue;
     }
+    final marker = _fence.firstMatch(line)?.group(1);
     if (marker != null) {
       fence = marker;
       continue;
     }
-    if (!line.contains('|') || !_isDelimiterRow(lines[i + 1], line)) continue;
-    final bolded = _boldRow(line);
-    if (bolded != line) {
+    if (line.contains('|') && _isDelimiterRow(lines[i + 1], line)) yield i;
+  }
+}
+
+bool _boldHeaders(List<String> lines, Iterable<int> headers, Set<int> breaks) {
+  var changed = false;
+  var delimiter = -1;
+  for (final i in headers) {
+    // A new blank can separate two originally adjacent rows. A delimiter
+    // consumed by an accepted header cannot itself head another table.
+    if (i == delimiter || breaks.contains(i + 1)) continue;
+    delimiter = i + 1;
+    final bolded = _boldRow(lines[i]);
+    if (bolded != lines[i]) {
       lines[i] = bolded;
       changed = true;
     }
-    i += 1;
   }
-  return changed ? lines.join('\n') : source;
+  return changed;
 }
 
 final _fence = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*(`{3,}|~{3,})');
@@ -69,35 +96,24 @@ List<String> _cellsOf(String row) {
 /// Only a table at the left margin, or inside a `>` quote, is moved: one
 /// indented under a list item keeps its place, and fenced code is skipped.
 String blankLineBeforeTables(String source) {
-  if (!source.contains('|') || !source.contains('-')) return source;
+  if (!_mayHaveTable(source)) return source;
   final lines = source.split('\n');
-  final out = <String>[];
-  String? fence;
-  var changed = false;
-  for (var i = 0; i < lines.length; i++) {
+  final breaks = _breaksBeforeHeaders(lines, _headerRows(lines));
+  if (breaks.isEmpty) return source;
+  _insertBreaks(lines, breaks);
+  return lines.join('\n');
+}
+
+Set<int> _breaksBeforeHeaders(List<String> lines, Iterable<int> headers) => {
+  for (final i in headers)
+    if (i > 0 && _needsBreakAbove(lines[i - 1], lines[i])) i,
+};
+
+void _insertBreaks(List<String> lines, Set<int> breaks) {
+  for (final i in breaks) {
     final line = lines[i];
-    final marker = _fence.firstMatch(line)?.group(1);
-    if (fence != null) {
-      final close = _fenceClose.firstMatch(line)?.group(1);
-      if (close != null && close[0] == fence[0] && close.length >= fence.length) fence = null;
-      out.add(line);
-      continue;
-    }
-    if (marker != null) {
-      fence = marker;
-      out.add(line);
-      continue;
-    }
-    if (i + 1 < lines.length &&
-        line.contains('|') &&
-        _isDelimiterRow(lines[i + 1], line) &&
-        _needsBreakAbove(out.isEmpty ? null : out.last, line)) {
-      out.add(_quotePrefix(line));
-      changed = true;
-    }
-    out.add(line);
+    lines[i] = '${_quotePrefix(line)}\n$line';
   }
-  return changed ? out.join('\n') : source;
 }
 
 /// Whether the table header [line] is glued to the paragraph line above it.
