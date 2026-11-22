@@ -59,7 +59,7 @@ String workshopErrorLine(L10n l10n, String code) => switch (code) {
   _ => l10n.workshopErrorWithCode(code.startsWith('workshop_') ? code.substring('workshop_'.length) : code),
 };
 
-final _packCode = RegExp(r'^workshop_(?:companion|pet|png|sheet|pack|zip|archive|moc)_');
+final _packCode = RegExp(r'^workshop_(?:companion|pet|theme|png|sheet|pack|zip|archive|moc)_');
 
 /// As [workshopErrorLine] for an exception: a write whose result is unknown
 /// says so, whatever its code, because retrying it could do the thing twice.
@@ -80,6 +80,7 @@ String workshopTitleOf(WorkshopMetadata metadata, String languageCode) {
 String workshopKindText(L10n l10n, String kind) => switch (kind) {
   'pet' => l10n.workshopKindPet,
   'companion' => l10n.workshopKindCompanion,
+  'theme' => AppLocale.isEnglish ? 'Theme' : '主题包',
   _ => kind,
 };
 

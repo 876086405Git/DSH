@@ -55,10 +55,29 @@ function personalPage(items: Submission[], url: URL, status: string | null) {
   const limit = Number(limitText), selected = sorted.slice(0, limit);
   return { selected, nextCursor: sorted.length > limit ? selected[selected.length - 1]!.submissionId : null };
 }
-function listSubmissions(snapshot: Snapshot, url: URL, owner?: Owner): Response {
+const LEGACY_PERSONAL_KINDS = new Set(['pet', 'companion']);
+function personalSupportedKinds(request?: Request): Set<string> {
+  const raw = request?.headers.get('X-Workshop-Supported-Kinds');
+  if (!raw) return LEGACY_PERSONAL_KINDS;
+  const allowed = new Set<string>();
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim();
+    if (kind(trimmed)) allowed.add(trimmed);
+  }
+  return allowed.size > 0 ? allowed : LEGACY_PERSONAL_KINDS;
+}
+function listSubmissions(snapshot: Snapshot, url: URL, owner?: Owner, request?: Request): Response {
   const status = url.searchParams.get('status'); need(status === null || STATUSES.includes(status as typeof STATUSES[number]), 'bad_query');
   const selectedKind = owner ? null : url.searchParams.get('kind'); need(selectedKind === null || kind(selectedKind), 'bad_query');
-  const result = owner ? personalPage(snapshot.state.submissions.filter(s => sameOwner(s.owner, owner)), url, status)
+  const allowedPersonalKinds = owner ? personalSupportedKinds(request) : null;
+  const result = owner
+    ? personalPage(
+        snapshot.state.submissions.filter(
+          s => sameOwner(s.owner, owner) && allowedPersonalKinds!.has(s.metadata.kind),
+        ),
+        url,
+        status,
+      )
     : page(snapshot.state.submissions.filter(s => (!status || s.status === status) &&
       (!selectedKind || s.metadata.kind === selectedKind)), url, s => s.submissionId);
   return json(200, { submissions: result.selected, nextCursor: result.nextCursor });
@@ -167,7 +186,7 @@ async function serveBlob(request: Request, env: Env, ctx: Ctx, meta: SubmissionM
   response.headers.set('Content-Type', 'application/zip'); return response;
 }
 async function publicRoute(request: Request, env: Env, ctx: Ctx, url: URL): Promise<Response> {
-  const picture = /^\/market\/workshop\/(pet|companion)\/[^/]+\/[^/]+\/[a-f0-9]{64}\/preview\/[a-f0-9]{64}\.png$/.test(url.pathname);
+  const picture = /^\/market\/workshop\/(pet|companion|theme)\/[^/]+\/[^/]+\/[a-f0-9]{64}\/preview\/[a-f0-9]{64}\.png$/.test(url.pathname);
   method(request, 'GET', 'HEAD'); await limitBurst(request, env, false, picture ? 'workshop-preview' : 'workshop');
   const flags = features(env), companions = url.pathname === '/market/companions.json';
   if (companions || url.pathname.startsWith('/market/workshop/companion/')) need(flags.companion, 'companion_disabled', 503);
@@ -187,7 +206,7 @@ async function publicRoute(request: Request, env: Env, ctx: Ctx, url: URL): Prom
       !state.withdrawn.some(w => releaseId(w) === key), 'not_found', 404);
     return servePreview(request, env, submission.preview);
   }
-  const match = /^\/market\/workshop\/(pet|companion)\/([^/]+)\/([^/]+)\/([a-f0-9]{64})\.zip$/.exec(url.pathname);
+  const match = /^\/market\/workshop\/(pet|companion|theme)\/([^/]+)\/([^/]+)\/([a-f0-9]{64})\.zip$/.exec(url.pathname);
   need(match, 'not_found', 404);
   const s = snapshot.state.current.map(sid => find(snapshot.state, sid)).find(s => assetUrl(s.metadata) === url.pathname);
   need(s, 'not_found', 404);
@@ -211,7 +230,7 @@ async function userRoute(request: Request, env: Env, ctx: Ctx, url: URL): Promis
     await commitState(env, previous, state, now); return json(201, { submission });
   }
   if (path === '/submissions') {
-    method(request, 'GET'); const owner = await user(request, env); return listSubmissions(await loadState(env), url, owner);
+    method(request, 'GET'); const owner = await user(request, env); return listSubmissions(await loadState(env), url, owner, request);
   }
   if (path === '/reports') {
     method(request, 'POST'); const owner = await user(request, env), body = await jsonBody(request), explanation = reason(body);

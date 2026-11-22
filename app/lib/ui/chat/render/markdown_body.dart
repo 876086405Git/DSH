@@ -80,6 +80,7 @@ class MarkdownBody extends StatefulWidget {
     this.selectable = true,
     this.secondary = false,
     this.repairBareViews = false,
+    this.replyTypography = false,
   });
 
   final String text;
@@ -99,6 +100,9 @@ class MarkdownBody extends StatefulWidget {
   /// 助手回复:模型把 `dsh-ui` 的 JSON 裸着写进正文时,也当成视图画
   /// (见 [fenceBareDshUiViews])。别的 Markdown(文档、说明页)不开。
   final bool repairBareViews;
+
+  /// 助手回复正文:当主题包声明启用阅读字体/行高时应用阅读排版。
+  final bool replyTypography;
 
   /// 表格单列最宽多少;更长的单元格在列内换行,而不是把整表拉得很长。
   static const _maxColumnWidth = 260.0;
@@ -755,9 +759,13 @@ class _MarkdownBodyState extends State<MarkdownBody> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
-    final body = widget.secondary
+    final themeStyle = DshThemeStyle.of(context);
+    final baseBody = widget.secondary
         ? AppType.chatBody(context, scale: 0.9, color: theme.colorScheme.onSurfaceVariant)
-        : AppType.chatBody(context, color: theme.colorScheme.onSurface);
+        : AppType.chatBody(context, color: themeStyle.onAssistantBubble ?? theme.colorScheme.onSurface);
+    final body = (widget.replyTypography && themeStyle.components.useReadingFontForReply)
+        ? themeStyle.readingTextStyle(baseBody)
+        : baseBody;
     final source = _source;
     final extra = MarkdownPatterns.maybeOf(context);
 

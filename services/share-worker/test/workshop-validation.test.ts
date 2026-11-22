@@ -76,3 +76,43 @@ it('accepts ordinary empty directories but rejects hidden directory data or a ru
   const manifest = petManifest(), wrapped = zip([['sample/', Buffer.alloc(0)], ['sample/pack.json', Buffer.from(JSON.stringify(manifest))], ['sample/idle.png', png()]]);
   expect(validatePet(wrapped, metaFor(wrapped))).toMatchObject({ files: 2 });
 });
+it('validates theme packs, referenced PNGs/fonts, and rejects undeclared extras', () => {
+  const themeManifest = {
+    schema: 1,
+    id: 'sample',
+    name: 'Paper & Ink',
+    author: 'Synthetic author',
+    license: 'CC0-1.0',
+    source: 'https://example.org/synthetic',
+    palette: { seed: '#A14732', tintHue: 74, tintChroma: 0.3, glowOpacity: 0 },
+    surfaces: { preset: 'paper', backdropImage: 'paper-bg.png', backdropOpacity: 0.25, backdropRepeat: true },
+    typography: { readingFont: 'reading.otf', readingLineHeight: 1.65 },
+    components: { headerStyle: 'ghost', composerStyle: 'solidPaper', sendButtonStyle: 'ink', codeBlockStyle: 'outlined' },
+    emptyState: { heroStyle: 'badge', suggestionsDisplay: 'collapsible' },
+  };
+  const otfFont = Buffer.from([0x4f, 0x54, 0x54, 0x4f, 0, 1, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4]);
+  const good = zip([
+    ['theme.json', Buffer.from(JSON.stringify(themeManifest))],
+    ['paper-bg.png', png(4, 4)],
+    ['reading.otf', otfFont],
+  ]);
+  expect(validatePack(good, metaFor(good, { kind: 'theme' }), 6)).toMatchObject({ files: 3 });
+
+  const withExtra = zip([
+    ['theme.json', Buffer.from(JSON.stringify(themeManifest))],
+    ['paper-bg.png', png(4, 4)],
+    ['reading.otf', otfFont],
+    ['secret.txt', Buffer.from('nope')],
+  ]);
+  expect(() => validatePack(withExtra, metaFor(withExtra, { kind: 'theme' }), 6)).toThrow('theme_extra_file');
+
+  const missingHeroImage = zip([
+    ['theme.json', Buffer.from(JSON.stringify({ ...themeManifest, surfaces: { preset: 'paper' }, typography: {}, emptyState: { heroStyle: 'customImage' } }))],
+  ]);
+  expect(() => validatePack(missingHeroImage, metaFor(missingHeroImage, { kind: 'theme' }), 6)).toThrow('theme_schema');
+
+  const unknownKey = zip([
+    ['theme.json', Buffer.from(JSON.stringify({ ...themeManifest, surfaces: { preset: 'paper' }, typography: {}, extraField: true }))],
+  ]);
+  expect(() => validatePack(unknownKey, metaFor(unknownKey, { kind: 'theme' }), 6)).toThrow('theme_schema');
+});

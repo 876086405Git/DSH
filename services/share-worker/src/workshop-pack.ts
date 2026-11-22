@@ -17,7 +17,201 @@ function depth(value: unknown): number {
   return maximum + 1;
 }
 export function validatePack(bytes: Uint8Array, meta: SubmissionMeta, maxMocVersion: number): PackSummary {
-  return meta.kind === 'pet' ? validatePet(bytes, meta) : validateCompanion(bytes, meta, maxMocVersion);
+  if (meta.kind === 'pet') return validatePet(bytes, meta);
+  if (meta.kind === 'theme') return validateTheme(bytes, meta);
+  return validateCompanion(bytes, meta, maxMocVersion);
+}
+
+const THEME_JSON_CAP = 128 * 1024;
+const THEME_FONT_CAP = 16 * 1024 * 1024;
+const THEME_ASSET_TOTAL_CAP = 32 * 1024 * 1024;
+const THEME_BUILT_IN_FONTS = new Set(['system', 'serif', 'mono', 'JetBrainsMono', 'monospace']);
+const THEME_TOP_KEYS = new Set(['schema', 'id', 'name', 'title', 'description', 'tags', 'author', 'license', 'source', 'palette', 'surfaces', 'typography', 'shapes', 'components', 'emptyState']);
+const THEME_COLOR_KEYS = new Set(['backdropTop', 'backdropBottom', 'glowPrimary', 'glowSecondary', 'surface', 'onSurface', 'onSurfaceVariant', 'outline', 'outlineVariant', 'primary', 'onPrimary', 'primaryContainer', 'onPrimaryContainer', 'userBubble', 'onUserBubble', 'assistantBubble', 'onAssistantBubble', 'codeWellBg', 'codeWellHeader', 'codeWellFg', 'codeWellBorder']);
+const THEME_PALETTE_KEYS = new Set(['seed', 'seedDark', 'tintHue', 'tintChroma', 'glowOpacity', 'light', 'dark']);
+const THEME_SURFACE_KEYS = new Set(['preset', 'chromeBlur', 'sheetBlur', 'cardOpacity', 'pillOpacity', 'hairlineWidth', 'rimOpacity', 'shadowOpacity', 'backdropImage', 'backdropOpacity', 'backdropRepeat']);
+const THEME_TYPO_KEYS = new Set(['uiFont', 'readingFont', 'headingFont', 'codeFont', 'readingScale', 'readingLineHeight', 'headingScale']);
+const THEME_SHAPE_KEYS = new Set(['cornerScale', 'borderWidth', 'turnGap', 'inTurnGap', 'gutter']);
+const THEME_COMP_KEYS = new Set(['headerStyle', 'composerStyle', 'sendButtonStyle', 'userBubbleStyle', 'assistantStyle', 'useReadingFontForReply', 'suggestionCardStyle', 'codeBlockStyle']);
+const THEME_EMPTY_KEYS = new Set(['layout', 'heroStyle', 'heroImage', 'useReadingFontForGreeting', 'showConnectedSubtitle', 'suggestionsDisplay']);
+const THEME_HEX = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+function safeThemeAsset(value: unknown, exts: string[]): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 80 &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(value) && !value.includes('..') &&
+    exts.some(ext => value.toLowerCase().endsWith(ext));
+}
+function validFontMagic(bytes: Uint8Array): boolean {
+  if (bytes.length < 12 || bytes.length > THEME_FONT_CAP) return false;
+  if (bytes[0] === 0 && bytes[1] === 1 && bytes[2] === 0 && bytes[3] === 0) return true;
+  const tag = String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!);
+  return tag === 'OTTO' || tag === 'true';
+}
+function checkThemeKeys(value: Record<string, unknown>, allowed: Set<string>): void {
+  need(Object.keys(value).every(k => allowed.has(k)), 'theme_schema');
+}
+function checkThemeNum(value: unknown, min: number, max: number): void {
+  if (value !== undefined) need(finite(value) && value >= min && value <= max, 'theme_schema');
+}
+function checkThemeColors(value: unknown): void {
+  if (value === undefined) return;
+  need(record(value), 'theme_schema');
+  checkThemeKeys(value, THEME_COLOR_KEYS);
+  for (const v of Object.values(value)) {
+    if (v !== undefined && v !== null) need(typeof v === 'string' && THEME_HEX.test(v.trim()), 'theme_schema');
+  }
+}
+function checkThemeEnum(value: unknown, allowed: readonly string[]): void {
+  if (value !== undefined) need(typeof value === 'string' && allowed.includes(value), 'theme_schema');
+}
+export function validateTheme(bytes: Uint8Array, meta: SubmissionMeta): PackSummary {
+  const zip = new WorkshopArchive(bytes, 256);
+  const candidates = [...zip.files.keys()].filter(name => /^(?:[^/]+\/)?theme\.json$/.test(name));
+  need(candidates.length === 1, 'archive_pack_count');
+  const manifestPath = candidates[0]!, prefix = manifestPath.slice(0, -'theme.json'.length);
+  need([...zip.directories].every(name => prefix !== '' && name === prefix), 'theme_extra_file');
+  const raw = zip.read(manifestPath, THEME_JSON_CAP), pack = strictJson(raw, THEME_JSON_CAP, 60);
+  need(record(pack) && depth(pack) <= 60 && pack.schema === 1 && typeof pack.id === 'string' &&
+    typeof pack.name === 'string' && pack.name.trim().length > 0 && [...pack.name].length <= 120, 'theme_schema');
+  checkThemeKeys(pack, THEME_TOP_KEYS);
+  need(pack.id === meta.id && pack.author === meta.author && pack.license === meta.license && pack.source === meta.source, 'theme_metadata_mismatch');
+
+  if (pack.title !== undefined) {
+    need(record(pack.title), 'theme_schema');
+    checkThemeKeys(pack.title, new Set(['zh', 'en']));
+    for (const v of Object.values(pack.title)) {
+      if (v !== undefined) need(typeof v === 'string' && v.trim().length > 0 && [...v].length <= 120, 'theme_schema');
+    }
+  }
+  if (pack.description !== undefined && pack.description !== '') {
+    need(typeof pack.description === 'string' && pack.description.trim().length > 0 && [...pack.description].length <= 512, 'theme_schema');
+  }
+  if (pack.tags !== undefined) {
+    need(Array.isArray(pack.tags) && pack.tags.length <= 8, 'theme_schema');
+    const seenTags = new Set<string>();
+    for (const tag of pack.tags) {
+      need(typeof tag === 'string' && tag.trim().length > 0 && [...tag].length <= 32 && !seenTags.has(tag), 'theme_schema');
+      seenTags.add(tag);
+    }
+  }
+
+  const images = new Set<string>(), fonts = new Set<string>(), aliases = new Set<string>();
+  const addAsset = (name: string, bucket: Set<string>) => {
+    if (!bucket.has(name)) {
+      const alias = nameAlias(name);
+      need(!aliases.has(alias), 'theme_asset_alias');
+      aliases.add(alias);
+      bucket.add(name);
+    }
+  };
+
+  if (pack.palette !== undefined) {
+    need(record(pack.palette), 'theme_schema');
+    checkThemeKeys(pack.palette, THEME_PALETTE_KEYS);
+    if (pack.palette.seed !== undefined) need(typeof pack.palette.seed === 'string' && THEME_HEX.test(pack.palette.seed.trim()), 'theme_schema');
+    if (pack.palette.seedDark !== undefined) need(typeof pack.palette.seedDark === 'string' && THEME_HEX.test(pack.palette.seedDark.trim()), 'theme_schema');
+    checkThemeNum(pack.palette.tintHue, 0, 360);
+    checkThemeNum(pack.palette.tintChroma, 0, 2);
+    checkThemeNum(pack.palette.glowOpacity, 0, 1);
+    checkThemeColors(pack.palette.light);
+    checkThemeColors(pack.palette.dark);
+  }
+
+  if (pack.surfaces !== undefined) {
+    need(record(pack.surfaces), 'theme_schema');
+    checkThemeKeys(pack.surfaces, THEME_SURFACE_KEYS);
+    checkThemeEnum(pack.surfaces.preset, ['glass', 'paper', 'flat', 'outlined']);
+    checkThemeNum(pack.surfaces.chromeBlur, 0, 40);
+    checkThemeNum(pack.surfaces.sheetBlur, 0, 40);
+    checkThemeNum(pack.surfaces.cardOpacity, 0, 1);
+    checkThemeNum(pack.surfaces.pillOpacity, 0, 1);
+    checkThemeNum(pack.surfaces.hairlineWidth, 0, 3);
+    checkThemeNum(pack.surfaces.rimOpacity, 0, 1);
+    checkThemeNum(pack.surfaces.shadowOpacity, 0, 1);
+    checkThemeNum(pack.surfaces.backdropOpacity, 0, 1);
+    if (pack.surfaces.backdropRepeat !== undefined) need(typeof pack.surfaces.backdropRepeat === 'boolean', 'theme_schema');
+    if (pack.surfaces.backdropImage !== undefined) {
+      need(safeThemeAsset(pack.surfaces.backdropImage, ['.png']), 'theme_asset_name');
+      addAsset(pack.surfaces.backdropImage, images);
+    }
+  }
+
+  if (pack.typography !== undefined) {
+    need(record(pack.typography), 'theme_schema');
+    checkThemeKeys(pack.typography, THEME_TYPO_KEYS);
+    for (const role of ['uiFont', 'readingFont', 'headingFont', 'codeFont']) {
+      const val = pack.typography[role];
+      if (val !== undefined) {
+        need(typeof val === 'string' && (THEME_BUILT_IN_FONTS.has(val) || safeThemeAsset(val, ['.ttf', '.otf'])), 'theme_font_role');
+        if (!THEME_BUILT_IN_FONTS.has(val)) addAsset(val, fonts);
+      }
+    }
+    checkThemeNum(pack.typography.readingScale, 0.85, 1.25);
+    checkThemeNum(pack.typography.readingLineHeight, 1.2, 2.0);
+    checkThemeNum(pack.typography.headingScale, 0.85, 1.35);
+  }
+  need(fonts.size <= 2, 'theme_font_count');
+
+  if (pack.shapes !== undefined) {
+    need(record(pack.shapes), 'theme_schema');
+    checkThemeKeys(pack.shapes, THEME_SHAPE_KEYS);
+    checkThemeNum(pack.shapes.cornerScale, 0, 1.6);
+    checkThemeNum(pack.shapes.borderWidth, 0, 2.5);
+    checkThemeNum(pack.shapes.turnGap, 12, 40);
+    checkThemeNum(pack.shapes.inTurnGap, 4, 20);
+    checkThemeNum(pack.shapes.gutter, 10, 28);
+  }
+
+  if (pack.components !== undefined) {
+    need(record(pack.components), 'theme_schema');
+    checkThemeKeys(pack.components, THEME_COMP_KEYS);
+    checkThemeEnum(pack.components.headerStyle, ['glass', 'ghost', 'outlined', 'minimal']);
+    checkThemeEnum(pack.components.composerStyle, ['floatingGlass', 'solidPaper', 'outlined']);
+    checkThemeEnum(pack.components.sendButtonStyle, ['primary', 'ink', 'tonal']);
+    checkThemeEnum(pack.components.userBubbleStyle, ['soft', 'outlined', 'accent', 'minimal']);
+    checkThemeEnum(pack.components.assistantStyle, ['plain', 'card', 'leftRule']);
+    if (pack.components.useReadingFontForReply !== undefined) need(typeof pack.components.useReadingFontForReply === 'boolean', 'theme_schema');
+    checkThemeEnum(pack.components.suggestionCardStyle, ['glass', 'paper', 'outlined', 'minimal']);
+    checkThemeEnum(pack.components.codeBlockStyle, ['well', 'outlined', 'card']);
+  }
+
+  if (pack.emptyState !== undefined) {
+    need(record(pack.emptyState), 'theme_schema');
+    checkThemeKeys(pack.emptyState, THEME_EMPTY_KEYS);
+    checkThemeEnum(pack.emptyState.layout, ['centered', 'editorial', 'compact']);
+    checkThemeEnum(pack.emptyState.heroStyle, ['whale', 'badge', 'customImage', 'hidden']);
+    if (pack.emptyState.useReadingFontForGreeting !== undefined) need(typeof pack.emptyState.useReadingFontForGreeting === 'boolean', 'theme_schema');
+    if (pack.emptyState.showConnectedSubtitle !== undefined) need(typeof pack.emptyState.showConnectedSubtitle === 'boolean', 'theme_schema');
+    checkThemeEnum(pack.emptyState.suggestionsDisplay, ['expanded', 'collapsible', 'grid']);
+    if (pack.emptyState.heroImage !== undefined) {
+      need(safeThemeAsset(pack.emptyState.heroImage, ['.png']), 'theme_asset_name');
+      addAsset(pack.emptyState.heroImage, images);
+    }
+    if (pack.emptyState.heroStyle === 'customImage') {
+      need(pack.emptyState.heroImage !== undefined, 'theme_schema');
+    }
+  }
+
+  const kept = new Set([
+    manifestPath,
+    ...[...images].map(n => prefix + n),
+    ...[...fonts].map(n => prefix + n),
+    ...(meta.previewSource === 'theme-preview' ? ['preview.png'] : []),
+  ]);
+  need([...zip.files.keys()].every(name => kept.has(name)), 'theme_extra_file');
+  let total = 0;
+  for (const name of images) {
+    const data = zip.read(prefix + name, Math.min(PET_LIMITS.sheetBytes, THEME_ASSET_TOTAL_CAP - total));
+    total += data.length;
+    validatePng(data);
+  }
+  for (const name of fonts) {
+    const data = zip.read(prefix + name, Math.min(THEME_FONT_CAP, THEME_ASSET_TOTAL_CAP - total));
+    total += data.length;
+    need(validFontMagic(data), 'theme_font_invalid');
+  }
+  if (meta.previewSource === 'theme-preview') need(zip.files.has('preview.png'), 'preview_missing');
+  const previewBytes = meta.previewSource === 'theme-preview' ? zip.files.get('preview.png')!.size : 0;
+  return { validator: VALIDATOR_VERSION, files: zip.files.size, expandedBytes: raw.length + total + previewBytes };
 }
 export function validatePet(bytes: Uint8Array, meta: SubmissionMeta): PackSummary {
   const zip = new WorkshopArchive(bytes, PET_LIMITS.archiveEntries);

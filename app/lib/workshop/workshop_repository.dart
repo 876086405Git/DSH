@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../companion/companion_pack.dart';
 import '../pets/pet_library.dart';
+import '../themes/theme_library.dart';
 import '../update/downloader.dart';
 import '../update/installer.dart';
 import '../update/update_config.dart' show DownloadUrl;
@@ -71,9 +72,10 @@ abstract interface class WorkshopPackages {
 }
 
 class LocalWorkshopPackages implements WorkshopPackages {
-  const LocalWorkshopPackages({required this.pets, required this.companion});
+  const LocalWorkshopPackages({required this.pets, required this.companion, this.themes});
   final PetLibrary pets;
   final CompanionPackStore companion;
+  final ThemeLibrary? themes;
 
   @override
   Future<List<WorkshopLocalEntry>> installed() async {
@@ -85,6 +87,16 @@ class LocalWorkshopPackages implements WorkshopPackages {
         else
           WorkshopInstallationIssue(localId: entry.key, issue: entry.value.issue!),
     ];
+    if (themes case final themeLib?) {
+      final themeFound = await themeLib.workshopReceipts();
+      for (final entry in themeFound.entries) {
+        if (entry.value.receipt case final receipt?) {
+          result.add(WorkshopInstalled(localId: entry.key, receipt: receipt, issue: entry.value.issue));
+        } else {
+          result.add(WorkshopInstallationIssue(localId: entry.key, issue: entry.value.issue!));
+        }
+      }
+    }
     // Listing isolates expected failures from this slot, including recovery.
     // Errors not converted by the store still escape this boundary.
     try {
@@ -116,6 +128,11 @@ class LocalWorkshopPackages implements WorkshopPackages {
       case 'companion':
         await companion.install(archive.path, workshop: receipt, replaceExisting: replaceExisting);
         return WorkshopInstalled(localId: 'companion', receipt: receipt);
+      case 'theme':
+        final themeLib = themes;
+        if (themeLib == null) workshopInvalid('workshop_unsupported_kind');
+        final result = await themeLib.install(archive, workshop: receipt, replaceExisting: replaceExisting);
+        return WorkshopInstalled(localId: result.id, receipt: receipt);
       default: workshopInvalid('workshop_unsupported_kind');
     }
   }
@@ -124,6 +141,10 @@ class LocalWorkshopPackages implements WorkshopPackages {
     switch (installed.receipt.kind) {
       case 'pet': await pets.remove(installed.localId, expectedWorkshop: installed.receipt);
       case 'companion': await companion.remove(expectedWorkshop: installed.receipt);
+      case 'theme':
+        final themeLib = themes;
+        if (themeLib == null) workshopInvalid('workshop_unsupported_kind');
+        await themeLib.remove(installed.localId, expectedWorkshop: installed.receipt);
       default: workshopInvalid('workshop_unsupported_kind');
     }
   }
@@ -304,6 +325,56 @@ class WorkshopRepository {
     return _prepared(file, publication);
   });
 
+  Future<WorkshopPreparedUpload> prepareTheme(
+    ThemeLibrary library,
+    String localId,
+    File destination,
+    WorkshopPublication publication, {
+    WorkshopPreviewInput? preview,
+  }) => _exclusive(() async {
+    if (publication.kind != 'theme') workshopInvalid('workshop_unsupported_kind');
+    if (publication.previewSource != null && preview == null) workshopInvalid('workshop_preview_missing');
+    if (preview?.source != publication.previewSource) workshopInvalid('workshop_bad_metadata');
+    if (preview == null) {
+      final file = await library.exportZip(
+        localId,
+        destination,
+        publicId: publication.id,
+        author: publication.author,
+        license: publication.license,
+        source: publication.source,
+      );
+      return _prepared(file, publication);
+    }
+    final target = await workshopExportTarget(destination);
+    Directory? owned;
+    try {
+      await target.parent.create(recursive: true);
+      final directory = await target.parent.createTemp('.workshop-theme-preview-');
+      owned = directory;
+      final exported = await library.exportZip(
+        localId,
+        File('${directory.path}/theme.zip'),
+        publicId: publication.id,
+        author: publication.author,
+        license: publication.license,
+        source: publication.source,
+      );
+      final bytes = await compute(workshopThemePreviewZip, (await exported.readAsBytes(), preview));
+      await workshopCommitExport(target, (staging) async {
+        await staging.writeAsBytes(bytes, flush: true);
+      });
+      return await _prepared(target, publication);
+    } finally {
+      final directory = owned;
+      try {
+        if (directory != null && await directory.exists()) await directory.delete(recursive: true);
+      } on FileSystemException {
+        // Ignored.
+      }
+    }
+  });
+
   Future<WorkshopPreparedUpload> prepareCompanion(CompanionPackStore store, File destination, WorkshopPublication publication,
     {String? name, String? persona, WorkshopPreviewInput? preview}) => _exclusive(() async {
     if (publication.kind != 'companion') workshopInvalid('workshop_unsupported_kind');
@@ -384,6 +455,12 @@ const Set<String> workshopPackageValidationCodes = {
   'workshop_pet_missing_sheet',
   'workshop_pet_bad_sheet',
   'workshop_pet_too_large',
+  'workshop_theme_not_a_zip',
+  'workshop_theme_no_pack',
+  'workshop_theme_bad_pack',
+  'workshop_theme_missing_asset',
+  'workshop_theme_bad_asset',
+  'workshop_theme_too_large',
   'workshop_companion_bad_index',
   'workshop_companion_bad_json',
   'workshop_companion_bad_metadata',
@@ -415,6 +492,11 @@ WorkshopException workshopLocalError(Object error) {
   if (error is PetImportException) {
     errno = error.osErrorCode;
     if (error.problem != PetImportProblem.storage) return WorkshopException('workshop_pet_${_problemName(error.problem.name)}');
+  } else if (error is ThemeImportException) {
+    errno = error.osErrorCode;
+    if (error.problem != ThemeImportProblem.storage) {
+      return WorkshopException('workshop_theme_${_problemName(error.problem.name)}');
+    }
   } else if (error is CompanionPackException) {
     errno = error.osErrorCode;
     if (error.detail == 'companion_readers_busy') return const WorkshopException('workshop_readers_busy');

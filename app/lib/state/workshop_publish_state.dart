@@ -317,7 +317,7 @@ class WorkshopPublishController extends Notifier<WorkshopPublishState> {
       state = state.copyWith(error: const WorkshopException('workshop_pending_submission'));
       return false;
     }
-    if ((source.kind != 'pet' && source.kind != 'companion') || source.localId.isEmpty) {
+    if ((source.kind != 'pet' && source.kind != 'companion' && source.kind != 'theme') || source.localId.isEmpty) {
       state = state.copyWith(error: const WorkshopException('workshop_unsupported_kind'));
       return false;
     }
