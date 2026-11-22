@@ -159,6 +159,7 @@ piai-usage-evidence.diff
 piai-tool-call-id.diff
 piai-bedrock-usage-evidence.diff
 empty-tool-name-replay.diff
+piai-dashscope-system-role.diff
 companion-phone-memory-request.diff
 companion-auxiliary-single-request.diff
 companion-chat-usage-receipts.diff
