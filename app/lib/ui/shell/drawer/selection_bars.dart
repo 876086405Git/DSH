@@ -26,10 +26,15 @@ class DrawerSelectionHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = context.l10n;
-    final theme = Theme.of(context);
     // What 全选 picks: the conversations on screen.
     final selectable = drawerSelectableIds(watchDrawerBlocks(ref, now: now) ?? const []);
+    // Ticking a row rebuilds only the bar, not the sorted, grouped list above.
+    return Consumer(builder: (context, ref, _) => _bar(context, ref, selectable));
+  }
+
+  Widget _bar(BuildContext context, WidgetRef ref, List<String> selectable) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
     final selected = ref.watch(drawerSelectionProvider) ?? const {};
     final notifier = ref.read(drawerSelectionProvider.notifier);
     final all = selectable.isNotEmpty && selectable.every(selected.contains);

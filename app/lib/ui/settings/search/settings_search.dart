@@ -57,10 +57,13 @@ class SearchHit {
 
 /// The words an entry answers to in one language.
 class _Words {
-  _Words(this.title, this.synonyms, this.path);
+  _Words(String title, List<String> synonyms, String path)
+    : title = normalizeQuery(title),
+      synonyms = [for (final s in synonyms) (text: s.trim(), normalized: normalizeQuery(s))],
+      path = normalizeQuery(path);
 
   final String title;
-  final List<String> synonyms;
+  final List<({String text, String normalized})> synonyms;
   final String path;
 }
 
@@ -71,7 +74,7 @@ class _Words {
   }
 
   for (final w in langs) {
-    final title = normalizeQuery(w.title);
+    final title = w.title;
     if (title == q) {
       take(SearchMatch.titleExact);
     } else if (title.startsWith(q)) {
@@ -80,15 +83,15 @@ class _Words {
       take(SearchMatch.title);
     }
     for (final s in w.synonyms) {
-      final n = normalizeQuery(s);
+      final n = s.normalized;
       if (n.isEmpty) continue;
       if (n == q) {
-        take(SearchMatch.synonymExact, s.trim());
+        take(SearchMatch.synonymExact, s.text);
       } else if (n.contains(q)) {
-        take(SearchMatch.synonym, s.trim());
+        take(SearchMatch.synonym, s.text);
       }
     }
-    if (normalizeQuery(w.path).contains(q)) take(SearchMatch.path);
+    if (w.path.contains(q)) take(SearchMatch.path);
   }
   return best;
 }
@@ -118,45 +121,87 @@ List<SearchHit> searchSettings(
   bool androidFeatures = true,
   bool ios = false,
 }) {
-  final q = normalizeQuery(query);
-  if (q.isEmpty) return const [];
-  final hits = <SearchHit>[];
-  for (final spot in spots) {
-    if (!androidFeatures && SettingsIndex.androidOnly(spot) && !(ios && spot.iosToo)) continue;
-    if ((androidFeatures || ios) && spot.ohosOnly) continue;
-    if (ios && spot.iosLacks) continue;
+  if (normalizeQuery(query).isEmpty) return const [];
+  return SettingsSearchIndex(
+    spots: spots,
+    features: features,
+    zh: zh,
+    en: en,
+    androidFeatures: androidFeatures,
+    ios: ios,
+  ).search(query);
+}
+
+/// Resolved, normalized words for one catalog and platform. The page keeps
+/// this until its plugin settings or feature catalog changes, so typing only
+/// normalizes the query, not every title, synonym and path again.
+class SettingsSearchIndex {
+  SettingsSearchIndex({
+    required Iterable<SettingSpot> spots,
+    required List<FeatureSection> features,
+    required L10n zh,
+    required L10n en,
+    bool androidFeatures = true,
+    bool ios = false,
+  }) {
     final harmony = !androidFeatures && !ios;
-    final langs = [
-      for (final l in [zh, en])
-        _Words(spot.titleOn(harmony: harmony)(l), [
-          ..._split((harmony ? spot.ohosKeywords ?? spot.keywords : spot.keywords)?.call(l)),
-          ?spot.altTitle?.call(l),
-        ], SettingsIndex.path(spot, l).join(' ')),
-    ];
-    final best = _best(q, langs);
-    if (best == null) continue;
-    hits.add(
-      SearchHit._(
+    for (final spot in spots) {
+      if (!androidFeatures && SettingsIndex.androidOnly(spot) && !(ios && spot.iosToo)) continue;
+      if ((androidFeatures || ios) && spot.ohosOnly) continue;
+      if (ios && spot.iosLacks) continue;
+      _spots.add((
         spot: spot,
-        match: best.$1,
-        score: best.$1.score + spot.freq.bonus,
-        synonym: best.$1.bySynonym ? best.$2 : null,
-      ),
-    );
-  }
-  for (final section in features) {
-    for (final item in section.items) {
-      // Cards that open a settings page are found as that page.
-      if (SettingsIndex.linkIds.contains(item.id)) continue;
-      final best = _best(q, [
-        for (final l in [zh, en]) _Words(item.titleIn(l), const [], section.titleIn(l)),
-      ]);
-      if (best == null) continue;
-      hits.add(SearchHit._(feature: item, section: section, match: best.$1, score: best.$1.score));
+        langs: [
+          for (final l in [zh, en])
+            _Words(spot.titleOn(harmony: harmony)(l), [
+              ..._split((harmony ? spot.ohosKeywords ?? spot.keywords : spot.keywords)?.call(l)),
+              ?spot.altTitle?.call(l),
+            ], SettingsIndex.path(spot, l).join(' ')),
+        ],
+      ));
+    }
+    for (final section in features) {
+      for (final item in section.items) {
+        // Cards that open a settings page are found as that page.
+        if (SettingsIndex.linkIds.contains(item.id)) continue;
+        _features.add((
+          item: item,
+          section: section,
+          langs: [
+            for (final l in [zh, en]) _Words(item.titleIn(l), const [], section.titleIn(l)),
+          ],
+        ));
+      }
     }
   }
-  // Stable: a tie keeps the index's order (pages before rows, the hub first).
-  final order = {for (final (i, h) in hits.indexed) h: i};
-  hits.sort((a, b) => b.score != a.score ? b.score.compareTo(a.score) : order[a]!.compareTo(order[b]!));
-  return hits.take(searchLimit).toList();
+
+  final _spots = <({SettingSpot spot, List<_Words> langs})>[];
+  final _features = <({FeatureItem item, FeatureSection section, List<_Words> langs})>[];
+
+  List<SearchHit> search(String query) {
+    final q = normalizeQuery(query);
+    if (q.isEmpty) return const [];
+    final hits = <SearchHit>[];
+    for (final entry in _spots) {
+      final best = _best(q, entry.langs);
+      if (best == null) continue;
+      hits.add(
+        SearchHit._(
+          spot: entry.spot,
+          match: best.$1,
+          score: best.$1.score + entry.spot.freq.bonus,
+          synonym: best.$1.bySynonym ? best.$2 : null,
+        ),
+      );
+    }
+    for (final entry in _features) {
+      final best = _best(q, entry.langs);
+      if (best == null) continue;
+      hits.add(SearchHit._(feature: entry.item, section: entry.section, match: best.$1, score: best.$1.score));
+    }
+    // Stable: a tie keeps the index's order (pages before rows, the hub first).
+    final order = {for (final (i, h) in hits.indexed) h: i};
+    hits.sort((a, b) => b.score != a.score ? b.score.compareTo(a.score) : order[a]!.compareTo(order[b]!));
+    return hits.take(searchLimit).toList();
+  }
 }

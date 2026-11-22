@@ -56,8 +56,7 @@ class DrawerConversationList extends ConsumerWidget {
     final l10n = context.l10n;
     final blocks = watchDrawerBlocks(ref, now: now);
     if (blocks == null) return const SizedBox.shrink();
-    final selection = ref.watch(drawerSelectionProvider);
-    final selecting = !readOnly && selection != null;
+    final selecting = !readOnly && ref.watch(drawerSelectionProvider.select((s) => s != null));
     final filter = ref.watch(drawerFilterProvider);
     final current = ref.watch(currentSessionProvider);
     final pending = ref.watch(pendingInteractionsProvider);
@@ -77,23 +76,26 @@ class DrawerConversationList extends ConsumerWidget {
 
     Widget tile(SessionSummary s, {bool inFolder = false}) {
       final id = s.sessionId;
-      return SessionTile(
+      final title = sessionTitle(s);
+      return Consumer(
         key: ValueKey('session-$id'),
-        title: sessionTitle(s),
-        running: s.running,
-        current: id == current,
-        pending: readOnly ? null : pending[id],
-        unread: !readOnly && unread.contains(id),
-        pinned: inFolder && pinned.contains(id),
-        indent: inFolder ? SessionTile.folderIndent : 0,
-        selecting: selecting,
-        selected: selection?.contains(id) ?? false,
-        onTap: selecting ? () => selectionNotifier.toggle(id) : () => onOpen(id),
-        onLongPress: readOnly
-            ? null
-            : selecting
-            ? () => selectionNotifier.toggle(id)
-            : () => onLongPress(s),
+        builder: (context, ref, _) => SessionTile(
+          title: title,
+          running: s.running,
+          current: id == current,
+          pending: readOnly ? null : pending[id],
+          unread: !readOnly && unread.contains(id),
+          pinned: inFolder && pinned.contains(id),
+          indent: inFolder ? SessionTile.folderIndent : 0,
+          selecting: selecting,
+          selected: ref.watch(drawerSelectionProvider.select((s) => s?.contains(id) ?? false)),
+          onTap: selecting ? () => selectionNotifier.toggle(id) : () => onOpen(id),
+          onLongPress: readOnly
+              ? null
+              : selecting
+              ? () => selectionNotifier.toggle(id)
+              : () => onLongPress(s),
+        ),
       );
     }
 

@@ -102,8 +102,6 @@ class SettingsSearchPage extends ConsumerStatefulWidget {
 class _SettingsSearchPageState extends ConsumerState<SettingsSearchPage> {
   final _field = TextEditingController();
   final _focus = FocusNode();
-  static final _zh = lookupL10n(AppLocale.zhCN);
-  static final _en = lookupL10n(AppLocale.en);
 
   @override
   void dispose() {
@@ -158,17 +156,10 @@ class _SettingsSearchPageState extends ConsumerState<SettingsSearchPage> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final query = _field.text;
-    final extra = ref.watch(_pluginSpotsProvider);
+    ref.watch(_pluginSpotsProvider); // alive between searches, as before the index
     final androidFeatures = ref.watch(androidSystemFeaturesProvider);
-    List<SearchHit> search({required bool androidFeatures}) => searchSettings(
-      query,
-      spots: [...SettingsIndex.spots, ...extra],
-      features: ref.watch(featureSectionsProvider),
-      zh: _zh,
-      en: _en,
-      androidFeatures: androidFeatures,
-      ios: ref.watch(operatingSystemProvider) == 'ios',
-    );
+    List<SearchHit> search({required bool androidFeatures}) =>
+        ref.watch(_searchIndexProvider((androidFeatures: androidFeatures, locale: l10n.localeName))).search(query);
     final hits = query.trim().isEmpty ? const <SearchHit>[] : search(androidFeatures: androidFeatures);
     final session = ref.watch(currentSessionProvider);
     return AppPage(
@@ -254,6 +245,21 @@ class _SettingsSearchPageState extends ConsumerState<SettingsSearchPage> {
     ];
   }
 }
+
+typedef _IndexKey = ({bool androidFeatures, String locale});
+
+/// Catalog or language changes rebuild the index; query edits do not.
+/// Older plugin titles use AppLocale.current even when passed a locale.
+final _searchIndexProvider = Provider.autoDispose.family<SettingsSearchIndex, _IndexKey>(
+  (ref, key) => SettingsSearchIndex(
+    spots: [...SettingsIndex.spots, ...ref.watch(_pluginSpotsProvider)],
+    features: ref.watch(featureSectionsProvider),
+    zh: lookupL10n(AppLocale.zhCN),
+    en: lookupL10n(AppLocale.en),
+    androidFeatures: key.androidFeatures,
+    ios: ref.watch(operatingSystemProvider) == 'ios',
+  ),
+);
 
 /// A plugin's own settings form, found once the host has said it has one,
 /// under the name 设置 › 引擎参数 › 插件 lists it by (in both languages).

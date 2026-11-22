@@ -510,9 +510,11 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
   /// Archived sessions of the active host, newest first (session search lists
   /// them so they can be found and restored). Changes to the archived set
   /// re-emit [state], so watchers of [sessionsProvider] see them.
-  List<SessionSummary> get archivedSessions =>
-      _rows().where((s) => !s.blank && !s.isSubagent && _archived.contains(s.sessionId)).toList()
-        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  List<SessionSummary> get archivedSessions {
+    if (_archived.isEmpty) return [];
+    return _rows().where((s) => !s.blank && !s.isSubagent && _archived.contains(s.sessionId)).toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
 
   /// Every row of the last `session/list`, subagent children included (the
   /// lineage in agents_state.dart is built from it). Re-read on [state].

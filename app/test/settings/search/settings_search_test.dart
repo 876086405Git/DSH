@@ -63,6 +63,31 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('matching', () {
+    test('a catalog resolves its words once across query edits', () {
+      var titles = 0;
+      var keywords = 0;
+      final spot = SettingSpot(
+        'counted',
+        page: SettingsPageId.about,
+        title: (_) {
+          titles++;
+          return 'Alpha';
+        },
+        keywords: (_) {
+          keywords++;
+          return 'First, 首个';
+        },
+      );
+      final index = SettingsSearchIndex(spots: [spot], features: const [], zh: _zh, en: _en);
+      expect((titles, keywords), (2, 2));
+      for (final query in ['a', 'al', 'alpha', 'first', '首个']) {
+        expect(index.search(query).single.spot, same(spot));
+      }
+      expect(index.search('missing'), isEmpty);
+      expect((titles, keywords), (2, 2));
+      expect(index.search('First').single.synonym, 'First');
+    });
+
     test('iOS search keeps the available PiP setting and filters unsupported renderer controls', () {
       List<String?> ids(String query) => [
         for (final hit in searchSettings(
