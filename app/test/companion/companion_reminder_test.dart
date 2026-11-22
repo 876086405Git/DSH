@@ -271,9 +271,7 @@ void main() {
         owner = CompanionMemoryOwner(store, CompanionLocal.at(root));
         await tester.pumpWidget(
           ProviderScope(
-            overrides: [
-              activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
-            ],
+            overrides: [activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null))],
             child: MaterialApp(
               theme: buildDarkTheme(),
               localizationsDelegates: L10n.localizationsDelegates,
@@ -317,9 +315,7 @@ void main() {
     owner = CompanionMemoryOwner(store, CompanionLocal.at(root));
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
-        ],
+        overrides: [activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null))],
         child: MaterialApp(
           theme: buildDarkTheme(),
           localizationsDelegates: L10n.localizationsDelegates,
@@ -355,9 +351,7 @@ void main() {
         await tester.pump();
         await tester.pumpWidget(
           ProviderScope(
-            overrides: [
-              activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
-            ],
+            overrides: [activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null))],
             child: MaterialApp(
               theme: buildDarkTheme(),
               localizationsDelegates: L10n.localizationsDelegates,
@@ -516,9 +510,7 @@ void main() {
       calls.clear();
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
-          ],
+          overrides: [activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null))],
           child: MaterialApp(
             theme: buildDarkTheme(),
             localizationsDelegates: L10n.localizationsDelegates,

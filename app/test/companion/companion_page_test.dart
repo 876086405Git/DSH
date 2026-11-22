@@ -3495,9 +3495,7 @@ void main() {
               expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
             }
 
-            List<MemoryRow> readRows(String sql) => [
-              for (final row in db.select(sql)) Map<String, Object?>.from(row),
-            ];
+            List<MemoryRow> readRows(String sql) => [for (final row in db.select(sql)) Map<String, Object?>.from(row)];
             List<List<MemoryRow>> ledger() => [
               readRows('SELECT * FROM companion_tasks ORDER BY task_id'),
               readRows('SELECT * FROM companion_task_revisions ORDER BY task_id,task_rev'),
@@ -3701,10 +3699,7 @@ void main() {
                 beforeDetail[0].where((row) => row['task_id'] != id),
               );
               expect(afterCancel[1], hasLength(beforeDetail[1].length + 1));
-              expect(
-                afterCancel[1].where((row) => row['task_id'] != id || row['task_rev'] == 1),
-                beforeDetail[1],
-              );
+              expect(afterCancel[1].where((row) => row['task_id'] != id || row['task_rev'] == 1), beforeDetail[1]);
               expect(afterCancel[2], beforeDetail[2]);
               expect(calls.where((call) => call.method == 'wake').single.arguments, {'taskId': id});
               expect(calls.where((call) => call.method == 'resolve'), isEmpty);
@@ -6039,10 +6034,10 @@ void main() {
               await tester.pump();
               expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, answer);
               expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running, isTrue);
-              expect(voiceCalls.where((call) => call.method == 'speak').map((call) => (call.arguments as Map)['text']), [
-                acknowledgment,
-                answer,
-              ]);
+              expect(
+                voiceCalls.where((call) => call.method == 'speak').map((call) => (call.arguments as Map)['text']),
+                [acknowledgment, answer],
+              );
               final spoken = voiceCalls.lastWhere((call) => call.method == 'speak').arguments as Map;
               expect(spoken['flush'], isFalse, reason: 'the new streamed sentence uses the actual speaker queue');
               expect(memory.store.archive['widget_clear_pending'], 1);
@@ -6054,15 +6049,21 @@ void main() {
             expect(await settleMixed(tester, clearing), isTrue);
             // Drain metadata behind the real queue without changing its line.
             expect(
-              await settleMixed(tester, widget.update({
-                'memoryArchiveId': memory.store.archive['id'],
-                'memoryControlRevision': clearedRevision,
-              })),
+              await settleMixed(
+                tester,
+                widget.update({
+                  'memoryArchiveId': memory.store.archive['id'],
+                  'memoryControlRevision': clearedRevision,
+                }),
+              ),
               isTrue,
             );
             await tester.pump();
             expect(memory.store.archive['widget_clear_pending'], 0);
-            expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, newerChat ? answer : acknowledgment);
+            expect(
+              tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text,
+              newerChat ? answer : acknowledgment,
+            );
             expect(voiceCalls, callsBeforeAck, reason: 'late clearing must not speak again or flush newer speech');
 
             if (newerChat) {
@@ -6080,10 +6081,13 @@ void main() {
               expect(memory.store.requests().singleWhere((row) => row['category'] == 'chat')['terminal'], 'complete');
               expect(memory.store.messages().singleWhere((row) => row['role'] == 'assistant')['text'], answer);
               expect(
-                await settleMixed(tester, widget.update({
-                  'memoryArchiveId': memory.store.archive['id'],
-                  'memoryControlRevision': clearedRevision,
-                })),
+                await settleMixed(
+                  tester,
+                  widget.update({
+                    'memoryArchiveId': memory.store.archive['id'],
+                    'memoryControlRevision': clearedRevision,
+                  }),
+                ),
                 isTrue,
               );
               expect(widgetUpdates.where((value) => value['line'] != null).map((value) => value['line']), [answer]);

@@ -6029,6 +6029,9 @@ class L10nZh extends L10n {
   String get companionTasksEmpty => '你还没交代我什么事呢。';
 
   @override
+  String get companionTasksEarlier => '更早的事';
+
+  @override
   String get companionTaskMissing => '这件事我这儿找不到了。';
 
   @override
@@ -6056,7 +6059,7 @@ class L10nZh extends L10n {
   String get companionReminderZoneHint => '比如 Asia/Shanghai 或 +08:00';
 
   @override
-  String get companionReminderQueued => '好，记下了，正在帮你设。';
+  String get companionReminderQueued => '好，提醒记下了，还没确认设好。';
 
   @override
   String get companionReminderDone => '设好了，到点我叫你。';
@@ -6113,7 +6116,7 @@ class L10nZh extends L10n {
   String get companionReminderInvalidTime => '这个时间我没弄明白，再告诉我一次哪天、几点、哪个时区？';
 
   @override
-  String get companionReminderCancelUnknown => '我在撤了，但不太确定撤干净没；要是到点还响，别理它就好。';
+  String get companionReminderCancelUnknown => '取消的要求已记下，还没确认这条提醒已撤下。';
 
   @override
   String get companionReminderWhich => '你说的是哪一条？去「交代的事」里点给我看看。';
@@ -6186,7 +6189,7 @@ class L10nZh extends L10n {
   String get companionLookupCancelled => '好，不查了。';
 
   @override
-  String get companionLookupCancelUnknown => '我让它停了，不过还不确定停下没。';
+  String get companionLookupCancelUnknown => '已记下不再查，还没确认原来的查询已停。';
 
   @override
   String get companionLookupUnavailable => '现在连不上能查的地方，还没查到结果。';

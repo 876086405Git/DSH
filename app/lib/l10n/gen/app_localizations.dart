@@ -11222,6 +11222,12 @@ abstract class L10n {
   /// **'你还没交代我什么事呢。'**
   String get companionTasksEmpty;
 
+  /// No description provided for @companionTasksEarlier.
+  ///
+  /// In zh, this message translates to:
+  /// **'更早的事'**
+  String get companionTasksEarlier;
+
   /// No description provided for @companionTaskMissing.
   ///
   /// In zh, this message translates to:
@@ -11279,7 +11285,7 @@ abstract class L10n {
   /// No description provided for @companionReminderQueued.
   ///
   /// In zh, this message translates to:
-  /// **'好，记下了，正在帮你设。'**
+  /// **'好，提醒记下了，还没确认设好。'**
   String get companionReminderQueued;
 
   /// No description provided for @companionReminderDone.
@@ -11393,7 +11399,7 @@ abstract class L10n {
   /// No description provided for @companionReminderCancelUnknown.
   ///
   /// In zh, this message translates to:
-  /// **'我在撤了，但不太确定撤干净没；要是到点还响，别理它就好。'**
+  /// **'取消的要求已记下，还没确认这条提醒已撤下。'**
   String get companionReminderCancelUnknown;
 
   /// No description provided for @companionReminderWhich.
@@ -11531,7 +11537,7 @@ abstract class L10n {
   /// No description provided for @companionLookupCancelUnknown.
   ///
   /// In zh, this message translates to:
-  /// **'我让它停了，不过还不确定停下没。'**
+  /// **'已记下不再查，还没确认原来的查询已停。'**
   String get companionLookupCancelUnknown;
 
   /// No description provided for @companionLookupUnavailable.

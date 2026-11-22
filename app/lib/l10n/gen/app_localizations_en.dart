@@ -6392,6 +6392,9 @@ class L10nEn extends L10n {
   String get companionTasksEmpty => 'You haven\'t asked me to do anything yet.';
 
   @override
+  String get companionTasksEarlier => 'Earlier errands';
+
+  @override
   String get companionTaskMissing => 'I can\'t find this one anymore.';
 
   @override
@@ -6419,7 +6422,7 @@ class L10nEn extends L10n {
   String get companionReminderZoneHint => 'Like Asia/Shanghai or +08:00';
 
   @override
-  String get companionReminderQueued => 'Okay, got it. I\'m setting it up.';
+  String get companionReminderQueued => 'Okay, I\'ve saved the reminder request. I haven\'t confirmed it\'s set.';
 
   @override
   String get companionReminderDone => 'All set. I\'ll ping you on time.';
@@ -6482,7 +6485,7 @@ class L10nEn extends L10n {
 
   @override
   String get companionReminderCancelUnknown =>
-      'I\'m taking it off, but I\'m not sure it\'s fully gone. If it still rings, just ignore it.';
+      'Your request to cancel is saved. I haven\'t confirmed that this reminder has been removed.';
 
   @override
   String get companionReminderWhich => 'Which one do you mean? Tap it in Errands.';
@@ -6556,7 +6559,8 @@ class L10nEn extends L10n {
   String get companionLookupCancelled => 'Okay, I won\'t look it up.';
 
   @override
-  String get companionLookupCancelUnknown => 'I asked it to stop, but I\'m not sure it has yet.';
+  String get companionLookupCancelUnknown =>
+      'Your request to stop is saved. I haven\'t confirmed that the original lookup has stopped.';
 
   @override
   String get companionLookupUnavailable => 'I can\'t reach anywhere to look this up right now, so no answer yet.';

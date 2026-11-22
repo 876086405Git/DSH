@@ -137,9 +137,7 @@ void main() {
       });
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
-          ],
+          overrides: [activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null))],
           child: MaterialApp(
             theme: buildDarkTheme(),
             localizationsDelegates: L10n.localizationsDelegates,
