@@ -688,7 +688,7 @@ const _followupDateWord = r'(?:\d{4}-\d{2}-\d{2}|今天|明天|后天|(?:本周|
 final _followupAsk = RegExp(
   '^(?:($_followupDateWord'
   r'(?:上午|下午|晚上)?)|(到时|到时候|过后|事后|结束后))?'
-  r'\s*(?:你(?:可以|来)?|可以|来)?(?:再)?问(?:问)?(?:我)?',
+  r'\s*(?:你(?:可以|来)?|可以|来)?(?:再)?问(?:问)?(我)?',
 );
 
 /// A small literal invitation grammar. Unsupported language remains waiting
@@ -724,6 +724,11 @@ MemoryRow? qualifyMemoryFollowup(MemoryRow card, MemoryRow source) {
   var afterDay = false;
   var reason = subject == null ? 'date_unresolved' : 'waiting_for_completion';
   if (ask != null) {
+    // Keep every original head in the uniqueness check. Inspect the tail
+    // before optional 我 consumption; these two known recipients are not a
+    // general person-name classifier or a restriction on the topic itself.
+    final recipient = '${ask.group(3) ?? ''}${asks.single.substring(ask.end)}';
+    if (recipient.startsWith('医生') || recipient.startsWith('我妈')) return null;
     date = _followupDay(ask.group(1) ?? '', source);
     if (date == null && event != null && ask.group(2) != null) {
       date = _followupDay(event['wording'] as String, source);
