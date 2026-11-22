@@ -30459,7 +30459,7 @@ class L10nEn extends L10n {
 
   @override
   String get workshopPublishCoverHelper =>
-      'PNG, up to 512 px a side and 2 MB. Without one, the first letter of the name is shown.';
+      'Supports JPEG, PNG, WebP and more, resized before upload. Without one, the first letter of the name is shown.';
 
   @override
   String get workshopPublishCoverChosen => 'Your cover';
@@ -30471,14 +30471,13 @@ class L10nEn extends L10n {
   String get workshopPublishCoverRemove => 'Remove';
 
   @override
-  String get workshopPublishCoverBadSize => 'This image is empty or larger than 2 MB. Try another.';
+  String get workshopPublishCoverBadSize => 'This image is empty or larger than 32 MB. Try another.';
 
   @override
-  String get workshopPublishCoverBadPng => 'This isn\'t an intact PNG image. Try another.';
+  String get workshopPublishCoverBadPng => 'This image is damaged or in an unsupported format. Try another.';
 
   @override
-  String get workshopPublishCoverBadDimensions =>
-      'This image is too large: 512 px a side at most. Shrink it and choose again.';
+  String get workshopPublishCoverBadDimensions => 'This image has too many pixels. Shrink it and choose again.';
 
   @override
   String get workshopPublishCoverUnreadable => 'Couldn\'t read this image. Try another.';

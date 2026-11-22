@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:archive/archive.dart';
 
@@ -7,6 +9,49 @@ import '../pets/pet_name_alias.dart';
 import '../pets/pet_pack.dart';
 import '../pets/pet_pack_validator.dart';
 import 'workshop_models.dart';
+
+/// Reads a selected image and fits its first frame to the existing PNG upload contract.
+Future<Uint8List> workshopReadCover(Stream<List<int>> chunks, {int? length}) async {
+  const maxSourceBytes = 32 * 1024 * 1024;
+  const maxSourcePixels = 50 * 1000 * 1000;
+  if (length != null && length > maxSourceBytes) workshopInvalid('workshop_preview_size');
+  final source = BytesBuilder(copy: false);
+  await for (final chunk in chunks) {
+    if (source.length + chunk.length > maxSourceBytes) workshopInvalid('workshop_preview_size');
+    source.add(chunk);
+  }
+  if (source.isEmpty) workshopInvalid('workshop_preview_size');
+
+  ui.ImmutableBuffer? buffer;
+  ui.ImageDescriptor? descriptor;
+  ui.Codec? codec;
+  ui.Image? image;
+  try {
+    buffer = await ui.ImmutableBuffer.fromUint8List(source.takeBytes());
+    descriptor = await ui.ImageDescriptor.encoded(buffer);
+    final (width, height) = (descriptor.width, descriptor.height);
+    // Some codecs decode at source resolution before scaling.
+    if (width * height > maxSourcePixels) workshopInvalid('workshop_preview_dimensions');
+    final scale = math.min(1.0, workshopPreviewSide / math.max(width, height));
+    codec = await descriptor.instantiateCodec(
+      targetWidth: math.max(1, (width * scale).round()),
+      targetHeight: math.max(1, (height * scale).round()),
+    );
+    image = (await codec.getNextFrame()).image;
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (png == null) workshopInvalid('workshop_preview_png');
+    return png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes);
+  } on WorkshopException {
+    rethrow;
+  } on Exception {
+    workshopInvalid('workshop_preview_png');
+  } finally {
+    image?.dispose();
+    codec?.dispose();
+    descriptor?.dispose();
+    buffer?.dispose();
+  }
+}
 
 /// Explicit local input, with no path or credential in page state. The PNG
 /// snapshot is private; later changes to the caller's byte array cannot alter it.
