@@ -12,6 +12,7 @@ plugin-manager-cancel-tree-confirmation.diff
 preset-legacy-delegation.diff
 route-guard.diff
 client-hmr-closed-response.diff
+client-modules-combo-rebuild.diff
 schemastery-json-context.diff
 session-title-word-prefix.diff
 str-editor-view-prefix.diff

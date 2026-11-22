@@ -1,0 +1,15 @@
+--- a/node_modules/@deepseek-ai/dsh-client-modules/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-client-modules/lib/index.js
+@@ -1006,2 +1006,3 @@
+-	chunkRequest(requestUrl) {
+-		const resourceUrl = `${requestUrl.pathname}${requestUrl.search}`;
++	chunkRequest({ pathname, search }) {
++		const resourceUrl = `${pathname}${search}`;
++		const path = pathname.startsWith(`${PLUGIN_ROUTE}/`) ? pathname.slice(PLUGIN_ROUTE.length + 1) : "";
+@@ -1009,3 +1010,3 @@
+-			const prefix = `/plugins/${record.entry.id}/`;
+-			if (!requestUrl.pathname.startsWith(prefix)) continue;
+-			const requested = requestUrl.pathname.slice(prefix.length);
++			const id = `${record.entry.id}`;
++			if (!path.startsWith(id) || path[id.length] !== "/") continue;
++			const requested = path.slice(id.length + 1);
