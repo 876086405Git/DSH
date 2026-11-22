@@ -252,6 +252,13 @@ for (const profile of ['openai-gpt-image', 'ark-image', 'ali-wan-image', 'silico
     assert.equal(f.wires.length, 1);
   });
 }
+test('explicit video resolution reaches the provider and returned metadata', async t => {
+  const f = await fixture(t, 'ark-video'), req = request('ark-video', { resolution: '720p' });
+  f.context.admission = await admitGeneration(req, f.context);
+  const result = await generateMedia(req, f.context);
+  assert.equal(f.wires[0].body.resolution, '720p');
+  assert.equal(result.meta.request.resolution, '720p');
+});
 for (const profile of ['ark-video', 'ali-video', 'silicon-video']) {
   test(`${profile}: real HTTP async video downloads bounded MP4 and derives actual metadata`, async t => {
     const f = await fixture(t, profile), req = request(profile);
