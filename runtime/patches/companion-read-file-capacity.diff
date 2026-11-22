@@ -1,0 +1,13 @@
+--- a/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
+@@ -847 +847 @@
+-		const bytes = Buffer.alloc(maxBytes + 1);
++		let bytes = Buffer.alloc(info.size + 1);
+@@ -853,1 +853,6 @@
+-			used += read.bytesRead;
++			used += read.bytesRead;
++			if (used === bytes.length && used <= maxBytes) {
++				const expanded = Buffer.alloc(maxBytes + 1);
++				bytes.copy(expanded);
++				bytes = expanded;
++			}
