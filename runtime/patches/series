@@ -45,6 +45,7 @@ zzzzzzz-prompt-tool-order.diff
 zzzzzzz-query-open-retry.diff
 zzzzzzz-reference-drop-size.diff
 zzzzzzz-reference-encoding.diff
+otel-product-transport-lazy.diff
 zzzzzzz-retainer-decode-copy.diff
 zzzzzzz-settings-local-redaction.diff
 zzzzzzz-skill-watcher-recheck.diff
