@@ -29,6 +29,7 @@ zzzzzzz-bundle-membership.diff
 zzzzzzz-domain-owner-dispose.diff
 zzzzzzz-file-query-normalization.diff
 zzzzzzz-file-reference-owner-dispose.diff
+file-reference-hidden-paths.diff
 zzzzzzz-grep-retention-preview.diff
 zzzzzzz-input-recovery.diff
 zzzzzzz-job-follow-removal.diff
@@ -69,6 +70,7 @@ zzzzzzzzz-subprocess-utf8-cursor.diff
 zzzzzzzzz-subprocess-zsingle-read.diff
 zzzzzzzzz-subprocess-zzspill-write-all.diff
 zzzzzzzzz-subprocess-zzzero-tail.diff
+subprocess-latest-chunk.diff
 zzzzzzzzz-terminal-tail.diff
 zzzzzzzzz-tool-history-lookup.diff
 zzzzzzzzz-workspace-domain-close.diff
@@ -171,7 +173,9 @@ companion-task-storage.diff
 # Public lookup: direct observation and complete-input answer estimate.
 companion-public-lookup-observer.diff
 companion-lookup-answer-window.diff
+ohos-api-gateway-idle.diff
 companion-find-drafts-files.diff
+companion-read-file-capacity.diff
 companion-compare-output-window.diff
 companion-receipt-file-bytes.diff
 web-table-pipes.diff
@@ -210,7 +214,6 @@ ohos-mcp-command-router.diff
 ohos-workspace-grant-paths.diff
 ohos-workspace-edit.diff
 ohos-client-hmr-idle.diff
-ohos-api-gateway-idle.diff
 ohos-image-codec.diff
 ohos-web-converter-lazy.diff
 ohos-cordis-catalog-lazy.diff
