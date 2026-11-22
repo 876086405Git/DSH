@@ -462,7 +462,7 @@ class CompanionAgent extends ChangeNotifier {
   void stop({bool discard = false}) {
     cancelScreenObservation();
     final background = _visit?.residentUi;
-    if (background is CompanionAgentAmbientUi) background.stopSpeech();
+    if (background is CompanionAgentAmbientUi) (background as CompanionAgentAmbientUi).stopSpeech();
     final run = _run;
     if (run == null || !run.running) return;
     run.onStop?.call();

@@ -639,15 +639,26 @@ void main() {
       final clock = Clock();
       final owner = await make(tester, clock);
       final room = Room();
-      const background = CompanionInitiativeView(visible: false, resumed: false,
-        blocked: false, enabled: true, accessible: false, notificationAvailable: true, contextKey: 'room');
+      const background = CompanionInitiativeView(
+        visible: false,
+        resumed: false,
+        blocked: false,
+        enabled: true,
+        accessible: false,
+        notificationAvailable: true,
+        contextKey: 'room',
+      );
       final native = Completer<bool>();
       Future<void>? retained;
       var deliveries = 0;
       var current = true;
       try {
         owner.enter(room, background);
-        owner.requestSignal(room, background, candidate(clock), isCurrent: () => current,
+        owner.requestSignal(
+          room,
+          background,
+          candidate(clock),
+          isCurrent: () => current,
           present: (_) => throw StateError('A notification is not a Page frame'),
           hide: (_) {},
           deliver: (_) {

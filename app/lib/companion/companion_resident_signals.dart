@@ -14,10 +14,16 @@ import 'companion_signals.dart';
 /// The existing live, metadata-only ingress while the resident notification is
 /// the active recipient. It neither replays history nor reads task bodies.
 class CompanionResidentSignals {
-  CompanionResidentSignals({required this.ref, required this.isCurrent,
-    required this.isOwnSession, required this.offer, required CompanionInitiativeClock Function() clock})
-      : gate = CompanionSignalGate(monotonicMs: () => clock().monoMs,
-          utcNow: () => DateTime.fromMillisecondsSinceEpoch(clock().wallMs, isUtc: true)) {
+  CompanionResidentSignals({
+    required this.ref,
+    required this.isCurrent,
+    required this.isOwnSession,
+    required this.offer,
+    required CompanionInitiativeClock Function() clock,
+  }) : gate = CompanionSignalGate(
+         monotonicMs: () => clock().monoMs,
+         utcNow: () => DateTime.fromMillisecondsSinceEpoch(clock().wallMs, isUtc: true),
+       ) {
     _subscriptions.add(ref.listen(activeConnectionProvider, (_, _) => refresh()).close);
     _subscriptions.add(ref.listen(activeHostProvider, (_, _) => refresh()).close);
     _subscriptions.add(ref.listen(companionSignalConsentProvider, (_, _) => refresh()).close);
@@ -60,7 +66,8 @@ class CompanionResidentSignals {
       _states = client?.mux.states.listen((_) => refresh());
     }
     final previous = _source;
-    if (previous == null || !identical(previous.connection, connection) ||
+    if (previous == null ||
+        !identical(previous.connection, connection) ||
         !identical(previous.generation, client?.mux.generation)) {
       if (previous != null) gate.retireSource(previous);
       _source = null;
@@ -69,12 +76,18 @@ class CompanionResidentSignals {
           late final CompanionSignalSource source;
           source = CompanionSignalSource.dsh(
             hostKey: companionHostKey(connection.isLocal ? HostRef.local : ref.read(activeHostProvider)),
-            client: client, connection: connection,
-            isAttached: () => !_closed && isCurrent() && identical(_source, source) &&
+            client: client,
+            connection: connection,
+            isAttached: () =>
+                !_closed &&
+                isCurrent() &&
+                identical(_source, source) &&
                 identical(ref.read(activeConnectionProvider).value, connection),
           );
           _source = source;
-        } on ArgumentError { /* Only a real ready mux can supply this ingress. */ }
+        } on ArgumentError {
+          /* Only a real ready mux can supply this ingress. */
+        }
       }
     }
     unawaited(_deliveries?.cancel());
@@ -89,7 +102,9 @@ class CompanionResidentSignals {
       final signal = delivery.signal;
       if (signal.kind != 'task.terminal' ||
           !const {'completed', 'output_limit', 'failed'}.contains(signal.payload['phase']) ||
-          (signal.sessionId != null && isOwnSession(signal.sessionId!))) return;
+          (signal.sessionId != null && isOwnSession(signal.sessionId!))) {
+        return;
+      }
       if (delivery.receive(gate, ingress) != CompanionSignalAdmission.accepted) return;
       final slot = gate.slots.where((slot) => identical(slot.signal, signal)).firstOrNull;
       final speech = slot == null ? null : gate.speechCandidate(slot);
@@ -101,7 +116,9 @@ class CompanionResidentSignals {
     if (_closed) return;
     _closed = true;
     gate.leave();
-    for (final cancel in _subscriptions) cancel();
+    for (final cancel in _subscriptions) {
+      cancel();
+    }
     unawaited(_deliveries?.cancel());
     unawaited(_generations?.cancel());
     unawaited(_states?.cancel());

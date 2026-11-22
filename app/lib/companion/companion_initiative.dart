@@ -302,6 +302,7 @@ class CompanionInitiativeView {
   final bool enabled;
   final bool accessible;
   final String contextKey;
+
   /// A retained background conversation can deliver signals, not room greetings
   /// or cushion invitations. It is never counted as visible/resumed presence.
   final bool notificationAvailable;
@@ -533,8 +534,8 @@ class _State {
 
   bool get eligible =>
       fault == null && inRoom && (view?.visible ?? false) && view!.resumed && !view!.blocked && view!.enabled;
-  bool get signalEligible => eligible ||
-      (fault == null && inRoom && view?.notificationAvailable == true && !view!.blocked && view!.enabled);
+  bool get signalEligible =>
+      eligible || (fault == null && inRoom && view?.notificationAvailable == true && !view!.blocked && view!.enabled);
   bool get quietEligible => eligible && stay != null && !stay!.interacted && !stay!.invited;
 
   Map<String, Object?> toJson() => {

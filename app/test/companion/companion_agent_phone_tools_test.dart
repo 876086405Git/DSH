@@ -25,7 +25,10 @@ const _catalog = [
     'description': '尝试打开应用或链接。',
     'inputSchema': {
       'type': 'object',
-      'properties': {'app': {'type': 'string'}, 'url': {'type': 'string'}},
+      'properties': {
+        'app': {'type': 'string'},
+        'url': {'type': 'string'},
+      },
       'additionalProperties': false,
     },
   },
@@ -35,15 +38,22 @@ http.StreamedResponse _modelReply(List<(String, String, Map<String, Object?>)> c
   final events = <Map<String, Object?>>[
     for (var i = 0; i < calls.length; i++) ...[
       {
-        'type': 'content_block_start', 'index': i,
+        'type': 'content_block_start',
+        'index': i,
         'content_block': {'type': 'tool_use', 'id': calls[i].$1, 'name': calls[i].$2, 'input': <String, Object?>{}},
       },
-      {'type': 'content_block_delta', 'index': i,
-        'delta': {'type': 'input_json_delta', 'partial_json': jsonEncode(calls[i].$3)}},
+      {
+        'type': 'content_block_delta',
+        'index': i,
+        'delta': {'type': 'input_json_delta', 'partial_json': jsonEncode(calls[i].$3)},
+      },
       {'type': 'content_block_stop', 'index': i},
     ],
-    {'type': 'message_delta', 'delta': {'stop_reason': calls.isEmpty ? 'end_turn' : 'tool_use'},
-      'usage': {'output_tokens': 5}},
+    {
+      'type': 'message_delta',
+      'delta': {'stop_reason': calls.isEmpty ? 'end_turn' : 'tool_use'},
+      'usage': {'output_tokens': 5},
+    },
     {'type': 'message_stop'},
   ];
   final wire = [for (final event in events) 'event: ${event['type']}\ndata: ${jsonEncode(event)}\n\n'].join();
@@ -69,25 +79,37 @@ void main() {
       nowMilliseconds: () => _now,
     );
     source = memory.store.submitMessage(
-      id: 'actual-user-source', sessionId: memory.store.lightSessionId,
-      text: '请帮我打开日历。', saidAtUtc: _now, offsetMinutes: 480,
-      zoneId: 'Asia/Shanghai', offsetSeconds: 28800,
+      id: 'actual-user-source',
+      sessionId: memory.store.lightSessionId,
+      text: '请帮我打开日历。',
+      saidAtUtc: _now,
+      offsetMinutes: 480,
+      zoneId: 'Asia/Shanghai',
+      offsetSeconds: 28800,
     );
-    turnId = memory.store.beginAgentTurn(
-      messageId: source['id']! as String, expectedSourceRev: source['source_rev']! as int,
-      shownCardRevisions: const {},
-    )['id']! as String;
+    turnId =
+        memory.store.beginAgentTurn(
+              messageId: source['id']! as String,
+              expectedSourceRev: source['source_rev']! as int,
+              shownCardRevisions: const {},
+            )['id']!
+            as String;
     current = true;
     steps = [];
     release = [];
     phone = CompanionAgentPhoneTools(
-      memory: memory, source: source, turnId: turnId,
-      isCurrent: () => current, onStep: steps.add,
+      memory: memory,
+      source: source,
+      turnId: turnId,
+      isCurrent: () => current,
+      onStep: steps.add,
     );
   });
 
   tearDown(() async {
-    for (final unblock in release) { unblock(); }
+    for (final unblock in release) {
+      unblock();
+    }
     current = false;
     await phone.close(stopped: true);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_channel, null);
@@ -111,9 +133,9 @@ void main() {
     });
     await phone.prepare();
     expect(phone.bindings.single.definition.name, 'phone_open');
-    final result = await phone.execute(const CompanionAgentToolCall(
-      id: 'rejected-open', name: 'phone_open', input: {'app': 'calendar'},
-    ));
+    final result = await phone.execute(
+      const CompanionAgentToolCall(id: 'rejected-open', name: 'phone_open', input: {'app': 'calendar'}),
+    );
     expect(result.isError, isTrue);
     expect((jsonDecode(result.content) as Map)['code'], 'phone_not_authorized');
     final begin = calls.singleWhere((call) => call.method == 'companionPhoneBegin').arguments as Map;
@@ -130,30 +152,40 @@ void main() {
     final approval = Completer<Map<String, Object?>>();
     final ending = Completer<void>();
     final drain = Completer<void>();
-    release.add(() { if (!approval.isCompleted) approval.complete({'decision': 'stopped'}); });
-    release.add(() { if (!drain.isCompleted) drain.complete(); });
+    release.add(() {
+      if (!approval.isCompleted) approval.complete({'decision': 'stopped'});
+    });
+    release.add(() {
+      if (!drain.isCompleted) drain.complete();
+    });
     var nativeCalls = 0;
     var ends = 0;
     Map? startIdentity, endIdentity;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (call) async {
       switch (call.method) {
-        case 'companionPhoneTools': return _catalog;
+        case 'companionPhoneTools':
+          return _catalog;
         case 'companionPhoneBegin':
           startIdentity = call.arguments as Map;
           began.complete();
           return approval.future;
-        case 'companionPhoneCall': nativeCalls++; return null;
+        case 'companionPhoneCall':
+          nativeCalls++;
+          return null;
         case 'companionPhoneEnd':
-          ends++; endIdentity = call.arguments as Map; ending.complete();
+          ends++;
+          endIdentity = call.arguments as Map;
+          ending.complete();
           await drain.future;
           return null;
-        default: throw StateError(call.method);
+        default:
+          throw StateError(call.method);
       }
     });
     await phone.prepare();
-    final running = phone.execute(const CompanionAgentToolCall(
-      id: 'late-open', name: 'phone_open', input: {'app': 'calendar'},
-    ));
+    final running = phone.execute(
+      const CompanionAgentToolCall(id: 'late-open', name: 'phone_open', input: {'app': 'calendar'}),
+    );
     await began.future;
     phone.stop();
     final closed = phone.close();
@@ -179,14 +211,18 @@ void main() {
     final dispatched = <Map>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (call) async {
       switch (call.method) {
-        case 'companionPhoneTools': return _catalog;
-        case 'companionPhoneBegin': return {'decision': 'allowed-once'};
-        case 'companionPhoneEnd': return null;
+        case 'companionPhoneTools':
+          return _catalog;
+        case 'companionPhoneBegin':
+          return {'decision': 'allowed-once'};
+        case 'companionPhoneEnd':
+          return null;
         case 'companionPhoneCall':
           final args = call.arguments as Map;
           dispatched.add(args);
           return jsonEncode({
-            'jsonrpc': '2.0', 'id': args['callId'],
+            'jsonrpc': '2.0',
+            'id': args['callId'],
             'result': {
               'isError': false,
               'content': [
@@ -195,7 +231,8 @@ void main() {
               ],
             },
           });
-        default: throw StateError(call.method);
+        default:
+          throw StateError(call.method);
       }
     });
     await phone.prepare();
@@ -210,9 +247,9 @@ void main() {
     expect(steps, ['已打开日历。']);
     expect(dispatched.single['name'], 'open');
     expect(dispatched.single['arguments'], call.input);
-    final repeat = await phone.execute(const CompanionAgentToolCall(
-      id: 'one-open', name: 'phone_open', input: {'app': 'another-app'},
-    ));
+    final repeat = await phone.execute(
+      const CompanionAgentToolCall(id: 'one-open', name: 'phone_open', input: {'app': 'another-app'}),
+    );
     expect(repeat.isError, isTrue);
     expect((jsonDecode(repeat.content) as Map)['code'], 'duplicate_phone_call');
     expect(dispatched, hasLength(1));
@@ -226,11 +263,16 @@ void main() {
     const cardText = '我喜欢用日历安排事情。';
     memory.store.saveManual(
       const CompanionMemory(id: cardId, text: cardText, keywords: ['日历']),
-      expectedRowRev: null, currentValueChange: true, realityKnown: true,
+      expectedRowRev: null,
+      currentValueChange: true,
+      realityKnown: true,
     );
     source = memory.store.submitMessage(
-      id: 'phone-loop-user', sessionId: memory.store.lightSessionId,
-      text: '请帮我打开日历。', saidAtUtc: _now, offsetMinutes: 480,
+      id: 'phone-loop-user',
+      sessionId: memory.store.lightSessionId,
+      text: '请帮我打开日历。',
+      saidAtUtc: _now,
+      offsetMinutes: 480,
     );
     final requests = <Map<String, Object?>>[];
     final executedMemory = <String>[];
@@ -243,35 +285,49 @@ void main() {
             ('loop-open', 'phone_open', <String, Object?>{'app': 'calendar'}),
             ('same-batch-forget', 'forget', <String, Object?>{'card': cardId}),
           ],
-          3 => [('new-user-forget', 'forget', <String, Object?>{'card': cardId})],
+          3 => [
+            ('new-user-forget', 'forget', <String, Object?>{'card': cardId}),
+          ],
           _ => [],
         });
       }),
     );
     addTearDown(agent.dispose);
     CompanionAgentMemoryTools forSource(MemoryRow row) => CompanionAgentMemoryTools(
-      memory: memory, source: row, isCurrent: () => current,
-      onCommitted: agent.confirmControlRevision, forgottenNotice: '已忘记。',
+      memory: memory,
+      source: row,
+      isCurrent: () => current,
+      onCommitted: agent.confirmControlRevision,
+      forgottenNotice: '已忘记。',
     );
     final firstTools = forSource(source);
     turnId = firstTools.turnId;
     firstTools.grantCards(memory.store.cards());
     phone = CompanionAgentPhoneTools(
-      memory: memory, source: source, turnId: turnId,
-      isCurrent: () => current && firstTools.isCurrent, onStep: steps.add,
+      memory: memory,
+      source: source,
+      turnId: turnId,
+      isCurrent: () => current && firstTools.isCurrent,
+      onStep: steps.add,
     );
     await phone.prepare();
     try {
       await agent.say(
-        memory: memory, source: source, system: 'Synthetic phone-result boundary.',
-        isCurrent: () => current, onSelected: firstTools.grantSelection,
+        memory: memory,
+        source: source,
+        system: 'Synthetic phone-result boundary.',
+        isCurrent: () => current,
+        onSelected: firstTools.grantSelection,
         tools: [
           ...phone.bindings,
           for (final binding in firstTools.bindings)
-            (definition: binding.definition, execute: (CompanionAgentToolCall tool) {
-              executedMemory.add(tool.name);
-              return binding.execute(tool);
-            }),
+            (
+              definition: binding.definition,
+              execute: (CompanionAgentToolCall tool) {
+                executedMemory.add(tool.name);
+                return binding.execute(tool);
+              },
+            ),
         ],
       );
       expect(agent.error, isNull);
@@ -285,8 +341,7 @@ void main() {
       expect(results.map((row) => row['tool_use_id']), ['loop-open', 'same-batch-forget']);
       expect(results.last['is_error'], isTrue);
       expect((jsonDecode(results.last['content']! as String) as Map)['code'], 'memory_change_after_web');
-      expect((jsonDecode(results.first['content']! as String) as Map)['nativeResult'],
-        '已打开日历。\n这是实际返回的第二行。');
+      expect((jsonDecode(results.first['content']! as String) as Map)['nativeResult'], '已打开日历。\n这是实际返回的第二行。');
       expect(dispatched, hasLength(2));
     } finally {
       await phone.close();
@@ -294,22 +349,31 @@ void main() {
     }
 
     source = memory.store.submitMessage(
-      id: 'phone-loop-new-user', sessionId: memory.store.lightSessionId,
-      text: '现在请忘掉我的日历偏好。', saidAtUtc: _now, offsetMinutes: 480,
+      id: 'phone-loop-new-user',
+      sessionId: memory.store.lightSessionId,
+      text: '现在请忘掉我的日历偏好。',
+      saidAtUtc: _now,
+      offsetMinutes: 480,
     );
     final nextTools = forSource(source);
     turnId = nextTools.turnId;
     nextTools.grantCards(memory.store.cards());
     try {
       await agent.say(
-        memory: memory, source: source, system: 'Synthetic phone-result boundary.',
-        isCurrent: () => current, onSelected: nextTools.grantSelection,
+        memory: memory,
+        source: source,
+        system: 'Synthetic phone-result boundary.',
+        isCurrent: () => current,
+        onSelected: nextTools.grantSelection,
         tools: [
           for (final binding in nextTools.bindings)
-            (definition: binding.definition, execute: (CompanionAgentToolCall tool) {
-              executedMemory.add(tool.name);
-              return binding.execute(tool);
-            }),
+            (
+              definition: binding.definition,
+              execute: (CompanionAgentToolCall tool) {
+                executedMemory.add(tool.name);
+                return binding.execute(tool);
+              },
+            ),
         ],
       );
       expect(agent.error, isNull);
@@ -318,8 +382,10 @@ void main() {
       expect(executedMemory, ['forget']);
       expect(memory.store.cards().where((row) => row['id'] == cardId), isEmpty);
       expect(memory.store.requests(), hasLength(4));
-      expect(memory.store.requests().every((row) =>
-        row['state'] == 'finished' && row['terminal'] == 'complete'), isTrue);
+      expect(
+        memory.store.requests().every((row) => row['state'] == 'finished' && row['terminal'] == 'complete'),
+        isTrue,
+      );
     } finally {
       nextTools.close();
     }

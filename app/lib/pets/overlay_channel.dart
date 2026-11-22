@@ -231,29 +231,54 @@ class PetOverlayChannel {
   }
 
   Future<void> companionMode({required bool enabled, required String name}) async {
-    try { await channel.invokeMethod<void>('companionMode', {'enabled': enabled, 'name': name}); }
-    on MissingPluginException { /* No Android overlay. */ }
-    on PlatformException { /* Actual status still reports the failed overlay. */ }
+    try {
+      await channel.invokeMethod<void>('companionMode', {'enabled': enabled, 'name': name});
+    } on MissingPluginException {
+      /* No Android overlay. */
+    } on PlatformException {
+      /* Actual status still reports the failed overlay. */
+    }
   }
 
-  Future<bool> presentCompanion({required String id, required String text,
-    String emotion = 'neutral', bool speaking = false}) async {
-    try { return await channel.invokeMethod<bool>('companionLine',
-      {'id': id, 'text': text, 'emotion': emotion, 'speaking': speaking}) ?? false; }
-    on MissingPluginException { return false; }
-    on PlatformException { return false; }
+  Future<bool> presentCompanion({
+    required String id,
+    required String text,
+    String emotion = 'neutral',
+    bool speaking = false,
+  }) async {
+    try {
+      return await channel.invokeMethod<bool>('companionLine', {
+            'id': id,
+            'text': text,
+            'emotion': emotion,
+            'speaking': speaking,
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
   }
 
   Future<void> companionSpeech({required String id, required int chars, required bool speaking}) async {
-    try { await channel.invokeMethod<void>('companionSpeech', {'id': id, 'chars': chars, 'speaking': speaking}); }
-    on MissingPluginException { /* No displayed body. */ }
-    on PlatformException { /* A late voice event owns no replacement window. */ }
+    try {
+      await channel.invokeMethod<void>('companionSpeech', {'id': id, 'chars': chars, 'speaking': speaking});
+    } on MissingPluginException {
+      /* No displayed body. */
+    } on PlatformException {
+      /* A late voice event owns no replacement window. */
+    }
   }
 
   Future<void> clearCompanion() async {
-    try { await channel.invokeMethod<void>('clearCompanion'); }
-    on MissingPluginException { /* No displayed companion body. */ }
-    on PlatformException { /* The next actual window evaluation rechecks it. */ }
+    try {
+      await channel.invokeMethod<void>('clearCompanion');
+    } on MissingPluginException {
+      /* No displayed companion body. */
+    } on PlatformException {
+      /* The next actual window evaluation rechecks it. */
+    }
   }
 
   /// Sends [state] to the overlay; nothing happens without the native side.

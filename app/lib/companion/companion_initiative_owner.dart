@@ -110,8 +110,17 @@ abstract interface class CompanionInitiativeRoom {
 }
 
 class _SignalRequest {
-  _SignalRequest(this.room, this.candidate, this.isCurrent, this.present, this.hide, this.followupId, this.prepare,
-    this.deliver, this.retainDelivery);
+  _SignalRequest(
+    this.room,
+    this.candidate,
+    this.isCurrent,
+    this.present,
+    this.hide,
+    this.followupId,
+    this.prepare,
+    this.deliver,
+    this.retainDelivery,
+  );
   final CompanionInitiativeRoom room;
   final CompanionInitiativeSignal candidate;
   final bool Function() isCurrent;
@@ -336,8 +345,17 @@ class CompanionInitiative {
     _retireRequest();
     _view = view;
     _revision++;
-    final request = _SignalRequest(room, candidate, isCurrent, present, hide, followupId, prepare,
-      deliver, retainDelivery);
+    final request = _SignalRequest(
+      room,
+      candidate,
+      isCurrent,
+      present,
+      hide,
+      followupId,
+      prepare,
+      deliver,
+      retainDelivery,
+    );
     _signal = request;
     if (previous != null) _enqueue(CompanionInitiativeEvent.cancelSignal(previous.candidate.id), room);
     _enqueue(CompanionInitiativeEvent.signal(candidate, nightCareEnabled: nightCareEnabled, view: view), room);
@@ -570,9 +588,14 @@ class CompanionInitiative {
     }
   }
 
-  Future<void> _deliver(CompanionInitiativeController controller,
-    CompanionInitiativePresentation staged, _QueuedInitiative op,
-    CompanionInitiativeRoom room, _SignalRequest request, String? reservation) async {
+  Future<void> _deliver(
+    CompanionInitiativeController controller,
+    CompanionInitiativePresentation staged,
+    _QueuedInitiative op,
+    CompanionInitiativeRoom room,
+    _SignalRequest request,
+    String? reservation,
+  ) async {
     final ticket = staged.display.ticket;
     var shown = false;
     var unknown = false;
@@ -583,11 +606,21 @@ class CompanionInitiative {
         unknown = true;
       }
       if (!shown) {
-        try { request.hide(ticket.id); } on Object { /* no evidence of absence */ }
+        try {
+          request.hide(ticket.id);
+        } on Object {
+          /* no evidence of absence */
+        }
       }
       if (reservation != null) {
-        _store!.settleInitiative(reservation,
-          outcome: shown ? 'shown' : unknown ? 'unknown' : 'released');
+        _store!.settleInitiative(
+          reservation,
+          outcome: shown
+              ? 'shown'
+              : unknown
+              ? 'unknown'
+              : 'released',
+        );
       }
       if (!shown && !unknown) {
         _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);

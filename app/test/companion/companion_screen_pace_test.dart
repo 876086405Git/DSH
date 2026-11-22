@@ -3,9 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 
 // These exercise the real local policy with explicit display/user events.
 // They do not assert a real overlay acknowledgement, model call, or device capture.
-CompanionScreenReading reading({double salience = .9, bool busy = false,
-    String scene = 'other', String quip = '这一步很稳'}) => CompanionScreenReading(
-  scene: scene, mood: 'calm', salience: salience, busy: busy, quip: quip, emotion: 'neutral');
+CompanionScreenReading reading({
+  double salience = .9,
+  bool busy = false,
+  String scene = 'other',
+  String quip = '这一步很稳',
+}) =>
+    CompanionScreenReading(scene: scene, mood: 'calm', salience: salience, busy: busy, quip: quip, emotion: 'neutral');
 
 void main() {
   test('only acknowledged lines back off and a newer user reply resets them', () {
@@ -13,11 +17,13 @@ void main() {
       ..cheapStarted(0)
       ..userSpoke(1000);
     expect(beforeAnyScreenLine.cheapDue(23999), isFalse);
-    expect(beforeAnyScreenLine.cheapDue(24000), isTrue,
-      reason: 'any recent real user reply applies, without a prior screen line');
+    expect(
+      beforeAnyScreenLine.cheapDue(24000),
+      isTrue,
+      reason: 'any recent real user reply applies, without a prior screen line',
+    );
     beforeAnyScreenLine.cheapStarted(120000);
-    expect(beforeAnyScreenLine.cheapDue(144000), isFalse,
-      reason: 'the recent-user factor expires after two minutes');
+    expect(beforeAnyScreenLine.cheapDue(144000), isFalse, reason: 'the recent-user factor expires after two minutes');
     expect(beforeAnyScreenLine.cheapDue(150000), isTrue);
     final pace = CompanionScreenPace();
     expect(pace.cheapDue(1000), isTrue);
@@ -33,7 +39,9 @@ void main() {
     pace.shown(3000, reading(), quip: true);
     expect(pace.cheapDue(60999), isFalse);
     expect(pace.cheapDue(61000), isTrue);
-    for (final at in [4000, 5000, 6000]) { pace.shown(at, reading(), quip: true); }
+    for (final at in [4000, 5000, 6000]) {
+      pace.shown(at, reading(), quip: true);
+    }
     expect(pace.cheapDue(90999), isFalse);
     expect(pace.cheapDue(91000), isTrue);
     pace.userSpoke(7000);
@@ -65,8 +73,14 @@ void main() {
   });
 
   test('short structured readings and recent similar quips are bounded', () {
-    final value = <String, Object?>{'scene': 'coding', 'mood': 'calm', 'salience': .9,
-      'busy': false, 'quip': '这一步很稳', 'emotion': 'neutral'};
+    final value = <String, Object?>{
+      'scene': 'coding',
+      'mood': 'calm',
+      'salience': .9,
+      'busy': false,
+      'quip': '这一步很稳',
+      'emotion': 'neutral',
+    };
     final decoded = CompanionScreenReading.parse(value)!;
     expect(decoded.scene, 'coding');
     expect(CompanionScreenReading.parse({...value, 'salience': double.nan}), isNull);

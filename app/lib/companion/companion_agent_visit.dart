@@ -68,16 +68,47 @@ class CompanionAgentAttachment {
     final visitCurrent = _visit.captureCurrent();
     return () => isAttached && visitCurrent();
   }
-  Future<CompanionMemoryOwner> openMemory() => isAttached ? _visit.openMemory() : Future.error(const DshClosedException('Companion window closed'));
-  Future<void> submit(String raw) async { if (isAttached) await _visit.submit(raw, origin: _window.ui, handoff: _window.mapHandoff, originCurrent: () => isAttached); }
-  Future<void> arrive({bool greet = true}) async { if (isAttached) await _visit.arrive(greet: greet, windowCurrent: () => isAttached); }
-  Future<void> restart() async { if (isAttached) await _visit.restart(); }
-  void stop({bool discard = false}) { if (isAttached) _visit.stop(discard: discard); }
-  void event(String type) { if (isAttached) _visit.event(type); }
-  void remember(String kind, String? note) { if (isAttached) _visit.remember(kind, note); }
-  void observe(CompanionInitiativeView view) { if (isAttached) _visit.observe(view); }
-  void acted() { if (isAttached) _visit.acted(); }
-  void presentedReply(String replyId, String text) { if (isAttached) _visit.presentedReply(replyId, text); }
+
+  Future<CompanionMemoryOwner> openMemory() =>
+      isAttached ? _visit.openMemory() : Future.error(const DshClosedException('Companion window closed'));
+  Future<void> submit(String raw) async {
+    if (isAttached) {
+      await _visit.submit(raw, origin: _window.ui, handoff: _window.mapHandoff, originCurrent: () => isAttached);
+    }
+  }
+
+  Future<void> arrive({bool greet = true}) async {
+    if (isAttached) await _visit.arrive(greet: greet, windowCurrent: () => isAttached);
+  }
+
+  Future<void> restart() async {
+    if (isAttached) await _visit.restart();
+  }
+
+  void stop({bool discard = false}) {
+    if (isAttached) _visit.stop(discard: discard);
+  }
+
+  void event(String type) {
+    if (isAttached) _visit.event(type);
+  }
+
+  void remember(String kind, String? note) {
+    if (isAttached) _visit.remember(kind, note);
+  }
+
+  void observe(CompanionInitiativeView view) {
+    if (isAttached) _visit.observe(view);
+  }
+
+  void acted() {
+    if (isAttached) _visit.acted();
+  }
+
+  void presentedReply(String replyId, String text) {
+    if (isAttached) _visit.presentedReply(replyId, text);
+  }
+
   void updateCharacter(CompanionCharacter character, CompanionMoves moves, {String? sourceKey}) {
     if (isAttached) _visit.updateCharacter(character, moves, sourceKey);
   }
@@ -93,20 +124,34 @@ class CompanionAgentResident {
   CompanionMemoryOwner? get memory => active ? _visit.memory : null;
   String? get characterId => active ? _visit.characterId : null;
   bool get ownsCurrentRun => active && identical(_visit.runOrigin, _ui) && identical(_visit.run, _visit.agent._run);
+
   /// The floating composer reads the same role/cutoff-filtered transcript.
   /// It keeps no second message list or cold replay queue.
   List<MemoryRow> get recentMessages {
     final owner = memory;
     if (owner == null) return const [];
-    return owner.store.modelMessages(sessionId: owner.store.lightSessionId,
-      characterId: characterId, limit: 3);
+    return owner.store.modelMessages(sessionId: owner.store.lightSessionId, characterId: characterId, limit: 3);
   }
-  Future<CompanionMemoryOwner> openMemory() => active ? _visit.openMemory() : Future.error(const DshClosedException('Companion resident closed'));
+
+  Future<CompanionMemoryOwner> openMemory() =>
+      active ? _visit.openMemory() : Future.error(const DshClosedException('Companion resident closed'));
   Future<void> submit(String raw, {void Function(MemoryRow)? onCommitted}) async {
-    if (active) await _visit.submit(raw, origin: _ui, handoff: _visit.residentMapHandoff!, originCurrent: () => active,
-      replacePreparing: true, onCommitted: onCommitted);
+    if (active) {
+      await _visit.submit(
+        raw,
+        origin: _ui,
+        handoff: _visit.residentMapHandoff!,
+        originCurrent: () => active,
+        replacePreparing: true,
+        onCommitted: onCommitted,
+      );
+    }
   }
-  void setReducedPower(bool value) { if (active) _visit.setReducedPower(value); }
+
+  void setReducedPower(bool value) {
+    if (active) _visit.setReducedPower(value);
+  }
+
   void close() => _visit.releaseResident(_ui);
 }
 
@@ -153,6 +198,7 @@ class _CompanionAgentVisit {
     final view = page?.initiativeView;
     return page != null && view!.visible && view.resumed ? page : residentUi ?? ui;
   }
+
   final CompanionInitiative initiative;
   final CompanionInitiativeClock Function() clock;
   final subscriptions = <void Function()>[];
@@ -199,7 +245,10 @@ class _CompanionAgentVisit {
     caseSensitive: false,
   );
 
-  bool get active => !closed && !agent._disposed && identical(agent._visit, this) &&
+  bool get active =>
+      !closed &&
+      !agent._disposed &&
+      identical(agent._visit, this) &&
       (residentUi != null || (window?.attached == true && window!.ui.mounted));
   DateTime? lastUserInteractionAt;
 
@@ -226,7 +275,7 @@ class _CompanionAgentVisit {
 
   CompanionAgentAttachment attachWindow(CompanionAgentRoomUi next, CompanionMapHandoff handoff) {
     final background = residentUi;
-    if (background is CompanionAgentAmbientUi) background.stopSpeech();
+    if (background is CompanionAgentAmbientUi) (background as CompanionAgentAmbientUi).stopSpeech();
     final previous = window;
     if (previous != null) detachWindow(previous, replacing: true);
     final captured = window = _CompanionAgentWindow(next, handoff);
@@ -275,6 +324,7 @@ class _CompanionAgentVisit {
       changed();
     }
   }
+
   bool get light {
     final mode = ref.read(companionModeProvider);
     return mode == CompanionMode.light || (mode == null && ref.read(activeConnectionProvider).value == null);
@@ -445,9 +495,14 @@ class _CompanionAgentVisit {
     }
   }
 
-  Future<void> submit(String raw, {required CompanionAgentRoomUi origin,
-    required CompanionMapHandoff handoff, required bool Function() originCurrent,
-    bool replacePreparing = false, void Function(MemoryRow)? onCommitted}) async {
+  Future<void> submit(
+    String raw, {
+    required CompanionAgentRoomUi origin,
+    required CompanionMapHandoff handoff,
+    required bool Function() originCurrent,
+    bool replacePreparing = false,
+    void Function(MemoryRow)? onCommitted,
+  }) async {
     if (!active || !originCurrent() || raw.trim().isEmpty || (preparing && !replacePreparing)) return;
     lastUserInteractionAt = DateTime.now();
     acted();
@@ -471,9 +526,13 @@ class _CompanionAgentVisit {
     runOrigin = origin;
     runMapHandoff = handoff;
     void failed(Object error, {String? retry}) {
-      if (originCurrent()) origin.failed(error, retry: retry);
-      else residentUi?.failed(error, retry: retry);
+      if (originCurrent()) {
+        origin.failed(error, retry: retry);
+      } else {
+        residentUi?.failed(error, retry: retry);
+      }
     }
+
     preparing = true;
     changed();
     CompanionAgentMemoryTools? memoryTools;
@@ -639,7 +698,7 @@ class _CompanionAgentVisit {
         isCurrent: () => current() && memoryTools?.isCurrent == true,
         onStep: (text) {
           final target = residentUi;
-          if (current() && target is CompanionAgentAmbientUi && target.presentationAvailable) {
+          if (current() && target is CompanionAgentAmbientUi && (target as CompanionAgentAmbientUi).presentationAvailable) {
             unawaited(target.presentLine(id: 'phone:${source['id']}', text: text, emotion: 'neutral', speak: false));
           }
         },
@@ -884,12 +943,19 @@ class _CompanionAgentVisit {
     }
     requestFollowup(deliveredView, target);
     if (residentUi != null) {
-      residentSignals ??= CompanionResidentSignals(ref: ref, clock: clock,
-        isCurrent: () => active && residentUi != null && identical(initiativeUi, residentUi) &&
+      residentSignals ??= CompanionResidentSignals(
+        ref: ref,
+        clock: clock,
+        isCurrent: () =>
+            active &&
+            residentUi != null &&
+            identical(initiativeUi, residentUi) &&
             residentUi!.initiativeView.notificationAvailable,
-        isOwnSession: (session) => session == memory?.store.lightSessionId ||
+        isOwnSession: (session) =>
+            session == memory?.store.lightSessionId ||
             ref.read(companionSessionFilterProvider)(ref.read(activeHostProvider), session),
-        offer: offerResidentSignal);
+        offer: offerResidentSignal,
+      );
       residentSignals!.refresh();
     }
   }
@@ -996,8 +1062,15 @@ class _CompanionAgentVisit {
 
   void requestFollowup(CompanionInitiativeView view, CompanionAgentRoomUi target) {
     final owner = memory;
-    if (owner == null || owner.working || preparing || agent.running || followupRetired ||
-        !presentable(view) || initiative.fault != null) return;
+    if (owner == null ||
+        owner.working ||
+        preparing ||
+        agent.running ||
+        followupRetired ||
+        !presentable(view) ||
+        initiative.fault != null) {
+      return;
+    }
     final now = clock();
     final role = characterId;
     final window = '${view.contextKey}:$controlRevision';
@@ -1034,11 +1107,18 @@ class _CompanionAgentVisit {
       try {
         final shown = owner.store.followups().singleWhere((row) => row['id'] == captured['id']);
         if (shown['state'] != 'asked' || shown['presented_at_ms'] is! int) return;
-        owner.store.recordCompanionPresentation(characterId: role, presentationId: ticketId,
-          kind: 'followup', presentedAtMs: shown['presented_at_ms']! as int,
-          opportunityId: captured['id']! as String);
-      } on Object { /* No shown receipt means no presentation fact. */ }
+        owner.store.recordCompanionPresentation(
+          characterId: role,
+          presentationId: ticketId,
+          kind: 'followup',
+          presentedAtMs: shown['presented_at_ms']! as int,
+          opportunityId: captured['id']! as String,
+        );
+      } on Object {
+        /* No shown receipt means no presentation fact. */
+      }
     }
+
     initiative.requestSignal(
       target.initiativeRoom,
       view,
@@ -1086,15 +1166,19 @@ class _CompanionAgentVisit {
         }
         return true;
       },
-      deliver: target is CompanionAgentNotificationUi ? (display) async {
-        if (!current() || line == null) return false;
-        notificationTicket = display.ticket.id;
-        return target.deliverFollowup(id: 'followup:${captured['id']}', text: line!);
-      } : null,
+      deliver: target is CompanionAgentNotificationUi
+          ? (display) async {
+              if (!current() || line == null) return false;
+              notificationTicket = display.ticket.id;
+              return target.deliverFollowup(id: 'followup:${captured['id']}', text: line!);
+            }
+          : null,
       retainDelivery: (future) {
-        owner.retainReceipt(future.then((_) {
-          if (notificationTicket case final id?) recordPresented(id);
-        }));
+        owner.retainReceipt(
+          future.then((_) {
+            if (notificationTicket case final id?) recordPresented(id);
+          }),
+        );
       },
       hide: target.hideFollowup,
     );
@@ -1110,16 +1194,24 @@ class _CompanionAgentVisit {
   void offerResidentSignal(CompanionSignalSpeech speech, bool Function() signalCurrent) {
     final target = residentUi;
     final owner = memory;
-    if (target is! CompanionAgentNotificationUi || owner == null || !active ||
-        !identical(initiativeUi, target)) return;
+    if (target is! CompanionAgentNotificationUi || owner == null || !active || !identical(initiativeUi, target)) return;
     final view = target.initiativeView;
-    final candidate = CompanionInitiativeSignal(id: speech.id, contextKey: view.contextKey,
-      expiresAtMonoMs: speech.expiresAtMonoMs, nightKey: speech.nightKey);
+    final candidate = CompanionInitiativeSignal(
+      id: speech.id,
+      contextKey: view.contextKey,
+      expiresAtMonoMs: speech.expiresAtMonoMs,
+      nightKey: speech.nightKey,
+    );
     final visitCurrent = captureCurrent();
-    bool current() => visitCurrent() && identical(residentUi, target) &&
-        identical(initiativeUi, target) && signalCurrent();
-    initiative.requestSignal(target.initiativeRoom, view, candidate,
-      isCurrent: current, present: (_) => false, hide: (_) {},
+    bool current() =>
+        visitCurrent() && identical(residentUi, target) && identical(initiativeUi, target) && signalCurrent();
+    initiative.requestSignal(
+      target.initiativeRoom,
+      view,
+      candidate,
+      isCurrent: current,
+      present: (_) => false,
+      hide: (_) {},
       nightCareEnabled: speech.nightCare,
       deliver: (_) async {
         if (!current()) return false;

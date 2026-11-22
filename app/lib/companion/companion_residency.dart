@@ -5,9 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// The native switch is authoritative; the Dart object never auto-enables it.
 class CompanionAlwaysOnStatus {
-  const CompanionAlwaysOnStatus({this.available = false, this.enabled = false,
-    this.running = false, this.notificationAvailable = false, this.epoch = 0, this.failure,
-    this.batteryLow, this.powerSave = false});
+  const CompanionAlwaysOnStatus({
+    this.available = false,
+    this.enabled = false,
+    this.running = false,
+    this.notificationAvailable = false,
+    this.epoch = 0,
+    this.failure,
+    this.batteryLow,
+    this.powerSave = false,
+  });
 
   final bool available;
   final bool enabled;
@@ -40,7 +47,9 @@ class CompanionResidentInput {
   final int epoch;
 }
 
-final companionResidencyProvider = NotifierProvider<CompanionResidency, CompanionAlwaysOnStatus>(CompanionResidency.new);
+final companionResidencyProvider = NotifierProvider<CompanionResidency, CompanionAlwaysOnStatus>(
+  CompanionResidency.new,
+);
 
 /// One method handler for the lifetime of dsh-main, including Activity changes.
 class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
@@ -49,7 +58,6 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
   final _pending = <CompanionResidentInput>[];
   bool _receiving = false;
   bool _disposed = false;
-
 
   @override
   CompanionAlwaysOnStatus build() {
@@ -60,10 +68,16 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
         case 'status':
           if (value is Map) state = CompanionAlwaysOnStatus.fromMap(value);
         case 'reply':
-          if (value is! Map || value['id'] is! String || value['text'] is! String || value['epoch'] is! int) return false;
+          if (value is! Map || value['id'] is! String || value['text'] is! String || value['epoch'] is! int) {
+            return false;
+          }
           final input = CompanionResidentInput(value['id'] as String, value['text'] as String, value['epoch'] as int);
           if (state.available && (!state.enabled || input.epoch != state.epoch)) return false;
-          if (_receiving) { _inputs.add(input); } else { _pending.add(input); }
+          if (_receiving) {
+            _inputs.add(input);
+          } else {
+            _pending.add(input);
+          }
           return true;
       }
       return null;
@@ -80,7 +94,9 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
   StreamSubscription<CompanionResidentInput> listenInputs(void Function(CompanionResidentInput) receive) {
     final subscription = _inputs.stream.listen(receive);
     _receiving = true;
-    for (final input in List.of(_pending)) { receive(input); }
+    for (final input in List.of(_pending)) {
+      receive(input);
+    }
     _pending.clear();
     return subscription;
   }
@@ -96,21 +112,44 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
     } on MissingPluginException {
       if (!_disposed) state = const CompanionAlwaysOnStatus();
     } on PlatformException catch (error) {
-      if (!_disposed) state = CompanionAlwaysOnStatus(available: true,
-        enabled: state.enabled, running: false, epoch: state.epoch, failure: error.code,
-        batteryLow: state.batteryLow, powerSave: state.powerSave);
+      if (!_disposed) {
+        state = CompanionAlwaysOnStatus(
+          available: true,
+          enabled: state.enabled,
+          running: false,
+          epoch: state.epoch,
+          failure: error.code,
+          batteryLow: state.batteryLow,
+          powerSave: state.powerSave,
+        );
+      }
     }
   }
 
-  Future<bool> update({required int epoch, required String name, required String text, required String id,
-    bool user = false, bool quiet = true}) async {
+  Future<bool> update({
+    required int epoch,
+    required String name,
+    required String text,
+    required String id,
+    bool user = false,
+    bool quiet = true,
+  }) async {
     if (!state.enabled || state.epoch != epoch) return false;
     try {
       return await channel.invokeMethod<bool>('update', {
-        'epoch': epoch, 'name': name, 'text': text, 'id': id, 'user': user, 'quiet': quiet,
-      }) ?? false;
-    } on MissingPluginException { return false; }
-    on PlatformException { return false; }
+            'epoch': epoch,
+            'name': name,
+            'text': text,
+            'id': id,
+            'user': user,
+            'quiet': quiet,
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
   }
 
   /// For an already-reserved business opportunity an exception is unknown,
@@ -119,14 +158,26 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
     if (!state.enabled || state.epoch != epoch || !state.notificationAvailable) return false;
     try {
       return await channel.invokeMethod<bool>('update', {
-        'epoch': epoch, 'name': name, 'text': text, 'id': id, 'user': false, 'quiet': false,
-      }) ?? false;
-    } on MissingPluginException { return false; }
+            'epoch': epoch,
+            'name': name,
+            'text': text,
+            'id': id,
+            'user': false,
+            'quiet': false,
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    }
   }
 
   Future<void> clear(int epoch) async {
-    try { await channel.invokeMethod<void>('clear', {'epoch': epoch}); }
-    on MissingPluginException { /* No native notification was shown. */ }
-    on PlatformException { /* A failed clear is not a delivery receipt. */ }
+    try {
+      await channel.invokeMethod<void>('clear', {'epoch': epoch});
+    } on MissingPluginException {
+      /* No native notification was shown. */
+    } on PlatformException {
+      /* A failed clear is not a delivery receipt. */
+    }
   }
 }

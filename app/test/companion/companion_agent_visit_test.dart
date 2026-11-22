@@ -255,18 +255,17 @@ class _AmbientUi extends _RoomUi implements CompanionAgentAmbientUi {
   @override
   bool get presentationAvailable => mounted;
   @override
-  Future<bool> presentLine({required String id, required String text, required String emotion,
-    required bool speak}) {
+  Future<bool> presentLine({required String id, required String text, required String emotion, required bool speak}) {
     presented.add((id: id, text: text, emotion: emotion, speak: speak));
     if (entered case final signal?) {
       if (!signal.isCompleted) signal.complete();
     }
     return acknowledgement?.future ?? Future.value(true);
   }
+
   @override
   void stopSpeech() {}
 }
-
 
 class _Visit {
   _Visit(this.root, this.database, this.memory, this.replies);
@@ -778,17 +777,25 @@ void main() {
   test('resident lease preserves the original turn across window detach and reattachment', () async {
     final entered = Completer<void>();
     final release = Completer<void>();
-    final visit = await _Visit.open([_message(words: '我还在这儿。')], beforeReply: (_) async {
-      if (!entered.isCompleted) entered.complete();
-      await release.future;
-    });
+    final visit = await _Visit.open(
+      [_message(words: '我还在这儿。')],
+      beforeReply: (_) async {
+        if (!entered.isCompleted) entered.complete();
+        await release.future;
+      },
+    );
     const character = CompanionCharacter(name: '伙伴');
     const sourceKey = 'builtin:companion/whale-girl';
     visit.attachment.updateCharacter(character, const CompanionMoves(), sourceKey: sourceKey);
     final background = _RoomUi();
-    final resident = visit.agent.retainAlwaysOn(root: Future.value(visit.root),
-      character: character, moves: const CompanionMoves(), sourceKey: sourceKey,
-      ui: background, mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)));
+    final resident = visit.agent.retainAlwaysOn(
+      root: Future.value(visit.root),
+      character: character,
+      moves: const CompanionMoves(),
+      sourceKey: sourceKey,
+      ui: background,
+      mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+    );
     CompanionAgentAttachment? reopened;
     Future<void>? work;
     try {
@@ -813,9 +820,13 @@ void main() {
       expect(visit.memory.store.requests().single['terminal'], 'complete');
       expect(resident.recentMessages.map((row) => row['text']), ['我先把页面收起来。', '我还在这儿。']);
       expect(resident.recentMessages.every((row) => row['character_id'] == role), isTrue);
-      reopened = visit.agent.attach(root: Future.value(visit.root), character: character,
-        moves: const CompanionMoves(), ui: _RoomUi(),
-        mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)));
+      reopened = visit.agent.attach(
+        root: Future.value(visit.root),
+        character: character,
+        moves: const CompanionMoves(),
+        ui: _RoomUi(),
+        mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+      );
       expect(await reopened.openMemory(), same(visit.memory));
       expect(reopened.characterId, role);
       expect(reopened.text, '我还在这儿。');
@@ -835,16 +846,26 @@ void main() {
     final entered = Completer<void>();
     final release = Completer<void>();
     var physical = 0;
-    final visit = await _Visit.open([_message(words: '迟到的旧回答。'), _message(words: '我听见新的话了。')],
+    final visit = await _Visit.open(
+      [_message(words: '迟到的旧回答。'), _message(words: '我听见新的话了。')],
       beforeReply: (_) async {
-        if (++physical == 1) { entered.complete(); await release.future; }
-      });
+        if (++physical == 1) {
+          entered.complete();
+          await release.future;
+        }
+      },
+    );
     const character = CompanionCharacter(name: '伙伴');
     const sourceKey = 'builtin:companion/whale-girl';
     visit.attachment.updateCharacter(character, const CompanionMoves(), sourceKey: sourceKey);
-    final resident = visit.agent.retainAlwaysOn(root: Future.value(visit.root),
-      character: character, moves: const CompanionMoves(), sourceKey: sourceKey,
-      ui: _RoomUi(), mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)));
+    final resident = visit.agent.retainAlwaysOn(
+      root: Future.value(visit.root),
+      character: character,
+      moves: const CompanionMoves(),
+      sourceKey: sourceKey,
+      ui: _RoomUi(),
+      mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+    );
     Future<void>? old;
     try {
       old = resident.submit('第一句话。');
@@ -864,10 +885,8 @@ void main() {
       expect(visit.requests, hasLength(2));
       expect(visit.calls('clock'), 2);
       final history = visit.memory.store.messages();
-      expect(history.where((row) => row['role'] == 'user').map((row) => row['text']),
-        ['第一句话。', '停一下，听这一句。']);
-      expect(history.where((row) => row['role'] == 'assistant').map((row) => row['text']),
-        ['我听见新的话了。']);
+      expect(history.where((row) => row['role'] == 'user').map((row) => row['text']), ['第一句话。', '停一下，听这一句。']);
+      expect(history.where((row) => row['role'] == 'assistant').map((row) => row['text']), ['我听见新的话了。']);
       expect(visit.memory.store.requests().map((row) => row['terminal']), containsAll(['cancelled', 'complete']));
       expect(visit.memory.store.tasks(), isEmpty);
       expect(visit.database.select('SELECT * FROM memory_agent_calls'), isEmpty);
@@ -880,17 +899,19 @@ void main() {
   });
 
   test('screen observation revalidates after the model and awaits the actual presentation acknowledgement', () async {
-    final visit = await _Visit.open([
-      _message(words: '第一句观察。'),
-      _message(words: '第二句观察。'),
-    ]);
+    final visit = await _Visit.open([_message(words: '第一句观察。'), _message(words: '第二句观察。')]);
     const character = CompanionCharacter(name: '伙伴');
     const sourceKey = 'builtin:companion/whale-girl';
     visit.attachment.updateCharacter(character, const CompanionMoves(), sourceKey: sourceKey);
     final ambient = _AmbientUi();
-    final resident = visit.agent.retainAlwaysOn(root: Future.value(visit.root),
-      character: character, moves: const CompanionMoves(), sourceKey: sourceKey,
-      ui: ambient, mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)));
+    final resident = visit.agent.retainAlwaysOn(
+      root: Future.value(visit.root),
+      character: character,
+      moves: const CompanionMoves(),
+      sourceKey: sourceKey,
+      ui: ambient,
+      mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+    );
     final validationTerminals = <Object?>[];
     Future<bool>? pending;
     final context = <String, Object?>{
@@ -905,10 +926,13 @@ void main() {
     try {
       expect(await resident.openMemory(), same(visit.memory));
       expect(resident.characterId, isNotNull);
-      final rejected = await visit.agent.observeScreen(context: context, isCurrentObservation: () async {
-        validationTerminals.add(visit.memory.store.requests().single['terminal']);
-        return false;
-      });
+      final rejected = await visit.agent.observeScreen(
+        context: context,
+        isCurrentObservation: () async {
+          validationTerminals.add(visit.memory.store.requests().single['terminal']);
+          return false;
+        },
+      );
       expect(rejected, isFalse);
       expect(visit.requests, hasLength(1));
       expect(validationTerminals, ['complete']);
@@ -921,11 +945,14 @@ void main() {
 
       ambient.entered = Completer<void>();
       ambient.acknowledgement = Completer<bool>();
-      pending = visit.agent.observeScreen(context: context, isCurrentObservation: () async {
-        final receipts = visit.memory.store.requests();
-        validationTerminals.add(receipts.singleWhere((row) => row['id'] != rejectedReceipt['id'])['terminal']);
-        return true;
-      });
+      pending = visit.agent.observeScreen(
+        context: context,
+        isCurrentObservation: () async {
+          final receipts = visit.memory.store.requests();
+          validationTerminals.add(receipts.singleWhere((row) => row['id'] != rejectedReceipt['id'])['terminal']);
+          return true;
+        },
+      );
       // Also finish this wait if the actual Agent exits before presentation,
       // so a regression fails the assertions instead of stranding teardown.
       await Future.any<void>([ambient.entered!.future, pending.then((_) {})]);
