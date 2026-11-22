@@ -57,6 +57,23 @@ class OverlayAccessTest {
         assertEquals(OverlayHost.ACCESSIBILITY, OverlayAccess.host(true, AddResult.FAILED, a11yFailed = false, canDraw = true))
     }
 
+    @Test fun failedAccessibilityPermissionRecoversWithTheExistingCooldown() {
+        val retry = AccessibilityOverlayRetry()
+        val connected = Any()
+        val failedAt = 1_000L
+        fun permission(service: Any = connected, canDraw: Boolean = false, now: Long = failedAt + 1) =
+            OverlayAccess.permission(true, canDraw, AddResult.OK, a11yFailed = retry.remaining(service, now) != null)
+
+        assertEquals(OverlayPermission.ACCESSIBILITY, permission())
+        retry.failed(connected, failedAt)
+        // Even a previous application-overlay success cannot authorize this fallback.
+        assertEquals(OverlayPermission.DENIED, permission())
+        assertEquals(OverlayPermission.ACCESSIBILITY, permission(canDraw = true))
+        assertEquals(OverlayPermission.ACCESSIBILITY, permission(now = failedAt + OverlayAccess.RETRY_MS))
+        retry.failed(connected, failedAt + OverlayAccess.RETRY_MS)
+        assertEquals(OverlayPermission.ACCESSIBILITY, permission(service = Any(), now = failedAt + OverlayAccess.RETRY_MS + 1))
+    }
+
     @Test fun failedAccessibilityAddCannotSpinThroughRemovalCallbacks() {
         val retry = AccessibilityOverlayRetry()
         val service = Any()
