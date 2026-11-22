@@ -25,7 +25,8 @@ extension CompanionAgentAmbient on CompanionAgent {
   /// An ephemeral observation is not a user message or a memory proof source.
   /// This uses the same decoder/physical receipt/cancellation implementation,
   /// with no tool bindings and no assistant transcript insertion.
-  Future<bool> observeScreen({required Map<String, Object?> context}) async {
+  Future<bool> observeScreen({required Map<String, Object?> context,
+    required Future<bool> Function() isCurrentObservation}) async {
     final visit = _visit;
     final ui = visit?.residentUi;
     if (visit == null || !visit.active || running || visit.preparing ||
@@ -104,6 +105,7 @@ extension CompanionAgentAmbient on CompanionAgent {
           return message == null ? null : (message: message, requestId: id);
         });
       if (!current() || message == null || message.calls.isNotEmpty || request.text.trim().isEmpty) return false;
+      if (!await isCurrentObservation() || !current()) return false;
       return await ui.presentLine(id: 'screen-aside:$id', text: request.text,
         emotion: context['emotion'] as String? ?? 'neutral', speak: true);
     } on Object {

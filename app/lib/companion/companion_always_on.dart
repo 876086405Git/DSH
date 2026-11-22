@@ -54,6 +54,7 @@ class CompanionAlwaysOnOwner {
   late final StreamSubscription<CompanionVoiceEvent> _voiceEvents;
   late final CompanionSpeaker _speaker;
   late final CompanionScreenObserver _screen;
+  CompanionScreenObserver get screen => _screen;
   StreamSubscription<int>? _packChanges;
   void Function()? _removeBeforePack;
   CompanionAgentResident? _resident;

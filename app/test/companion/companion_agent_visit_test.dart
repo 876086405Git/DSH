@@ -248,6 +248,26 @@ class _RoomUi implements CompanionAgentRoomUi, CompanionInitiativeRoom {
   void rest(CompanionInitiativeEffect intent) {}
 }
 
+class _AmbientUi extends _RoomUi implements CompanionAgentAmbientUi {
+  final presented = <({String id, String text, String emotion, bool speak})>[];
+  Completer<void>? entered;
+  Completer<bool>? acknowledgement;
+  @override
+  bool get presentationAvailable => mounted;
+  @override
+  Future<bool> presentLine({required String id, required String text, required String emotion,
+    required bool speak}) {
+    presented.add((id: id, text: text, emotion: emotion, speak: speak));
+    if (entered case final signal?) {
+      if (!signal.isCompleted) signal.complete();
+    }
+    return acknowledgement?.future ?? Future.value(true);
+  }
+  @override
+  void stopSpeech() {}
+}
+
+
 class _Visit {
   _Visit(this.root, this.database, this.memory, this.replies);
   final Directory root;
@@ -854,6 +874,86 @@ void main() {
     } finally {
       if (!release.isCompleted) release.complete();
       await old;
+      resident.close();
+      await visit.close();
+    }
+  });
+
+  test('screen observation revalidates after the model and awaits the actual presentation acknowledgement', () async {
+    final visit = await _Visit.open([
+      _message(words: '第一句观察。'),
+      _message(words: '第二句观察。'),
+    ]);
+    const character = CompanionCharacter(name: '伙伴');
+    const sourceKey = 'builtin:companion/whale-girl';
+    visit.attachment.updateCharacter(character, const CompanionMoves(), sourceKey: sourceKey);
+    final ambient = _AmbientUi();
+    final resident = visit.agent.retainAlwaysOn(root: Future.value(visit.root),
+      character: character, moves: const CompanionMoves(), sourceKey: sourceKey,
+      ui: ambient, mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)));
+    final validationTerminals = <Object?>[];
+    Future<bool>? pending;
+    final context = <String, Object?>{
+      'type': 'screen_observation',
+      'observed_at_ms': _now,
+      'package_name': 'example.reader',
+      'window_title': '阅读',
+      'capture_method': 'tree',
+      'text': '一段屏幕文字。',
+      'emotion': 'neutral',
+    };
+    try {
+      expect(await resident.openMemory(), same(visit.memory));
+      expect(resident.characterId, isNotNull);
+      final rejected = await visit.agent.observeScreen(context: context, isCurrentObservation: () async {
+        validationTerminals.add(visit.memory.store.requests().single['terminal']);
+        return false;
+      });
+      expect(rejected, isFalse);
+      expect(visit.requests, hasLength(1));
+      expect(validationTerminals, ['complete']);
+      expect(ambient.presented, isEmpty);
+      expect(visit.agent.running, isFalse);
+      final rejectedReceipt = visit.memory.store.requests().single;
+      expect(rejectedReceipt['terminal'], 'complete');
+      expect(visit.memory.store.messages(), isEmpty);
+      expect(visit.memory.store.tasks(), isEmpty);
+
+      ambient.entered = Completer<void>();
+      ambient.acknowledgement = Completer<bool>();
+      pending = visit.agent.observeScreen(context: context, isCurrentObservation: () async {
+        final receipts = visit.memory.store.requests();
+        validationTerminals.add(receipts.singleWhere((row) => row['id'] != rejectedReceipt['id'])['terminal']);
+        return true;
+      });
+      // Also finish this wait if the actual Agent exits before presentation,
+      // so a regression fails the assertions instead of stranding teardown.
+      await Future.any<void>([ambient.entered!.future, pending.then((_) {})]);
+      expect(visit.requests, hasLength(2));
+      expect(validationTerminals, ['complete', 'complete']);
+      expect(ambient.presented, hasLength(1));
+      expect(ambient.presented.single.text, '第二句观察。');
+      expect(ambient.presented.single.emotion, 'neutral');
+      expect(ambient.presented.single.speak, isTrue);
+      expect(visit.agent.running, isTrue);
+      final receipts = visit.memory.store.requests();
+      expect(receipts, hasLength(2));
+      expect(receipts.every((row) => row['terminal'] == 'complete'), isTrue);
+      final shownReceipt = receipts.singleWhere((row) => row['id'] != rejectedReceipt['id']);
+      expect(ambient.presented.single.id, 'screen-aside:${shownReceipt['id']}');
+      ambient.acknowledgement!.complete(true);
+      expect(await pending, isTrue);
+      expect(visit.agent.running, isFalse);
+      expect(visit.memory.store.messages(), isEmpty);
+      expect(visit.memory.store.tasks(), isEmpty);
+      for (final body in visit.requests) {
+        expect(body.containsKey('tools'), isFalse);
+        expect(_context(body)['screenObservation'], context);
+      }
+    } finally {
+      final acknowledgement = ambient.acknowledgement;
+      if (acknowledgement != null && !acknowledgement.isCompleted) acknowledgement.complete(true);
+      await pending;
       resident.close();
       await visit.close();
     }
