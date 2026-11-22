@@ -306,6 +306,20 @@ class MessagePickRow extends StatelessWidget {
     return text;
   }
 
+  /// [preview] per message, so picking or dragging over rows doesn't mask and
+  /// strip every visible message again. A prompt's pictures and the language
+  /// go into the line, so either changing makes it again.
+  static final _previews = Expando<(int, Locale, String)>();
+
+  static String _previewOf(ChatItem item) {
+    final images = item is UserChatItem ? item.images.length : 0;
+    final locale = AppLocale.current;
+    if (_previews[item] case (final n, final l, final text) when n == images && l == locale) return text;
+    final text = preview(item);
+    _previews[item] = (images, locale, text);
+    return text;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -346,7 +360,7 @@ class MessagePickRow extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          preview(item),
+                          _previewOf(item),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurface),

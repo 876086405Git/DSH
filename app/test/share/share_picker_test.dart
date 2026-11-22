@@ -7,6 +7,7 @@
 
 import 'dart:collection';
 
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/ui/share/share_content.dart';
 import 'package:dsh_app/ui/share/share_picker.dart';
@@ -156,6 +157,28 @@ void main() {
     expect(items.reads, inInclusiveRange(1, 99));
     await gesture.up();
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('a row\'s line follows its pictures and the language', (tester) async {
+    addTearDown(() => AppLocale.use(AppLocale.zhCN));
+    final images = <ImageAttachment>[];
+    final prompt = UserChatItem(seq: 1, time: DateTime(2026), text: '帮我调一下', images: images, files: const []);
+    Future<void> show({bool picked = false}) => tester.pumpWidget(
+      testApp(
+        Scaffold(
+          body: MessagePickRow(item: prompt, picked: picked, onTap: () {}),
+        ),
+      ),
+    );
+
+    await show();
+    expect(find.text('帮我调一下'), findsOneWidget);
+    images.add(const ImageAttachment(attachmentId: 'x', mediaType: 'image/png'));
+    await show(picked: true);
+    expect(find.text('〔图片〕 帮我调一下'), findsOneWidget);
+    AppLocale.use(AppLocale.en);
+    await show();
+    expect(find.text('[Image] 帮我调一下'), findsOneWidget);
   });
 
   testWidgets('picked neighbours share a rail through their checks', (tester) async {
