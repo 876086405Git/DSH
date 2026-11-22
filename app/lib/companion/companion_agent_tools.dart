@@ -444,6 +444,16 @@ class CompanionAgentMemoryTools {
       },
     ),
     CompanionAgentTool(
+      name: 'postpone',
+      description: 'Mark a supplied memory plan postponed with no new time yet and retire its current followup. Use ask_later instead when a new time is known.',
+      inputSchema: {
+        'type': 'object',
+        'properties': {'card': _card},
+        'required': ['card'],
+        'additionalProperties': false,
+      },
+    ),
+    CompanionAgentTool(
       name: 'ask_later',
       description: 'Arrange a real followup opportunity about a supplied card at the chosen UTC epoch millisecond time. Existing presentation limits still apply.',
       inputSchema: {

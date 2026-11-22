@@ -886,11 +886,7 @@ void main() {
     // A plan change is now the model's tool call on the card it was shown,
     // not a phrase the room recognizes itself. The chat turn costs its own
     // receipts; the memory question costs nothing.
-    //
-    // Skipped for postponed — A1 gap: the agent memory tools
-    // (companion_agent_tools.dart) have cancel but no postpone, so no room turn
-    // can set plan_state=postponed any more.
-    testWidgets('a pending memory question yields to $state through the real composer', skip: state == 'postponed', (
+    testWidgets('a pending memory question yields to $state through the real composer', (
       tester,
     ) async {
       final chats = <Map<String, Object?>>[];
@@ -902,7 +898,7 @@ void main() {
           chats.add(body);
           if (chats.length == 1) {
             expect(jsonEncode(body['messages']), contains(_cardId!));
-            return _toolUse('call-plan', 'cancel', {'card': _cardId!});
+            return _toolUse('call-plan', state == 'cancelled' ? 'cancel' : 'postpone', {'card': _cardId!});
           }
           final results = (((body['messages']! as List).last as Map)['content']! as List).cast<Map>();
           expect(results.single['tool_use_id'], 'call-plan');
