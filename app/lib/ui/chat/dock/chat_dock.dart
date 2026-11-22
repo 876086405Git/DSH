@@ -47,7 +47,8 @@ class TodoDockSlot extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final todos = ref.watch(chatProvider(sessionId).select((s) => TodoDockSummary.of(s.todos, running: s.running)));
+    final (items, running) = ref.watch(chatProvider(sessionId).select((s) => (s.todos, s.running)));
+    final todos = TodoDockSummary.of(items, running: running);
     return DockSlot(
       key: const ValueKey('todo'),
       child: todos == null ? null : TodoBar(key: ValueKey(sessionId), summary: todos),
