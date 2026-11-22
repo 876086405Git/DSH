@@ -440,7 +440,7 @@ void main() {
           if (request.url.path.endsWith('/search')) {
             return _json({
               'results': [
-                {'url': 'https://museum.example/notice', 'title': '馆方公告', 'snippet': '搜索摘要', 'date': '2026-11-20'},
+                {'url': 'https://museum.example/notice', 'title': '青桥美术馆馆方公告', 'snippet': '搜索摘要', 'date': '2026-11-20'},
               ],
             });
           }
