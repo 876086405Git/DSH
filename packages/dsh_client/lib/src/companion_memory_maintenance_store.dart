@@ -161,11 +161,14 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
             memoryBatchInputTokens) {
           return null;
         }
-        final end = today.millisecondsSinceEpoch - offsetMinutes * 60000;
+        // Compare local calendar coordinates with each original source's
+        // stored offset; today's offset may have changed at a DST boundary.
+        final end = today.millisecondsSinceEpoch;
         for (final row in _db.select(
           '''
           SELECT * FROM memory_messages WHERE scope='real' AND first_seq>?
-            AND said_at_utc>=? AND said_at_utc<? ORDER BY first_seq DESC
+            AND said_at_utc+offset_minutes*60000>=?
+            AND said_at_utc+offset_minutes*60000<? ORDER BY first_seq DESC
         ''',
           [meta['history_after_seq'], end - 86400000, end],
         )) {
@@ -327,7 +330,7 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
     required int Function(String) estimateTokens,
     required int Function(MemoryRow)? estimateContextTokens,
   }) {
-    final scopedSources = _agentSourcesForScope(sources, characterId, kind, localDay: localDay, zoneId: zoneId);
+    final scopedSources = _agentSourcesForScope(sources, characterId, kind, localDay: localDay);
     final revisions = {for (final card in cards) card['id']: card['row_rev']};
     final selected = [
       for (final card in _memoryDomainCards(characterId))
@@ -670,7 +673,6 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
       characterId,
       claim['kind'] as String,
       localDay: claim['local_day'] as String?,
-      zoneId: claim['zone_id'] as String?,
     );
   }
 
@@ -722,19 +724,18 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
     String? characterId,
     String kind, {
     String? localDay,
-    String? zoneId,
   }) => [
     for (final source in sources)
       if (characterId == null
           ? source['role'] == 'user' &&
-                (kind == 'organize' ? _agentSourceOnDay(source, localDay!, zoneId!) : source['character_id'] == null)
+                (kind == 'organize' ? _agentSourceOnDay(source, localDay!) : source['character_id'] == null)
           : source['character_id'] == characterId)
         source,
   ];
 
-  bool _agentSourceOnDay(MemoryRow source, String localDay, String zoneId) =>
+  bool _agentSourceOnDay(MemoryRow source, String localDay) =>
       source['scope'] == 'real' &&
-      _memoryLocalDay(source['said_at_utc'] as int, int.parse(zoneId.substring('offset:'.length))) == localDay;
+      _memoryLocalDay(source['said_at_utc'] as int, source['offset_minutes'] as int) == localDay;
 
   void _advanceAgentMaintenanceCommit(Row turn, Set<String> changed) {
     if (turn['origin_kind'] == 'chat') return;

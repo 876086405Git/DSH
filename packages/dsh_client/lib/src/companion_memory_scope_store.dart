@@ -160,7 +160,7 @@ extension CompanionMemoryScopeStore on CompanionMemoryStore {
       'aliases': aliases,
       // Aliases are model-written names for this exact person card. They aid
       // the existing lexical fallback, without becoming a merge decision.
-      'keywords': <dynamic>{...(card['keywords'] as List), ...aliases}.toList(),
+      'keywords': <String>{...(card['keywords'] as List<String>), ...aliases}.toList(),
     };
   }
 
