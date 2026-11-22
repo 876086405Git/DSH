@@ -94,6 +94,18 @@ void main() {
     return at;
   }
 
+  /// [frames], each arriving [gap] later as on a device: the release is timed from
+  /// the last frame's own time stamp.
+  Future<Duration> play(WidgetTester tester, int count, Duration gap, {Duration from = Duration.zero}) async {
+    var at = from;
+    for (var i = 0; i < count; i++) {
+      await tester.pump(gap);
+      at += gap;
+      RefreshRateService.instance.frameForTest(at);
+    }
+    return at;
+  }
+
   const cadence = Duration(milliseconds: 8);
   const blink = Duration(milliseconds: 500);
 
@@ -127,7 +139,7 @@ void main() {
     testWidgets('long motion says active once, with no renewals', (tester) async {
       final calls = record();
       RefreshRateService.instance.start();
-      frames(1000, cadence);
+      await play(tester, 1000, cadence);
       await tester.pump();
       expect(calls, ['setRefreshRateMode auto', 'setFrameActive true']);
       await tester.pump(RefreshRateService.idleAfter);
@@ -206,7 +218,7 @@ void main() {
     testWidgets('it ends after the motion even with a cursor still blinking', (tester) async {
       final calls = record();
       RefreshRateService.instance.start();
-      var at = frames(10, cadence, from: blink);
+      var at = await play(tester, 10, cadence, from: blink);
       await tester.pump(blink);
       at = frames(1, blink, from: at);
       await tester.pump(const Duration(milliseconds: 199));
@@ -221,10 +233,9 @@ void main() {
     testWidgets('one slow frame in a long motion doesn\'t release it', (tester) async {
       final calls = record();
       RefreshRateService.instance.start();
-      var at = frames(10, cadence, from: blink);
-      await tester.pump(const Duration(milliseconds: 80));
-      at = frames(1, const Duration(milliseconds: 80), from: at);
-      frames(10, cadence, from: at);
+      var at = await play(tester, 10, cadence, from: blink);
+      at = await play(tester, 1, const Duration(milliseconds: 80), from: at);
+      await play(tester, 10, cadence, from: at);
       await tester.pump();
       expect(calls, ['setRefreshRateMode auto', 'setFrameActive true']);
       await tester.pump(RefreshRateService.idleAfter);
@@ -234,8 +245,8 @@ void main() {
       final calls = record();
       RefreshRateService.instance.start();
       // 2.5 s of frames from the first active: renewed at 1 s and at 2 s.
-      final at = frames(RefreshRateService.motionFrames, cadence, from: blink);
-      frames(2500 ~/ cadence.inMilliseconds, cadence, from: at);
+      final at = await play(tester, RefreshRateService.motionFrames, cadence, from: blink);
+      await play(tester, 2500 ~/ cadence.inMilliseconds, cadence, from: at);
       await tester.pump();
       expect(calls, ['setRefreshRateMode auto', 'setFrameActive true', 'setFrameActive true', 'setFrameActive true']);
       await tester.pump(RefreshRateService.idleAfter);
