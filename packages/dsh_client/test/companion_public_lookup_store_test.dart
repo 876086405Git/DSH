@@ -182,7 +182,7 @@ void main() {
       String executor = 'phone-installation',
       bool full = false,
     }) {
-      say(source, session: room, text: '帮我查今天${place}开不开，给我馆方公告。');
+      say(source, session: room, text: '帮我查今天$place开不开，给我馆方公告。');
       return store.createLookupFromMessage(
         messageId: source,
         expectedSourceRev: 1,
