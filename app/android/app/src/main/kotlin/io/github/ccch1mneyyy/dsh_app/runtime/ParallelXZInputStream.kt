@@ -27,6 +27,7 @@ internal class ParallelXZInputStream private constructor(
     private var nextBlock = 0
     private var consumed = 0
     private var current: ByteArray? = null
+    private var recycled: ByteArray? = null
     private var offset = 0
     @Volatile private var closed = false
 
@@ -35,10 +36,12 @@ internal class ParallelXZInputStream private constructor(
     private fun submit() {
         if (nextBlock == sizes.size) return
         val block = nextBlock++
+        val buffer = recycled
+        recycled = null
         pending.addLast(workers[block % 2].submit<ByteArray> {
             val decoder = decoders[block % 2]
             decoder.seekToBlock(block)
-            val bytes = ByteArray(sizes[block])
+            val bytes = buffer ?: ByteArray(sizes[block])
             var at = 0
             while (at < bytes.size) {
                 if (closed) throw InterruptedIOException("xz decoding cancelled")
@@ -72,6 +75,8 @@ internal class ParallelXZInputStream private constructor(
             offset += count
             if (offset == block.size) {
                 current = null
+                // Only the next submit can take this block, after its last byte was copied out.
+                if (nextBlock < sizes.size && sizes[nextBlock] == block.size) recycled = block
                 onProgress(progress[consumed++])
             }
             return count
@@ -85,6 +90,7 @@ internal class ParallelXZInputStream private constructor(
     override fun close() {
         if (closed) return
         closed = true
+        recycled = null
         workers.forEach { it.shutdownNow() }
         // A decoder isn't safe to close under a read; a block read stops within 64 KiB.
         workers.forEach { it.awaitTermination(1, TimeUnit.MINUTES) }
