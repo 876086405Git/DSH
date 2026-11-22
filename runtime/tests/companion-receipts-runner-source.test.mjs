@@ -54,7 +54,21 @@ test('J SOURCE_HTTP mixed PDF keeps image date unverified while accepting only i
 test('J SOURCE_HTTP four verified text receipts produce done; formula-looking strings remain literal cells', async t => {
   const fixtures = Array.from({length: 4}, (_, i) => ({name: `receipt-${i}.txt`, bytes: Buffer.from(textReceipt)}));
   fixtures[0].bytes = Buffer.from(textReceipt.replace('交通', '=HYPERLINK("https://example.invalid","票")'));
-  const f = await receiptFixture(t, {fixtures}); const {snapshot} = await completeReceipts(f);
+  const f = await receiptFixture(t, {fixtures});
+  const readReceipt = f.fs.dshGoReadReceipt.bind(f.fs);
+  const save = f.store.saveReceiptObservation.bind(f.store);
+  let reads, checks;
+  t.mock.method(f.fs, 'dshGoReadReceipt', async (...args) => {
+    const value = await readReceipt(...args);
+    if (checks === undefined && !reads) reads = t.mock.method(f.store, 'read');
+    return value;
+  });
+  t.mock.method(f.store, 'saveReceiptObservation', (...args) => {
+    if (reads) { checks = reads.mock.callCount(); reads.mock.restore(); reads = undefined; }
+    return save(...args);
+  });
+  const {snapshot} = await completeReceipts(f);
+  assert.equal(checks, 0, 'the two checks after reading a receipt only inspect task control fields');
   assert.equal(snapshot.state, 'done'); assert.equal(snapshot.steps.at(-1).state, 'done');
   const actual = await f.raw(artifactPath(f, snapshot));
   assert.equal(parseActualWorkbook(f, snapshot, actual.bytes).rows[1][1], '=HYPERLINK("https://example.invalid","票")');
