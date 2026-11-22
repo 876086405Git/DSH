@@ -196,9 +196,10 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
     return segment(id, rev, 'model', 180_000, controller, owner, async ({claim, signal, guard: current}) => {
       const {text, inputBudget, usage} = await runTaskModel({store, claim, owner, signal, guard: current,
         system: notesSystem, input, capability, inputEstimate: notesInputEstimate, outputTokens: NOTES_LIMITS.outputTokens});
-      const page = renderNotesPage(readNotesProposal(text, inputs), inputs);
+      const mediaType = current().agreement.args.outputName.toLowerCase().endsWith('.md') ? 'text/markdown' : 'text/plain';
+      const page = renderNotesPage(readNotesProposal(text, inputs), inputs, mediaType);
       await store.saveCandidate(claim, {content: page.content,
-        mediaType: current().agreement.args.outputName.toLowerCase().endsWith('.md') ? 'text/markdown' : 'text/plain',
+        mediaType,
         sourceCount: page.sourceCount, itemCount: page.itemCount, usage});
       return {sourceCount: page.sourceCount, itemCount: page.itemCount, inputBudget, usage};
     });
