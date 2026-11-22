@@ -417,8 +417,9 @@ TurnOutcome? outcomeFromEvents(List<SessionLogEvent> events, {String? title}) {
     switch (event) {
       case TurnEndedEvent():
         end = event;
-      case AssistantMessageEvent(:final message) when message.text.trim().isNotEmpty:
-        reply = message.text;
+      case AssistantMessageEvent(:final message):
+        final text = message.text;
+        if (text.trim().isNotEmpty) reply = text;
       case TurnStartedEvent():
         end = null;
         reply = null;
