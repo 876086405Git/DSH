@@ -29309,6 +29309,23 @@ class L10nEn extends L10n {
   String get wallpaperDim => 'Dim';
 
   @override
+  String get wallpaperGuard => 'Keep text readable';
+
+  @override
+  String get wallpaperGuardHint =>
+      'Off: blur and brightness follow the sliders exactly, and at 0 you get the original picture';
+
+  @override
+  String get wallpaperGuardMotionHint =>
+      'While an animation plays, only text colours are adjusted; nothing is laid over the picture';
+
+  @override
+  String get wallpaperPlay => 'Play animation';
+
+  @override
+  String get wallpaperPlayHint => 'Shows the first frame when motion is reduced';
+
+  @override
   String get wallpaperReplace => 'Replace picture';
 
   @override
@@ -29316,7 +29333,7 @@ class L10nEn extends L10n {
 
   @override
   String get wallpaperFooter =>
-      'Shown on home, in chats and in the drawer. Lighten applies in light mode, Dim in dark mode; text always stays clear. PNG, JPEG or WebP, up to 15 MB.';
+      'Shown on home, in chats and in the drawer. Lighten applies in light mode, Dim in dark mode. PNG, JPEG, WebP or GIF, up to 15 MB.';
 
   @override
   String get wallpaperChanged => 'Wallpaper changed';
@@ -29362,7 +29379,8 @@ class L10nEn extends L10n {
   String get wallpaperSampleTool => 'Checked 3 weather sources';
 
   @override
-  String get searchKwWallpaper => 'background,background image,chat background,custom background,backdrop,blur,photo';
+  String get searchKwWallpaper =>
+      'background,background image,chat background,custom background,backdrop,blur,photo,animated,gif,live wallpaper';
 
   @override
   String get webTitle => 'DSH Web';

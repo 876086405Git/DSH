@@ -389,6 +389,8 @@ class _ComposerState extends State<Composer> with SingleTickerProviderStateMixin
     final textPad = math.max(4.0, (_keySize - line) / 2);
     final voice = widget.voice;
     voice?.ensureFresh();
+    final themeStyle = DshThemeStyle.of(context);
+    final themeHint = themeStyle.localized(themeStyle.components.composerHint);
 
     // The chat page's pet stands on the composer's top edge (outside a pet
     // stage this is a plain pass-through).
@@ -421,7 +423,7 @@ class _ComposerState extends State<Composer> with SingleTickerProviderStateMixin
                     : widget.waitHint ??
                           (widget.running && !waiting
                               ? l10n.chatGeneratingSteerHint
-                              : widget.placeholder ?? l10n.chatComposerHint),
+                              : widget.placeholder ?? themeHint ?? l10n.chatComposerHint),
             };
             final leading = dictating
                 ? VoiceCancelKey(key: const ValueKey('voice-cancel'), onPressed: voice!.cancel)
@@ -651,12 +653,12 @@ class _ComposerGlass extends StatelessWidget {
     final themeStyle = DshThemeStyle.of(context);
     final closedRadius = themeStyle.pack == null
         ? AppShape.radiusXl
-        : themeStyle.scaledBorderRadius(AppShape.xl);
+        : BorderRadius.all(Radius.circular(themeStyle.composerRadius));
     final openedRadius = themeStyle.pack == null
         ? _opened
         : themeStyle.scaledBorderRadius(AppShape.lg);
     final scheme = Theme.of(context).colorScheme;
-    final GlassStyle? overrideStyle = switch (themeStyle.components.composerStyle) {
+    final GlassStyle? variantStyle = switch (themeStyle.components.composerStyle) {
       ThemeComposerStyle.floatingGlass => null,
       ThemeComposerStyle.solidPaper => GlassStyle(
         fill: scheme.surfaceContainerLowest,
@@ -673,6 +675,16 @@ class _ComposerGlass extends StatelessWidget {
         rim: Colors.transparent,
       ),
     };
+    final fill = themeStyle.composerFill;
+    final border = themeStyle.composerBorder;
+    final overrideStyle = fill == null && border == null
+        ? variantStyle
+        : (variantStyle ?? DshSurfaces.of(context).chrome).copyWith(
+            fill: fill,
+            // Without blur the fill has to be opaque: flattened onto the page.
+            fallbackFill: fill == null ? null : Color.alphaBlend(fill, scheme.surface),
+            hairline: border,
+          );
     if (open == null) {
       return GlassSurface(
         tier: GlassTier.chrome,
@@ -899,9 +911,11 @@ class _SendButtonState extends State<_SendButton> {
     final fluid = AppMotion.fluid(context);
     final enabled = widget.enabled && !widget.busy;
     final mode = widget.mode;
-    final sendStyle = DshThemeStyle.of(context).components.sendButtonStyle;
+    final themeStyle = DshThemeStyle.of(context);
+    final sendStyle = themeStyle.components.sendButtonStyle;
     final inkMic = mode == _KeyMode.mic && sendStyle == ThemeSendButtonStyle.ink;
     final tonalKey = sendStyle == ThemeSendButtonStyle.tonal;
+    final outlinedKey = sendStyle == ThemeSendButtonStyle.outlined;
     final mic = mode == _KeyMode.mic || widget.quiet;
     final active = enabled || widget.busy;
     final bg = inkMic
@@ -909,15 +923,30 @@ class _SendButtonState extends State<_SendButton> {
         : mic
         ? colors.onSurface.withValues(alpha: 0.06)
         : active
-        ? (tonalKey ? colors.primaryContainer : colors.primary)
+        ? (themeStyle.sendButton ??
+              (outlinedKey
+                  ? Colors.transparent
+                  : tonalKey
+                  ? colors.primaryContainer
+                  : colors.primary))
         : colors.onSurface.withValues(alpha: 0.12);
     final fg = inkMic
         ? colors.surface
         : mic
         ? colors.onSurface
         : active
-        ? (tonalKey ? colors.onPrimaryContainer : colors.onPrimary)
+        ? (themeStyle.onSendButton ??
+              (outlinedKey
+                  ? colors.primary
+                  : tonalKey
+                  ? colors.onPrimaryContainer
+                  : colors.onPrimary))
         : colors.onSurface.withValues(alpha: 0.38);
+    // The outline belongs to the filled state: the mic and the disabled key keep their own look.
+    final outline = outlinedKey && !inkMic && !mic && active
+        ? BorderSide(color: colors.primary, width: 1.5)
+        : BorderSide.none;
+    final keyShape = themeStyle.keyShape;
     final (icon, size, label) = switch (mode) {
       _KeyMode.send => (AppIcons.send, 20.0, widget.sendLabel ?? l10n.commonSend),
       _KeyMode.stopRun => (AppIcons.stopGenerating, 18.0, l10n.chatStopGenerating),
@@ -948,7 +977,14 @@ class _SendButtonState extends State<_SendButton> {
             duration: AppMotion.of(context, AppMotion.quick),
             width: _keySize,
             height: _keySize,
-            decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+            decoration: keyShape != null
+                ? ShapeDecoration(
+                    color: bg,
+                    shape: keyShape.copyWith(side: outline),
+                  )
+                : outlinedKey
+                ? BoxDecoration(color: bg, shape: BoxShape.circle, border: Border.fromBorderSide(outline))
+                : BoxDecoration(color: bg, shape: BoxShape.circle),
             child: AnimatedSwitcher(
               duration: fluid ? AppMotion.standard : AppMotion.of(context, AppMotion.quick),
               switchInCurve: fluid ? Curves.linear : AppMotion.enter,

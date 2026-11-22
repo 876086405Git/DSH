@@ -12,11 +12,14 @@
 //   ━━━━━━━━━●──────────────────────────────       │ only while the custom one is in use
 //   提亮 (light) / 压暗 (dark)              20%     │
 //   ━━━━━━●─────────────────────────────────       │
+//   自动保证文字清晰                          ◉     │
+//   播放动图 (an animated picture only)       ◉     │
 //   更换图片                                 ›     ┘
 //   预览                                     ›
 //
 // The custom phone shows the real bake (small), redone as a slider moves; the backdrop behind
-// the app is baked again once the slider is let go.
+// the app is baked again once the slider is let go. An animated picture's phone stays on its
+// first frame.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -26,6 +29,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/l10n.dart';
+import '../../../performance/performance_state.dart';
 import '../../../state/wallpaper_state.dart';
 import '../../../wallpaper/custom_wallpaper.dart';
 import '../../../wallpaper/wallpaper_look.dart';
@@ -84,10 +88,16 @@ class _WallpaperSectionState extends ConsumerState<WallpaperSection> {
     unawaited(_bake(key));
   }
 
+  /// [frame] with the performance profile in it, as the backdrop's own bake has it.
+  WallpaperFrame _onDevice(WallpaperFrame frame) =>
+      frame.copyWith(lightweight: ref.read(performanceDefaultsProvider).lightweight);
+
   Future<void> _bake((CustomWallpaper, WallpaperFrame) key) async {
     _baking = true;
     final density = _density(context);
-    final image = await ref.read(wallpaperRendererProvider).bake(key.$1, key.$2, density: density);
+    final image = await ref
+        .read(wallpaperRendererProvider)
+        .bake(key.$1, key.$2, density: density, moving: _onDevice(key.$2).plays(key.$1));
     _baking = false;
     if (!mounted) {
       image?.dispose();
@@ -137,6 +147,8 @@ class _WallpaperSectionState extends ConsumerState<WallpaperSection> {
     final brightness = Theme.of(context).brightness;
     final frame = WallpaperBackdrop.frameOf(context);
     if (wallpaper != null) _want(wallpaper, frame);
+    final lightweight = ref.watch(performanceDefaultsProvider.select((p) => p.lightweight));
+    final onDevice = frame.copyWith(lightweight: lightweight);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -181,6 +193,24 @@ class _WallpaperSectionState extends ConsumerState<WallpaperSection> {
                   unawaited(notifier.setTone(brightness, v));
                 },
               ),
+              SettingsSwitchTile(
+                key: const ValueKey('wallpaper-guard'),
+                title: l10n.wallpaperGuard,
+                // A playing picture gets no veil, only its text colours; unguarded, not those either.
+                subtitle: stored != null && stored.guard && onDevice.plays(stored)
+                    ? l10n.wallpaperGuardMotionHint
+                    : l10n.wallpaperGuardHint,
+                value: stored?.guard ?? true,
+                onChanged: (v) => unawaited(notifier.setGuard(v)),
+              ),
+              if (stored != null && onDevice.playable(stored))
+                SettingsSwitchTile(
+                  key: const ValueKey('wallpaper-play'),
+                  title: l10n.wallpaperPlay,
+                  subtitle: l10n.wallpaperPlayHint,
+                  value: stored.play,
+                  onChanged: (v) => unawaited(notifier.setPlay(v)),
+                ),
               SettingsTile(
                 key: const ValueKey('wallpaper-replace'),
                 title: l10n.wallpaperReplace,
@@ -408,7 +438,7 @@ class _Screen extends StatelessWidget {
 }
 
 /// No picture yet: a quiet phone with the add mark. A picture: its small bake under the sketch,
-/// the guarded colours on it, as the chat will show it.
+/// the guarded colours on it (when it is guarded), as the chat will show it.
 class _CustomMini extends StatelessWidget {
   const _CustomMini({required this.custom, required this.thumb, required this.broken, required this.busy});
 
@@ -451,7 +481,7 @@ class _CustomMini extends StatelessWidget {
       final theme = Theme.of(context);
       body = _Screen(
         child: Theme(
-          data: WallpaperLook.of(context).guardTheme(theme),
+          data: custom.guard ? WallpaperLook.of(context).guardTheme(theme) : theme,
           child: Stack(
             fit: StackFit.expand,
             children: [

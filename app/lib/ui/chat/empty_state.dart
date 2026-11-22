@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -214,6 +215,12 @@ class ChatEmptyState extends StatelessWidget {
   /// The suggestions → the tip line.
   static const tipGap = 6.0;
 
+  /// The editorial layout's left line, from the column's edge.
+  static const _editorialInset = SuggestionCardMetrics.padH;
+
+  static Widget _startAligned(Widget? current, List<Widget> previous) =>
+      Stack(alignment: AlignmentDirectional.centerStart, children: [...previous, ?current]);
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -239,7 +246,7 @@ class ChatEmptyState extends StatelessWidget {
     final retry = connected ? null : onReconnect;
     final idle = connected || retry != null ? null : this.idle;
     final subtitle = connected
-        ? l10n.viewEmptySubtitle
+        ? themeStyle.localized(emptySpec.subtitle) ?? l10n.viewEmptySubtitle
         : retry != null
         ? l10n.commonEngineUnreachable
         : idle != null
@@ -252,6 +259,15 @@ class ChatEmptyState extends StatelessWidget {
 
     var order = 0;
     Widget enter(Widget child) => FadeSlideIn(index: order++, child: child);
+    // Editorial: everything that reads as text starts on one line, the
+    // suggestion cards' own content inset; [hang] is the air a control already
+    // carries on that side.
+    Widget onLine(Widget child, {double hang = 0}) => editorial
+        ? Padding(
+            padding: EdgeInsets.only(left: _editorialInset - hang, right: _editorialInset),
+            child: child,
+          )
+        : child;
     final tipList = tips ?? defaultTips();
 
     // One slot under the subtitle: the primary pill or the workspace chip,
@@ -297,32 +313,45 @@ class ChatEmptyState extends StatelessWidget {
                     ),
                     child: Padding(
                       padding: EdgeInsets.only(
-                        bottom: compact ? 8 : (emptySpec.heroStyle == ThemeHeroStyle.badge ? 18 : 12),
+                        bottom: compact
+                            ? 8
+                            : switch (emptySpec.heroStyle) {
+                                ThemeHeroStyle.badge || ThemeHeroStyle.seal => 18,
+                                _ => 12,
+                              },
                       ),
-                      child: Align(
-                        alignment: blockAlign,
-                        child: _buildHero(context, theme, themeStyle, emptySpec, compact: compact),
+                      child: onLine(
+                        Align(
+                          alignment: blockAlign,
+                          child: _buildHero(context, theme, themeStyle, emptySpec, compact: compact),
+                        ),
                       ),
                     ),
                   ),
                 ),
               enter(
-                Text(
-                  greetingFor(now ?? chatClock()),
-                  textAlign: textAlign,
-                  style: greetingStyle,
+                onLine(
+                  Text(
+                    themeStyle.localized(emptySpec.greeting) ?? greetingFor(now ?? chatClock()),
+                    textAlign: textAlign,
+                    style: greetingStyle,
+                  ),
                 ),
               ),
               if (emptySpec.showConnectedSubtitle || !connected) ...[
                 const SizedBox(height: 4),
                 enter(
-                  AnimatedSwitcher(
-                    duration: AppMotion.of(context, AppMotion.quick),
-                    child: Text(
-                      subtitle,
-                      key: ValueKey(subtitle),
-                      textAlign: textAlign,
-                      style: theme.textTheme.bodyLarge?.copyWith(color: dsh.textTertiary),
+                  onLine(
+                    AnimatedSwitcher(
+                      duration: AppMotion.of(context, AppMotion.quick),
+                      // The switcher centres its child by default, whatever the text's own alignment.
+                      layoutBuilder: editorial ? _startAligned : AnimatedSwitcher.defaultLayoutBuilder,
+                      child: Text(
+                        subtitle,
+                        key: ValueKey(subtitle),
+                        textAlign: textAlign,
+                        style: theme.textTheme.bodyLarge?.copyWith(color: dsh.textTertiary),
+                      ),
                     ),
                   ),
                 ),
@@ -330,15 +359,22 @@ class ChatEmptyState extends StatelessWidget {
               if (slot != null) ...[
                 SizedBox(height: effectiveSlotGap),
                 enter(
-                  Align(
-                    alignment: blockAlign,
-                    child: AnimatedSwitcher(duration: AppMotion.of(context, AppMotion.quick), child: slot),
+                  onLine(
+                    Align(
+                      alignment: blockAlign,
+                      child: AnimatedSwitcher(
+                        duration: AppMotion.of(context, AppMotion.quick),
+                        layoutBuilder: editorial ? _startAligned : AnimatedSwitcher.defaultLayoutBuilder,
+                        child: slot,
+                      ),
+                    ),
                   ),
                 ),
               ],
               if (connected && options != null) ...[
                 SizedBox(height: effectiveOptionsGap),
-                enter(Align(alignment: blockAlign, child: options!)),
+                // A setup item has no fill: its glyph sits 8 inside its tap area.
+                enter(onLine(Align(alignment: blockAlign, child: options!), hang: 8)),
               ],
               if (emptySpec.suggestionsDisplay == ThemeSuggestionsDisplay.collapsible &&
                   connected &&
@@ -346,12 +382,13 @@ class ChatEmptyState extends StatelessWidget {
                 Padding(
                   padding: EdgeInsets.only(top: compact ? 14 : 24),
                   child: ExpansionTile(
+                    tilePadding: editorial ? const EdgeInsets.symmetric(horizontal: _editorialInset) : null,
                     shape: const Border(),
                     collapsedShape: const Border(),
                     leading: const Icon(AppIcons.tip, size: 18),
                     title: Text(AppLocale.isEnglish ? 'Quick start' : '快速上手'),
                     children: [
-                      _suggestionsBlock(order, tipList),
+                      _suggestionsBlock(order, tipList, editorial),
                     ],
                   ),
                 )
@@ -360,7 +397,7 @@ class ChatEmptyState extends StatelessWidget {
                   open: retry == null && idle == null,
                   child: Padding(
                     padding: EdgeInsets.only(top: effectiveSuggestionsGap),
-                    child: _suggestionsBlock(order, tipList),
+                    child: _suggestionsBlock(order, tipList, editorial),
                   ),
                 ),
             ],
@@ -377,23 +414,58 @@ class ChatEmptyState extends StatelessWidget {
     ThemeEmptyStateSpec emptySpec, {
     bool compact = false,
   }) {
+    final scheme = theme.colorScheme;
+    final scale = emptySpec.heroScale;
     Widget badge() => DecoratedBox(
       decoration: ShapeDecoration(
-        color: theme.colorScheme.primaryContainer,
+        color: scheme.primaryContainer,
         shape: themeStyle.pack == null ? AppShape.card : themeStyle.cardShape(),
       ),
       child: Padding(
-        padding: EdgeInsets.all(compact ? 8 : 10),
-        child: WhaleTail(still: true, height: compact ? 20 : 26, color: theme.colorScheme.primary),
+        padding: EdgeInsets.all((compact ? 8 : 10) * scale),
+        child: WhaleTail(still: true, height: (compact ? 20 : 26) * scale, color: scheme.primary),
       ),
     );
+    final glyph = emptySpec.heroGlyph;
+    // Display type carries the pack's heading font, weight and tracking.
+    TextStyle glyphStyle(double size, Color color) =>
+        theme.textTheme.displaySmall!.copyWith(fontSize: size * scale, height: 1.1, color: color);
     return switch (emptySpec.heroStyle) {
       ThemeHeroStyle.whale => WhaleTail(
         still: true,
-        height: compact ? 30 : 40,
-        color: whaleColorFor(theme.brightness).withValues(alpha: 0.4),
+        height: (compact ? 30 : 40) * scale,
+        // Under a pack the tail takes the pack's colour; lifted on dark, where 0.4 sinks into the page.
+        color: themeStyle.pack == null
+            ? whaleColorFor(theme.brightness).withValues(alpha: 0.4)
+            : scheme.primary.withValues(alpha: theme.brightness == Brightness.dark ? 0.6 : 0.45),
       ),
-      ThemeHeroStyle.badge => badge(),
+      ThemeHeroStyle.glyph when glyph != null => Text(glyph, style: glyphStyle(compact ? 32 : 40, scheme.primary)),
+      ThemeHeroStyle.seal when glyph != null => Transform.rotate(
+        angle: -4 * math.pi / 180,
+        child: DecoratedBox(
+          decoration: ShapeDecoration(
+            color: scheme.primary,
+            shape: themeStyle.shapeFor(const BorderRadius.all(Radius.circular(10))),
+          ),
+          child: SizedBox.square(
+            dimension: (compact ? 44 : 56) * scale,
+            child: Padding(
+              padding: EdgeInsets.all(8 * scale),
+              child: FittedBox(
+                child: Text(
+                  // Four characters stack two by two, as a seal is cut.
+                  glyph.runes.length == 4
+                      ? '${String.fromCharCodes(glyph.runes.take(2))}\n${String.fromCharCodes(glyph.runes.skip(2))}'
+                      : glyph,
+                  textAlign: TextAlign.center,
+                  style: glyphStyle(24, scheme.onPrimary),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      ThemeHeroStyle.badge || ThemeHeroStyle.glyph || ThemeHeroStyle.seal => badge(),
       ThemeHeroStyle.customImage =>
         (themeStyle.folderPath != null && emptySpec.heroImage != null)
             ? ClipRRect(
@@ -401,7 +473,7 @@ class ChatEmptyState extends StatelessWidget {
                 child: Image.file(
                   File('${themeStyle.folderPath}/${emptySpec.heroImage}'),
                   key: ValueKey('${themeStyle.folderPath}/${emptySpec.heroImage}#${themeStyle.assetRevision}'),
-                  height: compact ? 48 : 64,
+                  height: (compact ? 48 : 64) * scale,
                   fit: BoxFit.contain,
                   errorBuilder: (_, _, _) => badge(),
                 ),
@@ -411,7 +483,7 @@ class ChatEmptyState extends StatelessWidget {
     };
   }
 
-  Widget _suggestionsBlock(int order, List<String> tipList) => Column(
+  Widget _suggestionsBlock(int order, List<String> tipList, bool editorial) => Column(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -426,7 +498,13 @@ class ChatEmptyState extends StatelessWidget {
         const SizedBox(height: tipGap),
         FadeSlideIn(
           index: order + suggestions.length,
-          child: TipLine(tips: tipList, start: tipStart),
+          // The tip's bulb sits 10 inside its tap area.
+          child: editorial
+              ? Padding(
+                  padding: const EdgeInsets.only(left: _editorialInset - 10),
+                  child: TipLine(tips: tipList, start: tipStart),
+                )
+              : TipLine(tips: tipList, start: tipStart),
         ),
       ],
     ],

@@ -130,32 +130,12 @@ class _ChatHeaderState extends ConsumerState<ChatHeader> {
     final colors = theme.colorScheme;
     final dsh = DshColors.of(context);
     final themeStyle = DshThemeStyle.of(context);
-    final GlassStyle? headerButtonStyle = switch (themeStyle.components.headerStyle) {
-      ThemeHeaderStyle.glass => null,
-      ThemeHeaderStyle.ghost => const GlassStyle(
-        fill: Colors.transparent,
-        fallbackFill: Colors.transparent,
-        hairline: Colors.transparent,
-        rim: Colors.transparent,
-      ),
-      ThemeHeaderStyle.outlined => GlassStyle(
-        fill: Colors.transparent,
-        fallbackFill: Colors.transparent,
-        hairline: colors.outlineVariant,
-        hairlineWidth: 1.0,
-        rim: Colors.transparent,
-      ),
-      ThemeHeaderStyle.minimal => GlassStyle(
-        fill: colors.surfaceContainerLow.withValues(alpha: 0.72),
-        fallbackFill: colors.surfaceContainerLow,
-        hairline: Colors.transparent,
-        rim: Colors.transparent,
-      ),
-    };
+    final headerButtonStyle = themeStyle.headerGlass(colors);
     final top = MediaQuery.paddingOf(context).top;
     final barHeight = ChatHeader.barHeightOf(context);
     final pillHeight = ChatHeader.pillHeightOf(context);
-    final titleStyle = theme.textTheme.titleSmall?.copyWith(fontSize: 15, height: 1.3);
+    final baseTitleStyle = theme.textTheme.titleSmall?.copyWith(fontSize: 15, height: 1.3);
+    final titleStyle = baseTitleStyle == null ? null : themeStyle.headerTitleTextStyle(baseTitleStyle);
     final statusStyle = theme.textTheme.labelSmall?.copyWith(fontSize: 11, height: 1.25);
     final titleFloor = _titleFloor(context, statusStyle);
     // The schedule clock widens the pill by this much over its plain right

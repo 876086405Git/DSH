@@ -347,10 +347,15 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   /// ([_deriveRows]), the motion duration and the language ([build]), the
   /// fork / regenerate marks ([_clearBuiltRows]) and which callbacks are given
   /// ([didUpdateWidget]).
-  final Map<String, ({ChatRow row, double gap, Widget widget})> _built = {};
+  final Map<String, ({ChatRow row, double gap, bool divided, Widget widget})> _built = {};
   Duration? _builtMotion;
   Locale? _builtLocale;
   ThemeShapeSpec _builtShapes = const ThemeShapeSpec();
+
+  /// The pack's mark between turns and its colour (null without one), which
+  /// [_rowFrame] paints into the gap above a turn's first message.
+  ThemeTurnDivider _builtDivider = ThemeTurnDivider.none;
+  Color? _builtDividerColor;
   ChatState? _builtState;
 
   /// A streaming draft has words, not only thinking: earlier rows read that
@@ -939,11 +944,20 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     // A language switch rebuilds every element (app.dart) without an
     // inherited change; rows hold [appL10n] strings in their arguments.
     final locale = AppLocale.current;
-    final shapes = DshThemeStyle.of(context).shapes;
-    if (motion != _builtMotion || locale != _builtLocale || shapes != _builtShapes) {
+    final themeStyle = DshThemeStyle.of(context);
+    final shapes = themeStyle.shapes;
+    final divider = themeStyle.components.turnDivider;
+    final dividerColor = divider == ThemeTurnDivider.none ? null : Theme.of(context).colorScheme.outlineVariant;
+    if (motion != _builtMotion ||
+        locale != _builtLocale ||
+        shapes != _builtShapes ||
+        divider != _builtDivider ||
+        dividerColor != _builtDividerColor) {
       _builtMotion = motion;
       _builtLocale = locale;
       _builtShapes = shapes;
+      _builtDivider = divider;
+      _builtDividerColor = dividerColor;
       _built.clear();
     }
 
@@ -1071,21 +1085,24 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     final row = _rows[index];
     final previous = index > 0 ? _rows[index - 1] : null;
     final gap = _gapBefore(row, previous, _builtShapes);
+    final divided = _builtDivider != ThemeTurnDivider.none && previous != null && _isUser(row) && !_isUser(previous);
     final fresh = _fresh.remove(row.key);
     // A row's first appearance (fade in, settle) plays once: that build is
     // not kept, or scrolling back to the row would play it again.
     if (fresh != null || _settling.contains(row.key)) {
       _built.remove(row.key);
-      return _rowFrame(row, gap, fresh);
+      return _rowFrame(row, gap, fresh, divided);
     }
     final built = _built[row.key];
-    if (built != null && identical(built.row, row) && built.gap == gap) return built.widget;
-    final frame = _rowFrame(row, gap, null);
-    _built[row.key] = (row: row, gap: gap, widget: frame);
+    if (built != null && identical(built.row, row) && built.gap == gap && built.divided == divided) {
+      return built.widget;
+    }
+    final frame = _rowFrame(row, gap, null, divided);
+    _built[row.key] = (row: row, gap: gap, divided: divided, widget: frame);
     return frame;
   }
 
-  Widget _rowFrame(ChatRow row, double gap, int? fresh) {
+  Widget _rowFrame(ChatRow row, double gap, int? fresh, [bool divided = false]) {
     final gutter = _builtShapes.gutter;
     final padding = EdgeInsets.fromLTRB(gutter, gap, gutter, 0);
     final body = StreamFadeIn(
@@ -1108,7 +1125,15 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
                   padding: padding,
                   child: SizedBox(width: double.infinity, child: body),
                 )
-              : Container(width: double.infinity, padding: padding, child: body),
+              : Container(
+                  width: double.infinity,
+                  padding: padding,
+                  // Painted over the gap this row already has: its height stays.
+                  foregroundDecoration: divided
+                      ? _TurnDividerDecoration(_builtDivider, _builtDividerColor!, gap, gutter)
+                      : null,
+                  child: body,
+                ),
         ),
       ),
     );
@@ -1827,4 +1852,60 @@ class StatusBarTop extends ScrollController {
 
   @override
   Future<void> animateTo(double offset, {required Duration duration, required Curve curve}) async => onTap?.call();
+}
+
+/// A theme pack's mark between two turns, in the middle of the gap above the
+/// turn's first message and as wide as the reading column's text.
+class _TurnDividerDecoration extends Decoration {
+  const _TurnDividerDecoration(this.style, this.color, this.gap, this.gutter);
+
+  final ThemeTurnDivider style;
+  final Color color;
+  final double gap;
+  final double gutter;
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) => _TurnDividerPainter(this);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _TurnDividerDecoration &&
+      other.style == style &&
+      other.color == color &&
+      other.gap == gap &&
+      other.gutter == gutter;
+
+  @override
+  int get hashCode => Object.hash(style, color, gap, gutter);
+}
+
+class _TurnDividerPainter extends BoxPainter {
+  _TurnDividerPainter(this._mark);
+
+  final _TurnDividerDecoration _mark;
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    final y = offset.dy + _mark.gap / 2;
+    final left = offset.dx + _mark.gutter;
+    final right = offset.dx + configuration.size!.width - _mark.gutter;
+    final paint = Paint()
+      ..color = _mark.color
+      ..strokeWidth = 1;
+    switch (_mark.style) {
+      case ThemeTurnDivider.none:
+        break;
+      case ThemeTurnDivider.hairline:
+        canvas.drawLine(Offset(left, y), Offset(right, y), paint);
+      case ThemeTurnDivider.dashed:
+        for (var x = left; x < right; x += 8) {
+          canvas.drawLine(Offset(x, y), Offset(math.min(x + 4, right), y), paint);
+        }
+      case ThemeTurnDivider.dots:
+        final centre = (left + right) / 2;
+        for (final dx in const [-8.0, 0.0, 8.0]) {
+          canvas.drawCircle(Offset(centre + dx, y), 1.5, paint);
+        }
+    }
+  }
 }

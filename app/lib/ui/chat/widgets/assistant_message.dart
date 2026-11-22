@@ -22,6 +22,7 @@ import '../render/markdown_body.dart';
 import 'message_actions.dart';
 import 'message_selection.dart';
 import 'stream_row.dart';
+import 'theme_role_tag.dart';
 import 'thinking_pill.dart';
 
 /// 三个点交给下一块内容:旧的线性淡出,新的淡入并上移一点。
@@ -255,30 +256,57 @@ class _AssistantMessageState extends State<AssistantMessage> {
     final themeStyle = DshThemeStyle.of(context);
     if (themeStyle.pack == null) return child;
     final scheme = Theme.of(context).colorScheme;
-    return switch (themeStyle.components.assistantStyle) {
+    final rule = themeStyle.rule ?? scheme.primary.withValues(alpha: 0.65);
+    final Widget body = switch (themeStyle.components.assistantStyle) {
       ThemeAssistantStyle.plain => child,
-      ThemeAssistantStyle.card => DecoratedBox(
-        decoration: ShapeDecoration(
-          color: themeStyle.assistantBubble ?? DshSurfaces.of(context).card.fill,
-          shape: themeStyle.cardShape(scheme.outlineVariant, themeStyle.borderWidth),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: child,
+      // Full width: a short reply's card is as wide as a long one's.
+      ThemeAssistantStyle.card => SizedBox(
+        width: double.infinity,
+        child: DecoratedBox(
+          decoration: ShapeDecoration(
+            color: themeStyle.assistantBubble ?? DshSurfaces.of(context).card.fill,
+            shape: themeStyle.cardShape(themeStyle.assistantBorder ?? scheme.outlineVariant, themeStyle.borderWidth),
+          ),
+          child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), child: child),
         ),
       ),
       ThemeAssistantStyle.leftRule => DecoratedBox(
         decoration: BoxDecoration(
-          border: Border(
-            left: BorderSide(color: scheme.primary.withValues(alpha: 0.65), width: 2.5),
-          ),
+          border: Border(left: BorderSide(color: rule, width: 2.5)),
         ),
-        child: Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: child,
+        child: Padding(padding: const EdgeInsets.only(left: 12), child: child),
+      ),
+      // Only the tint and the rule are clipped to the card's corners; the
+      // text is not, so nothing in it is cut.
+      ThemeAssistantStyle.quote => SizedBox(
+        width: double.infinity,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: themeStyle.clipFor(
+                themeStyle.cardRadius,
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.06),
+                    border: Border(left: BorderSide(color: rule, width: 3)),
+                  ),
+                ),
+              ),
+            ),
+            if (themeStyle.assistantBorder case final border?)
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: ShapeDecoration(shape: themeStyle.cardShape(border, themeStyle.borderWidth)),
+                ),
+              ),
+            Padding(padding: const EdgeInsets.fromLTRB(15, 10, 12, 10), child: child),
+          ],
         ),
       ),
     };
+    final tag = themeRoleTag(context, themeStyle, user: false);
+    if (tag == null) return body;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [tag, body]);
   }
 
   Future<void> _menu(String markdown) async {

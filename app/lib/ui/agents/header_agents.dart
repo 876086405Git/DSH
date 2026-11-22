@@ -109,6 +109,7 @@ class HeaderBackKey extends ConsumerWidget {
       excludeSemantics: true,
       child: GlassSurface(
         tier: GlassTier.chrome,
+        style: DshThemeStyle.of(context).headerGlass(Theme.of(context).colorScheme),
         stadium: true,
         grouped: true,
         onTap: () => selectConversation(ref, parent.address.parentSessionId),
@@ -212,6 +213,7 @@ class HeaderAgentsKey extends StatelessWidget {
                 dimension: height,
                 child: GlassSurface(
                   tier: GlassTier.chrome,
+                  style: DshThemeStyle.of(context).headerGlass(Theme.of(context).colorScheme),
                   circle: true,
                   grouped: true,
                   onTap: open,
@@ -220,6 +222,7 @@ class HeaderAgentsKey extends StatelessWidget {
               )
             : GlassSurface(
                 tier: GlassTier.chrome,
+                style: DshThemeStyle.of(context).headerGlass(Theme.of(context).colorScheme),
                 stadium: true,
                 grouped: true,
                 onTap: open,

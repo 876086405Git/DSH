@@ -25,6 +25,7 @@ import '../common/sheet_title_bar.dart';
 import '../features/feature_format.dart';
 import '../features/permission_page.dart' show confirmPermission;
 import '../theme/app_icons.dart';
+import '../theme/theme.dart' show DshThemeStyle, ThemeEmptyLayout;
 import 'empty_actions.dart';
 
 /// The longest a single option may grow before its label is cut.
@@ -168,7 +169,9 @@ class NewChatOptions extends ConsumerWidget {
         item(const ValueKey('new-chat-folder'), AppIcons.folder, folderLabel!, l10n.viewNewChatFolder, onFolder!),
     ];
     if (items.isEmpty) return const SizedBox.shrink();
-    return Wrap(alignment: WrapAlignment.center, spacing: 2, children: items);
+    // The editorial empty state is set left; a centred second line would step off its left line.
+    final editorial = DshThemeStyle.of(context).emptyState.layout == ThemeEmptyLayout.editorial;
+    return Wrap(alignment: editorial ? WrapAlignment.start : WrapAlignment.center, spacing: 2, children: items);
   }
 
   /// A pick belongs to the screen it was made on: the same host/connection

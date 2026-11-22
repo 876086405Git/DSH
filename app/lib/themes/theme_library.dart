@@ -478,7 +478,7 @@ Future<void> _evictFolderImages(Directory dir) async {
     if (!await dir.exists()) return;
     final cache = PaintingBinding.instance.imageCache;
     await for (final entity in dir.list(followLinks: false)) {
-      if (entity is File && entity.path.toLowerCase().endsWith('.png')) {
+      if (entity is File && themeImageExtensions.any(entity.path.toLowerCase().endsWith)) {
         cache.evict(FileImage(entity));
       }
     }
@@ -531,6 +531,7 @@ ThemeImportException _mapValidationProblem(ThemeValidationException error) {
   if (code == 'archive-path' ||
       code == 'theme-asset-alias' ||
       code.startsWith('theme-png-') ||
+      code.startsWith('theme-image-') ||
       code.startsWith('theme-font-') ||
       code.startsWith('png-')) {
     return ThemeImportException(ThemeImportProblem.badAsset, detail);

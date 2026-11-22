@@ -1,13 +1,14 @@
 // 自定义壁纸的导入：就是启动画面那条链路（lib/launch/launch_import.dart：系统选择器 → 按字节
 // 上限流式拷进私有目录 → 看文件头认类型 → 解码一遍确认能读、取边缘色），换成壁纸的预算：
-// 只要照片、15 MB 以内、放 `<support>/wallpaper/`。动图只用第一帧（渲染时只取首帧）。
+// 只要照片、15 MB 以内、放 `<support>/wallpaper/`。动图（GIF、动画 WebP / PNG）记成动图：
+// 烘焙只取首帧，播放由 wallpaper_frames.dart 逐帧解码。
 
 import 'dart:async';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
-import '../launch/custom_launch.dart' show CustomLaunch;
+import '../launch/custom_launch.dart' show CustomLaunch, LaunchMediaKind;
 import '../launch/launch_import.dart';
 import '../plugins/native/native_file_platform.dart';
 import 'custom_wallpaper.dart';
@@ -49,17 +50,29 @@ class WallpaperImport {
     return _adopt(launch, problem, previous);
   }
 
-  /// The launch import's result (a still or the first frame of an animation, read and checked)
-  /// as the wallpaper.
+  /// The launch import's result (a still or an animation, read and checked) as the wallpaper.
   Future<(CustomWallpaper?, LaunchImportProblem?)> _adopt(
     CustomLaunch? launch,
     LaunchImportProblem? problem,
     CustomWallpaper? previous,
   ) async {
     if (launch == null) return (null, problem ?? LaunchImportProblem.unreadable);
+    final animated = launch.kind == LaunchMediaKind.animation;
     final wallpaper =
-        previous?.replacedBy(path: launch.path, width: launch.width, height: launch.height, edge: launch.edge) ??
-        CustomWallpaper(path: launch.path, width: launch.width, height: launch.height, edge: launch.edge);
+        previous?.replacedBy(
+          path: launch.path,
+          width: launch.width,
+          height: launch.height,
+          edge: launch.edge,
+          animated: animated,
+        ) ??
+        CustomWallpaper(
+          path: launch.path,
+          width: launch.width,
+          height: launch.height,
+          edge: launch.edge,
+          animated: animated,
+        );
     return (wallpaper, null);
   }
 
