@@ -391,7 +391,7 @@
   "companionLookupFailed": "I couldn't find anything solid this time, so I can't say.",
   "companionLookupUnknown": "I didn't get a clear answer this time. I won't look it up again for now.",
   "companionLookupCancelled": "Okay, I won't look it up.",
-  "companionLookupCancelUnknown": "I asked it to stop, but I'm not sure it has yet.",
+  "companionLookupCancelUnknown": "Your request to stop is saved. I haven't confirmed that the original lookup has stopped.",
   "companionLookupUnavailable": "I can't reach anywhere to look this up right now, so no answer yet.",
   "companionLookupDeadline": "The time we agreed on has passed, so I stopped here.",
   "companionLookupInputLimit": "There's too much to read at once, so here's where I looked.",

@@ -485,7 +485,7 @@
   "companionLookupFailed": "这次没找到靠得住的说法，没法确定。",
   "companionLookupUnknown": "这次没得到明确结果，我先不重复去查。",
   "companionLookupCancelled": "好，不查了。",
-  "companionLookupCancelUnknown": "我让它停了，不过还不确定停下没。",
+  "companionLookupCancelUnknown": "已记下不再查，还没确认原来的查询已停。",
   "companionLookupUnavailable": "现在连不上能查的地方，还没查到结果。",
   "companionLookupDeadline": "约好的时间过了，就查到这儿，不再接着查了。",
   "companionLookupInputLimit": "资料太多，我一次读不完，先把出处给你。",
