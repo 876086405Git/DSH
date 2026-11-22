@@ -4,11 +4,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,writeFile,rename,unlink,chmod,utimes,mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
+import {registerHooks} from 'node:module';
 import {randomUUID} from 'node:crypto';
 import {findFixture,openFind,putDraft,completeFind,completion,sourcePath,until,load} from './fixtures/companion-find-runner-fixture.mjs';
 const {fingerprint,parseTask,amendSchema,cancelSchema}=await load('companion/task-schema.js');
 const operation=(f,rev=1,id='operation-2')=>({v:1,hostStoreId:f.store.hostStoreId,kind:'host.find_draft',operationId:id,expectedTaskRev:rev,taskRev:rev+1});
 const agreement=body=>({args:body.args,deadlineAtMs:body.deadlineAtMs,afterExit:body.afterExit,allowQueue:body.allowQueue});
+
+test('SOURCE_MOUNT task services advertise receipt support without loading the workbook codec', async t => {
+  const loads = [];
+  const hook = registerHooks({load(url, context, next) {
+    if (url.endsWith('/receipt-workbook.js') || url.endsWith('/fflate.mjs')) loads.push(url);
+    return next(url, context);
+  }});
+  t.after(() => hook.deregister());
+  const f = await findFixture(t, {mountService: true});
+  assert((await f.request('/capabilities')).body.kinds.includes('host.receipts_to_sheet'));
+  assert.deepEqual(loads, []);
+});
 
 test('SOURCE_HTTP actual read-only sandbox search, atomic report/source commit and explicit source opening use zero model services',async t=>{
  const f=await findFixture(t,{sandboxed:true});await putDraft(f.root,'开场 A.md');await putDraft(f.root,'提纲 B.txt','B');

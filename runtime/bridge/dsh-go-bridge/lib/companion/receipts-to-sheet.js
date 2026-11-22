@@ -4,7 +4,6 @@ import {XLSX_TYPE} from './task-schema.js';
 import {canReadReceiptPdf, readReceiptPdf} from './receipt-pdf.js';
 import {RECEIPT_LIMITS, ReceiptTaskError, receiptTextLines, receiptObservation, receiptReport,
   excludeReceiptAtPublish, receiptGrid, completeReceiptReport} from './receipt-content.js';
-import {createReceiptWorkbook, verifyReceiptWorkbook} from './receipt-workbook.js';
 
 const finished = new Set(['done', 'partial', 'failed', 'cancelled']);
 const stepOf = (record, key, rev = record.taskRev) => record.steps.findLast(step => step.taskRev === rev && step.stepKey === key);
@@ -155,6 +154,7 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
   }
   async function reopenWorkbook(reference, verified, candidate, signal) {
     const actual = await fs.dshGoReadTaskArtifactBytes(reference.directory, reference.outputName, verified, signal);
+    const {verifyReceiptWorkbook} = await import('./receipt-workbook.js');
     verifyReceiptWorkbook(actual.bytes, candidate.grid);
     if (actual.sha256 !== candidate.sha256) throw new ReceiptTaskError('workbook_verification_failed');
   }
@@ -209,6 +209,7 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
         const report = receiptReport(observations);
         if (!report.coverage.rowsWithVerifiedFields)
           throw Object.assign(new ReceiptTaskError('receipt_fields_unavailable'), {receiptReport: report});
+        const {createReceiptWorkbook, verifyReceiptWorkbook} = await import('./receipt-workbook.js');
         const grid = receiptGrid(report), bytes = createReceiptWorkbook(grid);
         verifyReceiptWorkbook(bytes, grid);
         const {createHash} = await import('node:crypto');
