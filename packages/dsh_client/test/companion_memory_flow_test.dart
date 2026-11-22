@@ -1945,7 +1945,7 @@ void main() {
 
     test('an unresolved control completes its own event without changing topics, cards, history or retry count', () {
       remember('u1', '我学长笛', keywords: ['长笛']);
-      final source = submit('ambiguous', '忘了那件事');
+      final source = submit('ambiguous', '忘掉那件事');
       final claimed = batch();
       store.recordInvalidProposal(claimed);
       final beforeCards = store.cards();

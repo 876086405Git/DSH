@@ -615,7 +615,7 @@ MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards, {List<MemoryR
   String? target;
   for (final entry in <String, RegExp>{
     'postpone': RegExp(r'^(.+?)(?:改期了?|延期了?)[，, ]*(?:时间还没定|时间未定|日期未定|还没定)[。.!！]*$'),
-    'forget': RegExp(r'^(?:忘掉|忘记|忘了)(.+?)[。.!！]*$'),
+    'forget': RegExp(r'^(?:忘掉(.+?)|把(.+?)忘了吧|别记(.+?)了)[。.!！]*$'),
     'never': RegExp(r'^(?:别再提|别主动提|不要再提|不要主动提)(.+?)[。.!！]*$'),
     'less': RegExp(r'^(?:少提(?:一点)?)(.+?)[。.!！]*$'),
     'normal': RegExp(r'^(?:以后可以聊|以后可以提|可以再聊)(.+?)[。.!！]*$'),
@@ -624,7 +624,7 @@ MemoryRow? parseMemoryControl(String input, List<MemoryRow> cards, {List<MemoryR
     final match = entry.value.firstMatch(text);
     if (match == null) continue;
     kind = entry.key;
-    target = match.group(1)!.trim();
+    target = (match.group(1) ?? match.group(2) ?? match.group(3))!.trim();
     break;
   }
   final less = RegExp(r'^(.+?)(?:少提一点|少提一些)[。.!！]*$').firstMatch(text);
