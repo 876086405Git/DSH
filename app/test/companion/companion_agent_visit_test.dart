@@ -43,10 +43,17 @@ http.Response _message({
 }) {
   final pending = [
     if (tool)
-      (_callId, 'reminder', <String, Object?>{
-        'operation': 'create', 'text': '带伞', 'localDate': '2026-11-23',
-        'localTime': '09:00', 'zoneId': 'Asia/Shanghai',
-      }),
+      (
+        _callId,
+        'reminder',
+        <String, Object?>{
+          'operation': 'create',
+          'text': '带伞',
+          'localDate': '2026-11-23',
+          'localTime': '09:00',
+          'zoneId': 'Asia/Shanghai',
+        },
+      ),
     ...calls,
   ];
   var index = 0;
@@ -469,96 +476,147 @@ void main() {
   });
 
   for (final sameBatch in [true, false]) {
-    test('public attachment keeps reminder and memory outcomes across a control commit: sameBatch=$sameBatch', () async {
-      const reminder = ('kept-reminder', 'reminder', <String, Object?>{
-        'operation': 'create', 'text': '带伞', 'localDate': '2026-11-23',
-        'localTime': '09:00', 'zoneId': 'Asia/Shanghai',
-      });
-      const remember = ('kept-preference', 'remember', <String, Object?>{
-        'kind': 'preference', 'text': '我喜欢简短回答。', 'keywords': ['简短'],
-      });
-      final visit = await _Visit.open([
-        if (sameBatch)
-          _message(calls: [reminder, remember])
-        else ...[_message(calls: [reminder]), _message(calls: [remember])],
-        _message(words: '提醒已记下，也记住了回答偏好。'),
-      ]);
-      try {
-        await visit.attachment.submit('明天九点提醒我带伞；我喜欢简短回答。');
-        expect(visit.attachment.error, isNull);
-        final task = visit.memory.store.tasks().single;
-        final card = visit.memory.store.cards().single;
-        expect(task['reminder_text'], '带伞');
-        expect(card['text'], '我喜欢简短回答。');
-        expect(visit.calls('wake'), 1);
-        final resultRows = <Map>[
-          for (final message in (visit.requests.last['messages']! as List).cast<Map>())
-            if (message['role'] == 'user' && message['content'] is List)
-              for (final row in (message['content']! as List).cast<Map>())
-                if (row['type'] == 'tool_result') row,
-        ];
-        expect(resultRows.map((row) => row['tool_use_id']), ['kept-reminder', 'kept-preference']);
-        final reminded = jsonDecode(resultRows.first['content']! as String) as Map;
-        final remembered = jsonDecode(resultRows.last['content']! as String) as Map;
-        expect(reminded['accepted'], isTrue);
-        expect(remembered['applied'], isTrue);
-        expect(remembered['targetId'], card['id']);
-        final retainedTask = reminded['task'] as Map;
-        for (final key in ['task_id', 'task_rev', 'kind', 'state', 'local_date', 'local_time', 'zone_id', 'epoch_ms']) {
-          expect(retainedTask[key], task[key], reason: key);
+    test(
+      'public attachment keeps reminder and memory outcomes across a control commit: sameBatch=$sameBatch',
+      () async {
+        const reminder = (
+          'kept-reminder',
+          'reminder',
+          <String, Object?>{
+            'operation': 'create',
+            'text': '带伞',
+            'localDate': '2026-11-23',
+            'localTime': '09:00',
+            'zoneId': 'Asia/Shanghai',
+          },
+        );
+        const remember = (
+          'kept-preference',
+          'remember',
+          <String, Object?>{
+            'kind': 'preference',
+            'text': '我喜欢简短回答。',
+            'keywords': ['简短'],
+          },
+        );
+        final visit = await _Visit.open([
+          if (sameBatch)
+            _message(calls: [reminder, remember])
+          else ...[
+            _message(calls: [reminder]),
+            _message(calls: [remember]),
+          ],
+          _message(words: '提醒已记下，也记住了回答偏好。'),
+        ]);
+        try {
+          await visit.attachment.submit('明天九点提醒我带伞；我喜欢简短回答。');
+          expect(visit.attachment.error, isNull);
+          final task = visit.memory.store.tasks().single;
+          final card = visit.memory.store.cards().single;
+          expect(task['reminder_text'], '带伞');
+          expect(card['text'], '我喜欢简短回答。');
+          expect(visit.calls('wake'), 1);
+          final resultRows = <Map>[
+            for (final message in (visit.requests.last['messages']! as List).cast<Map>())
+              if (message['role'] == 'user' && message['content'] is List)
+                for (final row in (message['content']! as List).cast<Map>())
+                  if (row['type'] == 'tool_result') row,
+          ];
+          expect(resultRows.map((row) => row['tool_use_id']), ['kept-reminder', 'kept-preference']);
+          final reminded = jsonDecode(resultRows.first['content']! as String) as Map;
+          final remembered = jsonDecode(resultRows.last['content']! as String) as Map;
+          expect(reminded['accepted'], isTrue);
+          expect(remembered['applied'], isTrue);
+          expect(remembered['targetId'], card['id']);
+          final retainedTask = reminded['task'] as Map;
+          for (final key in [
+            'task_id',
+            'task_rev',
+            'kind',
+            'state',
+            'local_date',
+            'local_time',
+            'zone_id',
+            'epoch_ms',
+          ]) {
+            expect(retainedTask[key], task[key], reason: key);
+          }
+          expect(retainedTask['reminder_text'], task['reminder_text']);
+          expect(visit.requests, hasLength(sameBatch ? 2 : 3));
+          expect(visit.memory.store.requests(), hasLength(visit.requests.length));
+          expect(
+            visit.memory.store.requests().every((row) => row['state'] == 'finished' && row['terminal'] == 'complete'),
+            isTrue,
+          );
+        } finally {
+          await visit.close();
         }
-        expect(retainedTask['reminder_text'], task['reminder_text']);
-        expect(visit.requests, hasLength(sameBatch ? 2 : 3));
-        expect(visit.memory.store.requests(), hasLength(visit.requests.length));
-        expect(visit.memory.store.requests().every((row) => row['state'] == 'finished' && row['terminal'] == 'complete'), isTrue);
-      } finally {
-        await visit.close();
-      }
-    });
+      },
+    );
   }
 
   test('public attachment keeps the actual lookup report after adding a new memory', () async {
     final lookupPaths = <String>[];
     late final _Visit visit;
     http.Response jsonResponse(Object value) => http.Response.bytes(
-      utf8.encode(jsonEncode(value)), 200,
+      utf8.encode(jsonEncode(value)),
+      200,
       headers: {'content-type': 'application/json; charset=utf-8'},
     );
-    visit = await _Visit.open([
-      _message(calls: [
-        ('actual-lookup', 'public_lookup', {
-          'operation': 'create', 'placeName': '青桥美术馆',
-          'localDate': '2026-11-21', 'question': '青桥美术馆是否开放？',
-        }),
-        ('new-preference', 'remember', {
-          'kind': 'preference', 'text': '我喜欢简短回答。', 'keywords': ['简短'],
-        }),
-      ]),
-      _message(words: '所问日期闭馆；也记住了你的回答偏好。'),
-    ], auxiliary: (request) {
-      if (request.url.path.endsWith('/search')) {
-        lookupPaths.add(request.url.path);
-        return jsonResponse({
-          'results': [
-            {'url': 'https://museum.example/notice', 'title': '青桥美术馆馆方公告', 'snippet': '搜索摘要', 'date': '2026-11-20'},
+    visit = await _Visit.open(
+      [
+        _message(
+          calls: [
+            (
+              'actual-lookup',
+              'public_lookup',
+              {'operation': 'create', 'placeName': '青桥美术馆', 'localDate': '2026-11-21', 'question': '青桥美术馆是否开放？'},
+            ),
+            (
+              'new-preference',
+              'remember',
+              {
+                'kind': 'preference',
+                'text': '我喜欢简短回答。',
+                'keywords': ['简短'],
+              },
+            ),
           ],
-        });
-      }
-      if (request.url.path.endsWith('/fetch')) {
+        ),
+        _message(words: '所问日期闭馆；也记住了你的回答偏好。'),
+      ],
+      auxiliary: (request) {
+        if (request.url.path.endsWith('/search')) {
+          lookupPaths.add(request.url.path);
+          return jsonResponse({
+            'results': [
+              {'url': 'https://museum.example/notice', 'title': '青桥美术馆馆方公告', 'snippet': '搜索摘要', 'date': '2026-11-20'},
+            ],
+          });
+        }
+        if (request.url.path.endsWith('/fetch')) {
+          lookupPaths.add(request.url.path);
+          return jsonResponse({'title': '馆方公告', 'content': '2026-11-21临时闭馆一天。'});
+        }
+        final body = jsonDecode(request.body) as Map;
+        if (body['system'] != companionLookupAnswerPrompt) return null;
         lookupPaths.add(request.url.path);
-        return jsonResponse({'title': '馆方公告', 'content': '2026-11-21临时闭馆一天。'});
-      }
-      final body = jsonDecode(request.body) as Map;
-      if (body['system'] != companionLookupAnswerPrompt) return null;
-      lookupPaths.add(request.url.path);
-      final task = visit.memory.store.tasks().single;
-      final fetch = visit.memory.store.lookupAttempts(task['task_id']! as String)
-          .singleWhere((row) => row['kind'] == 'fetch');
-      return _message(words: jsonEncode({
-        'status': 'done', 'conclusion': '所问日期临时闭馆。', 'applicable_date': '2026-11-21',
-        'evidence': [{'fetchRequestId': fetch['request_id'], 'quote': '2026-11-21临时闭馆一天。'}],
-      }));
-    });
+        final task = visit.memory.store.tasks().single;
+        final fetch = visit.memory.store
+            .lookupAttempts(task['task_id']! as String)
+            .singleWhere((row) => row['kind'] == 'fetch');
+        return _message(
+          words: jsonEncode({
+            'status': 'done',
+            'conclusion': '所问日期临时闭馆。',
+            'applicable_date': '2026-11-21',
+            'evidence': [
+              {'fetchRequestId': fetch['request_id'], 'quote': '2026-11-21临时闭馆一天。'},
+            ],
+          }),
+        );
+      },
+    );
     try {
       await visit.attachment.submit('查青桥美术馆昨天是否开放；我喜欢简短回答。');
       expect(visit.attachment.error, isNull);
@@ -587,9 +645,29 @@ void main() {
     const oldText = '凭证的旧私密正文：BLUE-ORIGINAL。';
     const newText = '凭证的改后私密正文：GREEN-REVISED。';
     final visit = await _Visit.open([
-      _message(calls: [('private-recall', 'recall', {'query': '凭证'})]),
-      _message(calls: [('private-revise', 'revise', {'card': id, 'text': newText, 'keywords': ['凭证']})]),
-      _message(calls: [('private-forget', 'forget', {'card': id})]),
+      _message(
+        calls: [
+          ('private-recall', 'recall', {'query': '凭证'}),
+        ],
+      ),
+      _message(
+        calls: [
+          (
+            'private-revise',
+            'revise',
+            {
+              'card': id,
+              'text': newText,
+              'keywords': ['凭证'],
+            },
+          ),
+        ],
+      ),
+      _message(
+        calls: [
+          ('private-forget', 'forget', {'card': id}),
+        ],
+      ),
       _message(words: '已经处理好了。'),
     ]);
     try {
@@ -648,8 +726,10 @@ void main() {
                 if (block['type'] == 'text') block['text']! as String,
         ];
         final text = texts.singleWhere((text) => text.startsWith('<companion_context>'));
-        return jsonDecode(text.substring('<companion_context>'.length, text.length - '</companion_context>'.length)) as Map;
+        return jsonDecode(text.substring('<companion_context>'.length, text.length - '</companion_context>'.length))
+            as Map;
       }
+
       expect(context(visit.requests.first)['localTime'], '2026-11-22T18:00+08:00');
       expect(context(visit.requests.last)['localTime'], '2026-11-22T18:05+08:00');
       expect(context(visit.requests.first)['zoneId'], 'Asia/Shanghai');

@@ -360,9 +360,8 @@ class _Room {
   Future<void> close() async {
     // Check the real maintenance receipts outside the transport callback:
     // its catch must not turn a fixture assertion into a hidden network error.
-    Iterable<MemoryRow> maintenanceReceipts() => memory.store.requests().where(
-      (row) => row['category'] == 'extract' || row['category'] == 'organize',
-    );
+    Iterable<MemoryRow> maintenanceReceipts() =>
+        memory.store.requests().where((row) => row['category'] == 'extract' || row['category'] == 'organize');
     for (var i = 0; i < 100 && memory.working; i++) {
       await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       await tester.pump();
@@ -915,9 +914,7 @@ void main() {
     // A plan change is now the model's tool call on the card it was shown,
     // not a phrase the room recognizes itself. The chat turn costs its own
     // receipts; the memory question costs nothing.
-    testWidgets('a pending memory question yields to $state through the real composer', (
-      tester,
-    ) async {
+    testWidgets('a pending memory question yields to $state through the real composer', (tester) async {
       final chats = <Map<String, Object?>>[];
       final room = _Room(tester, root)
         ..answer = (body) async {

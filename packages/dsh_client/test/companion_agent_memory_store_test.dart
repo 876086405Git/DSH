@@ -211,10 +211,7 @@ void main() {
       expect(actualCard(related.targetId!)['topic_mode'], mode);
       expect(actualCard(unrelated.targetId!)['topic_id'], isNot(topic));
       expect(actualCard(unrelated.targetId!)['topic_mode'], 'normal');
-      expect(
-        call(later, 'ask-muted', 'ask_later', {'card': related.targetId, 'whenMs': now}).code,
-        'topic_quiet',
-      );
+      expect(call(later, 'ask-muted', 'ask_later', {'card': related.targetId, 'whenMs': now}).code, 'topic_quiet');
       expect(
         (actualCard(related.targetId!)['evidence'] as List).single,
         containsPair('message_id', 'controlled-later'),

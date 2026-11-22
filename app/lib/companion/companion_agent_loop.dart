@@ -14,7 +14,6 @@ typedef CompanionAgentExchange = ({CompanionAgentMessage assistant, List<Map<Str
 
 typedef CompanionAgentResponse = ({CompanionAgentMessage message, String requestId});
 
-
 /// Own memory control can retire old text without erasing a confirmed outcome.
 /// These are the actual adapter's receipt fields, not a second execution log.
 Map<String, Object?> _safeToolOutcome(String content) {
@@ -31,32 +30,50 @@ Map<String, Object?> _safeToolOutcome(String content) {
   };
   Map<String, Object?> task(Map row) => {
     for (final key in const [
-      'task_id', 'task_rev', 'kind', 'source_session_id', 'state',
-      'wait_reason', 'cancel_requested', 'operation', 'executor_id',
-      'local_date', 'local_time', 'zone_id', 'epoch_ms', 'offset_seconds',
+      'task_id',
+      'task_rev',
+      'kind',
+      'source_session_id',
+      'state',
+      'wait_reason',
+      'cancel_requested',
+      'operation',
+      'executor_id',
+      'local_date',
+      'local_time',
+      'zone_id',
+      'epoch_ms',
+      'offset_seconds',
     ])
       if (row.containsKey(key)) key: row[key],
   };
   return {
     'retiredAfterMemoryChange': true,
     for (final key in const [
-      'applied', 'accepted', 'replayed', 'code', 'ok', 'error',
-      'changedCardIds', 'currentCardRevisions', 'targetId',
-      'readOnly', 'limited', 'sourceSessionId', 'receiptError',
+      'applied',
+      'accepted',
+      'replayed',
+      'code',
+      'ok',
+      'error',
+      'changedCardIds',
+      'currentCardRevisions',
+      'targetId',
+      'readOnly',
+      'limited',
+      'sourceSessionId',
+      'receiptError',
     ])
       if (decoded.containsKey(key)) key: decoded[key],
     if (decoded['task'] case final Map row) 'task': task(row),
-    if (decoded['tasks'] case final List rows)
-      'tasks': [for (final row in rows.whereType<Map>()) task(row)],
+    if (decoded['tasks'] case final List rows) 'tasks': [for (final row in rows.whereType<Map>()) task(row)],
     if (decoded['selection'] case final Map selection)
       'selection': {
         for (final key in const ['type', 'version', 'scope'])
           if (selection.containsKey(key)) key: selection[key],
-        if (selection['items'] case final List rows)
-          'items': [for (final row in rows.whereType<Map>()) card(row)],
+        if (selection['items'] case final List rows) 'items': [for (final row in rows.whereType<Map>()) card(row)],
       },
-    if (decoded['cards'] case final List rows)
-      'cards': [for (final row in rows.whereType<Map>()) card(row)],
+    if (decoded['cards'] case final List rows) 'cards': [for (final row in rows.whereType<Map>()) card(row)],
   };
 }
 
@@ -231,7 +248,8 @@ Future<CompanionAgentMessage?> runCompanionAgentLoop({
         } else {
           // Maintenance keeps its existing result-retirement contract.
           for (final previous in results) {
-            previous['content'] = 'This earlier result was retired after memory changed. Use the current memory context.';
+            previous['content'] =
+                'This earlier result was retired after memory changed. Use the current memory context.';
           }
         }
       }

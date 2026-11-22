@@ -524,7 +524,7 @@ class CompanionAgentTaskTools {
       if (kind == 'host.notes_to_todo' || kind == 'host.find_draft') {
         final date = _optionalText(input, 'localDate') ?? oldArgs?['localDate'] as String?;
         final keepDateWindow = kind == 'host.find_draft' && previous != null && date == oldArgs?['localDate'];
-        final zone = (keepDateWindow ? oldArgs?['timeZone'] : source['zone_id']) as String?;
+        final zone = (keepDateWindow ? (oldArgs?['timeZone']) : source['zone_id']) as String?;
         if (date == null || zone == null || (!keepDateWindow && source['offset_seconds'] is! int)) {
           throw const _TaskFailure('original_date_zone_missing');
         }

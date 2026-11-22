@@ -400,9 +400,7 @@ class _CompanionAgentVisit {
       // its stored source/clock identity and takes no second native sample.
       final sampledContext = companionTurnContext(
         now: now,
-        utcOffsetMinutes: sourceClock == null
-            ? now.timeZoneOffset.inMinutes
-            : sourceClock.offsetSeconds ~/ 60,
+        utcOffsetMinutes: sourceClock == null ? now.timeZoneOffset.inMinutes : sourceClock.offsetSeconds ~/ 60,
         lastSpokenAt: lastSpokenAt,
         lastClockAt: lastClockAt,
         askTime: true,

@@ -228,25 +228,35 @@ void main() {
               ('web-read', webTool, <String, Object?>{}),
               for (final name in forbidden) ('denied-$name', name, {'card': seedId}),
               ('denied-existing-remember', 'remember', {'card': seedId, 'text': '不可覆盖原卡'}),
-              ('allowed-new-remember', 'remember', {
-                'kind': 'preference', 'text': '我喜欢简短回答。', 'keywords': ['简短'],
-              }),
+              (
+                'allowed-new-remember',
+                'remember',
+                {
+                  'kind': 'preference',
+                  'text': '我喜欢简短回答。',
+                  'keywords': ['简短'],
+                },
+              ),
               ('allowed-recall', 'recall', {'query': '简短'}),
             ],
             if (requests.length == 3) ('next-turn-forget', 'forget', {'card': seedId}),
           ];
           return http.StreamedResponse(
-            Stream.value(utf8.encode(_sse([
-              for (var i = 0; i < calls.length; i++)
-                ..._call(i, calls[i].$1, [jsonEncode(calls[i].$3)], name: calls[i].$2),
-              if (calls.isEmpty) _words('这一轮完成了。'),
-              {
-                'type': 'message_delta',
-                'delta': {'stop_reason': calls.isEmpty ? 'end_turn' : 'tool_use'},
-                'usage': {'output_tokens': 5},
-              },
-              {'type': 'message_stop'},
-            ]))),
+            Stream.value(
+              utf8.encode(
+                _sse([
+                  for (var i = 0; i < calls.length; i++)
+                    ..._call(i, calls[i].$1, [jsonEncode(calls[i].$3)], name: calls[i].$2),
+                  if (calls.isEmpty) _words('这一轮完成了。'),
+                  {
+                    'type': 'message_delta',
+                    'delta': {'stop_reason': calls.isEmpty ? 'end_turn' : 'tool_use'},
+                    'usage': {'output_tokens': 5},
+                  },
+                  {'type': 'message_stop'},
+                ]),
+              ),
+            ),
             200,
           );
         }),
@@ -262,7 +272,18 @@ void main() {
       final firstTools = memoryTools(firstSource);
       forbidden = [
         for (final binding in firstTools.bindings)
-          if (const ['forget', 'revise', 'quiet', 'cancel', 'postpone', 'merge', 'person', 'diary', 'impression', 'relationship'].contains(binding.definition.name))
+          if (const [
+            'forget',
+            'revise',
+            'quiet',
+            'cancel',
+            'postpone',
+            'merge',
+            'person',
+            'diary',
+            'impression',
+            'relationship',
+          ].contains(binding.definition.name))
             binding.definition.name,
       ];
       final webDefinition = CompanionAgentTool(
@@ -316,13 +337,20 @@ void main() {
         expect((remember['input_schema'] as Map)['properties'] as Map, isNot(contains('card')));
         final results = (((requests.last['messages']! as List).last as Map)['content']! as List).cast<Map>();
         expect(results.map((row) => row['tool_use_id']), [
-          'web-read', for (final name in forbidden) 'denied-$name',
-          'denied-existing-remember', 'allowed-new-remember', 'allowed-recall',
+          'web-read',
+          for (final name in forbidden) 'denied-$name',
+          'denied-existing-remember',
+          'allowed-new-remember',
+          'allowed-recall',
         ]);
         // A pure new memory is not a reason to erase an earlier web answer.
         final web = jsonDecode(results.first['content']! as String) as Map;
         expect(web['report'], 'Untrusted public page text');
-        expect((jsonDecode(results.singleWhere((row) => row['tool_use_id'] == 'allowed-new-remember')['content']! as String) as Map)['applied'], isTrue);
+        expect(
+          (jsonDecode(results.singleWhere((row) => row['tool_use_id'] == 'allowed-new-remember')['content']! as String)
+              as Map)['applied'],
+          isTrue,
+        );
         for (final row in results.where((row) => (row['tool_use_id']! as String).startsWith('denied-'))) {
           expect(row['is_error'], isTrue);
           expect((jsonDecode(row['content']! as String) as Map)['code'], 'memory_change_after_web');
@@ -348,7 +376,10 @@ void main() {
         expect((requests[2]['tools']! as List).cast<Map>().map((row) => row['name']), containsAll(forbidden));
         expect(memory.store.cards().where((row) => row['id'] == seedId), isEmpty);
         expect(memory.store.requests(), hasLength(4));
-        expect(memory.store.requests().every((row) => row['state'] == 'finished' && row['terminal'] == 'complete'), isTrue);
+        expect(
+          memory.store.requests().every((row) => row['state'] == 'finished' && row['terminal'] == 'complete'),
+          isTrue,
+        );
       } finally {
         nextTools.close();
       }

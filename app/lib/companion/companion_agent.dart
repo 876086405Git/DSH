@@ -186,14 +186,21 @@ class CompanionAgent extends ChangeNotifier {
   // Only the explicitly allowed additive/read paths remain after web data.
   // These names are the current memory adapter's mutators, not task commands.
   static const _afterWebMemoryChanges = {
-    'forget', 'revise', 'quiet', 'cancel', 'postpone',
-    'merge', 'person', 'diary', 'impression', 'relationship',
+    'forget',
+    'revise',
+    'quiet',
+    'cancel',
+    'postpone',
+    'merge',
+    'person',
+    'diary',
+    'impression',
+    'relationship',
   };
 
   bool _toolAvailable(_CompanionAgentRun run, CompanionAgentToolCall call) =>
       !run.externalWebContent ||
-      (!_afterWebMemoryChanges.contains(call.name) &&
-          !(call.name == 'remember' && call.input['card'] != null));
+      (!_afterWebMemoryChanges.contains(call.name) && !(call.name == 'remember' && call.input['card'] != null));
 
   List<CompanionAgentTool> _definitions(_CompanionAgentRun run) => [
     for (final tool in run.tools)
