@@ -38,28 +38,62 @@ const _widget = MethodChannel('dsh/companion_widget');
 http.Response _message({bool tool = false, String? words}) {
   var index = 0;
   final events = <Map<String, Object?>>[
-    {'type': 'message_start', 'message': {'id': 'controlled-message', 'role': 'assistant',
-      'content': <Object?>[], 'usage': {'input_tokens': 12, 'output_tokens': 0}}},
+    {
+      'type': 'message_start',
+      'message': {
+        'id': 'controlled-message',
+        'role': 'assistant',
+        'content': <Object?>[],
+        'usage': {'input_tokens': 12, 'output_tokens': 0},
+      },
+    },
     if (words != null) ...[
-      {'type': 'content_block_start', 'index': index, 'content_block': {'type': 'text', 'text': ''}},
-      {'type': 'content_block_delta', 'index': index, 'delta': {'type': 'text_delta', 'text': words}},
+      {
+        'type': 'content_block_start',
+        'index': index,
+        'content_block': {'type': 'text', 'text': ''},
+      },
+      {
+        'type': 'content_block_delta',
+        'index': index,
+        'delta': {'type': 'text_delta', 'text': words},
+      },
       {'type': 'content_block_stop', 'index': index++},
     ],
     if (tool) ...[
-      {'type': 'content_block_start', 'index': index,
-        'content_block': {'type': 'tool_use', 'id': _callId, 'name': 'reminder', 'input': <String, Object?>{}}},
-      {'type': 'content_block_delta', 'index': index, 'delta': {'type': 'input_json_delta', 'partial_json': jsonEncode({
-        'operation': 'create', 'text': '带伞', 'localDate': '2026-11-23', 'localTime': '09:00', 'zoneId': 'Asia/Shanghai',
-      })}},
+      {
+        'type': 'content_block_start',
+        'index': index,
+        'content_block': {'type': 'tool_use', 'id': _callId, 'name': 'reminder', 'input': <String, Object?>{}},
+      },
+      {
+        'type': 'content_block_delta',
+        'index': index,
+        'delta': {
+          'type': 'input_json_delta',
+          'partial_json': jsonEncode({
+            'operation': 'create',
+            'text': '带伞',
+            'localDate': '2026-11-23',
+            'localTime': '09:00',
+            'zoneId': 'Asia/Shanghai',
+          }),
+        },
+      },
       {'type': 'content_block_stop', 'index': index},
     ],
-    {'type': 'message_delta', 'delta': {'stop_reason': tool ? 'tool_use' : 'end_turn'},
-      'usage': {'input_tokens': 12, 'cache_read_input_tokens': 0, 'cache_creation_input_tokens': 0, 'output_tokens': 8}},
+    {
+      'type': 'message_delta',
+      'delta': {'stop_reason': tool ? 'tool_use' : 'end_turn'},
+      'usage': {'input_tokens': 12, 'cache_read_input_tokens': 0, 'cache_creation_input_tokens': 0, 'output_tokens': 8},
+    },
     {'type': 'message_stop'},
   ];
-  return http.Response.bytes(utf8.encode([
-    for (final event in events) 'event: ${event['type']}\ndata: ${jsonEncode(event)}\n\n',
-  ].join()), 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
+  return http.Response.bytes(
+    utf8.encode([for (final event in events) 'event: ${event['type']}\ndata: ${jsonEncode(event)}\n\n'].join()),
+    200,
+    headers: {'content-type': 'text/event-stream; charset=utf-8'},
+  );
 }
 
 class _Host extends ActiveHostController {
@@ -80,32 +114,52 @@ class _TaskUi implements CompanionAgentTaskUi {
   @override
   CompanionAgentSelectionRoute? get onSelectionRoute => null;
   @override
-  Future<String?> chooseDeadline(List<String> choices, {
-    required bool Function() isCurrent, CompanionAgentSelectionRoute? onRouteChanged,
+  Future<String?> chooseDeadline(
+    List<String> choices, {
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
   }) => throw StateError('Unexpected deadline picker');
   @override
-  Future<String?> chooseDirectory({required String kind, String? directoryHint,
-    required bool Function() isCurrent, CompanionAgentSelectionRoute? onRouteChanged,
+  Future<String?> chooseDirectory({
+    required String kind,
+    String? directoryHint,
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
   }) => throw StateError('Unexpected directory picker');
   @override
-  Future<MemoryRow?> chooseSavedDirectory(List<MemoryRow> directories, {
-    required bool Function() isCurrent, CompanionAgentSelectionRoute? onRouteChanged,
+  Future<MemoryRow?> chooseSavedDirectory(
+    List<MemoryRow> directories, {
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
   }) => throw StateError('Unexpected saved directory picker');
   @override
-  Future<MemoryRow?> chooseDrafts({required CompanionMemoryStore store, required String hostKey,
-    required DshClient? client, required CompanionTasksCapability? capability,
-    required bool Function() isCurrent, CompanionAgentSelectionRoute? onRouteChanged, String? originalStoreId,
+  Future<MemoryRow?> chooseDrafts({
+    required CompanionMemoryStore store,
+    required String hostKey,
+    required DshClient? client,
+    required CompanionTasksCapability? capability,
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
+    String? originalStoreId,
   }) => throw StateError('Unexpected draft picker');
   @override
   Future<({List<MemoryRow> inputs, MemoryRow outputDirectory})?> chooseReceipts({
-    required CompanionMemoryStore store, required String hostKey, required DshClient? client,
-    required CompanionTasksCapability? capability, required bool Function() isCurrent,
-    CompanionAgentSelectionRoute? onRouteChanged, String? originalStoreId,
-    List<MemoryRow>? keptInputs, MemoryRow? keptOutput,
+    required CompanionMemoryStore store,
+    required String hostKey,
+    required DshClient? client,
+    required CompanionTasksCapability? capability,
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
+    String? originalStoreId,
+    List<MemoryRow>? keptInputs,
+    MemoryRow? keptOutput,
   }) => throw StateError('Unexpected receipt picker');
   @override
-  Future<CompanionMapSpec?> chooseMap(CompanionMaps maps, String address, {
-    required bool Function() isCurrent, CompanionAgentSelectionRoute? onRouteChanged,
+  Future<CompanionMapSpec?> chooseMap(
+    CompanionMaps maps,
+    String address, {
+    required bool Function() isCurrent,
+    CompanionAgentSelectionRoute? onRouteChanged,
   }) => throw StateError('Unexpected map picker');
   @override
   void accepted(MemoryRow task) => acceptedTasks.add(Map<String, Object?>.from(task));
@@ -128,7 +182,12 @@ class _RoomUi implements CompanionAgentRoomUi, CompanionInitiativeRoom {
   CompanionInitiativeRoom get initiativeRoom => this;
   @override
   CompanionInitiativeView get initiativeView => const CompanionInitiativeView(
-    visible: false, resumed: true, blocked: false, enabled: false, accessible: false, contextKey: 'retry-port',
+    visible: false,
+    resumed: true,
+    blocked: false,
+    enabled: false,
+    accessible: false,
+    contextKey: 'retry-port',
   );
   @override
   bool get hasInvitation => false;
@@ -189,7 +248,8 @@ class _Visit {
     final database = sqlite3.openInMemory();
     final memory = CompanionMemoryOwner(
       CompanionMemoryStore(database, nowMilliseconds: () => _now),
-      CompanionLocal.at(root, nowMilliseconds: () => _now), nowMilliseconds: () => _now,
+      CompanionLocal.at(root, nowMilliseconds: () => _now),
+      nowMilliseconds: () => _now,
     );
     final visit = _Visit(root, database, memory, replies);
     addTearDown(visit.close);
@@ -200,10 +260,16 @@ class _Visit {
       if (call.method == 'capabilities') return {'executorId': 'actual-phone'};
       if (call.method == 'resolve') {
         final input = call.arguments! as Map;
-        return {'kind': 'unique', 'moments': [{
-          'epochMs': DateTime.parse('${input['localDate']}T${input['localTime']}Z').millisecondsSinceEpoch - 28800000,
-          'offsetSeconds': 28800,
-        }]};
+        return {
+          'kind': 'unique',
+          'moments': [
+            {
+              'epochMs':
+                  DateTime.parse('${input['localDate']}T${input['localTime']}Z').millisecondsSinceEpoch - 28800000,
+              'offsetSeconds': 28800,
+            },
+          ],
+        };
       }
       return null;
     });
@@ -213,7 +279,10 @@ class _Visit {
     final background = CompanionLightMemoryTransport(apiKey: () => '');
     final provider = Provider<CompanionAgent>((ref) {
       final agent = CompanionAgent(
-        ref: ref, memoryTransport: () => background, host: () => null, apiKey: () => 'controlled-test-key',
+        ref: ref,
+        memoryTransport: () => background,
+        host: () => null,
+        apiKey: () => 'controlled-test-key',
         client: () => MockClient((request) async {
           visit.requests.add(Map<String, Object?>.from(jsonDecode(request.body) as Map));
           final index = visit.requests.length - 1;
@@ -223,22 +292,27 @@ class _Visit {
       ref.onDispose(agent.dispose);
       return agent;
     });
-    visit._container = ProviderContainer(overrides: [
-      activeHostProvider.overrideWith(_Host.new),
-      activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
-      companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
-      companionInitiativeClockProvider.overrideWithValue(() => CompanionInitiativeClock(
-        wallMs: _now, monoMs: 0, offsetMinutes: 480,
-      )),
-    ]);
+    visit._container = ProviderContainer(
+      overrides: [
+        activeHostProvider.overrideWith(_Host.new),
+        activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
+        companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+        companionInitiativeClockProvider.overrideWithValue(
+          () => CompanionInitiativeClock(wallMs: _now, monoMs: 0, offsetMinutes: 480),
+        ),
+      ],
+    );
     // Keep the actual Ref dependencies active, rather than only reading a
     // non-auto-disposed object whose provider listeners may be paused.
     visit._keep = visit.container.listen(provider, (_, _) {});
     visit.agent = visit.container.read(provider);
     await visit.container.read(companionModeProvider.notifier).choose(CompanionMode.light);
     visit._attachment = visit.agent.attach(
-      root: Future.value(root), character: const CompanionCharacter(name: '伙伴'), moves: const CompanionMoves(),
-      ui: visit.ui, mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+      root: Future.value(root),
+      character: const CompanionCharacter(name: '伙伴'),
+      moves: const CompanionMoves(),
+      ui: visit.ui,
+      mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
     );
     await visit.attachment.openMemory();
     return visit;
@@ -273,11 +347,15 @@ class _Visit {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  setUp(() => SharedPreferences.setMockInitialValues({'companion_mode': 'light', 'companion_initiative_enabled': false}));
+  setUp(
+    () => SharedPreferences.setMockInitialValues({'companion_mode': 'light', 'companion_initiative_enabled': false}),
+  );
 
   test('public attachment retries a no-tool failure with the same source clock and open turn', () async {
     final visit = await _Visit.open([
-      http.Response('Temporary model failure', 503), _message(tool: true), _message(words: '已记下这条提醒。'),
+      http.Response('Temporary model failure', 503),
+      _message(tool: true),
+      _message(words: '已记下这条提醒。'),
     ]);
     try {
       await visit.attachment.submit(_raw);
@@ -330,7 +408,10 @@ void main() {
   });
 
   test('public attachment does not replan a used turn after a preamble and failed continuation', () async {
-    final visit = await _Visit.open([_message(tool: true, words: _preamble), http.Response('Continuation failed', 503)]);
+    final visit = await _Visit.open([
+      _message(tool: true, words: _preamble),
+      http.Response('Continuation failed', 503),
+    ]);
     try {
       await visit.attachment.submit(_raw);
       final source = visit.userSource;
@@ -347,8 +428,10 @@ void main() {
       expect(visit.calls('wake'), 1);
       expect(visit.calls('clock'), 1);
       expect(visit.ui.failures.single.retry, isNull);
-      expect(visit.ui.failures.single.error, isA<DshRemoteException>()
-          .having((error) => error.code, 'code', 'companion/agent-retry-closed'));
+      expect(
+        visit.ui.failures.single.error,
+        isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/agent-retry-closed'),
+      );
 
       visit.clockAt += 3600000;
       await visit.attachment.submit(_raw);
@@ -357,7 +440,10 @@ void main() {
       expect(visit.turn, turn);
       expect(visit.memory.store.tasks().single, task);
       expect(visit.memory.store.taskReceipts(task['task_id']! as String), receipts);
-      expect(visit.memory.store.taskForCommand(source['id']! as String, toolReceipt.itemNo)!['task_id'], task['task_id']);
+      expect(
+        visit.memory.store.taskForCommand(source['id']! as String, toolReceipt.itemNo)!['task_id'],
+        task['task_id'],
+      );
       expect(visit.memory.store.agentToolCall(turnId: turn['id']! as String, callId: _callId)!.state, 'accepted');
       expect(visit.database.select('SELECT * FROM memory_agent_calls'), hasLength(1));
       expect(visit.calls('clock'), 1);
@@ -365,8 +451,10 @@ void main() {
       expect(visit.ui.acceptedTasks, hasLength(1));
       expect(visit.ui.failures, hasLength(2));
       expect(visit.ui.failures.last.retry, isNull);
-      expect(visit.ui.failures.last.error, isA<DshRemoteException>()
-          .having((error) => error.code, 'code', 'companion/agent-retry-closed'));
+      expect(
+        visit.ui.failures.last.error,
+        isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/agent-retry-closed'),
+      );
     } finally {
       await visit.close();
     }

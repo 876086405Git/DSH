@@ -15,14 +15,15 @@ void main() {
   var sequence = 0;
   const now = 1800000000000;
   String nextId() => '00000000-0000-4000-8000-${(++sequence).toString().padLeft(12, '0')}';
-  MemoryRow say(String messageId, String text) => memory.store.submitMessage(
-    id: messageId, sessionId: 'light:tools', text: text, saidAtUtc: now, offsetMinutes: 0,
-  );
+  MemoryRow say(String messageId, String text) =>
+      memory.store.submitMessage(id: messageId, sessionId: 'light:tools', text: text, saidAtUtc: now, offsetMinutes: 0);
   MemoryRow seed() {
     final cardId = nextId();
     memory.store.saveManual(
       CompanionMemory(id: cardId, text: '我喜欢蓝色', keywords: const ['蓝色']),
-      expectedRowRev: null, currentValueChange: true, realityKnown: true,
+      expectedRowRev: null,
+      currentValueChange: true,
+      realityKnown: true,
     );
     return memory.store.cards().single;
   }
@@ -53,7 +54,13 @@ void main() {
       isCurrent: () => true,
       forgottenNotice: '好，忘掉了。',
       onCommitted: ({required memory, required sourceId, required beforeRevision, required revision}) {
-        events.add({'event': 'confirm', 'memory': memory, 'sourceId': sourceId, 'before': beforeRevision, 'after': revision});
+        events.add({
+          'event': 'confirm',
+          'memory': memory,
+          'sourceId': sourceId,
+          'before': beforeRevision,
+          'after': revision,
+        });
         known = revision;
       },
     );
@@ -62,9 +69,17 @@ void main() {
     });
     tools.grantSelection(memory.select('蓝色'));
     final binding = tools.bindings.singleWhere((entry) => entry.definition.name == 'revise');
-    final result = await binding.execute(CompanionAgentToolCall(
-      id: 'edit', name: 'revise', input: {'card': card['id'], 'text': '我喜欢深蓝色', 'keywords': ['蓝色']},
-    ));
+    final result = await binding.execute(
+      CompanionAgentToolCall(
+        id: 'edit',
+        name: 'revise',
+        input: {
+          'card': card['id'],
+          'text': '我喜欢深蓝色',
+          'keywords': ['蓝色'],
+        },
+      ),
+    );
     expect(result.isError, isFalse);
     expect(result.notice, isNull);
     expect(events, [
@@ -76,11 +91,13 @@ void main() {
     final edited = memory.store.cards().single;
     memory.store.saveManual(
       CompanionMemory(id: card['id']! as String, text: '我现在喜欢绿色'),
-      expectedRowRev: edited['row_rev']! as int, currentValueChange: true, realityKnown: true,
+      expectedRowRev: edited['row_rev']! as int,
+      currentValueChange: true,
+      realityKnown: true,
     );
-    final late = await binding.execute(CompanionAgentToolCall(
-      id: 'late', name: 'revise', input: {'card': card['id'], 'text': '旧的蓝色'},
-    ));
+    final late = await binding.execute(
+      CompanionAgentToolCall(id: 'late', name: 'revise', input: {'card': card['id'], 'text': '旧的蓝色'}),
+    );
     expect(late.isError, isTrue);
     expect(jsonDecode(late.content), containsPair('applied', false));
     expect(memory.store.cards().single['text'], '我现在喜欢绿色');
@@ -97,10 +114,17 @@ void main() {
       source: source,
       isCurrent: () => true,
       forgottenNotice: '好，忘掉了。',
-      onCommitted: ({required memory, required sourceId, required beforeRevision, required revision}) => commits.add(revision),
+      onCommitted: ({required memory, required sourceId, required beforeRevision, required revision}) =>
+          commits.add(revision),
     );
     expect(tools.bindings.map((entry) => entry.definition.name), [
-      'remember', 'forget', 'revise', 'quiet', 'cancel', 'ask_later', 'recall',
+      'remember',
+      'forget',
+      'revise',
+      'quiet',
+      'cancel',
+      'ask_later',
+      'recall',
     ]);
     final forget = tools.bindings.singleWhere((entry) => entry.definition.name == 'forget').execute;
     final refused = await forget(CompanionAgentToolCall(id: 'unseen', name: 'forget', input: {'card': card['id']}));

@@ -23,13 +23,8 @@ void main() {
     open();
   }
 
-  MemoryRow say(String messageId, String text) => store.submitMessage(
-    id: messageId,
-    sessionId: 'light:agent',
-    text: text,
-    saidAtUtc: now,
-    offsetMinutes: 0,
-  );
+  MemoryRow say(String messageId, String text) =>
+      store.submitMessage(id: messageId, sessionId: 'light:agent', text: text, saidAtUtc: now, offsetMinutes: 0);
   MemoryRow seed(String text) {
     final cardId = id();
     store.saveManual(
@@ -41,11 +36,13 @@ void main() {
     return store.cards().singleWhere((card) => card['id'] == cardId);
   }
 
-  String begin(MemoryRow source, [Iterable<MemoryRow> shown = const []]) => store.beginAgentTurn(
-    messageId: source['id']! as String,
-    expectedSourceRev: source['source_rev']! as int,
-    shownCardRevisions: {for (final card in shown) card['id']! as String: card['row_rev']! as int},
-  )['id']! as String;
+  String begin(MemoryRow source, [Iterable<MemoryRow> shown = const []]) =>
+      store.beginAgentTurn(
+            messageId: source['id']! as String,
+            expectedSourceRev: source['source_rev']! as int,
+            shownCardRevisions: {for (final card in shown) card['id']! as String: card['row_rev']! as int},
+          )['id']!
+          as String;
   CompanionAgentMemoryResult call(String turn, String callId, String name, MemoryRow input) =>
       store.applyAgentMemoryTool(turnId: turn, callId: callId, toolName: name, input: input);
 
@@ -77,7 +74,10 @@ void main() {
     expect(store.cards().single['text'], '面试安排在周五下午');
     expect((store.cards().single['evidence'] as List).single, containsPair('message_id', 'source'));
     expect(store.messages().single['text'], source['text']);
-    expect(store.beginAgentTurn(messageId: 'source', expectedSourceRev: 1, shownCardRevisions: const {})['changed_cards'], [card['id']]);
+    expect(
+      store.beginAgentTurn(messageId: 'source', expectedSourceRev: 1, shownCardRevisions: const {})['changed_cards'],
+      [card['id']],
+    );
   });
 
   test('unknown and empty calls write no cards and one source keeps its three-card budget', () {
@@ -96,9 +96,15 @@ void main() {
     final after = store.cards();
     expect(after.singleWhere((card) => card['id'] == receipts.first.targetId)['keywords'], ['记忆 0']);
     expect(after.singleWhere((card) => card['id'] == receipts[1].targetId)['keywords'], isEmpty);
-    expect(selectMemoryContext(
-      after, input: '记忆 0', nowMs: now, controlRevision: store.archive['control_revision']! as int,
-    ).ids, [receipts.first.targetId]);
+    expect(
+      selectMemoryContext(
+        after,
+        input: '记忆 0',
+        nowMs: now,
+        controlRevision: store.archive['control_revision']! as int,
+      ).ids,
+      [receipts.first.targetId],
+    );
     final repeatedTurn = begin(source);
     expect(repeatedTurn, turn);
     expect(call(repeatedTurn, 'fourth', 'remember', {'text': '第四张'}).code, 'card_limit');
@@ -107,7 +113,9 @@ void main() {
     expect(replay.targetId, receipts.first.targetId);
     expect(store.cards(), after);
     expect(() => call(turn, 'save-0', 'remember', {'text': '替换参数'}), throwsA(isA<DshRemoteException>()));
-    final stored = jsonEncode([for (final row in database.select('SELECT * FROM memory_agent_calls')) {...row}]);
+    final stored = jsonEncode([
+      for (final row in database.select('SELECT * FROM memory_agent_calls')) {...row},
+    ]);
     expect(stored, isNot(contains('记忆 0')));
     expect(stored, isNot(contains('第四张')));
   });
@@ -116,19 +124,27 @@ void main() {
     final original = say('original', '我住杭州，也养猫。');
     final claimed = store.nextBatch(forceTail: true, estimateTokens: (text) => text.length)!;
     final texts = ['我住杭州。', '我养猫。', '我住杭州，也养猫。', '我住杭州；也养猫。', '我住杭州\n也养猫。'];
-    final proposal = parseExtractionProposal(jsonEncode({
-      'schema_version': 2,
-      'batch_id': claimed.id,
-      'covered_message_ids': [original['id']],
-      'completion': 'complete',
-      'operations': [
-        for (final text in texts)
-          {
-            'op': 'create', 'kind': 'fact', 'text': text, 'keywords': ['杭州', '养猫'],
-            'evidence': [{'message_id': original['id'], 'quote': original['text']}],
-          },
-      ],
-    }), claimed);
+    final proposal = parseExtractionProposal(
+      jsonEncode({
+        'schema_version': 2,
+        'batch_id': claimed.id,
+        'covered_message_ids': [original['id']],
+        'completion': 'complete',
+        'operations': [
+          for (final text in texts)
+            {
+              'op': 'create',
+              'kind': 'fact',
+              'text': text,
+              'keywords': ['杭州', '养猫'],
+              'evidence': [
+                {'message_id': original['id'], 'quote': original['text']},
+              ],
+            },
+        ],
+      }),
+      claimed,
+    );
     expect(store.commitExtraction(claimed, proposal), isTrue);
     final cards = store.cards();
     final home = cards.singleWhere((card) => card['text'] == '我住杭州。');
@@ -170,8 +186,12 @@ void main() {
 
   test('structured ask-later reaches real reserve and once-only presentation without a raw invitation regex', () {
     store.initializeInitiative({
-      'v': 2, 'lastGreetingAtMs': null, 'inviteAtMs': <int>[], 'signalAtMs': <int>[],
-      'declinedUntilMs': 0, 'night': null,
+      'v': 2,
+      'lastGreetingAtMs': null,
+      'inviteAtMs': <int>[],
+      'signalAtMs': <int>[],
+      'declinedUntilMs': 0,
+      'night': null,
     });
     final card = seed('这次修琴的情况');
     final source = say('source', '过一阵子再聊这个吧。');
@@ -189,7 +209,13 @@ void main() {
     expect(store.isFollowupCurrent(initial, nowMs: now), isFalse);
     final current = store.nextFollowup(nowMs: now)!;
     expect(current['id'], initial['id']);
-    final spend = store.reserveInitiative(kind: 'followup', nowMs: now, maxPerDay: 2, gapMs: 0, followupId: current['id']! as String)!;
+    final spend = store.reserveInitiative(
+      kind: 'followup',
+      nowMs: now,
+      maxPerDay: 2,
+      gapMs: 0,
+      followupId: current['id']! as String,
+    )!;
     store.settleInitiative(spend, outcome: 'shown');
     expect(store.nextFollowup(nowMs: now), isNull);
     reopen();
@@ -219,7 +245,12 @@ void main() {
     final source = say('source', '这是这次实际发送的原话。');
     final turn = begin(source);
     final remembered = call(turn, 'save', 'remember', {'text': '仅存一次的事实'});
-    final pending = store.reserveAgentTaskCall(turnId: turn, callId: 'task', toolName: 'reminder', input: {'text': '待定'});
+    final pending = store.reserveAgentTaskCall(
+      turnId: turn,
+      callId: 'task',
+      toolName: 'reminder',
+      input: {'text': '待定'},
+    );
     expect(pending.state, 'pending');
     reopen();
     final restored = store.beginAgentTurn(messageId: 'source', expectedSourceRev: 1, shownCardRevisions: const {});
@@ -236,7 +267,12 @@ void main() {
     final source = say('source', '请提醒喝水，也记下蓝色。');
     const spec = CompanionReminderSpec(text: '喝水', waitReason: 'date_missing');
     final original = store.createReminderFromMessage(
-      messageId: 'source', expectedSourceRev: 1, itemNo: 0, roomMode: 'light', executorId: 'phone', reminder: spec,
+      messageId: 'source',
+      expectedSourceRev: 1,
+      itemNo: 0,
+      roomMode: 'light',
+      executorId: 'phone',
+      reminder: spec,
     );
     final turn = begin(source);
     final memory = call(turn, 'remember', 'remember', {'text': '蓝色'});
@@ -244,9 +280,17 @@ void main() {
     final task = store.reserveAgentTaskCall(turnId: turn, callId: 'remind', toolName: 'reminder', input: callInput);
     expect(memory.itemNo, 1);
     expect(task.itemNo, 2);
-    expect(store.reserveAgentTaskCall(turnId: turn, callId: 'remind', toolName: 'reminder', input: callInput).itemNo, 2);
+    expect(
+      store.reserveAgentTaskCall(turnId: turn, callId: 'remind', toolName: 'reminder', input: callInput).itemNo,
+      2,
+    );
     final actual = store.createReminderFromMessage(
-      messageId: 'source', expectedSourceRev: 1, itemNo: task.itemNo, roomMode: 'light', executorId: 'phone', reminder: spec,
+      messageId: 'source',
+      expectedSourceRev: 1,
+      itemNo: task.itemNo,
+      roomMode: 'light',
+      executorId: 'phone',
+      reminder: spec,
     );
     store.closeAgentTurn(turn);
     final settled = store.finishAgentTaskCall(turnId: turn, callId: 'remind', taskId: actual['task_id']! as String);
@@ -254,12 +298,17 @@ void main() {
     expect(settled.taskId, actual['task_id']);
     expect(settled.taskId, isNot(original['task_id']));
     expect(store.taskForCommand('source', 2), actual);
-    expect(store.finishAgentTaskCall(turnId: turn, callId: 'remind', taskId: actual['task_id']! as String).replayed, isTrue);
+    expect(
+      store.finishAgentTaskCall(turnId: turn, callId: 'remind', taskId: actual['task_id']! as String).replayed,
+      isTrue,
+    );
   });
 
   test('a failed SQL commit rolls back the effect, call receipt and turn budget together', () {
     final turn = begin(say('source', '一次真实原话。'));
-    database.execute("CREATE TRIGGER fail_agent BEFORE INSERT ON memory_cards BEGIN SELECT RAISE(ABORT, 'fixture'); END");
+    database.execute(
+      "CREATE TRIGGER fail_agent BEFORE INSERT ON memory_cards BEGIN SELECT RAISE(ABORT, 'fixture'); END",
+    );
     expect(() => call(turn, 'save', 'remember', {'text': '必须原子保存'}), throwsA(isA<SqliteException>()));
     expect(store.cards(), isEmpty);
     expect(store.agentToolCall(turnId: turn, callId: 'save'), isNull);

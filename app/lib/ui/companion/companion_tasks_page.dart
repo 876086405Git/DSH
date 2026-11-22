@@ -319,6 +319,7 @@ class CompanionTasksPage extends ConsumerStatefulWidget {
 
   final CompanionMemoryOwner? memory;
   final String? sourceSessionId;
+
   /// The person's task-list entry can browse both phone and historical Host
   /// conversations. A notification still opens only its original task ID.
   final bool allSessions;
@@ -2968,7 +2969,10 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     final task = memory == null || selectedId == null ? null : memory.store.task(selectedId);
     final rows = memory == null || (!widget.allSessions && widget.sourceSessionId == null)
         ? <MemoryRow>[]
-        : memory.store.tasks(sourceSessionId: widget.allSessions ? null : widget.sourceSessionId, limit: _taskLimit + 1);
+        : memory.store.tasks(
+            sourceSessionId: widget.allSessions ? null : widget.sourceSessionId,
+            limit: _taskLimit + 1,
+          );
     return AppPage.list(
       title: l10n.companionTasksTitle,
       actions: [

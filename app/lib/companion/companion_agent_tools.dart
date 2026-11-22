@@ -18,12 +18,10 @@ class CompanionAgentMemoryTools {
   CompanionAgentMemoryTools({
     required this.memory,
     required MemoryRow source,
-    required bool Function() isCurrent,
-    required CompanionAgentMemoryCommit onCommitted,
+    required this._isCurrent,
+    required this._onCommitted,
     required this.forgottenNotice,
-  }) : sourceId = source['id']! as String,
-       _isCurrent = isCurrent,
-       _onCommitted = onCommitted {
+  }) : sourceId = source['id']! as String {
     final turn = memory.store.beginAgentTurn(
       messageId: sourceId,
       expectedSourceRev: source['source_rev']! as int,
@@ -42,8 +40,7 @@ class CompanionAgentMemoryTools {
   late int _knownControlRevision;
   bool _closed = false;
 
-  bool get isCurrent =>
-      !_closed && _isCurrent() && memory.store.archive['control_revision'] == _knownControlRevision;
+  bool get isCurrent => !_closed && _isCurrent() && memory.store.archive['control_revision'] == _knownControlRevision;
 
   /// Wire this to the Agent's actual onSelected callback, including each new
   /// selection after one of this turn's own control commits.
@@ -124,11 +121,18 @@ class CompanionAgentMemoryTools {
 
   static CompanionAgentToolResult _failure(String code) => CompanionAgentToolResult(
     // The provider does not interpret is_error. The body must say it failed.
-    content: jsonEncode({'applied': false, 'code': code, 'message': 'This request was not applied. Continue the conversation.'}),
+    content: jsonEncode({
+      'applied': false,
+      'code': code,
+      'message': 'This request was not applied. Continue the conversation.',
+    }),
     isError: true,
   );
 
-  static const _card = {'type': 'string', 'description': 'An exact card ID supplied in this turn or a successful recall.'};
+  static const _card = {
+    'type': 'string',
+    'description': 'An exact card ID supplied in this turn or a successful recall.',
+  };
   static const _text = {'type': 'string', 'minLength': 1};
   static const definitions = <CompanionAgentTool>[
     CompanionAgentTool(
@@ -138,7 +142,10 @@ class CompanionAgentMemoryTools {
         'type': 'object',
         'properties': {
           'text': _text,
-          'kind': {'type': 'string', 'enum': ['fact', 'preference', 'episode']},
+          'kind': {
+            'type': 'string',
+            'enum': ['fact', 'preference', 'episode'],
+          },
           'keywords': {'type': 'array', 'items': _text},
         },
         'required': ['text'],
@@ -148,14 +155,23 @@ class CompanionAgentMemoryTools {
     CompanionAgentTool(
       name: 'forget',
       description: 'Forget a supplied card and its actual dependent cards. Original chat stays. Tell the user when deletion succeeds.',
-      inputSchema: {'type': 'object', 'properties': {'card': _card}, 'required': ['card'], 'additionalProperties': false},
+      inputSchema: {
+        'type': 'object',
+        'properties': {'card': _card},
+        'required': ['card'],
+        'additionalProperties': false,
+      },
     ),
     CompanionAgentTool(
       name: 'revise',
       description: 'Replace a supplied card with the new nonempty wording and retrieval keywords. Use the same card ID for a later correction in this turn.',
       inputSchema: {
         'type': 'object',
-        'properties': {'card': _card, 'text': _text, 'keywords': {'type': 'array', 'items': _text}},
+        'properties': {
+          'card': _card,
+          'text': _text,
+          'keywords': {'type': 'array', 'items': _text},
+        },
         'required': ['card', 'text'],
         'additionalProperties': false,
       },
@@ -165,7 +181,13 @@ class CompanionAgentMemoryTools {
       description: 'Mention the topic of this supplied card less, or never proactively. All affected topic cards must be supplied and fit the turn budget.',
       inputSchema: {
         'type': 'object',
-        'properties': {'card': _card, 'mode': {'type': 'string', 'enum': ['less', 'never']}},
+        'properties': {
+          'card': _card,
+          'mode': {
+            'type': 'string',
+            'enum': ['less', 'never'],
+          },
+        },
         'required': ['card', 'mode'],
         'additionalProperties': false,
       },
@@ -173,14 +195,22 @@ class CompanionAgentMemoryTools {
     CompanionAgentTool(
       name: 'cancel',
       description: 'Mark a supplied memory plan cancelled and retire its followup. This does not cancel a reminder or a computer task.',
-      inputSchema: {'type': 'object', 'properties': {'card': _card}, 'required': ['card'], 'additionalProperties': false},
+      inputSchema: {
+        'type': 'object',
+        'properties': {'card': _card},
+        'required': ['card'],
+        'additionalProperties': false,
+      },
     ),
     CompanionAgentTool(
       name: 'ask_later',
       description: 'Arrange a real followup opportunity about a supplied card at the chosen UTC epoch millisecond time. Existing presentation limits still apply.',
       inputSchema: {
         'type': 'object',
-        'properties': {'card': _card, 'whenMs': {'type': 'integer', 'minimum': 0}},
+        'properties': {
+          'card': _card,
+          'whenMs': {'type': 'integer', 'minimum': 0},
+        },
         'required': ['card', 'whenMs'],
         'additionalProperties': false,
       },
@@ -188,7 +218,12 @@ class CompanionAgentMemoryTools {
     CompanionAgentTool(
       name: 'recall',
       description: 'Search the current eligible memory cards using the existing bounded selector. Only returned IDs become available to this turn.',
-      inputSchema: {'type': 'object', 'properties': {'query': _text}, 'required': ['query'], 'additionalProperties': false},
+      inputSchema: {
+        'type': 'object',
+        'properties': {'query': _text},
+        'required': ['query'],
+        'additionalProperties': false,
+      },
     ),
   ];
 }

@@ -54,7 +54,9 @@ const _tool = CompanionAgentTool(
   description: 'Synthetic operation for the protocol test.',
   inputSchema: {
     'type': 'object',
-    'properties': {'n': {'type': 'integer'}},
+    'properties': {
+      'n': {'type': 'integer'},
+    },
     'required': ['n'],
   },
 );
@@ -75,12 +77,20 @@ void main() {
                 _words('我先看看。'),
                 ..._call(1, 'call-one', ['{"n":', '1}']),
                 ..._call(2, 'call-two', ['{"n":2}']),
-                {'type': 'message_delta', 'delta': {'stop_reason': 'tool_use'}, 'usage': {'output_tokens': 5}},
+                {
+                  'type': 'message_delta',
+                  'delta': {'stop_reason': 'tool_use'},
+                  'usage': {'output_tokens': 5},
+                },
                 {'type': 'message_stop'},
               ]
             : <Map<String, Object?>>[
                 _words('第一件没改，第二件处理好了。'),
-                {'type': 'message_delta', 'delta': {'stop_reason': 'end_turn'}, 'usage': {'output_tokens': 7}},
+                {
+                  'type': 'message_delta',
+                  'delta': {'stop_reason': 'end_turn'},
+                  'usage': {'output_tokens': 7},
+                },
                 {'type': 'message_stop'},
               ];
         return http.StreamedResponse(Stream.value(utf8.encode(_sse(events))), 200);
@@ -150,13 +160,15 @@ void main() {
       if (agent.text == '还在说。' && !heard.isCompleted) heard.complete();
     });
     var turnSettled = false;
-    final turn = agent.say(
-      memory: memory,
-      source: _source(memory),
-      system: 'Synthetic test persona.',
-      tools: const [],
-      isCurrent: () => true,
-    ).whenComplete(() => turnSettled = true);
+    final turn = agent
+        .say(
+          memory: memory,
+          source: _source(memory),
+          system: 'Synthetic test persona.',
+          tools: const [],
+          isCurrent: () => true,
+        )
+        .whenComplete(() => turnSettled = true);
     addTearDown(() async {
       if (!releaseCancellation.isCompleted) releaseCancellation.complete();
       agent.dispose();

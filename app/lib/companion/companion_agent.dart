@@ -41,21 +41,18 @@ part 'companion_agent_visit.dart';
 /// One phone loop in either room mode. The caller supplies the tool bindings
 /// once per original user source, including any genuine foreground capability.
 class CompanionAgent extends ChangeNotifier {
+  /// Lets the agent's own helpers (visit, tools) announce a change.
+  void changed() => notifyListeners();
+
   CompanionAgent({
-    required http.Client Function() client,
-    required String Function() apiKey,
-    void Function(CompanionUsage)? onUsage,
-    void Function(Map<String, Object?>, {required bool partial})? onUsageSettled,
-    Ref? ref,
-    CompanionMemoryTransport Function()? memoryTransport,
-    ({HostRef host, DshClient client})? Function()? host,
-  }) : _ref = ref,
-       _memoryTransport = memoryTransport,
-       _host = host,
-       _client = client,
-       _apiKey = apiKey,
-       _onUsage = onUsage,
-       _onUsageSettled = onUsageSettled;
+    required this._client,
+    required this._apiKey,
+    this._onUsage,
+    this._onUsageSettled,
+    this._ref,
+    this._memoryTransport,
+    this._host,
+  });
 
   final Ref? _ref;
   final CompanionMemoryTransport Function()? _memoryTransport;
@@ -95,14 +92,18 @@ class CompanionAgent extends ChangeNotifier {
 
   /// The original SQLite user source, not the tools' separate journal turn ID.
   String? get sourceId => _run?.source['id'] as String?;
+
   /// A retry gets fresh subtitle/speech progress; this is not a tool identity.
   String? get replyId => _run?.replyId;
   int? get controlRevision => _run?.controlRevision;
 
   bool acceptsControl(CompanionMemoryOwner memory, int revision) {
     final run = _run;
-    return run != null && run.running && !run.cancelled &&
-        identical(run.memory, memory) && run.controlRevision == revision;
+    return run != null &&
+        run.running &&
+        !run.cancelled &&
+        identical(run.memory, memory) &&
+        run.controlRevision == revision;
   }
 
   /// Called synchronously after an own tool transaction and before changed().
@@ -115,10 +116,15 @@ class CompanionAgent extends ChangeNotifier {
     required int revision,
   }) {
     final run = _run;
-    if (run == null || !run.running || run.cancelled ||
-        !identical(run.memory, memory) || run.source['id'] != sourceId ||
+    if (run == null ||
+        !run.running ||
+        run.cancelled ||
+        !identical(run.memory, memory) ||
+        run.source['id'] != sourceId ||
         run.controlRevision != beforeRevision ||
-        memory.store.archive['control_revision'] != revision) return;
+        memory.store.archive['control_revision'] != revision) {
+      return;
+    }
     if (revision != beforeRevision) run.exchanges.clear();
     run.controlRevision = revision;
   }
@@ -131,10 +137,10 @@ class CompanionAgent extends ChangeNotifier {
     required MemoryRow source,
     required String system,
     CompanionTurnContext? context,
-    required List<({
-      CompanionAgentTool definition,
-      Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute,
-    })> tools,
+    required List<
+      ({CompanionAgentTool definition, Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute})
+    >
+    tools,
     required bool Function() isCurrent,
     void Function(MemorySelection)? onSelected,
   }) async {
@@ -158,9 +164,7 @@ class CompanionAgent extends ChangeNotifier {
       await _loop(run);
     } on Object catch (error) {
       if (_current(run)) {
-        run.error = error is CompanionLightError
-            ? error
-            : CompanionLightError(CompanionLightFailure.server, '$error');
+        run.error = error is CompanionLightError ? error : CompanionLightError(CompanionLightFailure.server, '$error');
       }
     } finally {
       run.running = false;
@@ -170,8 +174,12 @@ class CompanionAgent extends ChangeNotifier {
   }
 
   bool _current(_CompanionAgentRun run) =>
-      !_disposed && identical(_run, run) && run.running && !run.cancelled &&
-      run.isCurrent() && run.memory.store.archive['control_revision'] == run.controlRevision;
+      !_disposed &&
+      identical(_run, run) &&
+      run.running &&
+      !run.cancelled &&
+      run.isCurrent() &&
+      run.memory.store.archive['control_revision'] == run.controlRevision;
 
   Future<void> _loop(_CompanionAgentRun run) async {
     while (_current(run)) {
@@ -229,7 +237,8 @@ class CompanionAgent extends ChangeNotifier {
             result = await binding.execute(call);
           } on Object {
             result = const CompanionAgentToolResult(
-              content: '{"ok":false,"error":"tool_failed","message":"The operation did not return a confirmed result."}',
+              content:
+                  '{"ok":false,"error":"tool_failed","message":"The operation did not return a confirmed result."}',
               isError: true,
             );
           }
@@ -242,7 +251,8 @@ class CompanionAgent extends ChangeNotifier {
           // Keep this assistant's matching IDs while retiring any earlier
           // result body in the same batch (for example recall, then forget).
           for (final previous in results) {
-            previous['content'] = 'This earlier result was retired after memory changed. Use the current memory context.';
+            previous['content'] =
+                'This earlier result was retired after memory changed. Use the current memory context.';
           }
         }
         results.add({
@@ -267,11 +277,13 @@ class CompanionAgent extends ChangeNotifier {
       category: 'chat',
       provider: 'deepseek',
       model: companionLightModel,
-      inputTokens: estimateTokens(jsonEncode({
-        'system': run.system,
-        'messages': messages,
-        'tools': [for (final tool in definitions) tool.toJson()],
-      })).ceil(),
+      inputTokens: estimateTokens(
+        jsonEncode({
+          'system': run.system,
+          'messages': messages,
+          'tools': [for (final tool in definitions) tool.toJson()],
+        }),
+      ).ceil(),
       outputTokens: 800,
     )!;
     final request = _CompanionAgentRequest(requestId);
@@ -280,30 +292,32 @@ class CompanionAgent extends ChangeNotifier {
     CompanionAgentMessage? message;
     try {
       final client = request.client = _client();
-      final stream = request.stream = StreamIterator(streamCompanionAgentReply(
-        client: client,
-        apiKey: key,
-        system: run.system,
-        messages: messages,
-        tools: definitions,
-        onMessage: (value) => message = value,
-        onSent: () {
-          if (!_current(run)) throw const DshClosedException('Companion turn changed');
-          run.memory.store.markRequestSent(requestId);
-          request.sent = true;
-        },
-        onUsage: (usage) {
-          // These identities never come from current UI/turn fields.
-          run.memory.store.recordUsage(requestId, usage.toJson());
-          run.memory.store.finishRequest(requestId, terminal: usage.terminal);
-          request.finalized = true;
-          run.memory.changed();
-          if (!_disposed) _onUsage?.call(usage);
-        },
-        onUsageSettled: (usage, {required partial}) {
-          if (!_disposed) _onUsageSettled?.call(usage, partial: partial);
-        },
-      ));
+      final stream = request.stream = StreamIterator(
+        streamCompanionAgentReply(
+          client: client,
+          apiKey: key,
+          system: run.system,
+          messages: messages,
+          tools: definitions,
+          onMessage: (value) => message = value,
+          onSent: () {
+            if (!_current(run)) throw const DshClosedException('Companion turn changed');
+            run.memory.store.markRequestSent(requestId);
+            request.sent = true;
+          },
+          onUsage: (usage) {
+            // These identities never come from current UI/turn fields.
+            run.memory.store.recordUsage(requestId, usage.toJson());
+            run.memory.store.finishRequest(requestId, terminal: usage.terminal);
+            request.finalized = true;
+            run.memory.changed();
+            if (!_disposed) _onUsage?.call(usage);
+          },
+          onUsageSettled: (usage, {required partial}) {
+            if (!_disposed) _onUsageSettled?.call(usage, partial: partial);
+          },
+        ),
+      );
       while (await stream.moveNext()) {
         if (!_current(run)) return null;
         final delta = stream.current;
@@ -333,8 +347,12 @@ class CompanionAgent extends ChangeNotifier {
   }
 
   void _saveReply(_CompanionAgentRun run, _CompanionAgentRequest request) {
-    if (request.saved || run.discard || request.text.trim().isEmpty ||
-        run.memory.store.archive['control_revision'] != run.controlRevision) return;
+    if (request.saved ||
+        run.discard ||
+        request.text.trim().isEmpty ||
+        run.memory.store.archive['control_revision'] != run.controlRevision) {
+      return;
+    }
     _save(run, 'reply:${run.source['id']}:${request.id}', request.text);
     request.saved = true;
   }
@@ -420,10 +438,10 @@ class _CompanionAgentRun {
   final MemoryRow source;
   final String system;
   final CompanionTurnContext? context;
-  final List<({
-    CompanionAgentTool definition,
-    Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute,
-  })> tools;
+  final List<
+    ({CompanionAgentTool definition, Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute})
+  >
+  tools;
   final bool Function() isCurrent;
   final void Function(MemorySelection)? onSelected;
   final settled = Completer<void>();

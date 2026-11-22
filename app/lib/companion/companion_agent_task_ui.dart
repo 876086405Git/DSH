@@ -4,10 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'companion_host_tasks.dart';
 import 'companion_maps.dart';
 
-typedef CompanionAgentSelectionRoute = void Function(
-  ModalRoute<Object?> route,
-  Route<dynamic>? nextRoute,
-);
+typedef CompanionAgentSelectionRoute = void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute);
 
 /// One captured real full-mode connection, not a selected but disconnected Host.
 class CompanionAgentTaskHost {
@@ -89,8 +86,5 @@ abstract interface class CompanionAgentTaskUi {
   /// Starts the Page-owned handoff of fresh, fixed revisions. The Page may
   /// await its current frame before rechecking and pushing the existing detail;
   /// this call does not await leaving that route or transfer an active scope.
-  void startForeground(
-    List<CompanionNotesForegroundCapture> captures, {
-    required bool Function() isCurrent,
-  });
+  void startForeground(List<CompanionNotesForegroundCapture> captures, {required bool Function() isCurrent});
 }

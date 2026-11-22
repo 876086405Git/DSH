@@ -5051,6 +5051,9 @@ class L10nZh extends L10n {
   String get companionSendFailed => '这句话没送出去，要不要再说一次？';
 
   @override
+  String get companionAgentRetryClosed => '这次的操作不能直接重试。先在「交代的事」或「她记得的事」里查看，再告诉我接下来要做什么。';
+
+  @override
   String get companionLogTitle => '聊天记录';
 
   @override

@@ -2792,7 +2792,7 @@ class CompanionMemoryStore {
       .isNotEmpty;
 
   void _refreshFollowups(int at) {
-    this._refreshAgentFollowups(at);
+    _refreshAgentFollowups(at);
     final meta = archive;
     final sources = <String, MemoryRow>{
       for (final row in _db.select(

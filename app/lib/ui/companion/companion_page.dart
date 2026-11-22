@@ -44,7 +44,6 @@ import '../../pets/pet_state.dart';
 import '../../speech/speech_settings.dart';
 import '../../speech/voice_cloud.dart';
 import '../../state/app_mode_state.dart';
-import '../../state/app_notes.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
 import '../../state/sessions_state.dart';
@@ -106,6 +105,8 @@ class CompanionPage extends ConsumerStatefulWidget {
 
 class _CompanionPageState extends ConsumerState<CompanionPage>
     implements CompanionInitiativeRoom, CompanionAgentRoomUi {
+  void _update(VoidCallback change) => setState(change);
+
   late final _stage = widget.stageController ?? CompanionStageController();
   final _input = TextEditingController();
   final _focus = FocusNode();
@@ -320,7 +321,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _packRoot = widget.storeOverride != null
         ? Future.value(widget.storeOverride!.root)
         : getApplicationSupportDirectory().then((directory) => Directory('${directory.path}/companion'));
-    _attachment = _agent.attach(root: _packRoot, character: _character, moves: _moves, ui: this, mapHandoff: _mapHandoff);
+    _attachment = _agent.attach(
+      root: _packRoot,
+      character: _character,
+      moves: _moves,
+      ui: this,
+      mapHandoff: _mapHandoff,
+    );
     _agent.addListener(_onAgentChanged);
     ref.listenManual(companionEffectiveVoiceProvider, (_, settings) {
       if (settings != null) unawaited(_prepareVoice(settings));
@@ -401,11 +408,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     try {
       final memory = await _openMemory();
       if (!mounted || !_attachment.isAttached) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => CompanionTasksPage(memory: memory, allSessions: true),
-        ),
-      );
+      await Navigator.of(context)
+          .push(MaterialPageRoute<void>(builder: (_) => CompanionTasksPage(memory: memory, allSessions: true)));
     } on Object {
       if (mounted && _attachment.isAttached) _notice(context.l10n.companionMemoryLoadFailed);
     }
@@ -430,8 +434,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       return;
     }
     _baselineSet = true;
-    _onReply(id, _attachment.text, running: _attachment.running,
-        error: _attachment.error == null ? null : _failureText(_attachment.error!));
+    _onReply(
+      id,
+      _attachment.text,
+      running: _attachment.running,
+      error: _attachment.error == null ? null : _failureText(_attachment.error!),
+    );
     _queueObserve();
   }
 
@@ -446,8 +454,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   @override
   bool get hasInvitation => _invite != null || _memoryFollowupTicket != null;
   @override
-  CompanionAgentTaskUi tasks({required bool Function() isCurrent}) =>
-      _CompanionPageTaskUi(this, isCurrent);
+  CompanionAgentTaskUi tasks({required bool Function() isCurrent}) => _CompanionPageTaskUi(this, isCurrent);
   @override
   void committed(String raw) {
     if (!mounted || !_attachment.isAttached) return;
@@ -455,6 +462,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (_input.text == raw) _input.clear();
     _retireGreeting();
   }
+
   @override
   void failed(Object error, {String? retry}) {
     if (!mounted || !_attachment.isAttached) return;
@@ -462,6 +470,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _stage.command('emotion', {'name': 'worried', 'hold': 3000});
     _showBubble(_failureText(error), hold: const Duration(seconds: 6), error: true, clearTasks: false);
   }
+
   @override
   void controlChanged({required bool own}) {
     if (!mounted || !_attachment.isAttached) return;
@@ -469,6 +478,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _lastLine = null;
     if (!own) setState(_resetConversation);
   }
+
   @override
   void connectionChanged() {
     if (!mounted || !_attachment.isAttached) return;
@@ -476,6 +486,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _boundLight = _light;
     setState(_resetConversation);
   }
+
   @override
   void detached() {
     // Retire this window while it still owns the speaker queue. A later
@@ -487,6 +498,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _voice.removeListener(_voiceChanged);
     unawaited(_voice.cancel());
   }
+
   @override
   void widgetClearPending() => _notice(context.l10n.companionMemoryWidgetPending);
   @override
@@ -500,6 +512,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _memoryFollowupTicket = display.ticket.id;
     return true;
   }
+
   @override
   void hideFollowup(String ticketId) => _hideMemoryFollowup(ticketId);
 
@@ -2739,9 +2752,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 /// unrelated route or lifecycle exit retires it even if the room returns.
 class _CompanionPageTaskUi implements CompanionAgentTaskUi {
   _CompanionPageTaskUi(this.page, this.current)
-      : epoch = page._notesForegroundEpoch,
-        mapGeneration = page._mapHandoff.generation,
-        strings = page.context.l10n {
+    : epoch = page._notesForegroundEpoch,
+      mapGeneration = page._mapHandoff.generation,
+      strings = page.context.l10n {
     selectionRoute = (route, nextRoute) {
       if (!current() || epoch != page._notesForegroundEpoch) return;
       page._notesSelectionRoutes.add(route);
@@ -2764,8 +2777,12 @@ class _CompanionPageTaskUi implements CompanionAgentTaskUi {
   late final CompanionAgentSelectionRoute selectionRoute;
 
   @override
-  bool get isCurrent => current() && page.mounted && !page._leaving &&
-      epoch == page._notesForegroundEpoch && !page._logOpen &&
+  bool get isCurrent =>
+      current() &&
+      page.mounted &&
+      !page._leaving &&
+      epoch == page._notesForegroundEpoch &&
+      !page._logOpen &&
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
       (page._notesForegroundHere || page._notesSelectionRoutes.any((route) => route.isActive && route.isCurrent));
   @override
@@ -2774,7 +2791,8 @@ class _CompanionPageTaskUi implements CompanionAgentTaskUi {
   CompanionAgentSelectionRoute get onSelectionRoute => selectionRoute;
 
   @override
-  Future<String?> chooseDeadline(List<String> choices, {
+  Future<String?> chooseDeadline(
+    List<String> choices, {
     required bool Function() isCurrent,
     CompanionAgentSelectionRoute? onRouteChanged,
   }) async {
@@ -2810,15 +2828,18 @@ class _CompanionPageTaskUi implements CompanionAgentTaskUi {
     CompanionAgentSelectionRoute? onRouteChanged,
   }) async {
     if (!this.isCurrent || !isCurrent()) return null;
-    return showDirectoryPicker(page.context,
+    return showDirectoryPicker(
+      page.context,
       onRouteChanged: onRouteChanged,
       title: kind == 'host.find_draft'
           ? strings.companionFindChooseDirectory(directoryHint ?? '')
-          : strings.companionNotesChooseDirectory);
+          : strings.companionNotesChooseDirectory,
+    );
   }
 
   @override
-  Future<MemoryRow?> chooseSavedDirectory(List<MemoryRow> directories, {
+  Future<MemoryRow?> chooseSavedDirectory(
+    List<MemoryRow> directories, {
     required bool Function() isCurrent,
     CompanionAgentSelectionRoute? onRouteChanged,
   }) async {
@@ -2830,7 +2851,10 @@ class _CompanionPageTaskUi implements CompanionAgentTaskUi {
         title: Text(strings.companionFindSavedDirectory),
         children: [
           for (final value in directories)
-            SimpleDialogOption(onPressed: () => Navigator.pop(dialog, value), child: Text(value['displayPath']! as String)),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialog, value),
+              child: Text(value['displayPath']! as String),
+            ),
           SimpleDialogOption(onPressed: () => Navigator.pop(dialog), child: Text(strings.commonCancel)),
         ],
       ),
@@ -2848,9 +2872,16 @@ class _CompanionPageTaskUi implements CompanionAgentTaskUi {
     String? originalStoreId,
   }) async {
     if (!this.isCurrent || !isCurrent()) return null;
-    return chooseCompanionDraftInputs(page.context, store: store, hostKey: hostKey,
-      client: client, capability: capability, isCurrent: isCurrent,
-      onRouteChanged: onRouteChanged, originalStoreId: originalStoreId);
+    return chooseCompanionDraftInputs(
+      page.context,
+      store: store,
+      hostKey: hostKey,
+      client: client,
+      capability: capability,
+      isCurrent: isCurrent,
+      onRouteChanged: onRouteChanged,
+      originalStoreId: originalStoreId,
+    );
   }
 
   @override
@@ -2866,33 +2897,49 @@ class _CompanionPageTaskUi implements CompanionAgentTaskUi {
     MemoryRow? keptOutput,
   }) async {
     if (!this.isCurrent || !isCurrent()) return null;
-    return chooseCompanionReceiptInputs(page.context, store: store, hostKey: hostKey,
-      client: client, capability: capability, isCurrent: isCurrent,
-      onRouteChanged: onRouteChanged, originalStoreId: originalStoreId,
-      keptInputs: keptInputs, keptOutput: keptOutput);
+    return chooseCompanionReceiptInputs(
+      page.context,
+      store: store,
+      hostKey: hostKey,
+      client: client,
+      capability: capability,
+      isCurrent: isCurrent,
+      onRouteChanged: onRouteChanged,
+      originalStoreId: originalStoreId,
+      keptInputs: keptInputs,
+      keptOutput: keptOutput,
+    );
   }
 
   @override
-  Future<CompanionMapSpec?> chooseMap(CompanionMaps maps, String address, {
+  Future<CompanionMapSpec?> chooseMap(
+    CompanionMaps maps,
+    String address, {
     required bool Function() isCurrent,
     CompanionAgentSelectionRoute? onRouteChanged,
   }) async {
     if (!mapIsCurrent || !isCurrent()) return null;
-    return chooseCompanionMapTarget(page.context, maps, address,
-      isCurrent: isCurrent, choosing: (value) => page._mapChoosing = value,
-      onRouteChanged: onRouteChanged);
+    return chooseCompanionMapTarget(
+      page.context,
+      maps,
+      address,
+      isCurrent: isCurrent,
+      choosing: (value) => page._mapChoosing = value,
+      onRouteChanged: onRouteChanged,
+    );
   }
 
   @override
   void accepted(MemoryRow task) {
     if (!isCurrent) return;
     final id = task['task_id']! as String;
-    page.setState(() {
+    page._update(() {
       switch (task['kind']) {
         case 'public.lookup':
           final original = page._memoryOwner!.store.lookupTask(id)!;
           page._lookupResults = [
-            for (final result in page._lookupResults) if (result.taskId != id) result,
+            for (final result in page._lookupResults)
+              if (result.taskId != id) result,
             (taskId: id, placeName: original['lookup_place_name']! as String),
           ];
         case 'phone.map_open':
@@ -2904,9 +2951,7 @@ class _CompanionPageTaskUi implements CompanionAgentTaskUi {
   }
 
   @override
-  void startForeground(List<CompanionNotesForegroundCapture> captures, {
-    required bool Function() isCurrent,
-  }) {
+  void startForeground(List<CompanionNotesForegroundCapture> captures, {required bool Function() isCurrent}) {
     // A popped selection route must actually leave the frame before this
     // original Page hands the fresh tasks to their existing detail owner.
     unawaited(() async {
@@ -2922,12 +2967,18 @@ class _CompanionPageTaskUi implements CompanionAgentTaskUi {
               capture.task['host_key'] == companionHostKey(page.ref.read(activeHostProvider)))
             capture,
       ];
-      if (foregrounds.isEmpty) return;
-      unawaited(Navigator.of(page.context).push(MaterialPageRoute<void>(
-        builder: (_) => CompanionTasksPage(memory: memory,
-          taskId: foregrounds.first.task['task_id']! as String,
-          freshNotes: List<CompanionNotesForegroundCapture>.unmodifiable(foregrounds)),
-      )));
+      if (foregrounds.isEmpty || !page.mounted) return;
+      unawaited(
+        Navigator.of(page.context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => CompanionTasksPage(
+              memory: memory,
+              taskId: foregrounds.first.task['task_id']! as String,
+              freshNotes: List<CompanionNotesForegroundCapture>.unmodifiable(foregrounds),
+            ),
+          ),
+        ),
+      );
     }());
   }
 }

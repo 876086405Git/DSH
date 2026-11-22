@@ -371,7 +371,10 @@ Stream<String> _streamCompanionMessage({
       switch (event['type']) {
         case 'content_block_start':
           final block = event['content_block'];
-          if (collector != null && block is Map && block['type'] == 'text' && block['text'] is String &&
+          if (collector != null &&
+              block is Map &&
+              block['type'] == 'text' &&
+              block['text'] is String &&
               (block['text'] as String).isNotEmpty) {
             yield block['text'] as String;
           }
@@ -480,12 +483,17 @@ class _CompanionAgentMessageBuilder {
           case 'text':
             _blocks[index] = {'type': 'text', 'text': block['text'] as String? ?? ''};
           case 'tool_use':
-            if (block['id'] is! String || (block['id'] as String).isEmpty ||
-                block['name'] is! String || (block['name'] as String).isEmpty || block['input'] is! Map) {
+            if (block['id'] is! String ||
+                (block['id'] as String).isEmpty ||
+                block['name'] is! String ||
+                (block['name'] as String).isEmpty ||
+                block['input'] is! Map) {
               throw const FormatException('Invalid tool call');
             }
             _blocks[index] = {
-              'type': 'tool_use', 'id': block['id'], 'name': block['name'],
+              'type': 'tool_use',
+              'id': block['id'],
+              'name': block['name'],
               'input': Map<String, Object?>.from(block['input'] as Map),
             };
             _arguments[index] = StringBuffer();

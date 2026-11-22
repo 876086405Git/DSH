@@ -42,10 +42,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     required Map<String, int> shownCardRevisions,
   }) => _transaction(() {
     _taskSource(messageId, expectedSourceRev);
-    final previous = _db.select(
-      'SELECT * FROM memory_agent_turns WHERE source_message_id=? AND source_rev=?',
-      [messageId, expectedSourceRev],
-    );
+    final previous = _db.select('SELECT * FROM memory_agent_turns WHERE source_message_id=? AND source_rev=?', [
+      messageId,
+      expectedSourceRev,
+    ]);
     if (previous.isNotEmpty) return _agentTurnView(previous.single);
     _checkAgentReferences(shownCardRevisions);
     final id = _createId();
@@ -198,10 +198,14 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     } else if (ignoredCode != null || task == null || task['task_id'] != taskId) {
       throw _conflict;
     }
-    _db.execute(
-      'UPDATE memory_agent_calls SET state=?,code=?,task_id=?,task_rev=? WHERE turn_id=? AND call_id=?',
-      [taskId == null ? 'ignored' : 'accepted', ignoredCode, taskId, task?['task_rev'], turnId, callId],
-    );
+    _db.execute('UPDATE memory_agent_calls SET state=?,code=?,task_id=?,task_rev=? WHERE turn_id=? AND call_id=?', [
+      taskId == null ? 'ignored' : 'accepted',
+      ignoredCode,
+      taskId,
+      task?['task_rev'],
+      turnId,
+      callId,
+    ]);
     return _agentResult(_agentStoredCall(turnId, callId), replayed: false);
   });
 
@@ -273,7 +277,17 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         current_basis_seq,source_at_ms,created_at_ms,updated_at_ms,cleanup_history_complete)
       VALUES(?,1,?,?,?,0,'real',1,'current',0,?,?,?,?,?,1)
     ''',
-      [id, kind, text, jsonEncode(keywords), topic, source['first_seq'], source['edited_at_utc'] ?? source['said_at_utc'], at, at],
+      [
+        id,
+        kind,
+        text,
+        jsonEncode(keywords),
+        topic,
+        source['first_seq'],
+        source['edited_at_utc'] ?? source['said_at_utc'],
+        at,
+        at,
+      ],
     );
     _agentSourceProof(id, source);
     _bumpMemory();
@@ -286,11 +300,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     final text = _agentText(input, 'text');
     final keywords = _agentKeywords(input, text);
     final id = card['id']! as String;
-    final changed = _removeFactRelations(
-      {id},
-      retainTargetId: id,
-      beforeWrite: (ids) => _agentBudget(turn, ids),
-    );
+    final changed = _removeFactRelations({id}, retainTargetId: id, beforeWrite: (ids) => _agentBudget(turn, ids));
     _db.execute('DELETE FROM memory_card_sources WHERE card_id=?', [id]);
     _db.execute('DELETE FROM memory_card_cleanup_sources WHERE card_id=?', [id]);
     _db.execute(
@@ -299,7 +309,14 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         current_basis_seq=?,source_at_ms=?,event_time=NULL,followup=NULL,plan_state=NULL,expires_at_ms=NULL,
         updated_at_ms=?,cleanup_history_complete=1 WHERE id=?
     ''',
-      [text, jsonEncode(keywords), source['first_seq'], source['edited_at_utc'] ?? source['said_at_utc'], _checkedNow(), id],
+      [
+        text,
+        jsonEncode(keywords),
+        source['first_seq'],
+        source['edited_at_utc'] ?? source['said_at_utc'],
+        _checkedNow(),
+        id,
+      ],
     );
     _agentSourceProof(id, source);
     _closeAgentFollowups(id, 'revised');
@@ -309,10 +326,14 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
   }
 
   void _agentSourceProof(String cardId, Row source) {
-    _db.execute('INSERT INTO memory_card_sources(card_id,support_group,message_id,source_rev,quote) VALUES(?,?,?,?,?)', [
-      cardId, _createId(), source['id'], source['source_rev'], source['text'],
+    _db.execute(
+      'INSERT INTO memory_card_sources(card_id,support_group,message_id,source_rev,quote) VALUES(?,?,?,?,?)',
+      [cardId, _createId(), source['id'], source['source_rev'], source['text']],
+    );
+    _db.execute('INSERT OR IGNORE INTO memory_card_cleanup_sources(card_id,message_id) VALUES(?,?)', [
+      cardId,
+      source['id'],
     ]);
-    _db.execute('INSERT OR IGNORE INTO memory_card_cleanup_sources(card_id,message_id) VALUES(?,?)', [cardId, source['id']]);
   }
 
   ({Set<String> changed, String? target}) _agentQuiet(Row turn, MemoryRow input) {
@@ -326,9 +347,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     _agentBudget(turn, ids);
     final anchors = _controlAnchors(topic);
     _db.execute('UPDATE memory_topics SET mode=?,control_anchors=? WHERE id=?', [mode, jsonEncode(anchors), topic]);
-    _db.execute('UPDATE memory_cards SET followup=NULL,maintenance_row_rev=0,row_rev=row_rev+1,updated_at_ms=? WHERE topic_id=?', [
-      _checkedNow(), topic,
-    ]);
+    _db.execute(
+      'UPDATE memory_cards SET followup=NULL,maintenance_row_rev=0,row_rev=row_rev+1,updated_at_ms=? WHERE topic_id=?',
+      [_checkedNow(), topic],
+    );
     for (final id in ids) {
       _closeAgentFollowups(id, 'quiet');
     }
@@ -348,7 +370,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     _agentBudget(turn, {id});
     final topic = _db.select('SELECT mode FROM memory_topics WHERE id=?', [card['topic_id']]).single;
     if (topic['mode'] != 'normal') throw const _AgentMemoryRejected('topic_quiet');
-    _db.execute('UPDATE memory_cards SET followup=NULL,plan_state=NULL,row_rev=row_rev+1,updated_at_ms=? WHERE id=?', [at, id]);
+    _db.execute('UPDATE memory_cards SET followup=NULL,plan_state=NULL,row_rev=row_rev+1,updated_at_ms=? WHERE id=?', [
+      at,
+      id,
+    ]);
     _closeAgentFollowups(id, 'rescheduled');
     _bumpMemory();
     _bumpControl();
@@ -360,9 +385,19 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       VALUES(?,1,?,?,?,?,?,?,?,?,?,?,?,?,'pending',1)
     ''',
       [
-        opportunity, 'agent:$when', id, (card['row_rev']! as int) + 1, archive['control_revision'], source['id'],
-        source['source_rev'], source['text'], source['first_seq'], source['said_at_utc'], source['offset_minutes'],
-        when, when + memoryFollowupWindowMs,
+        opportunity,
+        'agent:$when',
+        id,
+        (card['row_rev']! as int) + 1,
+        archive['control_revision'],
+        source['id'],
+        source['source_rev'],
+        source['text'],
+        source['first_seq'],
+        source['said_at_utc'],
+        source['offset_minutes'],
+        when,
+        when + memoryFollowupWindowMs,
       ],
     );
     return (changed: {id}, target: opportunity);
@@ -399,16 +434,20 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       if (row['tool_name'] != name || row['input_sha256'] != digest) throw _conflict;
       return (row, true);
     }
-    final maximum = _db.select(
-      '''
+    final maximum =
+        _db
+                .select(
+                  '''
       SELECT MAX(item_no) AS maximum FROM (
         SELECT command_item_no AS item_no FROM companion_task_revisions WHERE command_message_id=?
         UNION ALL SELECT c.item_no FROM memory_agent_calls c JOIN memory_agent_turns t ON t.id=c.turn_id
           WHERE t.source_message_id=?
       )
     ''',
-      [turn['source_message_id'], turn['source_message_id']],
-    ).single['maximum'] as int?;
+                  [turn['source_message_id'], turn['source_message_id']],
+                )
+                .single['maximum']
+            as int?;
     final control = archive['control_revision']! as int;
     _db.execute(
       '''

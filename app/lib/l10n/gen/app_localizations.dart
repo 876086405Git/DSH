@@ -9320,6 +9320,12 @@ abstract class L10n {
   /// **'这句话没送出去，要不要再说一次？'**
   String get companionSendFailed;
 
+  /// No description provided for @companionAgentRetryClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次的操作不能直接重试。先在「交代的事」或「她记得的事」里查看，再告诉我接下来要做什么。'**
+  String get companionAgentRetryClosed;
+
   /// No description provided for @companionLogTitle.
   ///
   /// In zh, this message translates to:

@@ -42,12 +42,16 @@ class CompanionAgentAttachment {
     final request = _visit.run?.request;
     return request != null && !request.saved && request.text.isNotEmpty ? request.text : null;
   }
+
   String? get replyId => _visit.run?.replyId;
   Object? get error {
     final run = _visit.run;
-    if (run != null && run.error != null && (run.toolDispatchStarted || run.text.trim().isNotEmpty)) return _agentRetryClosed;
+    if (run != null && run.error != null && (run.toolDispatchStarted || run.text.trim().isNotEmpty)) {
+      return _agentRetryClosed;
+    }
     return run?.error;
   }
+
   CompanionMemoryOwner? get memory => _visit.memory;
   CompanionSnapshot? get vitals => _visit.snapshot;
   bool get light => _visit.light;
@@ -66,23 +70,27 @@ class CompanionAgentAttachment {
     _visit.character = character;
     _visit.moves = moves;
   }
+
   void detach() => _visit.close();
 }
 
 class _CompanionAgentVisit {
   _CompanionAgentVisit(this.agent, this.ref, this.root, this.character, this.moves, this.ui, this.mapHandoff)
-      : initiative = ref.read(companionInitiativeProvider),
-        clock = ref.read(companionInitiativeClockProvider),
-        boundHost = ref.read(activeHostProvider),
-        boundClient = ref.read(activeConnectionProvider).value?.client {
+    : initiative = ref.read(companionInitiativeProvider),
+      clock = ref.read(companionInitiativeClockProvider),
+      boundHost = ref.read(activeHostProvider),
+      boundClient = ref.read(activeConnectionProvider).value?.client {
     boundLight = light;
     initiative.pace = ref.read(companionInitiativePaceProvider);
-    subscriptions.add(ref.listen(companionInitiativePaceProvider, (_, pace) {
-      if (active) initiative.pace = pace;
-    }).close);
+    subscriptions.add(
+      ref.listen(companionInitiativePaceProvider, (_, pace) {
+        if (active) initiative.pace = pace;
+      }).close,
+    );
     subscriptions.add(ref.listen(activeHostProvider, (_, _) => connectionChanged()).close);
-    subscriptions.add(ref.listen(activeConnectionProvider.select((value) => value.value?.client),
-        (_, _) => connectionChanged()).close);
+    subscriptions.add(
+      ref.listen(activeConnectionProvider.select((value) => value.value?.client), (_, _) => connectionChanged()).close,
+    );
     subscriptions.add(ref.listen(companionModeProvider, (_, _) => connectionChanged()).close);
     idleTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (active) {
@@ -147,7 +155,7 @@ class _CompanionAgentVisit {
   }
 
   void changed() {
-    if (active) agent.notifyListeners();
+    if (active) agent.changed();
   }
 
   Future<CompanionMemoryOwner> openMemory() {
@@ -281,7 +289,10 @@ class _CompanionAgentVisit {
       settled = Completer<void>();
       owner.retainReceipt(settled.future);
       final sessionId = owner.store.lightSessionId;
-      final reuse = previous != null && previous['text'] == raw && previous['session_id'] == sessionId &&
+      final reuse =
+          previous != null &&
+          previous['text'] == raw &&
+          previous['session_id'] == sessionId &&
           (previous['first_seq']! as int) > (owner.store.archive['history_after_seq']! as int);
       if (reuse && (inheritedRetry == null || !identical(inheritedRetry.memory, owner))) {
         // A closed/used turn is not a new model-planning opportunity. Its
@@ -304,15 +315,19 @@ class _CompanionAgentVisit {
         }
       }
       if (!current()) return;
-      final source = retrySource = reuse ? previous : owner.store.submitMessage(
-        id: companionMemoryId(),
-        sessionId: sessionId,
-        text: raw,
-        saidAtUtc: sourceClock?.utcMs ?? submittedAt.toUtc().millisecondsSinceEpoch,
-        offsetMinutes: sourceClock == null ? submittedAt.timeZoneOffset.inMinutes : sourceClock.offsetSeconds ~/ 60,
-        zoneId: sourceClock?.zoneId,
-        offsetSeconds: sourceClock?.offsetSeconds,
-      );
+      final source = retrySource = reuse
+          ? previous
+          : owner.store.submitMessage(
+              id: companionMemoryId(),
+              sessionId: sessionId,
+              text: raw,
+              saidAtUtc: sourceClock?.utcMs ?? submittedAt.toUtc().millisecondsSinceEpoch,
+              offsetMinutes: sourceClock == null
+                  ? submittedAt.timeZoneOffset.inMinutes
+                  : sourceClock.offsetSeconds ~/ 60,
+              zoneId: sourceClock?.zoneId,
+              offsetSeconds: sourceClock?.offsetSeconds,
+            );
       if (farewell.hasMatch(raw.trim())) followupRetired = true;
       ui.committed(raw);
       final now = DateTime.now();
@@ -325,13 +340,15 @@ class _CompanionAgentVisit {
       );
       lastSpokenAt = now;
       final persona = ref.read(companionPersonaProvider);
-      final system = companionLightSystem(persona: companionPersona(
-        custom: persona.custom,
-        name: ref.read(companionNameProvider) ?? character.name,
-        callMe: persona.callMe,
-        tools: true,
-        moves: moves.rules(),
-      ));
+      final system = companionLightSystem(
+        persona: companionPersona(
+          custom: persona.custom,
+          name: ref.read(companionNameProvider) ?? character.name,
+          callMe: persona.callMe,
+          tools: true,
+          moves: moves.rules(),
+        ),
+      );
       memoryTools = CompanionAgentMemoryTools(
         memory: owner,
         source: source,
@@ -347,7 +364,9 @@ class _CompanionAgentVisit {
       if (capturedHost != null) {
         final client = capturedHost.client;
         final hostRef = capturedHost.host;
-        bool hostCurrent() => current() && ref.read(activeHostProvider) == hostRef &&
+        bool hostCurrent() =>
+            current() &&
+            ref.read(activeHostProvider) == hostRef &&
             identical(ref.read(activeConnectionProvider).value?.client, client);
         host = CompanionAgentTaskHost(
           key: companionHostKey(hostRef),
@@ -356,10 +375,12 @@ class _CompanionAgentVisit {
           sessionId: ref.read(companionSessionsProvider.notifier).of(hostRef)?.sessionId,
           ensureSession: () async {
             if (!hostCurrent()) throw const DshClosedException('Companion Host changed');
-            final binding = await ref.read(companionSessionsProvider.notifier).ensure(
-              memoryArchiveId: owner.store.archive['id']! as String,
-              memoryControlRevision: owner.store.archive['control_revision']! as int,
-            );
+            final binding = await ref
+                .read(companionSessionsProvider.notifier)
+                .ensure(
+                  memoryArchiveId: owner.store.archive['id']! as String,
+                  memoryControlRevision: owner.store.archive['control_revision']! as int,
+                );
             if (!hostCurrent()) throw const DshClosedException('Companion Host changed');
             return binding.sessionId;
           },
@@ -477,7 +498,9 @@ class _CompanionAgentVisit {
     if (!current()) return null;
     final CompanionKeeper? next = light
         ? (phone ??= ref.read(companionPhoneKeeperProvider)(directory))
-        : client == null ? null : HostKeeper(client);
+        : client == null
+        ? null
+        : HostKeeper(client);
     CompanionSnapshot? value;
     if (next != null) {
       try {
@@ -562,7 +585,10 @@ class _CompanionAgentVisit {
       contextKey: view.contextKey,
       expiresAtMonoMs: now.monoMs + math.min(120000, (captured['expires_at_ms']! as int) - now.wallMs),
     );
-    bool current() => active && !followupRetired && candidate.contextKey == ui.initiativeView.contextKey &&
+    bool current() =>
+        active &&
+        !followupRetired &&
+        candidate.contextKey == ui.initiativeView.contextKey &&
         owner.store.isFollowupCurrent(captured, nowMs: clock().wallMs);
     String? line;
     initiative.requestSignal(
@@ -579,12 +605,17 @@ class _CompanionAgentVisit {
         line = await owner.followup(
           this,
           captured,
-          persona: companionPersonaPart(custom: persona.custom,
-              name: ref.read(companionNameProvider) ?? character.name, callMe: persona.callMe),
+          persona: companionPersonaPart(
+            custom: persona.custom,
+            name: ref.read(companionNameProvider) ?? character.name,
+            callMe: persona.callMe,
+          ),
           offsetMinutes: clock().offsetMinutes,
           isCurrent: () {
             final now = clock();
-            return current() && presentable(ui.initiativeView) && now.monoMs < candidate.expiresAtMonoMs &&
+            return current() &&
+                presentable(ui.initiativeView) &&
+                now.monoMs < candidate.expiresAtMonoMs &&
                 companionNightKey(now.wallMs, now.offsetMinutes) == null;
           },
         );
@@ -636,7 +667,11 @@ class _CompanionAgentVisit {
         final capability = await client.readCompanionRecallCapabilities();
         if (capability == null) throw const DshClosedException('legacy recall cleanup pending');
         try {
-          await client.revokeCompanionRecall(capability, operationId: newCompanionRecallId(), bindingId: stored.bindingId);
+          await client.revokeCompanionRecall(
+            capability,
+            operationId: newCompanionRecallId(),
+            bindingId: stored.bindingId,
+          );
         } on DshRemoteException catch (error) {
           if (!error.code.endsWith('not-found') && !error.code.endsWith('retired')) rethrow;
         }
@@ -651,15 +686,21 @@ class _CompanionAgentVisit {
     final owner = memory;
     final client = ref.read(activeConnectionProvider).value?.client;
     if (!active || light || owner == null || client == null) return;
-    unawaited(owner.refreshHostChatUsage(client, companionHostKey(ref.read(activeHostProvider))).catchError((Object _) {}));
+    unawaited(
+      owner.refreshHostChatUsage(client, companionHostKey(ref.read(activeHostProvider))).catchError((Object _) {}),
+    );
   }
 
   Future<void> resumeLookups(CompanionMemoryOwner owner) async {
     // These are already persisted tasks, not fresh model intents. Preserve the
     // executor and original source; no old Host lookup is re-created on phone.
-    final originalSessions = [owner.store.lightSessionId, if (!light) 'full:${companionHostKey(ref.read(activeHostProvider))}'];
-    final pending = [for (final session in originalSessions) ...owner.store.tasks(sourceSessionId: session)].where((row) =>
-        row['kind'] == 'public.lookup' && const ['queued', 'running', 'unknown'].contains(row['state'])).toList();
+    final originalSessions = [
+      owner.store.lightSessionId,
+      if (!light) 'full:${companionHostKey(ref.read(activeHostProvider))}',
+    ];
+    final pending = [for (final session in originalSessions) ...owner.store.tasks(sourceSessionId: session)]
+        .where((row) => row['kind'] == 'public.lookup' && const ['queued', 'running', 'unknown'].contains(row['state']))
+        .toList();
     if (pending.isEmpty) return;
     final reminders = ref.read(companionRemindersProvider);
     final client = ref.read(activeConnectionProvider).value?.client;
@@ -673,10 +714,20 @@ class _CompanionAgentVisit {
           if (task['cancel_requested'] == 1) {
             await owner.lookups.stop(task, executorId: executor, host: client, hostKey: hostKey);
           } else {
-            await owner.lookups.run(task, executorId: executor, requestId: companionMemoryId,
-              estimateTokens: estimateCompanionMemoryTokens, host: client, hostKey: hostKey,
-              direct: CompanionLookupDirect(client: agent._client, apiKey: () => key,
-                nowMilliseconds: owner.lookups.nowMilliseconds, estimateTokens: estimateCompanionMemoryTokens));
+            await owner.lookups.run(
+              task,
+              executorId: executor,
+              requestId: companionMemoryId,
+              estimateTokens: estimateCompanionMemoryTokens,
+              host: client,
+              hostKey: hostKey,
+              direct: CompanionLookupDirect(
+                client: agent._client,
+                apiKey: () => key,
+                nowMilliseconds: owner.lookups.nowMilliseconds,
+                estimateTokens: estimateCompanionMemoryTokens,
+              ),
+            );
           }
         }
       } on Object {
@@ -692,10 +743,15 @@ class _CompanionAgentVisit {
     if (!active || client == null) return;
     final hostKey = companionHostKey(ref.read(activeHostProvider));
     final tasks = [
-      ...[for (final session in [owner.store.lightSessionId, if (!light) 'full:$hostKey'])
-        ...owner.store.tasks(sourceSessionId: session)].where((row) =>
-          row['kind'] == 'host.notes_to_todo' && row['host_key'] == hostKey &&
-          const ['queued', 'waiting', 'running', 'unknown'].contains(row['state'])),
+      ...[
+        for (final session in [owner.store.lightSessionId, if (!light) 'full:$hostKey'])
+          ...owner.store.tasks(sourceSessionId: session),
+      ].where(
+        (row) =>
+            row['kind'] == 'host.notes_to_todo' &&
+            row['host_key'] == hostKey &&
+            const ['queued', 'waiting', 'running', 'unknown'].contains(row['state']),
+      ),
       ...owner.store.pendingFindDraftTasks(hostKey: hostKey),
       ...owner.store.pendingCompareDraftTasks(hostKey: hostKey),
       ...owner.store.pendingReceiptsTasks(hostKey: hostKey),
@@ -704,10 +760,16 @@ class _CompanionAgentVisit {
       try {
         final current = owner.store.hostTask(task['task_id']! as String)!;
         final agreement = current['agreement']! as MemoryRow;
-        final firstDelivery = const ['host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(current['kind']) &&
-            current['state'] == 'queued' && current['host_store_id'] != null && current['cancel_requested'] == 0 &&
-            agreement['allowQueue'] == true && agreement['afterExit'] == 'continue' &&
-            owner.store.hostTaskCommands(current['task_id']! as String).every((row) => row['possible_sent_at_ms'] == null);
+        final firstDelivery =
+            const ['host.find_draft', 'host.compare_drafts', 'host.receipts_to_sheet'].contains(current['kind']) &&
+            current['state'] == 'queued' &&
+            current['host_store_id'] != null &&
+            current['cancel_requested'] == 0 &&
+            agreement['allowQueue'] == true &&
+            agreement['afterExit'] == 'continue' &&
+            owner.store
+                .hostTaskCommands(current['task_id']! as String)
+                .every((row) => row['possible_sent_at_ms'] == null);
         await owner.hostTasks.run(current, client: client, hostKey: hostKey, submitPending: firstDelivery);
       } on Object {
         // Original IDs/possible dispatch remain. This never opens a new scope.
@@ -723,7 +785,9 @@ class _CompanionAgentVisit {
     idleTimer?.cancel();
     usageTimer?.cancel();
     quietTimer?.cancel();
-    for (final close in subscriptions) close();
+    for (final close in subscriptions) {
+      close();
+    }
     subscriptions.clear();
     memory?.removeListener(memoryChanged);
     memory?.leave(this);

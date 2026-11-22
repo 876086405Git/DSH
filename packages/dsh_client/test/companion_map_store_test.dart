@@ -498,7 +498,7 @@ void main() {
     expect(store.messages().single['extraction_state'], 'pending');
   });
 
-  test('a genuine v13 database gains only the two map tables and retains earlier task rows and schemas', () {
+  test('a genuine v13 database gains the map and agent tables and retains earlier task rows and schemas', () {
     say('reminder', text: '提醒我带证件。');
     final prior = store.createReminderFromMessage(
       messageId: 'reminder',
@@ -526,10 +526,10 @@ void main() {
       database
           .select(
             "SELECT name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' "
-            "AND name NOT IN ('companion_map_revisions','companion_map_scopes') ORDER BY name",
+            "AND name NOT IN ('companion_map_revisions','companion_map_scopes') AND name NOT LIKE '%memory_agent_%' AND name != 'memory_followups' ORDER BY name",
           )
           .map((row) => Map<String, Object?>.from(row)),
-      schema,
+      [for (final row in schema) if (row['name'] != 'memory_followups') row],
     );
     expect(database.select('SELECT * FROM companion_map_scopes'), isEmpty);
     expect(database.select('PRAGMA foreign_key_check'), isEmpty);
