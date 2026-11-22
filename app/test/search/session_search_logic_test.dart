@@ -647,6 +647,14 @@ void main() {
       expect(corpus.assistantPreviews, ['已补充启动探针测试。', '已定位到 PID 残留导致的门禁死锁。']);
     });
 
+    test('a repeated word can still match across user and assistant messages', () {
+      final session = searchSession('s', 'title', DateTime(2026, 10, 20));
+      final corpus = {
+        's': const SessionSearchCorpusEntry(userMessages: ['word'], assistantPreviews: ['word']),
+      };
+      expect(searchSessionCorpus('word word', [session], corpus).items.single.sessionId, 's');
+    });
+
     test('matches CJK substrings, multi-turn user terms, and ranks user messages above reply previews', () {
       final s1 = searchSession('s1', '日常杂谈 A', DateTime(2026, 10, 20));
       final s2 = searchSession('s2', '日常杂谈 B', DateTime(2026, 10, 22));

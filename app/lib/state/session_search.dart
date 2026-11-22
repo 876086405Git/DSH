@@ -610,7 +610,7 @@ bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
       continue;
     }
 
-    final multiUser = bestCombinedMatch(entry.userMessages);
+    final multiUser = rawTerms.length > 1 ? bestCombinedMatch(entry.userMessages) : null;
     if (multiUser != null) {
       hits.add((
         session: session,
@@ -634,6 +634,7 @@ bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
       continue;
     }
 
+    if (rawTerms.length == 1) continue;
     final combinedAll = bestCombinedMatch([...entry.userMessages, ...entry.assistantPreviews]);
     if (combinedAll != null) {
       hits.add((
