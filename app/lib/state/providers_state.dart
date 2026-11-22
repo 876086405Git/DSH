@@ -106,7 +106,7 @@ class CustomProvider {
 
 /// What a route assumes for a model entry that leaves a field empty: the
 /// route's `defaultContextWindow` / `defaultMaxTokens` / `defaultInput`, else
-/// the adapter's own (256K, 32K, text only).
+/// the adapter's own (1M, 128K, text only).
 class ModelDefaults {
   const ModelDefaults({
     this.contextWindow = piAiDefaultContextWindow,
@@ -375,12 +375,12 @@ String? tokenCountError(String raw) {
   return parseTokenCount(raw) == null ? appL10n.stateProviderTokenCountInvalid : null;
 }
 
-/// `262144` → `256K`, `1000000` → `1M`.
+/// `262144` → `256K`, `128000` → `128K`, `1000000` → `1M`.
 String formatTokens(int value) {
   if (value >= 1000000 && value % 1000000 == 0) return '${value ~/ 1000000}M';
   if (value >= 1048576 && value % 1048576 == 0) return '${value ~/ 1048576}M';
-  if (value >= 1024 && value % 1024 == 0) return '${value ~/ 1024}K';
   if (value >= 1000 && value % 1000 == 0) return '${value ~/ 1000}K';
+  if (value >= 1024 && value % 1024 == 0) return '${value ~/ 1024}K';
   return '$value';
 }
 

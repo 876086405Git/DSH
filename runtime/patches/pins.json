@@ -27,8 +27,8 @@
     "companion-auxiliary-single-request.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
-          "after": "a7b836abc5db0d50afaaedec95f21bd3d9dac79593592d3935a63fa7a38971d8",
-          "before": "2ef54c3220c6ff9ac3f7593efa7c3b3813f2d79bca43fefbc8dde7f9ddcfa457"
+          "after": "ae6f429c694ac374b1721d7f7ececd0be429635b3fc46098377a0f6bc2bf4cb0",
+          "before": "be4a61018e474c03a1d5c7cca7d95369a0c9cbf5cc31ec5a198a98a1e97b59db"
         },
         "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
           "after": "3810a30c8eeb73b69f8761ba4bded8f79135eadb2d940f3d6b5092f979a687c1",
@@ -39,8 +39,8 @@
     "companion-chat-usage-receipts.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
-          "after": "0ea74e5612136e2a909ceae9f73e2e65632679772e4add1f0d6d68bc3e84c7e0",
-          "before": "a7b836abc5db0d50afaaedec95f21bd3d9dac79593592d3935a63fa7a38971d8"
+          "after": "467c6fe08886bb032315ee7783ba972b56c1fd1e8d303d767b7e362abb27c846",
+          "before": "ae6f429c694ac374b1721d7f7ececd0be429635b3fc46098377a0f6bc2bf4cb0"
         },
         "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
           "after": "05f5df0b0a91f33788e9f84b8a7cbfc4d8f4778836f26c45c98b034d2bde8890",
@@ -67,8 +67,8 @@
     "companion-lookup-answer-window.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
-          "after": "e38d5962a121c3e684e3b30b54e11c6923ac60757f74ad095f778f13340ac583",
-          "before": "0ea74e5612136e2a909ceae9f73e2e65632679772e4add1f0d6d68bc3e84c7e0"
+          "after": "ecc4935b23db523a1f6bbd8c901bdf9fc36bc2da498f354fca7dd44485b42dee",
+          "before": "467c6fe08886bb032315ee7783ba972b56c1fd1e8d303d767b7e362abb27c846"
         },
         "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
           "after": "4f659541a67d7b089cfd9980cbae25777c8419d7504f3bd8da947182f0c2726b",
@@ -112,6 +112,14 @@
         }
       }
     },
+    "companion-task-approval-cause.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-user-approval/lib/index.js": {
+          "after": "948aacea6b7348ad828b2685b7d38157beabd24e370d45d672172410d8c32ac2",
+          "before": "66b60f76e6f507a23eb3e65f22c23c88b5e4ab4ae3a5178115ddc90ae62d8274"
+        }
+      }
+    },
     "companion-task-approval-turn.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js": {
@@ -125,14 +133,6 @@
         "node_modules/@deepseek-ai/dsh-user-approval/lib/index.js": {
           "after": "66b60f76e6f507a23eb3e65f22c23c88b5e4ab4ae3a5178115ddc90ae62d8274",
           "before": "45b7c170b6897f15a338037b1951997a1b99018c30b5fc95f7e08ad798075be2"
-        }
-      }
-    },
-    "companion-task-approval-cause.diff": {
-      "0.2.2-rc.1": {
-        "node_modules/@deepseek-ai/dsh-user-approval/lib/index.js": {
-          "before": "66b60f76e6f507a23eb3e65f22c23c88b5e4ab4ae3a5178115ddc90ae62d8274",
-          "after": "948aacea6b7348ad828b2685b7d38157beabd24e370d45d672172410d8c32ac2"
         }
       }
     },
@@ -199,6 +199,18 @@
         "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
           "after": "0ace65d8cf477ebaeaeaaf3af7080ea4695d46f5cc8a34c7f92d5107715e08a9",
           "before": "074ea3696725abfbf1ed9c770130c2d6a1b5cc34f1991c4127e24cbc39a4d6be"
+        }
+      }
+    },
+    "empty-tool-name-replay.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
+          "after": "be4a61018e474c03a1d5c7cca7d95369a0c9cbf5cc31ec5a198a98a1e97b59db",
+          "before": "2ef54c3220c6ff9ac3f7593efa7c3b3813f2d79bca43fefbc8dde7f9ddcfa457"
+        },
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "after": "8fe83590a9b92beaac3bae171c979822f1373502182ada51a0bd53799ade0200",
+          "before": "2c75fbaa9a704c782494931e399839d40366194af3e27873a1859b1b1f154190"
         }
       }
     },
@@ -303,8 +315,8 @@
     "ohos-attachment-diagnostic.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "3b9657ca65b26a4d02aa1c6dc2fad91f5506fa084391e54aef411874f079e430",
-          "before": "2c75fbaa9a704c782494931e399839d40366194af3e27873a1859b1b1f154190"
+          "after": "61e62312f4c0ec4f1726518e587aa254805ef643166be959b24bd61b5cd928e7",
+          "before": "8fe83590a9b92beaac3bae171c979822f1373502182ada51a0bd53799ade0200"
         }
       }
     },
@@ -443,16 +455,16 @@
     "ohos-piai-empty-models.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "cd9521d90b2e7b92de46cc26cc2454d52a752b7600d27c84416beab1dd822400",
-          "before": "3b9657ca65b26a4d02aa1c6dc2fad91f5506fa084391e54aef411874f079e430"
+          "after": "bbdec11266f777c9f7469b48cf6881215e7f7aba9d14f47ee8c0214cc01510d2",
+          "before": "61e62312f4c0ec4f1726518e587aa254805ef643166be959b24bd61b5cd928e7"
         }
       }
     },
     "ohos-piai-text-preabort.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "8e4483ef606383f9d1751a144f187371e13e575294a150400779ed194abb654c",
-          "before": "cd9521d90b2e7b92de46cc26cc2454d52a752b7600d27c84416beab1dd822400"
+          "after": "277200d19734689bb39c489da29311424a47d7e74112bab603426ec514d6fb0d",
+          "before": "bbdec11266f777c9f7469b48cf6881215e7f7aba9d14f47ee8c0214cc01510d2"
         }
       }
     },
@@ -2685,6 +2697,7 @@
       "piai-usage-evidence.diff",
       "piai-tool-call-id.diff",
       "piai-bedrock-usage-evidence.diff",
+      "empty-tool-name-replay.diff",
       "companion-phone-memory-request.diff",
       "companion-auxiliary-single-request.diff",
       "companion-chat-usage-receipts.diff",
@@ -2858,6 +2871,7 @@
       "piai-usage-evidence.diff",
       "piai-tool-call-id.diff",
       "piai-bedrock-usage-evidence.diff",
+      "empty-tool-name-replay.diff",
       "companion-phone-memory-request.diff",
       "companion-auxiliary-single-request.diff",
       "companion-chat-usage-receipts.diff",

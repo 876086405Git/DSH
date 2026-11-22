@@ -176,6 +176,7 @@ void main() {
       expect(formatTokens(1048576), '1M');
       expect(formatTokens(1000000), '1M');
       expect(formatTokens(32000), '32K');
+      expect(formatTokens(128000), '128K', reason: 'also 125 × 1024; the decimal reading wins');
       expect(formatTokens(4097), '4097');
     });
 

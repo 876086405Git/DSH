@@ -558,8 +558,8 @@ void main() {
 
     test('thinking levels are the adapter\'s, in its order', () {
       expect(piAiThinkingLevels, ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
-      expect(piAiDefaultContextWindow, 262144);
-      expect(piAiDefaultMaxTokens, 32768);
+      expect(piAiDefaultContextWindow, 1000000);
+      expect(piAiDefaultMaxTokens, 128000);
     });
   });
 

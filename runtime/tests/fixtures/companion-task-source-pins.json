@@ -43,7 +43,7 @@
         "destination": "dsh-llm/index.lookup-window.js"
       },
       "@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
-        "sha256": "e38d5962a121c3e684e3b30b54e11c6923ac60757f74ad095f778f13340ac583",
+        "sha256": "ecc4935b23db523a1f6bbd8c901bdf9fc36bc2da498f354fca7dd44485b42dee",
         "destination": "dsh-llm-deepseek/index.lookup-window.js"
       },
       "@deepseek-ai/dsh-agent/lib/index.js": {
@@ -77,7 +77,7 @@
         "destination": "dsh-llm/index.lookup-window.js"
       },
       "@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
-        "sha256": "e38d5962a121c3e684e3b30b54e11c6923ac60757f74ad095f778f13340ac583",
+        "sha256": "ecc4935b23db523a1f6bbd8c901bdf9fc36bc2da498f354fca7dd44485b42dee",
         "destination": "dsh-llm-deepseek/index.lookup-window.js"
       },
       "@deepseek-ai/dsh-agent/lib/index.js": {
