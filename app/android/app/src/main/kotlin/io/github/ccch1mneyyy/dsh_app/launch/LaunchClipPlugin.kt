@@ -19,7 +19,7 @@ import kotlin.concurrent.thread
  *
  * - `probe {path, poster}` → `{durationMs, width, height}` (rotation applied) and the first frame
  *   written as a PNG at `poster`; null when it isn't a playable video.
- * - `open {path}` → `{texture}` once prepared.
+ * - `open {path}` → `{texture, rotation}` once prepared and the texture rotation is known.
  * - `play {texture}`; native → Dart `showing {texture}` at the first frame drawn, `done {texture}`
  *   at the end.
  * - `close {texture}`.
@@ -86,11 +86,16 @@ class LaunchClipPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         val clip = Clip(producer, player)
         val id = producer.id()
         clips[id] = clip
+        var rotation: Int? = if (producer.handlesCropAndRotation()) 0 else null
         var answered = false
         fun answer(value: Any?) {
             if (answered) return
             answered = true
             result.success(value)
+        }
+        fun publish() {
+            val angle = rotation ?: return
+            if (clip.prepared) answer(mapOf("texture" to id, "rotation" to angle))
         }
         try {
             player.setDataSource(path)
@@ -112,7 +117,7 @@ class LaunchClipPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             }
             player.setOnCompletionListener { methods.invokeMethod("done", mapOf("texture" to id)) }
             player.setOnErrorListener { _, _, _ ->
-                if (!clip.prepared) close(id)
+                if (!answered) close(id)
                 methods.invokeMethod("done", mapOf("texture" to id))
                 answer(null)
                 true
@@ -120,8 +125,13 @@ class LaunchClipPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             player.setOnPreparedListener {
                 clip.prepared = true
                 if (it.videoWidth > 0 && it.videoHeight > 0) producer.setSize(it.videoWidth, it.videoHeight)
-                answer(mapOf("texture" to id))
+                publish()
                 if (clip.wantPlay) startOrDone(clip)
+            }
+            // A slow metadata scan must not block the platform thread or another open.
+            if (rotation == null) thread(name = "dsh-launch-rotation", isDaemon = true) {
+                val angle = videoRotation(path)
+                main.post { if (clips[id] === clip) { rotation = angle; publish() } }
             }
             player.setSurface(producer.surface)
             player.prepareAsync()
@@ -130,6 +140,19 @@ class LaunchClipPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             answer(null)
         }
     }
+
+    private fun videoRotation(path: String): Int = runCatching {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(path)
+            when (val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0) {
+                90, 180, 270 -> rotation
+                else -> 0
+            }
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }.getOrDefault(0)
 
     private fun startOrDone(clip: Clip) {
         try {
