@@ -1129,9 +1129,21 @@ class CompanionMemoryStore {
 
   void _removeFactRelations(Set<String> roots, {String? retainTargetId, bool deleteChat = false}) {
     // Decide the complete deletion before any write, including cards that
-    // lose their last proof through a copied group or a raw-message deletion.
+    // lose their last proof through an explicitly selected raw-message deletion.
     final snapshot = cards(includeInactive: true);
     final groups = {for (final card in snapshot) card['id'] as String: _supportGroups(card)};
+    final ending = RegExp(r'[。.!！?？]+$');
+    final clauseBreak = RegExp(r'[，,。.;；\r\n]+');
+    bool containsBody(MemoryRow card, MemoryRow old) {
+      final text = card['text'] as String;
+      if (_containsCardText(text, old)) return true;
+      final original = normalizeMemoryText(old['text'] as String);
+      final clause = normalizeMemoryText(original.replaceFirst(ending, ''));
+      return clause != original &&
+          clause.isNotEmpty &&
+          text.split(clauseBreak).any((part) => normalizeMemoryText(part) == clause);
+    }
+
     final origins = <String, List<MemoryRow>>{};
     if (deleteChat) {
       for (final row in _db.select('SELECT card_id,message_id,proof_withdrawn FROM memory_card_cleanup_sources')) {
@@ -1145,20 +1157,6 @@ class CompanionMemoryStore {
     final deleting = {...roots};
     final planned = <String>{};
     final rawSources = <String>{};
-    final removedGroups = <List<MemoryRow>>[];
-    final copiedGroups = <String, Set<String>>{};
-    bool copied(List<MemoryRow> group) => removedGroups.any(
-      // Every member must belong to this ONE complete proof. Independent OR
-      // groups cannot be stitched together to manufacture an AND dependency.
-      (removed) => removed.every(
-        (proof) => group.any(
-          (member) =>
-              member['message_id'] == proof['message_id'] &&
-              member['source_rev'] == proof['source_rev'] &&
-              (member['quote'] as String).contains(proof['quote'] as String),
-        ),
-      ),
-    );
     var expanded = true;
     while (expanded) {
       final before = deleting.length + rawSources.length;
@@ -1167,7 +1165,9 @@ class CompanionMemoryStore {
         if (card['scope'] != 'real' || deleting.contains(card['id'])) {
           continue;
         }
-        if (known.any((old) => _containsCardText(card['text'] as String, old))) {
+        // A shared quote may support independent facts. Only the card body
+        // establishes this literal dependency; raw-source checks stay separate.
+        if (known.any((old) => containsBody(card, old))) {
           deleting.add(card['id'] as String);
         }
       }
@@ -1203,7 +1203,6 @@ class CompanionMemoryStore {
           }
         }
         for (final group in groups[id]!.values) {
-          removedGroups.add(group);
           if (!deleteChat) {
             continue;
           }
@@ -1225,18 +1224,12 @@ class CompanionMemoryStore {
           continue;
         }
         final current = groups[id]!;
-        final withdrawn = <String>{};
         var removed = 0;
         for (final group in current.entries) {
-          final copiedProof = copied(group.value);
-          if (copiedProof) {
-            withdrawn.add(group.key);
-          }
-          if (copiedProof || group.value.any((proof) => rawSources.contains(proof['message_id']))) {
+          if (group.value.any((proof) => rawSources.contains(proof['message_id']))) {
             removed++;
           }
         }
-        copiedGroups[id] = withdrawn;
         final touchedRaw = (origins[id] ?? const <MemoryRow>[]).any(
           (origin) => rawSources.contains(origin['message_id']),
         );
@@ -1248,18 +1241,7 @@ class CompanionMemoryStore {
       // non-manual card has a full group outside all planned removals.
       expanded = before != deleting.length + rawSources.length;
     }
-    final affected = <String>{};
-    for (final entry in copiedGroups.entries) {
-      if (deleting.contains(entry.key) || entry.value.isEmpty) {
-        continue;
-      }
-      affected.add(entry.key);
-      for (final group in entry.value) {
-        _withdrawSourceGroup(entry.key, group);
-      }
-    }
     _deleteCards(deleting.where((id) => id != retainTargetId));
-    _refreshSources(affected, eraseUnsupported: true);
     if (deleteChat) {
       for (final id in rawSources) {
         final rows = _db.select('SELECT * FROM memory_messages WHERE id=?', [id]);

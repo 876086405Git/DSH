@@ -414,6 +414,30 @@ void main() {
       expect(store.followups(), hasLength(1));
     });
 
+    for (final recipient in ['医生', '我妈', '老师', '他', '王总', '我的老师']) {
+      test('a question to $recipient keeps its factual card without creating a followup', () {
+        const fact = '我周四去修琴';
+        final wording = '周五可以问$recipient修琴的进展';
+        final raw = '$fact，$wording';
+        final saved = invite(raw: raw, text: fact, wording: wording);
+        expect(store.cards(), hasLength(1));
+        expect(saved['text'], fact);
+        expect(saved['eligible'], isTrue);
+        final proof = (saved['evidence']! as List<Object?>).cast<MemoryRow>().single;
+        expect(proof['quote'], raw);
+        now = utc('2026-11-20T01:00:00Z');
+        expect(store.nextFollowup(nowMs: now), isNull);
+        expect(store.followups(), isEmpty);
+        reopen();
+        expect(store.cards().single['id'], saved['id']);
+        expect(store.cards().single['text'], fact);
+        expect(store.nextFollowup(nowMs: now), isNull);
+        expect(store.followups(), isEmpty);
+        expect(store.requests(), isEmpty);
+        expect(spends(), isEmpty);
+      });
+    }
+
     test('wording limits stay in the complete invitation for generation; no local question is substituted', () {
       const question = '周五可以问我琴修好没';
       final examples = ['$question，只问修好没，不问想不想聊。', '只问修好没，不问想不想聊。$question。', '$question但不问想不想聊'];

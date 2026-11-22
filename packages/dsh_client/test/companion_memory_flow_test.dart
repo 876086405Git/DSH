@@ -1043,7 +1043,7 @@ void main() {
       database.execute(
         '''
         INSERT INTO memory_cards(id,row_rev,kind,text,eligible,manual,topic_id,source_at_ms,created_at_ms,updated_at_ms)
-        SELECT 'wrong-derived',1,'fact','半糖口味的错误派生',1,0,topic_id,source_at_ms,created_at_ms,updated_at_ms
+        SELECT 'wrong-derived',1,'fact','我咖啡喝半糖。半糖口味的错误派生',1,0,topic_id,source_at_ms,created_at_ms,updated_at_ms
         FROM memory_cards WHERE id=?
       ''',
         [before['id']],
@@ -1364,8 +1364,8 @@ void main() {
         );
         final clinic = store.cards().singleWhere((card) => card['text'] == '我周五复诊');
         final coffee = store.cards().singleWhere((card) => card['text'] == '我喝无糖咖啡。');
-        // One broad proof contains the forgotten matter; a separate complete
-        // proof still supports the independent coffee card after it is removed.
+        // A broad quote can support an independent fact. Keeping the original
+        // chat must not withdraw this group's authentic proof of coffee.
         database.execute('INSERT INTO memory_card_sources VALUES(?,?,?,?,?)', [
           coffee['id'],
           'broad-coffee-proof',
@@ -1373,6 +1373,7 @@ void main() {
           1,
           mixed['text'],
         ]);
+        final coffeeBefore = store.cards().singleWhere((card) => card['id'] == coffee['id']);
         for (var i = 0; i < 3; i++) {
           expect(reserve(), isNotNull);
         }
@@ -1386,11 +1387,14 @@ void main() {
         submit('after', '这是控制之后独立新说的长笛', session: 'room-b');
         store.applyControl(topicIds: [clinic['topic_id'] as String], kind: 'forget', controlMessageId: 'forget');
         expect(store.cards().map((card) => card['text']), unorderedEquals(['周六去公园', '我喝无糖咖啡。']));
-        expect(database.select("SELECT * FROM memory_card_sources WHERE instr(quote,'复诊')>0"), isEmpty);
         expect(
-          (store.cards().singleWhere((card) => card['id'] == coffee['id'])['evidence'] as List).single,
-          containsPair('message_id', 'independent'),
+          database
+              .select("SELECT card_id FROM memory_card_sources WHERE instr(quote,'复诊')>0")
+              .map((row) => row['card_id']),
+          [coffee['id']],
         );
+        expect(store.cards().singleWhere((card) => card['id'] == coffee['id']), coffeeBefore);
+        expect(select('咖啡').block, isNot(contains('复诊')));
         expect(store.requests(), hasLength(3), reason: 'immediate control is not an auxiliary model request');
         expect(store.messages().first['text'], mixed['text']);
         expect(store.archive['history_after_seq'], command['first_seq']);
@@ -1488,15 +1492,32 @@ void main() {
           } else {
             store.deleteCard(id: a['id'] as String, expectedRowRev: a['row_rev'] as int);
           }
-          expect(store.cards().map((card) => card['id']), hasIndependentProof ? [c['id']] : isEmpty);
-          expect(database.select("SELECT * FROM memory_card_sources WHERE instr(quote,'复诊')>0"), isEmpty);
-          if (hasIndependentProof) {
+          expect(store.cards().map((card) => card['id']), hasIndependentProof || !deleteChat ? [c['id']] : isEmpty);
+          expect(
+            database
+                .select("SELECT card_id FROM memory_card_sources WHERE instr(quote,'复诊')>0")
+                .map((row) => row['card_id']),
+            deleteChat ? isEmpty : [c['id']],
+          );
+          if (deleteChat && hasIndependentProof) {
             expect((store.cards().single['evidence'] as List).single, containsPair('message_id', 'm3'));
+          }
+          if (!deleteChat) {
+            expect(
+              (store.cards().single['evidence'] as List).map((proof) => (proof as Map)['message_id']),
+              unorderedEquals(['m2', if (hasIndependentProof) 'm3']),
+              reason: 'the park fact is independent of the removed composite, even when both quote m2',
+            );
           }
           expect(store.messages().map((source) => source['id']), deleteChat ? ['m3'] : ['m1', 'm2', 'm3']);
           expect(database.select('SELECT * FROM memory_deleted_messages'), hasLength(deleteChat ? 2 : 0));
           reopen();
-          expect(database.select("SELECT * FROM memory_card_sources WHERE instr(quote,'复诊')>0"), isEmpty);
+          expect(
+            database
+                .select("SELECT card_id FROM memory_card_sources WHERE instr(quote,'复诊')>0")
+                .map((row) => row['card_id']),
+            deleteChat ? isEmpty : [c['id']],
+          );
         });
       }
     }
@@ -1676,6 +1697,81 @@ void main() {
       expect(store.cards(), [morning]);
       expect(store.cards().single['topic_mode'], 'less');
     });
+
+    for (final action in ['delete', 'forget', 'correct']) {
+      test('shared full-statement proof keeps independent facts and removes complete body clauses ($action)', () {
+        final mixed = submit('mixed', '我住杭州，也养猫。');
+        final prefix = submit('prefix', '我住杭州湾。');
+        final claimed = batch();
+        expect(
+          store.commitExtraction(
+            claimed,
+            parsed(claimed, [
+              create(mixed, text: '我住杭州。', keywords: ['杭州']),
+              create(mixed, text: '我养猫。', keywords: ['养猫']),
+              for (final text in ['我住杭州，也养猫。', '我住杭州；也养猫。', '我住杭州\n也养猫。'])
+                create(mixed, text: text, keywords: ['杭州', '养猫']),
+              create(prefix, keywords: ['杭州湾']),
+            ]),
+          ),
+          isTrue,
+        );
+        expect(store.cards(), hasLength(6));
+        final home = store.cards().singleWhere((card) => card['text'] == '我住杭州。');
+        final cat = store.cards().singleWhere((card) => card['text'] == '我养猫。');
+        final bay = store.cards().singleWhere((card) => card['text'] == prefix['text']);
+        final originals = store.messages();
+        expect(
+          (cat['evidence'] as List).single,
+          allOf(containsPair('message_id', 'mixed'), containsPair('quote', mixed['text'])),
+        );
+        if (action == 'delete') {
+          store.deleteCard(id: home['id'] as String, expectedRowRev: home['row_rev'] as int);
+        } else if (action == 'forget') {
+          final command = submit('control', '忘掉我住杭州，聊天留着');
+          final control = parseMemoryControl(command['text'] as String, store.cards())!;
+          expect(control['ambiguous'], isFalse);
+          expect(control['target_card_ids'], [home['id']]);
+          store.applyControl(
+            topicIds: (control['topic_ids'] as List<Object?>).cast<String>(),
+            kind: 'forget',
+            controlMessageId: 'control',
+          );
+        } else {
+          submit('control', '把我住杭州。改成我住苏州。');
+          store.correctFromMessage(
+            cardId: home['id'] as String,
+            expectedRowRev: home['row_rev'] as int,
+            messageId: 'control',
+            expectedSourceRev: 1,
+            text: '我住苏州。',
+          );
+        }
+        expect(
+          store.cards().map((card) => card['id']),
+          unorderedEquals([cat['id'], bay['id'], if (action == 'correct') home['id']]),
+        );
+        expect(store.cards().singleWhere((card) => card['id'] == cat['id']), cat);
+        expect(
+          store.cards().singleWhere((card) => card['id'] == bay['id']),
+          bay,
+          reason: 'a prefix inside a different complete clause is not the selected fact',
+        );
+        expect(store.messages().where((row) => const ['mixed', 'prefix'].contains(row['id'])), originals);
+        expect(database.select('SELECT * FROM memory_deleted_messages'), isEmpty);
+        expect(select('养猫').ids, [cat['id']]);
+        expect(select('养猫').block, isNot(contains('我住杭州')));
+        if (action == 'correct') {
+          final corrected = store.cards().singleWhere((card) => card['id'] == home['id']);
+          expect(corrected['text'], '我住苏州。');
+          expect((corrected['evidence'] as List).single, containsPair('message_id', 'control'));
+        }
+        final after = store.cards();
+        reopen();
+        expect(store.cards(), after);
+        expect(store.messages().where((row) => const ['mixed', 'prefix'].contains(row['id'])), originals);
+      });
+    }
 
     for (final deleteChat in [false, true]) {
       test('a precise spoken forget retains the independent fact sharing its topic (raw=$deleteChat)', () {

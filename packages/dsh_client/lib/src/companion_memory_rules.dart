@@ -688,7 +688,13 @@ const _followupDateWord = r'(?:\d{4}-\d{2}-\d{2}|今天|明天|后天|(?:本周|
 final _followupAsk = RegExp(
   '^(?:($_followupDateWord'
   r'(?:上午|下午|晚上)?)|(到时|到时候|过后|事后|结束后))?'
-  r'\s*(?:你(?:可以|来)?|可以|来)?(?:再)?问(?:问)?(?:我)?',
+  r'\s*(?:你(?:可以|来)?|可以|来)?(?:再)?问(?:问)?(我)?',
+);
+
+final _otherRecipient = RegExp(
+  r'^(?:我的)?(?:他|她|他们|她们|医生|大夫|护士|老师|教练|导师|我妈|我爸|妈妈|爸爸|老妈|老爸|爷爷|奶奶|外公|外婆|'
+  r'哥哥|姐姐|弟弟|妹妹|老板|领导|上司|经理|同事|同学|朋友|室友|房东|对象|老公|老婆|男朋友|女朋友|客服|物业|'
+  r'[一-龥]总)',
 );
 
 /// A small literal invitation grammar. Unsupported language remains waiting
@@ -724,6 +730,9 @@ MemoryRow? qualifyMemoryFollowup(MemoryRow card, MemoryRow source) {
   var afterDay = false;
   var reason = subject == null ? 'date_unresolved' : 'waiting_for_completion';
   if (ask != null) {
+    // 「问医生/问我妈/问老师……」是让本人去问别人，不是请她回头来问。
+    final recipient = '${ask.group(3) ?? ''}${asks.single.substring(ask.end)}';
+    if (_otherRecipient.hasMatch(recipient)) return null;
     date = _followupDay(ask.group(1) ?? '', source);
     if (date == null && event != null && ask.group(2) != null) {
       date = _followupDay(event['wording'] as String, source);

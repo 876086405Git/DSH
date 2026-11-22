@@ -221,6 +221,32 @@ void main() {
       expect(d5['reason'], isNull);
     });
 
+    test('known recipients immediately after ask do not authorize a question to the person', () {
+      for (final raw in [
+        '周五可以问医生修琴的进展',
+        '周五可以问问医生修琴的进展',
+        '周五可以问我妈修琴的进展',
+        '周五可以问问我妈修琴的进展',
+      ]) {
+        expect(plan(raw, raw, date: '2026-11-20'), isNull, reason: raw);
+      }
+    });
+
+    test('asking the person about a doctor remains a literal invitation', () {
+      const raw = '周五可以问我医生的建议';
+      final value = plan(raw, raw, date: '2026-11-20')!;
+      expect(value['opens_at_ms'], utc('2026-11-19T16:00:00Z'));
+      expect(value['reason'], isNull);
+    });
+
+    test('a rejected recipient head still prevents a second head from becoming unique', () {
+      const own = '周五可以问我修琴的进展';
+      const other = '周六可以问医生陶杯的进展';
+      for (final raw in ['$own，$other', '$other，$own']) {
+        expect(plan(raw, own, date: '2026-11-20'), isNull, reason: raw);
+      }
+    });
+
     test('a model invitation label cannot authorize quotations, reminders, another person or multiple invitations', () {
       const wording = '周五可以问我修琴的进展';
       for (final raw in [
