@@ -56,7 +56,7 @@
     },
     {
       "path": "app/test/companion/companion_page_test.dart",
-      "sha256": "6c36292a2050849bc188acec49a6acd0014da11cefd7e947b6ba576429184cc5"
+      "sha256": "d5db60ceebe410dcebe612e173127632dec8dd80c8a2a10899bf97825306d523"
     },
     {
       "path": "app/test/companion/companion_recall_room_test.dart",
@@ -76,7 +76,7 @@
     },
     {
       "path": "app/test/companion/companion_test_settle.dart",
-      "sha256": "d04557f4615baad19c20abcfd2300987df180ede67f2254f9de1c52831ef7018"
+      "sha256": "387df443d245f8eeea9ec536a119996904a4a44183558306ef11e3dd0e7b4c66"
     },
     {
       "path": "app/test/companion/companion_widget_memory_test.dart",

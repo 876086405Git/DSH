@@ -2328,6 +2328,7 @@ void main() {
               await _notesVisible(tester, find.text('外来的页面'));
               await tester.pump(const Duration(milliseconds: 400));
               navigator.pop();
+              await tester.pump();
               await tester.pump(const Duration(milliseconds: 400));
             }
 
@@ -2369,6 +2370,8 @@ void main() {
               if (scenario == 'route-remove-same-frame-during-sheet') {
                 externalRouteRemovedInSameFrame(find.byType(DirectoryLocationsSheet));
               }
+              // Let the directory sheet finish sliding in before tapping an entry.
+              await tester.pump(const Duration(milliseconds: 500));
               if (typedDirectory) {
                 await tester.tap(find.text('输入路径').last);
                 await _notesVisible(tester, find.byType(AlertDialog));
@@ -2381,24 +2384,27 @@ void main() {
                 );
                 await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.byType(FilledButton)));
               } else {
-                // Let the directory sheet finish sliding in before tapping an entry.
-                await tester.pump(const Duration(milliseconds: 500));
                 await tester.tap(find.text('主目录').last);
               }
-              final choose = find
-                  .descendant(
-                    of: find.byType(DirectoryBrowserPage),
-                    matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
-                  )
-                  .last;
-              await _notesVisible(tester, choose);
+              // `.last` throws on no candidates, so wait for the enabled button
+              // (the listing arrives over real HTTP) before narrowing to it.
+              final enabledChoose = find.descendant(
+                of: find.byType(DirectoryBrowserPage),
+                matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
+              );
+              await _notesVisible(tester, enabledChoose);
+              final choose = enabledChoose.last;
               if (scenario == 'route-return-during-browser') {
                 await externalRouteAndBack();
               } else if (scenario == 'route-remove-same-frame-during-browser') {
                 externalRouteRemovedInSameFrame(find.byType(DirectoryBrowserPage));
               }
+              // The browser page slides in too; tap its button once it is on screen.
+              await tester.pump(const Duration(milliseconds: 500));
               await tester.tap(choose);
               await settleMixed(tester, bindings[choice].future);
+              // Let this picker finish closing, so the next wait sees only the next sheet.
+              if (choice == 0 && (two || followingFind)) await tester.pump(const Duration(milliseconds: 500));
             }
             if (holdAcceptance) {
               await settleMixed(tester, createSeen.future);
@@ -2411,6 +2417,8 @@ void main() {
                 await _notesVisible(tester, find.text('另一个页面'));
                 await tester.pump(const Duration(milliseconds: 400));
                 navigator.pop();
+                // The first frame only starts the reverse animation's ticker.
+                await tester.pump();
                 await tester.pump(const Duration(milliseconds: 400));
               } else if (scenario.startsWith('host-')) {
                 container.read(activeHostProvider.notifier).select(const HostRef.ssh('fresh-other-host'));
@@ -2514,6 +2522,8 @@ void main() {
               expect(memory.store.hostTask(second['taskId']! as String)!['state'], 'waiting');
               expect(memory.store.hostTaskCommands(second['taskId']! as String), hasLength(1));
             } else if (scenario == 'two-parts-cancel-first') {
+              // The tasks page slides in; tap its button once it is on screen.
+              await tester.pump(const Duration(milliseconds: 500));
               await tester.ensureVisible(find.text('不用整理了'));
               await tester.tap(find.text('不用整理了'));
               await settleMixed(tester, cancelSeen.future);
@@ -2625,7 +2635,12 @@ void main() {
           Map<String, Object?>? snapshot;
           var closed = false;
           var modelPosts = 0;
-          addTearDown(() async {
+          var cleaned = false;
+          // Runs at the end of the body too: the pending-timer check comes
+          // before tear-downs.
+          Future<void> cleanUp() async {
+            if (cleaned) return;
+            cleaned = true;
             if (!releaseBind.isCompleted) {
               releaseBind.complete();
             }
@@ -2638,8 +2653,12 @@ void main() {
             }
             await tester.pump();
             await tester.runAsync(peer.close);
+            // The inherited real HttpClient owns a 15-second idle timer.
+            await tester.pump(const Duration(seconds: 16));
             tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
-          });
+          }
+
+          addTearDown(cleanUp);
           tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
             if (call.method == 'clock') {
               if (!clockRead.isCompleted) {
@@ -2806,14 +2825,17 @@ void main() {
           await tester.pump(const Duration(milliseconds: 500));
           await tester.tap(find.text('主目录').last);
           await settleMixed(tester, browserRead.future);
-          final choose = find
-              .descendant(
-                of: find.byType(DirectoryBrowserPage),
-                matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
-              )
-              .last;
-          await _notesVisible(tester, choose);
+          // `.last` throws on no candidates; the Page sees the listing a turn
+          // after the server wrote it.
+          final enabledChoose = find.descendant(
+            of: find.byType(DirectoryBrowserPage),
+            matching: find.byWidgetPredicate((widget) => widget is FilledButton && widget.onPressed != null),
+          );
+          await _notesVisible(tester, enabledChoose);
+          final choose = enabledChoose.last;
           expect(tester.widget<FilledButton>(choose).onPressed, isNotNull);
+          // The browser page slides in too; tap its button once it is on screen.
+          await tester.pump(const Duration(milliseconds: 500));
           await tester.tap(choose);
           await settleMixed(tester, bindRead.future);
           expect(sourceCountsAtBrowse, [1]);
@@ -2913,7 +2935,8 @@ void main() {
               await tester.tap(find.text('看看这件事'));
               await _notesVisible(tester, find.byType(CompanionTasksPage));
               await settleMixed(tester, memory.lastReceipt);
-              await tester.pump();
+              // Let the tasks page finish sliding in, so the chat below it is offstage.
+              await tester.pump(const Duration(milliseconds: 500));
               expect(find.byType(CompanionTasksPage), findsOneWidget);
               expect(find.text(findDraft ? '查找目录：/实际笔记' : '笔记在：/实际笔记'), findsOneWidget);
               expect(find.textContaining('没法确定你离没离开'), findDraft ? findsNothing : findsOneWidget);
@@ -2938,7 +2961,7 @@ void main() {
               expect(cancelPosts.single.body!['kind'], 'host.find_draft');
             } else {
               expect(find.text('看看这件事'), findsNothing);
-              expect(find.text('电脑接手了，正在整理。'), findsNothing);
+              expect(find.text('电脑接下这件事了，结果还没出来。'), findsNothing);
               expect(find.textContaining('2026-11-21-待办.md'), findsNothing);
               expect(memory.store.tasks(sourceSessionId: memory.store.lightSessionId), isEmpty);
             }
@@ -2963,6 +2986,7 @@ void main() {
             ),
             isFalse,
           );
+          await cleanUp();
         });
       }
 
@@ -3006,13 +3030,22 @@ void main() {
           Map<String, Object?>? snapshot;
           var seeding = true;
           final bindingDuringSeed = <bool>[];
-          addTearDown(() async {
+          var cleaned = false;
+          // Runs at the end of the body too: the pending-timer check comes
+          // before tear-downs.
+          Future<void> cleanUp() async {
+            if (cleaned) return;
+            cleaned = true;
             await tester.pumpWidget(const SizedBox());
             memory.dispose();
             await tester.pump();
             await tester.runAsync(peer.close);
+            // The inherited real HttpClient owns a 15-second idle timer.
+            await tester.pump(const Duration(seconds: 16));
             tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
-          });
+          }
+
+          addTearDown(cleanUp);
           tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
             channel,
             (call) async => switch (call.method) {
@@ -3169,6 +3202,14 @@ void main() {
           await tester.pump();
           await settleMixed(tester, scenario == 'already-possible' ? readBack.future : posted.future);
           await settleMixed(tester, memory.lastReceipt);
+          // The reconnect resume is not a retained receipt: after the peer
+          // writes its reply, the Page still has to read and import it (the
+          // task shows 'unknown' while the create is possibly sent).
+          final settledState = scenario == 'already-possible' ? 'unknown' : 'running';
+          for (var i = 0; i < 200 && memory.store.hostTask(id)!['state'] != settledState; i++) {
+            await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+            await tester.pump();
+          }
           await tester.pump();
           final current = memory.store.hostTask(id)!;
           expect(container.read(companionModeProvider), isNull);
@@ -3201,6 +3242,7 @@ void main() {
           );
           expect(memory.store.hostTaskCommands(id), hasLength(1));
           expect(modelPosts, 0);
+          await cleanUp();
         });
       }
 
@@ -4432,7 +4474,9 @@ void main() {
           final response = Completer<http.Response>();
           storyResponse = response;
           await tester.tap(find.byIcon(AppIcons.send).last);
-          await settleMixed(tester, storyEntered.future);
+          // The chat page paces its sending and display with fake-clock timers.
+          const beat = Duration(milliseconds: 50);
+          await settleMixed(tester, storyEntered.future, step: beat);
           // Subscribe to the actual Page-started turn while HTTP is held.
           final done = engine.resumeTurn(chatId).toList();
           response.complete(
@@ -4457,7 +4501,7 @@ void main() {
               headers: {'content-type': 'text/event-stream; charset=utf-8'},
             ),
           );
-          final events = await settleMixed(tester, done);
+          final events = await settleMixed(tester, done, step: beat);
           expect(events.whereType<story.TavernTurnFailed>(), isEmpty);
           expect(events.whereType<story.TavernTurnDone>(), hasLength(1));
           // These display providers may already have been started by the Page.
