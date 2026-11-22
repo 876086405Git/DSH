@@ -625,6 +625,8 @@ class _CompanionAgentVisit {
         hasClock: sampledContext.hasClock,
       );
       lastSpokenAt = now;
+      await ref.read(companionPersonaProvider.notifier).ready;
+      if (!current()) return;
       final persona = ref.read(companionPersonaProvider);
       final system = companionLightSystem(
         persona: companionPersona(

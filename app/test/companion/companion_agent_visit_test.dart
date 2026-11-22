@@ -435,6 +435,14 @@ void main() {
   );
 
   test('public attachment retries a no-tool failure with the same source clock and open turn', () async {
+    const savedCustom = '我是已保存的星桥旅伴。';
+    const savedCallMe = '阿榛';
+    // Seed storage without reading or warming the lazy persona provider.
+    SharedPreferences.setMockInitialValues({
+      'companion_mode': 'light',
+      'companion_initiative_enabled': false,
+      'companion_persona_v1': jsonEncode({'custom': savedCustom, 'callMe': savedCallMe}),
+    });
     final visit = await _Visit.open([
       http.Response('Temporary model failure', 503),
       _message(tool: true),
@@ -472,6 +480,12 @@ void main() {
       expect(visit.calls('clock'), 1);
       expect(visit.calls('wake'), 1);
       expect(visit.requests, hasLength(3));
+      // Real wire bodies: cold first request, explicit retry and continuation.
+      for (final request in visit.requests) {
+        final system = jsonEncode(request['system']);
+        expect(system, contains(savedCustom));
+        expect(system, contains(savedCallMe));
+      }
       final retryContext = _context(visit.requests[1]);
       expect(retryContext['originalMessage'], {'localTime': '2026-11-22T18:00+08:00', 'zoneId': 'Asia/Shanghai'});
       expect(_context(visit.requests.last)['originalMessage'], retryContext['originalMessage']);
