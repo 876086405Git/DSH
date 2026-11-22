@@ -157,6 +157,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   /// The backlog is over her (companion_log.dart).
   bool _logOpen = false;
+  ({(CompanionMemoryStore, int, int, String?, String) key, List<CompanionLogEntry> entries})? _savedLightLog;
 
   /// What she's doing in her corner (the stage's word for it).
   String _home = 'idle';
@@ -1831,7 +1832,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   void _closeLog() {
     if (!mounted || !_logOpen) return;
-    setState(() => _logOpen = false);
+    setState(() {
+      _logOpen = false;
+      _savedLightLog = null;
+    });
     _stage.command('covered', {'on': false});
   }
 
@@ -1848,16 +1852,41 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         else
           entry,
     ];
+    List<CompanionLogEntry> saved() {
+      final store = _memoryOwner?.store;
+      if (store == null) return const [];
+      final role = _attachment.characterId;
+      List<CompanionLogEntry> project() => [
+        for (final row in store.messages())
+          if ((row['session_id']! as String).startsWith('light:') &&
+              (row['character_id'] == null || row['character_id'] == role))
+            ...read([
+              row['role'] == 'user'
+                  ? CompanionLine.user(row['text']! as String)
+                  : CompanionLine.her(row['text']! as String),
+            ], legacy: row['character_id'] == null),
+      ];
+      if (!_logOpen) return project();
+      // New/edited messages advance next_seq. Forget can remove older messages
+      // under an existing sequence and advances control_revision instead.
+      final archive = store.archive;
+      final key = (
+        store,
+        archive['next_seq']! as int,
+        archive['control_revision']! as int,
+        role,
+        context.l10n.companionLegacyConversation,
+      );
+      final previous = _savedLightLog;
+      if (previous != null && previous.key == key) return previous.entries;
+      final entries = project();
+      _savedLightLog = (key: key, entries: entries);
+      return entries;
+    }
+
     return [
       ...read(_lightHistory?.lines ?? const [], legacy: true),
-      for (final row in _memoryOwner?.store.messages() ?? const <MemoryRow>[])
-        if ((row['session_id']! as String).startsWith('light:') &&
-            (row['character_id'] == null || row['character_id'] == _attachment.characterId))
-          ...read([
-            row['role'] == 'user'
-                ? CompanionLine.user(row['text']! as String)
-                : CompanionLine.her(row['text']! as String),
-          ], legacy: row['character_id'] == null),
+      ...saved(),
       ...read(const [], speaking: _attachment.pendingText),
     ];
   }
