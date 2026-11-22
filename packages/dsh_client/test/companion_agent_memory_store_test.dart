@@ -1089,6 +1089,76 @@ void main() {
     expect(database.select('SELECT * FROM memory_agent_maintenance_claims'), hasLength(1));
   });
 
+  for (final day in [
+    (
+      name: 'spring',
+      today: DateTime.utc(2026, 3, 9, 12),
+      localDay: '2026-03-08',
+      oldOffset: -300,
+      currentOffset: -240,
+      before: DateTime.utc(2026, 3, 8, 4, 30),
+      early: DateTime.utc(2026, 3, 8, 5, 30),
+      late: DateTime.utc(2026, 3, 9, 3, 30),
+      after: DateTime.utc(2026, 3, 9, 4, 30),
+    ),
+    (
+      name: 'autumn',
+      today: DateTime.utc(2026, 11, 2, 12),
+      localDay: '2026-11-01',
+      oldOffset: -240,
+      currentOffset: -300,
+      before: DateTime.utc(2026, 11, 1, 3, 30),
+      early: DateTime.utc(2026, 11, 1, 4, 30),
+      late: DateTime.utc(2026, 11, 2, 4, 30),
+      after: DateTime.utc(2026, 11, 2, 5, 30),
+    ),
+  ]) {
+    test('ADD49 ${day.name} diary selects and validates the original source offset', () {
+      now = day.today.millisecondsSinceEpoch;
+      MemoryRow put(String messageId, String text, DateTime at, int offset) => store.submitMessage(
+        id: messageId,
+        sessionId: 'light:agent',
+        text: text,
+        saidAtUtc: at.millisecondsSinceEpoch,
+        offsetMinutes: offset,
+      );
+      put('outside-before', '前一天的话。', day.before, day.oldOffset);
+      final early = put('day-early', '当天一早的话。', day.early, day.oldOffset);
+      final late = put('day-late', '当天晚间的话。', day.late, day.currentOffset);
+      put('outside-after', '第二天的话。', day.after, day.currentOffset);
+      final claim = store.nextAgentMaintenance(
+        kind: 'organize',
+        offsetMinutes: day.currentOffset,
+        estimateTokens: (text) => text.length,
+      )!;
+      final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+      expect(turn['local_day'], day.localDay);
+      final sources = (turn['sources'] as List).cast<MemoryRow>();
+      expect(sources.map((source) => source['id']), [early['id'], late['id']]);
+      for (final original in [early, late]) {
+        final captured = sources.singleWhere((source) => source['id'] == original['id']);
+        expect(captured['said_at_utc'], original['said_at_utc']);
+        expect(captured['offset_minutes'], original['offset_minutes']);
+      }
+      // Use the early source alone: autumn's 00:30 would be rejected as the
+      // previous day if the diary validator still used today's new offset.
+      final written = call(turn['id']! as String, 'write-local-day', 'diary', {
+        'text': '当天一早的记录。',
+        'source': early['id'],
+      });
+      expect(written.applied, isTrue);
+      store.finishAgentMaintenance(turnId: turn['id']! as String, complete: true);
+      reopen();
+      final diary = actualCard(written.targetId!);
+      expect(diary['local_day'], day.localDay);
+      expect(diary['day_zone_id'], 'offset:${day.currentOffset}');
+      final proof = (diary['evidence'] as List).single as MemoryRow;
+      expect(proof['message_id'], early['id']);
+      expect(proof['said_at_utc'], early['said_at_utc']);
+      expect(proof['offset_minutes'], day.oldOffset);
+    });
+  }
+
   test(
     'a new diary needs its real target-day source while a controlled old-diary rewrite keeps its original day and proof',
     () {

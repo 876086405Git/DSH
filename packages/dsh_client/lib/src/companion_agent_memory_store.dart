@@ -828,7 +828,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     if (!sources.any(
       (source) =>
           source['role'] == 'user' &&
-          _agentSourceOnDay(source, claim['local_day'] as String, claim['zone_id'] as String),
+          _agentSourceOnDay(source, claim['local_day'] as String),
     )) {
       throw const _AgentMemoryRejected('diary_day_source_required');
     }
