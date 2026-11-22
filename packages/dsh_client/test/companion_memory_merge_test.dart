@@ -138,7 +138,7 @@ void main() {
   for (final version in [6, 7]) {
     test('a real v$version upgrade preserves B initiative data, source groups and request receipts', () {
       pair();
-      final unresolved = source('unclear', '忘了那件事');
+      final unresolved = source('unclear', '忘掉那件事');
       store.finishUnresolvedControl(messageId: 'unclear', expectedSourceRev: 1);
       expect(store.archive['followup_after_seq'], unresolved['first_seq']);
       final initiative = {

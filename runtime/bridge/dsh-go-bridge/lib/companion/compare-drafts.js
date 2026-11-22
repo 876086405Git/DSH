@@ -74,7 +74,9 @@ export function createCompareDraftRunner({ctx, store, execution}) {
   }
   function clock(claim, controller) {
     const budget = new AbortController(), timers = [];
-    const timer = setTimeout(() => budget.abort(stopped('execution_budget_exhausted')),claim.reserveMs);
+    // The reserve is capped at the deadline, so both can fire together; the deadline is the real reason.
+    const spent = () => stopped(claim.deadlineAtMs !== null && store.now() >= claim.deadlineAtMs ? 'deadline_expired' : 'execution_budget_exhausted');
+    const timer = setTimeout(() => budget.abort(spent()),claim.reserveMs);
     timer.unref?.(); timers.push(timer);
     const tick = () => {
       if (claim.deadlineAtMs === null || budget.signal.aborted) return;
