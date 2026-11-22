@@ -198,6 +198,7 @@ MentionQuery? activeMentionQuery(String text, int caret, {List<MentionToken> tok
   // Only the current line matters.
   final lineStart = text.lastIndexOf('\n', caret - 1) + 1;
   final before = text.substring(lineStart, caret);
+  if (!before.contains('@')) return null;
   final match = _quotedQuery.firstMatch(before) ?? _plainQuery.firstMatch(before);
   if (match == null) return null;
   final quoted = match[1]!.startsWith('@"');
