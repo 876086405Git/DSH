@@ -3,6 +3,7 @@ package io.github.ccch1mneyyy.dsh_app.nativemedia
 import ai.onnxruntime.OrtEnvironment
 import android.content.res.AssetManager
 import android.util.Log
+import java.io.DataInputStream
 
 /**
  * The models ship in the APK; where ONNX Runtime cannot load them, or once
@@ -46,5 +47,9 @@ object SpeechGates {
         return SpeechGate(echoCancelled)
     }
 
-    private fun load(assets: AssetManager, name: String): ByteArray = assets.open("speech/$name").use { it.readBytes() }
+    private fun load(assets: AssetManager, name: String): ByteArray =
+        DataInputStream(assets.open("speech/$name")).use { input ->
+            // AssetInputStream reports the remaining uncompressed length of this APK asset.
+            ByteArray(input.available()).also { input.readFully(it) }
+        }
 }
