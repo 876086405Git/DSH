@@ -433,10 +433,9 @@ void main() {
       room.words('[表情:担心]');
       await room.finish();
       expect(room.running, isFalse);
-      expect(
-        room.memory.store.messages().where((row) => row['role'] == 'assistant').map((row) => row['text']),
-        ['[表情:担心]'],
-      );
+      expect(room.memory.store.messages().where((row) => row['role'] == 'assistant').map((row) => row['text']), [
+        '[表情:担心]',
+      ]);
       expect(room.speech(tester), isNull);
       room.bridge.release();
       await flush(tester);

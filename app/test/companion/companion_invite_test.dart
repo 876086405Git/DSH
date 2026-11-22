@@ -879,45 +879,43 @@ void main() {
     // Skipped for postponed — A1 gap: the agent memory tools
     // (companion_agent_tools.dart) have cancel but no postpone, so no room turn
     // can set plan_state=postponed any more.
-    testWidgets(
-      'a pending memory question yields to $state through the real composer',
-      skip: state == 'postponed',
-      (tester) async {
-        final chats = <Map<String, Object?>>[];
-        final room = _Room(tester, root)
-          ..answer = (body) async {
-            if (body['system'] == companionMemoryFollowupPrompt || body['system'] == companionMemoryExtractionPrompt) {
-              return _conversationReply(body);
-            }
-            chats.add(body);
-            if (chats.length == 1) {
-              expect(jsonEncode(body['messages']), contains(_cardId!));
-              return _toolUse('call-plan', 'cancel', {'card': _cardId!});
-            }
-            final results = (((body['messages']! as List).last as Map)['content']! as List).cast<Map>();
-            expect(results.single['tool_use_id'], 'call-plan');
-            expect(jsonDecode(results.single['content']! as String), containsPair('applied', true));
-            return _generated('好，那就不问啦。');
-          };
-        await room.open(seed: _seedFollowup);
-        _cardId = room.memory.store.cards().single['id']! as String;
-        await room.wait(const Duration(seconds: 15));
-        expect(room.memory.store.followups().single['state'], 'pending');
-        await tester.enterText(find.byType(TextField), control);
-        await tester.pump();
-        await tester.tap(find.byIcon(AppIcons.send).last);
-        await room.settle();
-        expect(chats, hasLength(2));
-        expect(room.memory.store.cards().single['plan_state'], state);
-        await room.wait(const Duration(minutes: 2));
-        expect(find.text(_followup), findsNothing);
-        expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
-        expect(room.memory.store.requests().where((row) => row['category'] == 'followup'), isEmpty);
-        expect(room.memory.store.cards().single['plan_state'], state, reason: 'the later extraction keeps the plan');
-        expect(room.requests.where((body) => body['system'] == companionMemoryFollowupPrompt), isEmpty);
-        await room.close();
-      },
-    );
+    testWidgets('a pending memory question yields to $state through the real composer', skip: state == 'postponed', (
+      tester,
+    ) async {
+      final chats = <Map<String, Object?>>[];
+      final room = _Room(tester, root)
+        ..answer = (body) async {
+          if (body['system'] == companionMemoryFollowupPrompt || body['system'] == companionMemoryExtractionPrompt) {
+            return _conversationReply(body);
+          }
+          chats.add(body);
+          if (chats.length == 1) {
+            expect(jsonEncode(body['messages']), contains(_cardId!));
+            return _toolUse('call-plan', 'cancel', {'card': _cardId!});
+          }
+          final results = (((body['messages']! as List).last as Map)['content']! as List).cast<Map>();
+          expect(results.single['tool_use_id'], 'call-plan');
+          expect(jsonDecode(results.single['content']! as String), containsPair('applied', true));
+          return _generated('好，那就不问啦。');
+        };
+      await room.open(seed: _seedFollowup);
+      _cardId = room.memory.store.cards().single['id']! as String;
+      await room.wait(const Duration(seconds: 15));
+      expect(room.memory.store.followups().single['state'], 'pending');
+      await tester.enterText(find.byType(TextField), control);
+      await tester.pump();
+      await tester.tap(find.byIcon(AppIcons.send).last);
+      await room.settle();
+      expect(chats, hasLength(2));
+      expect(room.memory.store.cards().single['plan_state'], state);
+      await room.wait(const Duration(minutes: 2));
+      expect(find.text(_followup), findsNothing);
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+      expect(room.memory.store.requests().where((row) => row['category'] == 'followup'), isEmpty);
+      expect(room.memory.store.cards().single['plan_state'], state, reason: 'the later extraction keeps the plan');
+      expect(room.requests.where((body) => body['system'] == companionMemoryFollowupPrompt), isEmpty);
+      await room.close();
+    });
   }
 
   testWidgets('deleting the source withdraws the currently shown memory question without refunding it', (tester) async {
