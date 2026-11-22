@@ -692,9 +692,9 @@ final _followupAsk = RegExp(
 );
 
 final _otherRecipient = RegExp(
-  r'^(?:他|她|他们|她们|医生|大夫|护士|老师|教练|导师|我妈|我爸|妈妈|爸爸|老妈|老爸|爷爷|奶奶|外公|外婆|'
+  r'^(?:我的)?(?:他|她|他们|她们|医生|大夫|护士|老师|教练|导师|我妈|我爸|妈妈|爸爸|老妈|老爸|爷爷|奶奶|外公|外婆|'
   r'哥哥|姐姐|弟弟|妹妹|老板|领导|上司|经理|同事|同学|朋友|室友|房东|对象|老公|老婆|男朋友|女朋友|客服|物业|'
-  r'老[一-龥]|[一-龥]总)',
+  r'[一-龥]总)',
 );
 
 /// A small literal invitation grammar. Unsupported language remains waiting

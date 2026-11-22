@@ -120,7 +120,7 @@
     },
     {
       "path": "packages/dsh_client/test/companion_followup_store_test.dart",
-      "sha256": "f6a574301494ba013154ef7e89a2d950adb48b4ae4433a87d5b1c22c7460f3d2"
+      "sha256": "874ac5a8f4b3253ff3270762fc8cb68b4917478d42c138e8ab44657d7b019806"
     },
     {
       "path": "packages/dsh_client/test/companion_memory_chat_replay_test.dart",

@@ -414,7 +414,7 @@ void main() {
       expect(store.followups(), hasLength(1));
     });
 
-    for (final recipient in ['医生', '我妈', '老师', '他', '王总']) {
+    for (final recipient in ['医生', '我妈', '老师', '他', '王总', '我的老师']) {
       test('a question to $recipient keeps its factual card without creating a followup', () {
         const fact = '我周四去修琴';
         final wording = '周五可以问$recipient修琴的进展';
