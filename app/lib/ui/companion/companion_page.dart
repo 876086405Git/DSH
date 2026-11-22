@@ -2784,7 +2784,11 @@ class _CompanionPageTaskUi implements CompanionAgentTaskUi {
       epoch == page._notesForegroundEpoch &&
       !page._logOpen &&
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
-      (page._notesForegroundHere || page._notesSelectionRoutes.any((route) => route.isActive && route.isCurrent));
+      // The route, not the ticker: right after an owned picker pops, this
+      // page's TickerMode still reads the covered value until the next build.
+      // Coverage by any other route has already retired the epoch above.
+      ((ModalRoute.of(page.context)?.isCurrent ?? false) ||
+          page._notesSelectionRoutes.any((route) => route.isActive && route.isCurrent));
   @override
   bool get mapIsCurrent => isCurrent && page._mapHere && mapGeneration == page._mapHandoff.generation;
   @override
