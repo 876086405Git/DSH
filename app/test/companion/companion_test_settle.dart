@@ -8,7 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 Future<T> settleMixed<T>(WidgetTester tester, Future<T> work) async {
   var done = false;
   unawaited(work.whenComplete(() => done = true).then((_) {}, onError: (_) {}));
-  for (var i = 0; i < 200 && !done; i++) {
+  // Returning an unfinished fake-zone future would stop the pumps it still needs.
+  // Keep its existing test timeout; do not impose a separate polling window.
+  while (!done) {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
     await tester.pump();
   }

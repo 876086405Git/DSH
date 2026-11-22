@@ -904,9 +904,19 @@ void main() {
             }
 
             memory.addListener(onChanged);
+            await tester.enterText(find.byType(TextField), '我还有一句普通的话');
+            await tester.pump();
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isTrue);
             await tester.enterText(find.byType(TextField), '取消打开地图');
             await tester.pump();
             expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            await tester.enterText(find.byType(TextField), '我们待会儿聊聊');
+            await tester.pump();
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isTrue);
+            await tester.enterText(find.byType(TextField), '取消打开地图');
+            await tester.pump();
+            expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isFalse);
+            expect(release.isCompleted, isFalse);
             await tester.tap(find.byIcon(AppIcons.send).last);
             await settleMixed(tester, changed.future);
             memory.removeListener(onChanged);

@@ -1861,6 +1861,7 @@ void main() {
     await open(tester, id);
     try {
       await tester.ensureVisible(find.text('改一下'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('改一下'));
       await tester.pumpAndSettle();
       final dialog = find.byType(AlertDialog);
@@ -1885,6 +1886,7 @@ void main() {
         'zoneId': 'Asia/Shanghai',
       });
       await tester.ensureVisible(find.text('停止对稿'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('停止对稿'));
       await settleMixed(tester, cancellation.future);
       await settleMixed(tester, memory.settled);
@@ -2021,7 +2023,7 @@ void main() {
       expect(memory.store.hostTaskCommands(id), hasLength(1));
       expect(memory.store.hostTask(id)!['task_rev'], 1);
       expect(((memory.store.hostTask(id)!['agreement']! as Map)['args']! as Map)['localDate'], '2026-11-21');
-      expect(find.text('电脑接手了，正在整理。'), findsOneWidget);
+      expect(find.text('电脑接下这件事了，结果还没出来。'), findsOneWidget);
     } finally {
       await close(tester);
     }

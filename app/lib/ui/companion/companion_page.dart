@@ -4944,27 +4944,30 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
                     onDecline: () => _answerInvite(yes: false),
                   ),
                   const SizedBox(height: 10),
-                  CompanionComposer(
-                    onUserInput: () {
-                      _acted();
-                      _hush();
-                    },
-                    input: _input,
-                    focus: _focus,
-                    hint: l10n.companionInputHint(name),
-                    running: _running,
-                    busy: _sending && !_isMemoryControl(_input.text) && !_isTaskControl(_input.text),
-                    listening: _voice.active,
-                    voiceAvailable: _voice.available,
-                    onSend: _send,
-                    onStop: _stop,
-                    onVoice: () {
-                      // Reaching for the microphone is already doing something.
-                      _acted();
-                      // Her voice off before the microphone opens.
-                      _hush();
-                      _voice.active ? _voice.stop() : _voice.start();
-                    },
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _input,
+                    builder: (context, value, _) => CompanionComposer(
+                      onUserInput: () {
+                        _acted();
+                        _hush();
+                      },
+                      input: _input,
+                      focus: _focus,
+                      hint: l10n.companionInputHint(name),
+                      running: _running,
+                      busy: _sending && !_isMemoryControl(value.text) && !_isTaskControl(value.text),
+                      listening: _voice.active,
+                      voiceAvailable: _voice.available,
+                      onSend: _send,
+                      onStop: _stop,
+                      onVoice: () {
+                        // Reaching for the microphone is already doing something.
+                        _acted();
+                        // Her voice off before the microphone opens.
+                        _hush();
+                        _voice.active ? _voice.stop() : _voice.start();
+                      },
+                    ),
                   ),
                 ],
               ),

@@ -6,6 +6,7 @@ import 'package:dsh_app/companion/companion_maps.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_reminder.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
+import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/ui/companion/companion_tasks_page.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
 import 'package:dsh_client/dsh_client.dart';
@@ -136,6 +137,9 @@ void main() {
       });
       await tester.pumpWidget(
         ProviderScope(
+          overrides: [
+            activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
+          ],
           child: MaterialApp(
             theme: buildDarkTheme(),
             localizationsDelegates: L10n.localizationsDelegates,
