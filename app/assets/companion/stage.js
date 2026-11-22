@@ -575,7 +575,6 @@
     tick(dt, animate) {
       const core = this._model;
       core.loadParameters();
-      core.saveParameters();
       animate.before(this, dt);
       // One of its own motions, while it plays, takes over from the pose she
       // keeps herself; expressions and physics still come after.

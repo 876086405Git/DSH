@@ -50,7 +50,7 @@ Flutter CompanionPage
 - **回环服务**：WebView 要 `fetch` 着色器和模型文件，`file://` 做不到。手机上任何 App 都能连回环端口，所以每条路径都以每次启动随机生成的令牌开头，没有令牌只有 404。页面关闭时服务也关闭。`app/` 只有固定的几个文件，`pack/` 只读且不出目录。
 - **WebView 不拿权限**：`onPermissionRequest` 一律拒绝，页面只能导航到自己。麦克风留在 Flutter 一侧，用现有的 `VoiceInputController`。
 - **CSP**：`script-src 'self' 'wasm-unsafe-eval'`，Core 的 WASM 需要后者。模型文字不进脚本，命令都是 JSON 编码的结构化消息。
-- **一帧的顺序**（`StageModel.tick`）：恢复参数基线 → 保存 → `animate.before`（写视线、姿态、表情参数、动作、口型）→ 表情管理器 → 物理 → Pose → `animate.after`（尾巴）→ `model.update`。Framework 的 `getParameterIndex` 对不存在的参数会造一个虚拟索引，所以判断模型有没有某个参数要和 `getParameterCount` 比。
+- **一帧的顺序**（`StageModel.tick`）：恢复参数基线 → `animate.before`（写视线、姿态、表情参数、动作、口型）→ 播放中的模型自带动作（若有）→ 表情管理器 → 物理 → Pose → `animate.after`（尾巴）→ `model.update`。Framework 的 `getParameterIndex` 对不存在的参数会造一个虚拟索引，所以判断模型有没有某个参数要和 `getParameterCount` 比。
 
 ## 3. 素材包
 
