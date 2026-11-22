@@ -114,11 +114,12 @@ class _BlockScan {
       _fenceChar = fence.group(1)![0];
       _fenceLength = fence.group(1)!.length;
       _openFenceLine = offset;
-    } else if (line.trim().isEmpty || line.replaceAll(RegExp(r'[\s>]'), '').isEmpty) {
+    } else if (line.trim().isEmpty || !_nonQuoteText.hasMatch(line)) {
       lastBlockStart = offset + line.length + 1;
     }
   }
 
+  static final _nonQuoteText = RegExp(r'[^\s>]');
   static final _fence = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*(`{3,}|~{3,})(?!.*`)');
   static final _fenceClose = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*(`{3,}|~{3,})[ \t]*$');
 }
