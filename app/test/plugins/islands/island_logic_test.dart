@@ -77,9 +77,15 @@ void main() {
       });
       expect(book.targetFor(_spec('settings.section', cell: 'pet')), isNull, reason: 'nothing to find it by');
       expect(book.targetFor(_spec('settings.section', cell: 'pet'), labels: ['桌宠配置', ' ']), {
-        'web': {'settings': 'general'},
+        'web': {'settings': true},
         'then': {
           'settings': ['桌宠配置'],
+        },
+      });
+      expect(book.targetFor(_spec('settings.section', cell: 'pet'), labels: ['Desktop\n  pet', '\t']), {
+        'web': {'settings': true},
+        'then': {
+          'settings': ['Desktop pet'],
         },
       });
     });

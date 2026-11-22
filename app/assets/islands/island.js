@@ -734,6 +734,19 @@
   // other section the bridge reports under that name, then that button
   // current and the section drawn changed. Anything less is a miss.
   async function openSettingsSection(names) {
+    // Occupancy may have been reported in another locale or before a rename.
+    // This WebView's live label belongs to the exact requested package/cell.
+    var bridge = window.__dshGoBridge;
+    var cfg = st.cfg || {};
+    if (bridge && bridge.occupants) {
+      try {
+        var own = bridge.occupants('settings.section').filter(function (o) {
+          return o.cell === cfg.cell && (!cfg.package || o.package === cfg.package) &&
+            o.active !== false && !o.masked && typeof o.label === 'string' && o.label.trim();
+        });
+        if (own.length === 1) names = [own[0].label.replace(/\s+/g, ' ').trim()];
+      } catch (e) {}
+    }
     if (namedElsewhere('settings.section', names)) return miss('section', 'another section by its name');
     var dialog = await waitFor(function () { return document.querySelector('[data-shortcut-modal="settings"]'); }, 2000);
     if (!dialog) return miss('section', 'no settings');
@@ -1105,7 +1118,9 @@
     }
     if (web && Object.keys(web).length && window.__dshAppOpen) {
       window.__dshAppOpen(web);
-      try { await window.__dshAppOpening; } catch (e) {}
+      try {
+        if ((await window.__dshAppOpening) !== true) return false;
+      } catch (e) { return false; }
     }
     step('web done');
     var then = target.then;
@@ -1314,11 +1329,8 @@
       st.phase = 'waiting';
       step('opened ' + opened);
       outlet = await waitFor(function () { return findAny(cfg); }, attempt < 2 ? 1500 : (cfg.slotMs || 3000));
-      // The slots navigated to are drawn before we get there (a
-      // conversation's view: Chat; `main`: the conversation; the settings
-      // section: the first one; the right pane: another tab): the slot is
-      // ours only when the navigation to it said so.
-      if (outlet && opened !== true && cfg.target && cfg.target.then) outlet = null;
+      // A failed navigation must not expose the slot left on screen.
+      if (opened !== true) outlet = null;
     }
     if (!outlet) {
       st.phase = 'failed';

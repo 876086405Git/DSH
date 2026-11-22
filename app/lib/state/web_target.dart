@@ -17,6 +17,9 @@ class DshWebTarget {
     this.sessionId,
     this.panel,
     this.settings,
+    this.settingsSection,
+    this.settingsPackage,
+    this.settingsLabels = const [],
     this.pluginItem = const [],
     this.rightbar,
     this.sidebar = false,
@@ -33,6 +36,12 @@ class DshWebTarget {
   /// A section of the settings dialog.
   final DshWebSettings? settings;
 
+  /// A third-party section and its owner, with registered names for hosts
+  /// without a browser bridge. Bundle titles are not section names.
+  final String? settingsSection;
+  final String? settingsPackage;
+  final List<String> settingsLabels;
+
   /// Names of a card on the Plugins page: its titles (zh and en), e.g. a
   /// built-in config page ("Agent 循环") or an experimental bundle ("语音输入"),
   /// and a bundle's package name (the page marks its card with it).
@@ -40,8 +49,10 @@ class DshWebTarget {
 
   /// [pluginItem] as the page can match it: trimmed, none empty (an empty
   /// name would match any icon on the page), each once.
-  List<String> get _pluginLabels => {
-    for (final label in pluginItem)
+  List<String> get _pluginLabels => _labelsOf(pluginItem);
+
+  static List<String> _labelsOf(List<String> values) => {
+    for (final label in values)
       if (label.replaceAll(RegExp(r'\s+'), ' ').trim() case final clean when clean.isNotEmpty) clean,
   }.toList();
 
@@ -59,6 +70,7 @@ class DshWebTarget {
       sessionId == null &&
       panel == null &&
       settings == null &&
+      settingsSection == null &&
       _pluginLabels.isEmpty &&
       rightbar == null &&
       !sidebar &&
@@ -68,7 +80,9 @@ class DshWebTarget {
   Map<String, Object?> toJson() => {
     'session': ?sessionId,
     'panel': ?panel?.key,
-    'settings': ?settings?.key,
+    'settings': ?(settingsSection ?? settings?.key),
+    'settingsPackage': ?settingsPackage,
+    if (settingsSection != null && _labelsOf(settingsLabels).isNotEmpty) 'settingsLabels': _labelsOf(settingsLabels),
     if (_pluginLabels case final labels when labels.isNotEmpty) 'pluginItem': labels,
     'rightbar': ?rightbar?.key,
     if (sidebar) 'sidebar': true,
@@ -107,6 +121,9 @@ class DshWebTarget {
     sessionId: sessionId,
     panel: panel,
     settings: settings,
+    settingsSection: settingsSection,
+    settingsPackage: settingsPackage,
+    settingsLabels: settingsLabels,
     pluginItem: pluginItem,
     rightbar: rightbar,
     sidebar: sidebar,

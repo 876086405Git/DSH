@@ -16,19 +16,32 @@ import 'support.dart';
 
 void main() {
   group('seatWebTarget', () {
-    test('settings: an official section by id, a third-party one opens the dialog', () {
+    test('settings: official and third-party section ids are kept', () {
       expect(
         seatWebTarget(occupant(Slots.settingsSection, probe, 'models')),
-        const DshWebTarget(settings: DshWebSettings.models),
+        const DshWebTarget(settingsSection: 'models', settingsPackage: probe),
       );
       expect(
         seatWebTarget(occupant(Slots.settingsSection, probe, 'k4-probe')),
-        const DshWebTarget(settings: DshWebSettings.general),
+        const DshWebTarget(settingsSection: 'k4-probe', settingsPackage: probe),
       );
       expect(
         seatWebTarget(occupant(Slots.generalItem, pet, 'x')),
         const DshWebTarget(settings: DshWebSettings.general),
       );
+    });
+
+    test('a section keeps registered names, never its bundle title', () {
+      final target = seatWebTarget(
+        occupant(Slots.settingsSection, probe, 'k4-probe', label: '探针设置'),
+        bundle: probeBundle,
+        labels: ['Probe settings', '探针设置'],
+      );
+      expect(target.toJson(), {
+        'settings': 'k4-probe',
+        'settingsPackage': probe,
+        'settingsLabels': ['探针设置', 'Probe settings'],
+      });
     });
 
     test('a plugin\'s config: its card on the Plugins page, by every name', () {

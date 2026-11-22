@@ -408,11 +408,28 @@ class BundleSheet extends ConsumerWidget {
     final configSource = ref.watch(pluginConfigProvider);
     final config = configSource.value;
     final configurable = bundleSettingsRows(bundle, config);
-    // Every plugin with fields gets its native page; a third-party one
-    // without any keeps its config seat (an island page, or DSH Web).
+    // Native forms cover their own rows, not a sibling's custom config page.
+    final configuredRows = {for (final row in configurable) row.rowId};
     final configSeat = PluginSeat(slot: Slots.bundleConfig, placement: SeatPlacement.row, package: bundle.name);
-    final configSeated =
-        !bundle.official && !gone && configurable.isEmpty && !ref.watch(seatPlanProvider(configSeat.request)).isEmpty;
+    final configSeats = <PluginSeat>[];
+    if (!bundle.official && !gone && bundle.enabled) {
+      if (configurable.isEmpty && !ref.watch(seatPlanProvider(configSeat.request)).isEmpty) {
+        configSeats.add(configSeat);
+      } else {
+        for (final row in bundle.rows) {
+          if (configuredRows.contains(row.rowId)) continue;
+          final seat = PluginSeat(
+            slot: Slots.rowConfig,
+            placement: SeatPlacement.row,
+            package: bundle.name,
+            cell: '${bundle.name}#${row.rowId}',
+          );
+          if (ref.watch(seatPlanProvider(seat.request)).visible.any((item) => !item.occupant.inferred)) {
+            configSeats.add(seat);
+          }
+        }
+      }
+    }
 
     // Local installs can't be shared; a market entry adds the picture card.
     final shareable = !gone && sharedPluginFromBundle(bundle) != null;
@@ -518,7 +535,7 @@ class BundleSheet extends ConsumerWidget {
                   ),
                 ),
               if (!gone) PluginReloadAction(bundle: bundle),
-              if (configSeated) ...[
+              if (configSeats.isNotEmpty) ...[
                 // A third-party plugin's own config page in DSH Web: its
                 // schema form, its island page, or the way to DSH Web.
                 const SizedBox(height: 16),
@@ -530,10 +547,11 @@ class BundleSheet extends ConsumerWidget {
                     if (configSource.isLoading && !configSource.hasValue)
                       ListPageRow(icon: AppIcons.configure, title: l10n.commonSettings, meta: l10n.pluginsLoading)
                     else
-                      configSeat,
+                      ...configSeats,
                   ],
                 ),
-              ] else if (configurable.isNotEmpty) ...[
+              ],
+              if (configurable.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 ListPageCard(
                   margin: EdgeInsets.zero,

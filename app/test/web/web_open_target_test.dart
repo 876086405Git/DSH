@@ -45,6 +45,41 @@ void main() {
       }
     });
   }
+  test('a third-party section keeps its id and normalized names through copies', () {
+    const target = DshWebTarget(
+      settingsSection: 'skin-manager',
+      settingsPackage: '@acme/skin',
+      settingsLabels: [' 皮肤管理 ', '', '皮肤管理', 'Skin  manager'],
+    );
+    expect(target.isHome, isFalse);
+    final wire = {
+      'settings': 'skin-manager',
+      'settingsPackage': '@acme/skin',
+      'settingsLabels': ['皮肤管理', 'Skin manager'],
+    };
+    expect(target.toJson(), wire);
+    expect(target.inSession('s1').toJson(), {'session': 's1', ...wire});
+    expect(const DshWebTarget(settingsSection: 'skin-manager', settingsLabels: [' ']).toJson(), {
+      'settings': 'skin-manager',
+    });
+    final copied =
+        const DshWebTarget(
+          settingsSection: 'skin-manager',
+          settingsPackage: '@acme/skin',
+          settingsLabels: ['Skin manager'],
+          pluginItem: ['weather'],
+        ).withPluginNames([
+          _bundle('@acme/weather', {'en': 'Weather'}, ['weather']),
+        ]);
+    expect(copied.settingsSection, 'skin-manager');
+    expect(copied.settingsPackage, '@acme/skin');
+    expect(copied.settingsLabels, ['Skin manager']);
+    expect(
+      jsonDecode(target.openScript.substring(target.openScript.indexOf('({') + 1, target.openScript.length - 2)),
+      wire,
+    );
+  });
+
   group('a plugin card target', () {
     test('names are trimmed, none empty, each once; only empty names open nothing', () {
       const target = DshWebTarget(pluginItem: [' 天气 ', '', '天气', 'Weather  app', '  ']);
@@ -62,7 +97,9 @@ void main() {
       expect(target.pluginItem, ['weather-alerts', '天气', 'Weather', '@acme/dsh-weather']);
       // The open script carries them.
       final script = target.openScript;
-      final json = jsonDecode(script.substring(script.indexOf('(', script.indexOf('__dshAppOpen(')) + 1, script.length - 2));
+      final json = jsonDecode(
+        script.substring(script.indexOf('(', script.indexOf('__dshAppOpen(')) + 1, script.length - 2),
+      );
       expect((json as Map)['pluginItem'], target.pluginItem);
     });
 
@@ -90,7 +127,11 @@ void main() {
 
     /// Lets the bridges load from the asset bundle (real time), then frames.
     Future<void> injected(WidgetTester tester, int backBridges) async {
-      for (var i = 0; i < 40 && platform.controller.scripts.where((s) => s.contains('__dshAppBack =')).length < backBridges; i++) {
+      for (
+        var i = 0;
+        i < 40 && platform.controller.scripts.where((s) => s.contains('__dshAppBack =')).length < backBridges;
+        i++
+      ) {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
         await tester.pump();
       }

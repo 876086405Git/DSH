@@ -6,7 +6,7 @@
 //   {session: id}             open a session (stored selection + one load)
 //   {panel: 'plugins'|'schedules'}
 //   {panel: 'cordis'}         the Cordis plugin panel (sidebar footer badge)
-//   {settings: 'general'|'models'|'plugins'|'agent-presets'|'account'}
+//   {settings: id, settingsLabels?: [names]}  a settings section; true: dialog only
 //   {pluginItem: [labels]}    a card on the Plugins page (built-in config or
 //                             experimental bundle), matched by the package
 //                             name or item id the page marks it with, else
@@ -196,24 +196,74 @@
     return !!(await waitFor(function () { return document.querySelector('[data-cordis-panel]'); }, 3000, r));
   }
 
-  async function openSettings(r, key) {
-    var direct = byName(sidebar(), 'button', LABELS.settingsButton);
-    if (direct) {
-      if (!press(r, direct)) return false;
-    } else {
-      var menu = await waitFor(function () { return byName(document, 'button', LABELS.accountMenu); }, 8000, r);
-      if (!press(r, menu)) return false;
-      var item = await waitFor(function () {
-        return byName(document, '[role="menuitem"]', LABELS.settingsButton);
-      }, 3000, r);
-      if (!press(r, item)) return false;
+  function settingsDialog() {
+    return document.querySelector('[data-shortcut-modal="settings"]');
+  }
+
+  // Section ids are not on the DOM. Use the live ledger's label for this id
+  // (the WebView may use a different language), then registered names supplied
+  // by the app on older hosts. Never match a prefix or a button in the body.
+  function settingsButtons(key, fallback, pkg) {
+    var dialog = settingsDialog();
+    if (!dialog) return [];
+    var names = labelsOf(fallback && fallback.length ? fallback : LABELS.settings[key]);
+    var bridge = window.__dshGoBridge;
+    if (bridge && bridge.occupants) {
+      try {
+        var entries = bridge.occupants('settings.section').filter(function (o) { return o.active !== false; });
+        var own = entries.filter(function (o) { return o.cell === key; });
+        if (own.length > 1) return [];
+        if (pkg && own.length === 1 && own[0].package && own[0].package !== pkg) return [];
+        if (own.length === 1 && (!pkg || own[0].package === pkg) && labelsOf([own[0].label]).length) names = labelsOf([own[0].label]);
+        if (entries.some(function (o) { return o.cell !== key && names.indexOf(labelsOf([o.label])[0]) >= 0; })) return [];
+      } catch (e) {}
     }
-    var dialog = await waitFor(function () {
-      return document.querySelector('[data-shortcut-modal="settings"]');
-    }, 4000, r);
-    if (!dialog) return false;
-    if (!key || key === 'general') return true;
-    return press(r, await waitFor(function () { return byName(dialog, 'button', LABELS.settings[key] || []); }, 3000, r));
+    return Array.prototype.filter.call(dialog.querySelectorAll('nav button'), function (button) {
+      // The settings shell renders its label after the decorative icon.
+      var label = button.lastElementChild || button;
+      return names.indexOf(button.getAttribute('aria-label') || text(label)) >= 0;
+    });
+  }
+
+  function currentSetting(button) {
+    var value = button.getAttribute('aria-current');
+    return value !== null && value !== 'false';
+  }
+
+  async function openSettings(r, key, names, pkg) {
+    // The sidebar can mount before remote access registers either launcher.
+    // Wait for both alternatives, rather than committing to the account menu.
+    var way = await waitFor(function () {
+      if (settingsDialog()) return { opened: true };
+      var direct = byName(sidebar(), 'button', LABELS.settingsButton);
+      if (direct) return { button: direct };
+      var account = byName(document, 'button', LABELS.accountMenu);
+      return account ? { button: account, menu: true } : null;
+    }, 8000, r);
+    if (!way) return false;
+    if (!way.opened) {
+      if (!press(r, way.button)) return false;
+      if (way.menu) {
+        var item = await waitFor(function () {
+          return byName(document, '[role="menuitem"]', LABELS.settingsButton);
+        }, 3000, r);
+        if (!press(r, item)) return false;
+      }
+    }
+    if (!(await waitFor(settingsDialog, 4000, r))) return false;
+    // Islands that select a third-party section next only need the dialog.
+    if (key === true) return true;
+    var buttons = await waitFor(function () {
+      var matches = settingsButtons(key, names, pkg);
+      return matches.length ? matches : null;
+    }, 3000, r);
+    if (!buttons || buttons.length !== 1) return false;
+    if (currentSetting(buttons[0])) return live(r);
+    if (!press(r, buttons[0])) return false;
+    return !!(await waitFor(function () {
+      var matches = settingsButtons(key, names, pkg);
+      return matches.length === 1 && currentSetting(matches[0]);
+    }, 3000, r));
   }
 
   // The card [labels] name on the Plugins page: the one marked with one of
@@ -491,7 +541,7 @@
       ok = await openPanel(r, target.panel);
     } else if (target.settings) {
       step = 'settings';
-      ok = await openSettings(r, target.settings);
+      ok = await openSettings(r, target.settings, target.settingsLabels, target.settingsPackage);
     } else if (target.pluginItem && target.pluginItem.length) {
       step = 'pluginItem';
       ok = labels.length > 0 && (await openPluginItem(r, labels));
