@@ -111,7 +111,7 @@ class _SheetTableState extends State<SheetTable> {
     final sample = math.min(rows.length, 120);
     final painter = TextPainter(textDirection: TextDirection.ltr, maxLines: 1, textScaler: scaler);
     final widths = List<double>.filled(_columns, SheetTable.minColumn);
-    for (var c = 0; c < _columns; c++) {
+    for (var c = 0; c < widths.length; c++) {
       var widest = 0.0;
       for (var r = 0; r < sample; r++) {
         final row = rows[r];

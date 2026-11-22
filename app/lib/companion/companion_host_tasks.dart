@@ -119,7 +119,7 @@ class CompanionHostTasks {
             owned.close();
           },
           onSnapshot: (value) {
-            final before = store.hostTask(id)!;
+            late final before = store.hostTask(id)!;
             final keepUncertain =
                 owned._withdrawn &&
                 uncertainSeq != null &&

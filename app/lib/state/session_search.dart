@@ -195,10 +195,10 @@ SessionSearchResults deriveSessionSearchResults({
 }) {
   final terms = searchTerms(query);
   if (terms.isEmpty) return SessionSearchResults.empty;
-  final folders = {
-    for (final s in [...sessions, ...archived]) folderLabel(s.cwd),
-  };
-  final showFolders = folders.length > 1;
+  final all = sessions.followedBy(archived);
+  final firstCwd = all.firstOrNull?.cwd;
+  final firstLabel = folderLabel(firstCwd);
+  final showFolders = all.any((s) => s.cwd != firstCwd && folderLabel(s.cwd) != firstLabel);
   final snippets = <String, String>{};
   if (hits.isNotEmpty && sameSearchQuery(contentQuery, query)) {
     for (final hit in hits) {
@@ -610,7 +610,7 @@ bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
       continue;
     }
 
-    final multiUser = bestCombinedMatch(entry.userMessages);
+    final multiUser = rawTerms.length > 1 ? bestCombinedMatch(entry.userMessages) : null;
     if (multiUser != null) {
       hits.add((
         session: session,
@@ -634,6 +634,7 @@ bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
       continue;
     }
 
+    if (rawTerms.length == 1) continue;
     final combinedAll = bestCombinedMatch([...entry.userMessages, ...entry.assistantPreviews]);
     if (combinedAll != null) {
       hits.add((
