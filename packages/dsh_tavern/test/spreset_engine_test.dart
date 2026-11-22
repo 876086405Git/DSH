@@ -14,6 +14,9 @@ class SPresetHost extends ScriptHost implements TavernSPresetScriptHost, TavernS
   final released = <String>[];
   bool failFirstRelease = false;
   int actions = 0;
+  // Boundary fake only: actual page registration/cache/session semantics are
+  // covered by the Node tests loading the shipped asset.
+  final _registeredToolsByChat = <String, List<Map<String, Object?>>>{};
   Future<TavernSPresetEvaluationResult> Function(TavernSPresetEvaluationRequest)? handler;
   @override
   Future<TavernSPresetEvaluationResult> evaluateSPreset(
@@ -39,9 +42,11 @@ class SPresetHost extends ScriptHost implements TavernSPresetScriptHost, TavernS
           'hasAction': true,
         };
       case TavernSPresetEvaluationKind.toolRegistry:
-        value = {
-          'tools': [
-            for (final binding in ((args.single! as Map)['bindings']! as List))
+        final input = args.single! as Map;
+        final mode = input['registryMode'] ?? 'sync';
+        if (mode != 'read') {
+          _registeredToolsByChat[request.chatId] = [
+            for (final binding in (input['bindings']! as List))
               {
                 'identifier': (binding as Map)['identifier'],
                 'code': binding['code'],
@@ -53,6 +58,16 @@ class SPresetHost extends ScriptHost implements TavernSPresetScriptHost, TavernS
                   'hasAction': true,
                 },
               },
+          ];
+        }
+        final active = (input['activeIdentifiers']! as List).toSet();
+        value = {
+          'registryMode': mode,
+          'registryModes': ['sync', 'read', 'refresh'],
+          'tools': [
+            if (mode != 'refresh')
+              for (final tool in _registeredToolsByChat[request.chatId] ?? const [])
+                if (active.contains(tool['identifier'])) tool,
           ],
         };
       case TavernSPresetEvaluationKind.toolAction:
@@ -289,8 +304,9 @@ void main() {
       final response = await host.defaultEvaluate(request);
       if (request.kind != TavernSPresetEvaluationKind.toolRegistry) return response;
       final registry = response.value! as Map<String, Object?>;
-      final first = (registry['tools']! as List).first as Map<String, Object?>;
-      (first['definition']! as Map<String, Object?>)['stealth'] = 'yes';
+      for (final tool in (registry['tools']! as List).cast<Map<String, Object?>>()) {
+        (tool['definition']! as Map<String, Object?>)['stealth'] = 'yes';
+      }
       return TavernSPresetEvaluationResult(requestId: request.requestId, value: registry);
     };
     h.engine.scripts.attachHost(host);
@@ -391,8 +407,9 @@ void main() {
       if (request.kind == TavernSPresetEvaluationKind.toolRegistry) {
         final normal = await host.defaultEvaluate(request);
         final registry = normal.value! as Map<String, Object?>;
-        final tool = (registry['tools']! as List).single as Map<String, Object?>;
-        (tool['definition']! as Map<String, Object?>)['hasFormatMessage'] = true;
+        for (final tool in (registry['tools']! as List).cast<Map<String, Object?>>()) {
+          (tool['definition']! as Map<String, Object?>)['hasFormatMessage'] = true;
+        }
         return TavernSPresetEvaluationResult(requestId: request.requestId, value: registry);
       }
       if (request.kind == TavernSPresetEvaluationKind.toolFormatMessage) {

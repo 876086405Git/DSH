@@ -4,7 +4,7 @@ const fs = require('node:fs'), vm = require('node:vm');
 const assert = require('node:assert/strict'), crypto = require('node:crypto');
 const source = fs.readFileSync(process.argv[2], 'utf8');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
-assert.equal(sha(source), 'd0766c830f3bfd4a69c63bba60423d7a797276fbd4695420adb8f17ea330037b');
+assert.equal(sha(source), '4858bcb57530e3ff6ef68f0c94a4d291e2914c766c274f888e9a2fdf8d0efb59');
 const start = source.indexOf('  const handleChatCompletionPromptReady = data => {');
 const conditional = source.indexOf('  function consumeConditionalTag(prompts) {', start);
 const end = source.indexOf('\n  ctx.eventSource.on(ctx.eventTypes.APP_READY, data => {', conditional);

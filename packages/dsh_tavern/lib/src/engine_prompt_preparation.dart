@@ -174,6 +174,7 @@ PromptAssembly _assemblePreparedPrompt({
   List<PromptHistoryMessage> prefix = const [],
   PromptHistoryWindow? cacheWindow,
   void Function(PromptInput)? onInput,
+  void Function(PromptManagerSnapshot)? onPromptManager,
 }) {
   final examples = [for (var index = 0; index < world.activated.length; index++) (index, world.activated[index])];
   examples.sort((a, b) {
@@ -228,5 +229,9 @@ PromptAssembly _assemblePreparedPrompt({
     preparedFields: prepared,
   );
   onInput?.call(input);
-  return assemblePromptWindow(PromptAssembler(counter: counter), input, prefix: prefix);
+  return assemblePromptWindow(
+    PromptAssembler(counter: counter, onPromptManager: onPromptManager),
+    input,
+    prefix: prefix,
+  );
 }

@@ -36,6 +36,7 @@ abstract interface class TavernSPresetRequestObserver {
 | --- | --- |
 | requestId | 一次求值的唯一关联 ID；响应必须原样返回。 |
 | chatId / generationId | 当前生成所属上下文。 |
+| sessionScope | 每次生成实例的内部唯一前缀；generationId 可复用，不能用它代替此值。旧直接调用可省略。 |
 | sessionId | 本次生成内保留函数/状态的键；释放时按该键清理。 |
 | stage / identifier | 可见诊断阶段与可选 prompt 绑定 ID。 |
 | kind | 下表求值方式。 |
@@ -52,15 +53,33 @@ abstract interface class TavernSPresetRequestObserver {
 | validateFunctionExpression | 编译表达式，确认是函数，不调用；用于先验证输出拦截器。 |
 | functionExpression | 编译表达式并 await 调用结果；EntryCondition/Output/Final/工具文本 formatter。 |
 | syncFunctionExpression | direct eval 并同步调用；ChatSquash 支持语句完成值，原源不 await Promise。 |
-| toolRegistry | 一次同步所有活跃绑定，执行定义求值、UUID/临时缓存、注销/裁剪/保留注册，返回 tools 与 diagnostics。 |
+| toolRegistry | 缺省sync保持原同步；公开native还使用read/refresh，见下表。返回tools、diagnostics及明确模式ack。 |
 | toolDefinition | 用 Function('console', source)() 求工具对象，保留 action/formatMessage 闭包，仅返回 JSON 描述。 |
 | toolAction | 调用已保留的 action(args)，顺序 await；不重新求值定义。 |
 | toolFormatMessage | 调用已保留的 formatMessage(args)。 |
 
 响应 JSON：`{requestId,value,isUndefined,arguments,scriptLogs,scriptLogsDropped,scriptLogValuesTruncated}`；App 另可添加真实 `committed` 事实，并用 `TavernSPresetEvaluationResult.fromJson` 还原。两项计数缺省为 0，兼容旧页面返回。带结构化宿主 issues 时可直接构造 DTO 的 issues 参数（JSON convenience factory 当前不解析 issues）。
-toolRegistry 的 arguments[0] 为 `{bindings:[{identifier,code,uuid?}],activeIdentifiers:[...]}`。value 为 `{tools:[{identifier,code,sessionId,definition}],diagnostics:[{identifier,message}]}`；definition 含 name/description/parameters/hasAction/hasFormatMessage，以及可选 displayName/stealth。页面保留回调于 `generationId + ':' + returnedSessionId`；主引擎随后按该 sessionId 调用，不能重新执行定义来找 action。
+toolRegistry 的 arguments[0] 为 `{bindings:[{identifier,code,uuid?}],activeIdentifiers:[...]}`。value 为 `{tools:[{identifier,code,sessionId,definition}],diagnostics:[{identifier,message}]}`；definition 含 name/description/parameters/hasAction/hasFormatMessage，以及可选 displayName/stealth。页面保留回调于 `(sessionScope ?? generationId) + ':' + returnedSessionId`；主引擎总是传sessionScope，并用同一前缀调用与释放，不能重新执行定义来找 action。缺省generationId只兼容旧的直接页面协议调用。
+
+公开native的toolRegistry增加可选arguments[0].registryMode；缺省请求形状仍是sync。
+更新asset的同步响应另含registryModes:['sync','read','refresh']及registryMode:'sync'。
+附加JavaScript host只有明确声明能力后才接收新模式，每次新响应必须同名ack；缺能力/缺ack会可见失败，不能以空tools或退回sync冒充支持。已有Tavern/Host抽象接口没有新成员。
+升级页面asset并重新加载该画布后可重新发起生成；能力按本次生成的实际响应读取，不保留永久失败标记。
+没有附加JavaScript host的数据型预设沿既有路径，不因该协议额外要求页面；原本需JS的模块仍沿原可见失败规则。完全没有启用SPreset的普通预设保留原来的晚host/page捕获，START内host更换仍按原issue-only规则处理；不是把所有普通生成都纳入新增SP phase。
+
+| registryMode | 定义/注册行为 | 本次返回与绑定 |
+| --- | --- | --- |
+| sync（缺省） | 同步bindings、缓存与注册/注销，按activeIdentifiers选择 | 保留旧tools/diagnostics，绑定本sessionScope |
+| read | 不执行定义、不改缓存或注册；仅以当前activeIdentifiers查询实际共享注册 | 返回并绑定当前generation所选receiver；ack=read |
+| refresh | 同步bindings与未来注册，执行源码SETTINGS_READY后的刷新 | 返回diagnostics和空tools；不重绑已选session、不改当前body；ack=refresh |
+
+同页嵌套请求可在outer wire前改变当前注册；read必须查询页面实际集合，不能用outer早期返回的私有副本。
+refresh可改变未来请求，但本次已选工具和其action receiver保持；generation release仍只释放自己的sessionScope。
+`test/spreset_entry_phase_test.cjs`直接加载实际asset验证这三种行为；旧sync缓存/receiver/session测试保持。
+
 `isUndefined` 与 JSON null 分开：FinalRequestProcessing 的 undefined 采用修改后的 arguments[0].request；ChatSquash 数组 undefined 采用修改后的 arguments[0]。
-关闭合并时，原源 runPostScript 也接受 `['A']` 这样的 primitive 消息数组；本包后续 PromptSegment 需要消息 object，会在该类型边界报错，不把它伪装成源脚本回退。固定源54向量中53项对齐，这1项边界有单独测试与说明。
+关闭合并时，原源 runPostScript 也接受 `['A']` 这样的 primitive 消息数组。generic provider 且通用后处理走原switch default/no-op时，普通与背景raw把该数组直接保留在body.messages，FinalRequestProcessing可修复后发送；未修复也交实际HTTP并保留provider错误。none、空与未知模式均属no-op；merge/claude/merge_tools/semi/semi_tools/strict/strict_tools/single及DeepSeek仍需typed转换，保留当前pre-final类型边界，不把它伪装成脚本回退。
+这条通路的PromptAssembly.before/after、token与window记录的是脚本前的typed admission；body记录数组后脚本结果，最终观察器记录真正发送body。owner检查wire时应看body/最终观察，不能把typed段声称为脚本后逐项消息。没有给primitive伪造role/content、token数或来源，也没有重排Final与provider阶段。原53/54矩阵保持历史范围，新增真实HTTP用例证明这第54类输入在上述有限路径可被final修复；不宣称全部模式54/54。
 函数/循环引用/page 对象不能跨 JSON 返回；OutputPreprocessing 的 `state` 保留在该页面 session，adapter 不把它序列化。原源允许的其他任意对象结果不保证可跨桥复刻。
 
 ## 3. 函数输入形状
@@ -96,6 +115,7 @@ adapter 不替任意脚本伪造 committed。owner 应关联原有 Helper/native
 ADDENDUM-02 的实际 App 在取消时立即让 host Future 以错误/结果未知结算，不等待 JS 函数返回；该路径不保证另有晚事实回传。close/backup 等待的是 host Future 结算，并不证明任意 JS 已终止。页面销毁也必须结算 RPC；没有新增超时。
 runtime 的 signal 仅在入口检查；任意 JS 中途继续运行及其外部副作用不能靠 AbortSignal 强停。本次沿用 App 已有立即结算方式，不添加另一套取消竞速或伪造 committed。
 已有 hostVersion/cancellation/turn ownership 防止取消或页面换代后再采用结果。formatMessage await 返回后、action 进入前还会再次验证 ownership。
+公开generationId可在终态后立即复用；每个内部生成实例的sessionScope和requestId均独立。旧RPC晚结算、旧release晚完成也只清旧键，不能命中新运行。scope使用独立随机isolate前缀与共享计数，不消耗业务ID生成器；同一页面由多个engine使用时也保持实例分离。owner必须原样传递sessionId/requestId，不按公开generationId重建或截断键。此处只隔离session引用，ToolBindings的UUID缓存与注册receiver仍按上游规则共享。
 
 ## 6. 页面缓存生命周期
 
@@ -147,3 +167,71 @@ node test/spreset_tool_receiver_test.cjs /path/to/fixed/regex_bind/inject.js /pa
 ```
 
 已运行证据为 Dart 引擎+SQLite、HTTP mock 与 Node VM；不是实际 Flutter/WebView、真实外部模型 API 或完整用户预设已验证的声明。
+
+## 10. EntryConditions 当前决策与 Helper 路径
+
+固定上游的决策变量初始为 null，在原生 `GENERATION_STARTED` 条件求值开始时清空，全部条件结束后才发布 Map；全局 `GENERATION_ENDED` / `GENERATION_STOPPED` 清回 null。这不是跨已完成生成保留的结果缓存。来源为 [Entry hook 与决策读取](https://github.com/starowo/starowo.github.io/blob/53bd585da14248ba10baaede7fc7ed0cebe1eeeb/regex_bind/inject.js#L309-L381) 与 [ToolBindings 活跃条目](https://github.com/starowo/starowo.github.io/blob/53bd585da14248ba10baaede7fc7ed0cebe1eeeb/regex_bind/inject.js#L6566-L6581)。
+
+| 内部 preparePreset 路径 | 条件求值 | 提示 order | ToolBindings |
+| --- | --- | --- | --- |
+| native（已启用SPreset的实际公开_Turn） | 普通START handler前重新求值并发布，晚prepare不重复求值 | 晚prepare读取当时的Map | early sync、budget read、wire read、随后refresh |
+| native（既有私有prepare入口） | 保持prepare内求值，不假称有公开START | 应用准备时当前Map | 保持原sync |
+| helperPreset | 不重新求值 | 读取仍在活动的原生决策；无 Map 时沿原 order | 同样读取当前 Map |
+| helperRaw | 不重新求值 | 保留 raw 提示 order | 仍读取当前 Map |
+
+Helper 适配器按转换后的实际请求类型选择路径：named `generate()` 转成 raw 后也用 helperRaw。Helper 私有 `js_generation_ended` 不清共享 Map；实际向该聊天画布发出全局 STOP 时调用 `_clearSPresetEntryDecisions(chatId)`。取消或更换 host 后的原生晚结果不可采用；普通全局 STOP 仅清该画布当前 Map，不额外使同画布另一条仍活着的原生条件求值失效，该求值随后仍可发布。
+owner App 的同一 TavernScriptPages host 分派多个画布，SP evaluate 明确按 chatId 路由。因此活动 Map 按非空 chatId 分开；同 chat 的多个 script contexts 共享，不同 chat 的开始/END/STOP 不互相清理。host 替换清全部；无 chat 的调用不借用其他聊天的状态。公开 generationId 和单个 script contextId 都不是这份共享状态的键，Helper 关闭自己的求值 session 不清另一条原生生成的决策。
+上游 ST 单个网页的全局变量可跨该页 chat 切换共享；不能据此推定 App 的不同画布是同一个 JS realm。当前按 owner 明示路由实现 per-chat 作用域，没有为未知宿主自动启用跨chat共享。
+页面文档重建可能保留同一个 host/context，不能任意关闭一个 script context 就清整页 Map。现提供可选 TavernSPresetPageLifecycle.resetSPresetPage(chatId)，见下节；owner 当前页面代码尚未调用此新能力，因此 reload 完整接线仍未验收。
+启用SPreset的实际公开_Turn现已前移Entry：在普通tavern GENERATION_STARTED/AFTER_COMMANDS处理器之前，创建同一SPresetGeneration、逐条await条件及early tool sync。provider在本次求值中捕获一次，chat在每次调用前重新读取/复制；前一条件通过实际bridge修改chat，下一条件可见。随后prepare只读取当时当前Map；START里的Helper STOP可以清它，不能把早先私有Map重新发布。
+这针对实际已有公开lifecycle的send/continue/regenerate/impersonate及使用同_Turn的路径。ST generateQuietPrompt本身会走全局Generate START，但当前dsh slashquiet/B2是iframe私有生命周期；本块不改其公开ABI或伪造全局事件，仍是明确的范围边界。原显式native raw也保持原private prepare合同；Helper private START绝不触发fresh Entry。
+固定ST事件实现证明later注册的makeFirst可以排在SP监听器之前；当前引擎仅保证相对其普通START处理器的次序，不声称复现任意外部listener重排。
+`spreset_entry_state_test.dart`保留原共享/清理核心门禁；`w11_entry_phase_test.dart`通过真实native入口、公开Helper DTO、SQLite及生产HTTP编码器覆盖START重入、逐条件编辑、STOP/嵌套请求、wire晚读和取消/host/page epoch。后者不依赖VM reflection。页面求值host是边界替身，asset另有Node真代码门禁；尚无App/WebView端到端资格。
+
+| 固定源顺序 | 当前实现位置 | 可改变的事实 |
+| --- | --- | --- |
+| SP makeFirst GENERATION_STARTED：条件→sync | _ScriptCoordinator.beforeTurn → _beginNativeSPreset | 更新当前per-chat Map及共享页面注册 |
+| 普通START/AFTER_COMMANDS | 原_lifecycle循环 | 可编辑chat、清Map、进行嵌套生成 |
+| prompt prepare与预算工具查询 | preparePreset读取当前Map；registryMode=read | 只选当前注册，不能重新sync恢复被early排除的定义 |
+| 准入后GENERATE_AFTER_DATA/ChatSquash | spreset.assembly | 保持原准入与脚本合同，不重放宏/预算 |
+| sendOpenAIRequest选择本次wire工具 | selectNativeWireTools，位于ChatSquash后 | 再读当时Map/共享注册，绑定当次receiver |
+| CHAT_COMPLETION_SETTINGS_READY第二次sync | request中registryMode=refresh，Final前 | 只更新未来注册，不回写当次body或绑定 |
+| fetch Final/最终观察/发送 | 原request尾部 | 按原Final权能与累计最终offered-tool授权继续 |
+
+第二次refresh不能提前到本次wire选择前。false/default-true/STOP的首wire仍没有被early排除的工具；refresh后后续请求才恢复。若嵌套READY已先刷新，则outer的wire read看到新注册。这些特殊顺序由固定ST EventEmitter/ToolManager与SP原函数12个观察向量支持，研究报告与包内真实控制分别留档。
+当前工具执行来源来自本次实际选中工具；后置刷新不新增本次执行权限。最终body的工具授权仍由累计owner工具计划处理，此块没有另造权限来源。
+
+
+## 11. 可选页面 reset 与 PromptManager 集合
+
+TavernEngine 另实现 TavernSPresetPageLifecycle；既有 Tavern/TavernScriptHost 抽象接口不增加成员。App 包装器须显式检查并转发能力，不能假设所有 Tavern 实例支持。调用是同步 void，不新增 timeout。
+
+```dart
+final lifecycle = delegate;
+if (lifecycle is TavernSPresetPageLifecycle) {
+  lifecycle.resetSPresetPage(chatId);
+}
+```
+
+由可信 App 在该画布 pageLost 或更换 document、开始新文档调用之前调用；不直接暴露成页面可调用的任意 reset RPC。一个 chat 的多个 script contexts 共用该画布，不应在关闭任意脚本或最后一个 context 时猜测 realm 是否重建。固定 owner canvas_calls.pageLost 明确保留 context，document 过滤只处理消息归属，不能代替这个 engine 通知。
+reset 清该 chat 的活动 Entry 与 PromptManager 集合，每 chat 单调 epoch 使先前捕获的 SPresetGeneration 在 check 拒绝采用晚结果；不清另一 chat，不执行 JS，不撤销已发生副作用，也不声称令实际宿主 Future 结束。真实载体仍沿既有排空和回执规则。
+PromptManager 集合在普通/native/quiet/Helper normal 的准入 finally 更新；END/STOP 和换预设保留，raw/named 不刷新。快照含 MI 前 admitted 集合拓扑和独立 ST system squash 视图，集合重读见 HELPER-PROMPT-MANAGER.md。此处不将孤立 authoring preview 作为 ST UI dryRun。
+现交付只实现 engine 能力和明确手动信号的引擎/HTTP测试。没有修改 owner App，没有 Flutter/WebView 真机结果；只有 owner 实际接入 reset 信号后才能检验 reload 组合。
+
+## 12. 原生流式 formatter 的模型目录事实（可选）
+
+可选 `TavernSPresetToolCapabilityHost.lookupSPresetToolModel(request,cancellation)` 返回 `FutureOr<TavernSPresetToolModelLookup>`；没有向 Tavern 或既有 ScriptHost 添加必实现成员。request 包含 generationId/chatId/source/model，toJson 保留这四项；应按 chatId 的实际画布目录查第一个严格相同的模型 ID。请求通过返回值/Future 关联，不能仅用可复用的 generationId 关联 RPC。
+
+- `notSupplied(reason: ...)`：App 未提供原始目录元数据，或只保存了模型 ID；这不是匹配行缺能力字段的证据。
+- `noMatch()`：实际目录为空、非数组或没有匹配模型。
+- `matched(row)`：原目录第一条匹配的 JSON 行，含原字段；DTO 在构造和读取时均复制，宿主后续编辑不回写已返回事实。
+
+缺接口及 notSupplied 明确使用“native 未导入目录、ST 初始 []”的 provider 默认分支，不猜模型名、不伪造 raw row，也不逐帧刷诊断。noMatch 走同源默认名单；matched 对 OpenRouter 直接读 supported_parameters，字段缺失/空数组是假，不能回退名单。其余七个专门 provider 按固定源字段规则；这些纯规则不代表新增了 provider 原生传输支持。字符串 includes 与直接字段的 JS 真值语义保留；畸形不可调用 includes 或 null Workers property 是可见失败，不是无匹配。
+
+查询仅服务原生 OutputPreprocessing.consumeToolCalls 的流式 formatter metadata，经现有 parsed-frame callback 每帧读取；即时缓存结果不引入 await，异步结果受既有 cancellation、hostVersion 和关闭检查约束。App 应复用本地实际目录，Future 在取消/页面销毁后仍须结算；迟到结果不会采用，错误不会静默变成 noMatch。common function_calling/后处理/模型前缀已禁止时不查询。没有增加字节解析器或模型请求。
+
+source/model 绑定本次生成捕获的真实连接，预设残留连接字段、Final 改写的 wire model 均不改它；不同 chat 的目录事实不能因共享 dispatcher host 串用。目录逐帧变化已对照原源，但 native 保留既有捕获的 source/model/预设，未声称 UI 中途换源/换开关的全部 live-global 时序等价。OpenRouter 签名在支持门槛之前收集，先前不支持工具的帧仍可给后来启用的工具提供签名。
+
+非流式 SP response 消费不查询此接口。未提供 parsed-frame 回调的旧 custom ModelClient 仅在流式 EOF 查一次，这是旧入口的明确边界，不是逐帧源复刻。被门槛排除或格式化失败时仍沿现有原生 fragment 回放和工具授权；ST 的 unsupported 流原本不解析工具，两者授权体系的差异没有在此被重写。
+
+`tool/st_differential/spreset-tool-capability-oracle.cjs` 从固定 ST 真函数生成 103 个目录向量；`test/spreset_tool_capability_test.dart`、`test/spreset_tool_capability_engine_test.dart` 覆盖公共 DTO、真实生产 HTTP 编解码和宿主边界。旧 formatter 形状向量把 support 固定为 true，只证明其声明的形状/签名范围，不能单独作为完整 provider 能力证据；新接口尚需 owner 在实际 App 接线验证。

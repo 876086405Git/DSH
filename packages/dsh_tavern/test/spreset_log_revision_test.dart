@@ -371,9 +371,15 @@ class _LogEchoHost implements TavernScriptHost, TavernSPresetScriptHost {
     TavernScriptCancellation cancellation,
   ) async => TavernSPresetEvaluationResult(
     requestId: request.requestId,
-    value: request.kind == TavernSPresetEvaluationKind.validateFunctionExpression
-        ? true
-        : (request.arguments.first as Map)['chunk'],
+    value: switch (request.kind) {
+      TavernSPresetEvaluationKind.validateFunctionExpression => true,
+      TavernSPresetEvaluationKind.toolRegistry => {
+        'registryMode': (request.arguments.single! as Map<String, Object?>)['registryMode'] ?? 'sync',
+        'registryModes': ['sync', 'read', 'refresh'],
+        'tools': <Object?>[],
+      },
+      _ => (request.arguments.first as Map)['chunk'],
+    },
     arguments: request.arguments,
   );
   @override

@@ -10,8 +10,9 @@ class _ScriptGenerationRecord implements TavernScriptGeneration {
   @override
   final String id;
   final _ScriptContextState context;
-  final TavernScriptGenerateRequest request;
-  final TavernModelConfig config;
+  TavernScriptGenerateRequest request;
+  TavernModelConfig config;
+  late final _HelperRequestRuntime? helper = _helperOptions(request) == null ? null : _HelperRequestRuntime(this);
   final DateTime at;
   final _SlashGenerationSpec? slashSpec;
   final cancellation = ModelCancellation();
@@ -47,7 +48,7 @@ class _ScriptGenerationRecord implements TavernScriptGeneration {
     kind: kind,
     status: status,
     text: text.toString(),
-    reasoning: request.includeReasoning ? reasoning.toString() : null,
+    reasoning: helper != null || request.includeReasoning ? reasoning.toString() : null,
     usage: usage,
     delta: delta,
     finishReason: finishReason,
@@ -95,6 +96,12 @@ class _ScriptGenerationRecord implements TavernScriptGeneration {
 
   void finish({TavernScriptException? error}) {
     if (terminal != null) return;
+    if (helper != null && error == null) {
+      owner._generationNotify(this, 'GENERATION_BEFORE_END', [
+        {'message': helper!.endedText ?? text.toString(), if (reasoning.isNotEmpty) 'reasoning': reasoning.toString()},
+        id,
+      ]);
+    }
     status = error == null
         ? TavernScriptGenerationStatus.completed
         : error.code == TavernScriptErrorCode.cancelled
@@ -106,6 +113,7 @@ class _ScriptGenerationRecord implements TavernScriptGeneration {
       error: error,
     );
     if (identical(owner._generations[id], this)) owner._generations.remove(id);
+    if (_helperOptions(request) != null) owner._helperControl.changed();
     for (final observer in observers.toList()) {
       observer.add(terminal!);
       observer.close();
@@ -116,7 +124,9 @@ class _ScriptGenerationRecord implements TavernScriptGeneration {
         TavernScriptGenerationResult(
           id: id,
           text: text.toString(),
-          reasoning: request.includeReasoning ? reasoning.toString() : null,
+          reasoning: helper != null || request.includeReasoning ? reasoning.toString() : null,
+          helperMetadata: helper?.metadata,
+          helperReturnReasoning: helper?.options.returnReasoning ?? false,
           usage: usage,
           finishReason: finishReason,
           origin: origin,
@@ -125,6 +135,16 @@ class _ScriptGenerationRecord implements TavernScriptGeneration {
       );
     } else {
       _result.completeError(error);
+    }
+    if (helper != null) {
+      if (error == null) {
+        owner._generationNotify(this, 'GENERATION_ENDED', [
+          helper!.endedText ?? text.toString(),
+          id,
+          if (reasoning.isNotEmpty) reasoning.toString(),
+        ]);
+      }
+      return;
     }
     owner._generationNotify(this, 'GENERATION_ENDED', [
       {
@@ -172,7 +192,11 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
       );
     }
     final id = request.generationId ?? 'background-${_newStateId()}';
-    if (_generations.containsKey(id)) {
+    final previous = _generations[id];
+    if (previous != null &&
+        !(_helperOptions(previous.request) != null &&
+            _helperOptions(request) != null &&
+            previous.cancellation.isCancelled)) {
       throw _scriptError(TavernScriptErrorCode.duplicateId, 'generate', 'Generation id is active.');
     }
     final record = _ScriptGenerationRecord(
@@ -192,6 +216,7 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
       engine._clock(),
     );
     _generations[id] = record;
+    if (_helperOptions(request) != null) _helperControl.changed();
     // Start now, independently of observations. Storage ownership is acquired
     // before returning the handle, so backup cannot pass between admission and
     // the first asynchronous read.
@@ -205,7 +230,16 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
       record.cancellation.check();
       _context(record.context.value.id);
       // The pure transport phase is not a backup storage barrier.
-      final body = await record.spreset?.request(prepared.body) ?? prepared.body;
+      final helperBody = record.helper?.applyWire(prepared.body);
+      final body =
+          await record.spreset?.request(
+            helperBody ?? prepared.body,
+            prepared: helperBody != null,
+            requestSource: record.helper?.source,
+            validateFinalBody: prepared.validateFinalBody,
+          ) ??
+          helperBody ??
+          prepared.body;
       await _consumeGeneration(record, body);
     } catch (error) {
       if (record.terminal == null) record.finish(error: _generationFailure(record, error));
@@ -229,10 +263,14 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
     // Register before dispatch can synchronously reenter backup()/close().
     unawaited(() async {
       try {
-        record.emit(TavernScriptGenerationEventKind.started);
-        _generationNotify(record, 'GENERATION_STARTED', [
-          {'silent': record.request.silent},
-        ]);
+        if (record.helper == null) {
+          record.emit(TavernScriptGenerationEventKind.started);
+          _generationNotify(record, 'GENERATION_STARTED', [
+            {'silent': record.request.silent},
+          ]);
+        } else {
+          await record.helper!.prepare();
+        }
         record.cancellation.check();
         final capture = record.slashSpec == null
             ? await _captureGeneration(record)
@@ -246,6 +284,7 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
           cancellation: record.cancellation,
           settings: capture.settings,
           model: capture.config,
+          providerOverride: record.helper?.provider,
           presetId: capture.request.presetId ?? capture.chat?.presetId ?? engine._store.defaultPresetId,
           generationType: record.slashSpec == null ? 'normal' : 'quiet',
           onIssue: record.hookIssues.add,
@@ -268,6 +307,11 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
                 'is_system': _systemMessage(node),
               },
           ],
+          path: record.helper == null
+              ? _SPresetPromptPath.native
+              : record.request is TavernScriptRawRequest
+              ? _SPresetPromptPath.helperRaw
+              : _SPresetPromptPath.helperPreset,
         );
         record.receipt.phase = 'assemble';
         final prepared = record.slashSpec == null
@@ -287,6 +331,10 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
         record.receipt.budgetSource = prepared.budgetSource;
         record.cancellation.check();
         await _commitGeneration(record, prepared);
+        if (record.helper != null) {
+          record.emit(TavernScriptGenerationEventKind.started);
+          _generationNotify(record, 'GENERATION_STARTED', [record.id]);
+        }
         completed.complete(prepared);
       } catch (error, stack) {
         completed.completeError(error, stack);
@@ -300,7 +348,7 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
         record.cancellation.isCancelled ||
         error is TavernModelException && error.kind == TavernFailure.cancelled ||
         error is TavernScriptException && error.code == TavernScriptErrorCode.cancelled;
-    final original = _scriptReportedFailure(error);
+    final original = _scriptReportedFailure(error) ?? (error is SPresetException ? _scriptFailure(error) : null);
     final model = error is TavernModelException
         ? error.kind
         : error is PromptBudgetExceeded
@@ -355,11 +403,14 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
   }
 
   void _generationNotify(_ScriptGenerationRecord record, String name, List<Object?> args) {
+    if (name == 'GENERATION_STOPPED' || name == 'GENERATION_ENDED' && record.helper == null) {
+      engine._clearSPresetEntryDecisions(record.context.value.chatId ?? '');
+    }
     final slashSpec = record.slashSpec;
     final request = _dispatch(
       record.context,
       kind: TavernScriptDispatchKind.lifecycle,
-      namespace: 'iframe',
+      namespace: record.helper != null && name == 'GENERATION_STOPPED' ? 'tavern' : 'iframe',
       name: name,
       generationId: record.id,
       args: args,
@@ -372,7 +423,7 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
         record.context,
         request,
         committed: record.committed,
-        cancellation: name == 'GENERATION_ENDED' ? null : record.cancellation,
+        cancellation: name == 'GENERATION_ENDED' || name == 'GENERATION_STOPPED' ? null : record.cancellation,
         onObservedIssues: slashSpec == null
             ? null
             : (request, issues, committed) {
@@ -446,12 +497,28 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
       record.status = TavernScriptGenerationStatus.running;
       record.receipt.phase = 'key';
       final slashSpec = record.slashSpec;
+      final helperResponse = record.helper?.response = record.helper == null
+          ? null
+          : _HelperResponseCapture(
+              streaming: body['stream'] != false,
+              source: record.helper!.source,
+              hasTools: record.helper!.options.tools.isNotEmpty,
+            );
       final requestContext = ModelRequestContext(
         cancellation: requestCancellation,
         preparedBody: record.spreset != null,
+        allowEmptyKey: record.helper?.custom['apiurl'] is String && record.helper?.custom['apiurl'] != '',
+        endpointOverride: record.helper?.endpoint,
         onUsageReport: (_) {},
-        onResponseStarted: record.spreset?.observeResponseStarted,
-        onResponseBytes: record.spreset?.observeResponseBytes,
+        onResponseStarted: (attempt, status, headers) {
+          record.spreset?.observeResponseStarted(attempt, status, headers);
+          helperResponse?.started(attempt, status, headers);
+        },
+        onResponseBytes: (attempt, bytes) {
+          record.spreset?.observeResponseBytes(attempt, bytes);
+        },
+        projectResponseText: record.helper?.projectResponseText,
+        onResponseFrame: record.helper?.frame ?? record.spreset?.nativeResponseFrameObserver,
         onResponseSecret: record.spreset?.observeResponseSecret,
       );
       final modelStream = engine._modelClient.generate(
@@ -460,8 +527,12 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
         cancellation: requestContext,
         onRequestStarted: slashSpec == null ? null : (attempt) => slashSpec.onModelStarted(record, attempt),
       );
-      final responseStream =
-          record.spreset?.response(modelStream, body) ?? modelStream.map((delta) => (delta: delta, text: null));
+      final processedStream =
+          (record.helper != null
+              ? record.spreset?.helperResponse(modelStream, body, helperResponse!)
+              : record.spreset?.response(modelStream, body)) ??
+          modelStream.map((delta) => (delta: delta, text: null));
+      final responseStream = record.helper?.output(processedStream) ?? processedStream;
       subscription = responseStream.listen(
         (packet) {
           final delta = packet.delta;
@@ -487,7 +558,7 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
                       : TavernScriptGenerationEventKind.textDelta,
                   delta: addition,
                 );
-                if (record.request.stream) {
+                if (record.request.stream && record.helper == null) {
                   if (addition != null) _generationNotify(record, 'STREAM_TOKEN_RECEIVED_INCREMENTALLY', [addition]);
                   _generationNotify(record, 'STREAM_TOKEN_RECEIVED_FULLY', [processed]);
                 }
@@ -496,24 +567,29 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
               if (text.isEmpty) return;
               record.text.write(text);
               record.emit(TavernScriptGenerationEventKind.textDelta, delta: text);
-              if (record.request.stream) {
+              if (record.request.stream && record.helper == null) {
                 _generationNotify(record, 'STREAM_TOKEN_RECEIVED_INCREMENTALLY', [text]);
                 _generationNotify(record, 'STREAM_TOKEN_RECEIVED_FULLY', [record.text.toString()]);
               }
             case ModelReasoning(:final text):
               if (text.isEmpty ||
-                  !presetTruthy(
-                    record.spreset?.preset['show_thoughts'] ?? (!record.config.deepseek || record.config.thinking),
-                  )) {
+                  record.helper == null &&
+                      !presetTruthy(
+                        record.spreset?.preset['show_thoughts'] ?? (!record.config.deepseek || record.config.thinking),
+                      )) {
                 return;
               }
               record.reasoning.write(text);
-              if (record.request.includeReasoning) {
+              if (record.request.includeReasoning || record.helper != null) {
                 record.emit(TavernScriptGenerationEventKind.reasoningDelta, delta: text);
               }
             case ModelUsage(:final usage):
               record.usage = usage;
             case ModelToolFragment():
+              if (record.helper != null) {
+                helperResponse!.fallback.add(delta);
+                return;
+              }
               fail(
                 TavernScriptException(
                   code: TavernScriptErrorCode.unsupportedCapability,
@@ -531,9 +607,16 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
                   ],
                 ),
               );
-            case ModelFinished(:final reason):
+            case ModelFinished(:final reason, :final assistantSnapshot):
               record.finishReason = reason;
-              if (reason == 'tool_calls') {
+              if (record.helper != null) {
+                try {
+                  record.helper!.metadata = helperResponse!.finish(assistantSnapshot);
+                  record.finish();
+                } catch (error) {
+                  fail(error);
+                }
+              } else if (reason == 'tool_calls') {
                 fail(
                   TavernScriptException(
                     code: TavernScriptErrorCode.unsupportedCapability,
@@ -568,6 +651,7 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
             } else {
               try {
                 _checkScriptGameplayResources(engine, gameplayCapture, 'generate');
+                if (record.helper != null) record.helper!.metadata = helperResponse!.finish(null);
                 record.finish();
               } catch (error) {
                 record.finish(error: _generationFailure(record, error));
@@ -578,7 +662,11 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
         },
       );
       unawaited(
-        record.cancellation.whenCancelled.then<void>((_) {
+        record.cancellation.whenCancelled.then<void>((_) async {
+          // A Helper output macro may already own a file/SQL carrier. Preserve
+          // its real adoption facts and drain before publishing cancellation.
+          final pendingOutput = record.helper?.outputPending;
+          if (pendingOutput != null) await pendingOutput;
           if (record.terminal == null) {
             fail(const TavernModelException(TavernFailure.cancelled, 'cancelled'));
           } else {
@@ -594,6 +682,8 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
 }
 
 TavernScriptGenerateRequest _captureGenerationRequest(TavernScriptGenerateRequest source) {
+  if (source is TavernHelperRawRequest) return TavernHelperRawRequest.fromJson(source.toHelperJson());
+  if (source is TavernHelperGenerateRequest) return TavernHelperGenerateRequest.fromJson(source.toHelperJson());
   final injections = [
     for (final item in source.injects)
       TavernScriptInjection(

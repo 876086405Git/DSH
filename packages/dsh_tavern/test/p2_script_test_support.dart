@@ -80,6 +80,7 @@ class ScriptFixture {
   final plans = <ScriptResponsePlan>[];
   final peers = <_ScriptPeer>[];
   int keyReads = 0;
+  DateTime now = DateTime.utc(2026, 11, 12, 5);
   void Function()? onRandom;
 
   TavernEngine get engine => _engine!;
@@ -90,7 +91,7 @@ class ScriptFixture {
       root,
       config: config,
       modelClient: model,
-      clock: () => DateTime.utc(2026, 11, 12, 5),
+      clock: () => now,
       random: () {
         onRandom?.call();
         return 0.25;

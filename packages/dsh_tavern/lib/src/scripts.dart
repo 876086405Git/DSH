@@ -7,6 +7,8 @@ import 'regex/regex_engine.dart';
 import 'regex_library.dart' show TavernDisplayResult, TavernRegexDiagnostic;
 import 'state.dart';
 
+part 'script_helper_generation.dart';
+
 typedef TavernJsonObject = Map<String, Object?>;
 
 enum TavernVariableScope { global, character, chat, message, script }
@@ -1605,6 +1607,8 @@ class TavernScriptGenerationResult {
     this.reasoning,
     this.usage,
     this.finishReason,
+    this.helperMetadata,
+    this.helperReturnReasoning = false,
     List<TavernScriptIssue> hookIssues = const [],
   }) : hookIssues = List.unmodifiable(hookIssues);
   final String id, text;
@@ -1612,6 +1616,13 @@ class TavernScriptGenerationResult {
   final TavernUsage? usage;
   final TavernScriptGenerationOrigin origin;
   final List<TavernScriptIssue> hookIssues;
+  final TavernHelperGenerationMetadata? helperMetadata;
+  final bool helperReturnReasoning;
+  Object toHelperValue() => (helperMetadata ?? TavernHelperGenerationMetadata()).toHelperValue(
+    content: text,
+    reasoning: reasoning,
+    shouldReturnReasoning: helperReturnReasoning,
+  );
 }
 
 enum TavernScriptInjectionPosition { inChat, scanOnly, beforeMain, afterMain }

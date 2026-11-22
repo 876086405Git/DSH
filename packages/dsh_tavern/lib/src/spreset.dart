@@ -9,6 +9,7 @@ import 'package:crypto/crypto.dart' as crypto;
 
 import 'prompt/preset.dart';
 import 'prompt/prompt_types.dart';
+import 'prompt/prompt_manager_snapshot.dart';
 import 'scripts.dart';
 import 'js_string.dart';
 
@@ -17,6 +18,15 @@ part 'spreset/messages.dart';
 part 'spreset/squash.dart';
 part 'spreset/output.dart';
 part 'spreset/log.dart';
+part 'spreset/tool_capability.dart';
+
+/// Optional trusted App lifecycle signal for a chat canvas document reset.
+/// Call synchronously from pageLost/document replacement, never directly from
+/// an untrusted page message. This invalidates cached page state and late host
+/// results; it does not stop JavaScript or undo effects already performed.
+abstract interface class TavernSPresetPageLifecycle {
+  void resetSPresetPage(String chatId);
+}
 
 /// Optional App capability; the existing TavernScriptHost ABI is unchanged.
 /// Evaluate in the active chat's persistent page realm, including that page's
@@ -98,6 +108,7 @@ class TavernSPresetEvaluationRequest {
     required this.source,
     this.identifier,
     this.cacheKey,
+    this.sessionScope,
     this.kind = TavernSPresetEvaluationKind.functionExpression,
     this.reset = false,
     this.captureLogs = false,
@@ -105,6 +116,12 @@ class TavernSPresetEvaluationRequest {
   }) : _arguments = _spCopy(arguments)! as List<Object?>;
   final String requestId, chatId, generationId, sessionId, stage, source;
   final String? identifier;
+
+  /// Opaque per-generation-instance prefix for page sessions and request IDs.
+  /// Public generationId can be reused before an earlier host operation has
+  /// drained. Engine requests always set this; legacy direct host callers may
+  /// omit it and retain their generationId-based tool registry namespace.
+  final String? sessionScope;
 
   /// Legacy single-tool identity hint. Ordinary engine ToolBindings uses the
   /// toolRegistry operation and its raw UUID keys; callbacks use sessionId to
@@ -119,6 +136,7 @@ class TavernSPresetEvaluationRequest {
     'requestId': requestId,
     'chatId': chatId,
     'generationId': generationId,
+    if (sessionScope != null) 'sessionScope': sessionScope,
     'sessionId': sessionId,
     'stage': stage,
     'source': source,

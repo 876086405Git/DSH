@@ -67,8 +67,9 @@ List<Map<String, Object?>> spresetInjectMessage(
   for (var index = 0; index < rawCalls.length; index++) {
     final call = _spMap(rawCalls[index]);
     final function = _spMap(call['function']);
-    final id = trimJsWhitespace(_spString(call['id']));
-    final name = trimJsWhitespace(_spString(call['name'] ?? function['name']));
+    final id = trimJsWhitespace(presetTruthy(call['id']) ? _spString(call['id']) : '');
+    final rawName = presetTruthy(call['name']) ? call['name'] : function['name'];
+    final name = trimJsWhitespace(presetTruthy(rawName) ? _spString(rawName) : '');
     final rawArguments = call['arguments'] ?? function['arguments'] ?? <String, Object?>{};
     final args = rawArguments is String ? jsonDecode(rawArguments.isEmpty ? '{}' : rawArguments) : rawArguments;
     if (id.isEmpty || name.isEmpty || !ids.add(id) || args is! Map<String, Object?>) {
@@ -90,7 +91,8 @@ List<Map<String, Object?>> spresetInjectMessage(
   final results = <Map<String, Object?>>[];
   for (final raw in rawResults) {
     final result = _spMap(raw);
-    final id = trimJsWhitespace(_spString(result['toolCallId'] ?? result['tool_call_id']));
+    final rawId = presetTruthy(result['toolCallId']) ? result['toolCallId'] : result['tool_call_id'];
+    final id = trimJsWhitespace(presetTruthy(rawId) ? _spString(rawId) : '');
     if (id.isEmpty) throw const SPresetException('MessageInjections', 'Tool results require toolCallId.');
     final value = result.containsKey('content') ? result['content'] : '';
     results.add({
@@ -223,6 +225,8 @@ Future<List<SPresetTool>> resolveSPresetTools(
   SPresetEvaluate evaluate,
   SPresetDiagnostic diagnose, {
   bool synchronizeEmpty = false,
+  String registryMode = 'sync',
+  void Function(Set<String>)? onRegistryModes,
 }) async {
   final active = <String>{};
   for (final group in _spRows(preset['prompt_order'])) {
@@ -242,7 +246,7 @@ Future<List<SPresetTool>> resolveSPresetTools(
       if (binding.containsKey('uuid')) 'uuid': binding['uuid'],
     });
   }
-  if (bindings.isEmpty && !synchronizeEmpty) return const [];
+  if (registryMode == 'sync' && bindings.isEmpty && !synchronizeEmpty) return const [];
   final result = <SPresetTool>[];
   try {
     // One registry synchronization preserves UUID sharing, the transient
@@ -251,12 +255,22 @@ Future<List<SPresetTool>> resolveSPresetTools(
       'ToolBindings',
       '',
       [
-        {'bindings': bindings, 'activeIdentifiers': active.toList()},
+        {
+          if (registryMode != 'read') 'bindings': bindings,
+          'activeIdentifiers': active.toList(),
+          if (registryMode != 'sync') 'registryMode': registryMode,
+        },
       ],
       sessionId: 'tool-registry',
       kind: TavernSPresetEvaluationKind.toolRegistry,
     );
     final registry = _spMap(response.value);
+    if (registryMode != 'sync' && registry['registryMode'] != registryMode) {
+      throw SPresetException('ToolBindings', 'The host did not acknowledge tool registry mode $registryMode.');
+    }
+    if (registry['registryModes'] case final List<Object?> modes) {
+      onRegistryModes?.call(modes.whereType<String>().toSet());
+    }
     if (registry['tools'] is! List<Object?>) {
       throw const SPresetException('ToolBindings', 'Host must return a synchronized tool registry.');
     }
@@ -293,6 +307,7 @@ Future<List<SPresetTool>> resolveSPresetTools(
     }
   } catch (error) {
     diagnose('ToolBindings', error);
+    if (registryMode != 'sync') rethrow;
   }
   return result;
 }
@@ -301,15 +316,16 @@ Future<Map<String, Object?>> spresetFinalRequest(
   SPresetConfig config,
   Map<String, Object?> request,
   SPresetProvider provider,
-  SPresetEvaluate evaluate,
-) async {
+  SPresetEvaluate evaluate, {
+  String? requestSource,
+}) async {
   final module = config.module('FinalRequestProcessing');
   if (!presetTruthy(module['enabled'])) return request;
   final input = {
     'request': _spObjectCopy(request),
     'provider': provider.toJson(),
     'model': _spString(request['model'], provider.model),
-    'source': _spString(request['chat_completion_source'], provider.source),
+    'source': requestSource ?? _spString(request['chat_completion_source'], provider.source),
     'stream': request['stream'] == true,
     'preview': false,
   };
