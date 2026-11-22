@@ -46,6 +46,7 @@ class ReplayFrames {
 
   final ConversationShare share;
   final ReplayTimeline timeline;
+  final _wideRunes = <(int, bool), List<int>>{};
 
   final Map<int, ChatItem> _done = {};
   final Map<int, TurnTrace> _open = {};
@@ -137,11 +138,11 @@ class ReplayFrames {
     var text = e.text;
     if (!done) {
       if (time < beat.thinkEnd) {
-        reasoning = _prefix(reasoning, (time - beat.start) / (beat.thinkEnd - beat.start));
+        reasoning = _prefix((i, true), reasoning, (time - beat.start) / (beat.thinkEnd - beat.start));
         text = '';
       } else {
         final span = beat.end - beat.thinkEnd;
-        text = _prefix(text, span <= 0 ? 1 : (time - beat.thinkEnd) / span);
+        text = _prefix((i, false), text, span <= 0 ? 1 : (time - beat.thinkEnd) / span);
       }
     }
     return AssistantChatItem(
@@ -223,11 +224,30 @@ class ReplayFrames {
   }
 
   /// The first [fraction] of [text], by characters (never half a character).
-  static String _prefix(String text, double fraction) {
+  String _prefix((int, bool) part, String text, double fraction) {
     if (fraction >= 1) return text;
     if (fraction <= 0 || text.isEmpty) return '';
-    final runes = text.runes.toList();
-    final n = (runes.length * fraction).floor();
-    return String.fromCharCodes(runes.take(n));
+    final wide = _wideRunes.putIfAbsent(part, () {
+      final positions = <int>[];
+      var index = 0;
+      for (final rune in text.runes) {
+        if (rune > 0xffff) positions.add(index);
+        index++;
+      }
+      return positions;
+    });
+    final n = ((text.length - wide.length) * fraction).floor();
+    // Each two-unit rune before the boundary adds one UTF-16 code unit.
+    var lo = 0;
+    var hi = wide.length;
+    while (lo < hi) {
+      final mid = (lo + hi) ~/ 2;
+      if (wide[mid] < n) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return text.substring(0, n + lo);
   }
 }

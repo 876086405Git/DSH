@@ -26,6 +26,30 @@ ConversationShare _share() =>
     ConversationExport(fixtureSource()).build(now: DateTime.utc(2026, 10, 25, 3), app: 'dsh-go 1.0.0');
 
 void main() {
+  test('streamed prefixes keep rune boundaries when seeking in either direction', () {
+    final body = String.fromCharCodes([0xdc01, 0x41, 0x1f642, 0xd801, 0x301, 0x1f64a]);
+    const thinking = '中文👩‍💻';
+    final frames = ReplayFrames(
+      ConversationShare(
+        title: 'seek',
+        start: DateTime.utc(2026),
+        entries: [ReplyEntry(t: 0, text: body, thinking: thinking)],
+      ),
+    );
+    final beat = frames.timeline.beats.single;
+    for (final reason in [false, true, false]) {
+      final text = reason ? thinking : body;
+      final start = reason ? beat.start : beat.thinkEnd;
+      final end = reason ? beat.thinkEnd : beat.end;
+      final runes = text.runes.toList();
+      for (var n = runes.length - 1; n >= 0; n--) {
+        final time = start + (end - start) * ((n + 0.5) / runes.length);
+        final item = frames.at(time).items.whereType<AssistantChatItem>().single;
+        expect(reason ? item.reasoning : item.text, String.fromCharCodes(runes.take(n)));
+      }
+    }
+  });
+
   test('long waits shrink, short ones stay, streams keep a reading pace', () {
     final share = _share();
     final plan = ReplayTimeline.of(share.entries);
