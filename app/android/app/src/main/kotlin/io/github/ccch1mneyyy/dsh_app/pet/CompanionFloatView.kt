@@ -118,9 +118,14 @@ internal class CompanionFloatView(
     }
 
     fun state(next: String, reduceMotion: Boolean) {
+        if (state == next && reduced == reduceMotion) return
         state = next
         reduced = reduceMotion
-        if (ready) command(JSONObject().put("type", "petState").put("state", next).put("reduceMotion", reduced))
+        if (ready) sendState()
+    }
+
+    private fun sendState() {
+        command(JSONObject().put("type", "petState").put("state", state).put("reduceMotion", reduced))
     }
 
     /** A tap at ([x], [y]) in 0–1 of the viewport. */
@@ -145,7 +150,7 @@ internal class CompanionFloatView(
         when (json.optString("type")) {
             "floatReady" -> {
                 ready = true
-                state(state, reduced)
+                sendState()
                 freezeCommand(freezing.onReady())
             }
             "floatBounds" -> {
