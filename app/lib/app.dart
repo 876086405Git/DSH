@@ -15,7 +15,6 @@ import 'state/appearance_state.dart';
 import 'state/locale_state.dart';
 import 'state/star_prompt.dart' show starPromptGateProvider, starPromptProvider;
 import 'state/tile_style_state.dart';
-import 'themes/theme_pack.dart';
 import 'ui/chat/dsh_ui/dsh_ui_model.dart' show DshUiAppAccent;
 import 'ui/common/keyboard_motion.dart';
 import 'ui/common/side_insets.dart';

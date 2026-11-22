@@ -207,7 +207,7 @@ class _ThemePacksSectionState extends ConsumerState<ThemePacksSection> {
 
   Future<void> _openStudio([ThemePack? initial]) async {
     final saved = await showAppSheet<ThemePack>(
-      context: context,
+      context,
       isScrollControlled: true,
       builder: (_) => ThemeStudioSheet(initial: initial),
     );

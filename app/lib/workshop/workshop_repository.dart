@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import '../companion/companion_pack.dart';
 import '../pets/pet_library.dart';
 import '../themes/theme_library.dart';
-import '../themes/theme_pack.dart';
 import '../update/downloader.dart';
 import '../update/installer.dart';
 import '../update/update_config.dart' show DownloadUrl;

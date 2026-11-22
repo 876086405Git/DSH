@@ -248,7 +248,7 @@ class ThemeLibrary {
       }
       if (replaced) await _discard(old);
       ThemeFonts.instance.forget(localId);
-      return _load(root, localId);
+      return await _load(root, localId);
     } finally {
       if (await staging.exists()) await _discard(staging);
     }
@@ -336,9 +336,9 @@ class ThemeLibrary {
         final json = {
           ...builtIn.toJson(),
           'id': publicId ?? builtIn.publicId,
-          if (author != null) 'author': author,
-          if (license != null) 'license': license,
-          if (source != null) 'source': source,
+          'author': ?author,
+          'license': ?license,
+          'source': ?source,
         };
         final checked = ThemePackValidator.validateParts(json, const {});
         final archive = Archive()
@@ -361,9 +361,9 @@ class ThemeLibrary {
           staging.path,
           <String, String>{
             'id': publicId ?? publicThemeIdFor(id),
-            if (author != null) 'author': author,
-            if (license != null) 'license': license,
-            if (source != null) 'source': source,
+            'author': ?author,
+            'license': ?license,
+            'source': ?source,
           },
         ),
       ),
