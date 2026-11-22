@@ -9,6 +9,7 @@ import 'dart:io';
 
 import 'package:dsh_app/companion/companion_initiative.dart';
 import 'package:dsh_app/companion/companion_initiative_owner.dart';
+import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_signal_consent.dart';
 import 'package:dsh_app/companion/companion_signals.dart';
@@ -29,6 +30,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../packages/dsh_client/test/support/companion_signal_host.dart';
+import 'initiative_memory.dart';
 
 const _done = '你那边的任务跑完啦。';
 
@@ -70,6 +72,7 @@ class _Room {
   late _Source source;
   late HostAlertTracker tracker;
   late ProviderContainer container;
+  late CompanionMemoryOwner memory;
   final deliveries = <CompanionAlertDelivery>[];
   final commands = <(String, Map<String, Object?>)>[];
   CompanionStageEvents? events;
@@ -119,6 +122,7 @@ class _Room {
           activeHostProvider.overrideWith(_Host.new),
           activeConnectionProvider.overrideWithValue(AsyncData(connection)),
           companionInitiativeClockProvider.overrideWithValue(clock),
+          initiativeMemory(clock),
         ],
         child: MaterialApp(
           theme: buildDarkTheme(),
@@ -141,6 +145,7 @@ class _Room {
     }
     expect(events, isNotNull, reason: 'the stage was never built');
     container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
+    memory = (await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future)))!;
     events!.onReady();
     await settle();
   }
@@ -336,7 +341,7 @@ void main() {
       expect(room.commands.where((c) => c.$1 == 'emotion').single.$2['name'], 'happy');
       // Her voice was not allowed for it: her mouth keeps the text's rhythm.
       expect(room.commands.where((c) => c.$1 == 'say'), isNotEmpty);
-      final ledger = jsonDecode((await SharedPreferences.getInstance()).getString(companionInitiativeKey)!) as Map;
+      final ledger = room.memory.store.initiativeRecord()!;
       expect(ledger['signalAtMs'], hasLength(1));
 
       // The allowance is shared and spent: the next one is not said.
@@ -366,8 +371,7 @@ void main() {
       await room.wait(const Duration(seconds: 56));
       await room.otherConversationEnds();
       expect(await room.until(find.text(_done), const Duration(seconds: 70)), isNull);
-      final raw = (await SharedPreferences.getInstance()).getString(companionInitiativeKey);
-      expect(raw == null ? const [] : (jsonDecode(raw) as Map)['signalAtMs'], isEmpty);
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
     } finally {
       await room.close();
     }

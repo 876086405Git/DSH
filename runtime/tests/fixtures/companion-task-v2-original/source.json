@@ -1,0 +1,9 @@
+{
+  "scope": "Exact previously independently-reviewed I Host r1 v2 source, only for real Domain upgrade/downgrade test",
+  "files": {
+    "task-store.js": "634ada699a22352c3a195097b1cd385d84c6a9a1407b8c5eb19b8c3a27c7fe2b",
+    "task-schema.js": "da68bb85a03ac3d987d331982f19a41d2fa2fb83d6c5298436ae9b9ad9bf0f79",
+    "schema.js": "e1e32e223eea3d40c1d55a85255b62a0bbb30f3e5e08e088755f76b22f1dd63a",
+    "state.js": "7d639e0770d9602f644f0d3870df911cd37d608818c819bb52c2c28f81c41715"
+  }
+}

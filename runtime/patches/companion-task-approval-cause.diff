@@ -1,0 +1,37 @@
+--- a/node_modules/@deepseek-ai/dsh-user-approval/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-user-approval/lib/index.js
+@@ -156,11 +156,11 @@
+ 		const request = { ...req };
+ 		// approveEscalation supplies an own undefined callId when fixed work has no model call.
+ 		if (request.callId === void 0) delete request.callId;
+-		const binding = { observer, approvalId: void 0 };
++		const binding = { observer, approvalId: void 0, signalCancellation: null };
+ 		this.dshGoTaskRequests.set(request, binding);
+ 		try {
+ 			const outcome = await this.request(request);
+-			return { approvalId: binding.approvalId, outcome };
++			return { approvalId: binding.approvalId, outcome, signalCancellation: binding.signalCancellation };
+ 		} finally { this.dshGoTaskRequests.delete(request); }
+ 	}
+ 	dshGoTaskApproval(req) {
+@@ -221,13 +221,19 @@
+ 	*/
+ 	async decide(req, session) {
+ 		const signal = req.signal;
+-		if (signal?.aborted) return "cancelled";
++		const task = this.dshGoTaskRequests.get(req);
++		if (signal?.aborted) {
++			if (task !== void 0) task.signalCancellation = { reason: signal.reason };
++			return "cancelled";
++		}
+ 		if (this.effectivePolicy(session) === "never") return "rejected";
+ 		const answer = Promise.resolve().then(() => this.ctx.waterfall(scopeTarget(req.agent, req.agent), "approval/request", req, () => Promise.resolve("unavailable"))).then((outcome) => OUTCOMES.includes(outcome) ? outcome : "unavailable", () => "unavailable");
+ 		if (signal === void 0) return answer;
+ 		return await new Promise((resolve) => {
+ 			const onAbort = () => {
+ 				signal.removeEventListener("abort", onAbort);
++				// Capture the winning signal here, before the decision append or caller awaits.
++				if (task !== void 0) task.signalCancellation = { reason: signal.reason };
+ 				resolve("cancelled");
+ 			};
+ 			signal.addEventListener("abort", onAbort, { once: true });

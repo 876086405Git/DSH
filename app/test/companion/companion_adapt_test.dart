@@ -54,11 +54,15 @@ Map<String, Object?> probeJson({
 
 CompanionProbe probe([Map<String, Object?>? json]) => CompanionProbe.fromJson(json ?? probeJson())!;
 
-String sse(String text) =>
+String sse(String text, {Map<String, Object?>? usage}) =>
     'event: content_block_delta\ndata: ${jsonEncode({
       'type': 'content_block_delta',
       'index': 0,
       'delta': {'type': 'text_delta', 'text': text},
+    })}\n\nevent: message_delta\ndata: ${jsonEncode({
+      'type': 'message_delta',
+      'delta': {'stop_reason': 'end_turn'},
+      'usage': ?usage,
     })}\n\nevent: message_stop\ndata: {"type":"message_stop"}\n\n';
 
 void main() {
@@ -251,7 +255,11 @@ void main() {
 
     test('one request, the answer checked', () async {
       final asked = <Map<String, Object?>>[];
+      final receipts = <CompanionUsage>[];
+      var sent = 0;
+      const rawUsage = {'input_tokens': 100, 'cache_read_input_tokens': 10, 'output_tokens': 25};
       final client = MockClient.streaming((request, body) async {
+        expect(sent, 1, reason: 'the wrapper forwards onSent before the actual send');
         asked.add(jsonDecode(await body.bytesToString()) as Map<String, Object?>);
         final answer = jsonEncode({
           'params': {
@@ -262,25 +270,39 @@ void main() {
           ],
           'notes': '对上了眼睛',
         });
-        return http.StreamedResponse(Stream.value(utf8.encode(sse('好的。$answer'))), 200);
+        return http.StreamedResponse(Stream.value(utf8.encode(sse('好的。$answer', usage: rawUsage))), 200);
       });
-      final adapter = await companionAdaptAsk(client: client, apiKey: 'sk-test', probe: probe(), note: '眼睛不眨');
+      final adapter = await companionAdaptAsk(
+        client: client,
+        apiKey: 'sk-test',
+        probe: probe(),
+        note: '眼睛不眨',
+        onSent: () => sent++,
+        onUsage: receipts.add,
+      );
       expect(asked.single['system'], companionAdaptSystem);
       expect((asked.single['messages']! as List).single.toString(), contains('眼睛不眨'));
       expect(adapter['params'], {
         'ParamEyeLOpen': {'id': 'EyeOpenL'},
       });
       expect(adapter['notes'], '对上了眼睛');
+      expect(receipts.single.finalUsage, rawUsage);
+      expect(receipts.single.outputTokens, 25);
+      expect(receipts.single.complete, isTrue);
+      expect(receipts.single.terminal, 'complete');
     });
 
     test('an answer with nothing usable in it', () async {
+      final receipts = <CompanionUsage>[];
       final prose = MockClient.streaming(
-        (_, _) async => http.StreamedResponse(Stream.value(utf8.encode(sse('我不确定'))), 200),
+        (_, _) async => http.StreamedResponse(Stream.value(utf8.encode(sse('我不确定', usage: {'output_tokens': 4}))), 200),
       );
       await expectLater(
-        companionAdaptAsk(client: prose, apiKey: 'k', probe: probe()),
+        companionAdaptAsk(client: prose, apiKey: 'k', probe: probe(), onUsage: receipts.add),
         throwsA(isA<CompanionAdaptError>().having((e) => e.reason, 'reason', 'unreadable')),
       );
+      expect(receipts.single.outputTokens, 4, reason: 'an unusable adapter still has billable reported usage');
+      expect(receipts.single.complete, isTrue);
       final made = MockClient.streaming(
         (_, _) async => http.StreamedResponse(
           Stream.value(
@@ -376,10 +398,16 @@ void main() {
 
     test('a refused key is the light route\'s error', () async {
       final refused = MockClient((_) async => http.Response('{"error":"bad key"}', 401));
+      final receipts = <CompanionUsage>[];
+      var sent = 0;
       await expectLater(
-        companionAdaptAsk(client: refused, apiKey: 'k', probe: probe()),
+        companionAdaptAsk(client: refused, apiKey: 'k', probe: probe(), onSent: () => sent++, onUsage: receipts.add),
         throwsA(isA<CompanionLightError>().having((e) => e.failure, 'failure', CompanionLightFailure.badKey)),
       );
+      expect(sent, 1);
+      expect(receipts.single.terminal, 'http_error');
+      expect(receipts.single.httpStatus, 401);
+      expect(receipts.single.outputTokens, isNull);
     });
   });
 

@@ -1,0 +1,47 @@
+--- a/node_modules/@deepseek-ai/dsh-llm/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm/lib/index.js
+@@ -2552,26 +2552,28 @@
+ 			guard();
+ 			const observed = capability.physicalDispatch === "fetch-invoked";
+ 			const adapterCall = observed
+-				? await registration.adapter.prepareCompanionAuxiliaryCall(config.provider, config.model, signal, { guard, observe: observer.observe })
++				? await registration.adapter.prepareCompanionAuxiliaryCall(config.provider, config.model, signal, { guard, observe: observer.observe, checkRequest: observer.checkRequest })
+ 				: await registration.adapter.prepareCall(config.provider, config.model, signal);
+ 			guard();
+ 			const info = this.normalizeModelInfo(registration, config.model, adapterCall.model);
+ 			const resolved = deepFreeze(structuredClone(this.resolveCallWithInfo(config, info).config));
+ 			let used = false;
+ 			return Object.freeze({
+-				config: resolved, capability,
++				config: resolved, capability, contextWindow: info.context?.contextWindow ?? null,
+ 				stream: ({ system, input }) => {
+ 					if (used) throw new LlmError("An auxiliary handle can only be dispatched once", "INVALID_PREPARED_CALL");
+ 					if (typeof system !== "string" || typeof input !== "string") throw new LlmError("Auxiliary requests require plain text", "INVALID_PREPARED_CALL");
+ 					used = true;
+ 					guard();
++					// Construct only model input; never serialize credentials, signal,
++					// callbacks or the adapter connection into an input estimate.
++					const request = deepFreeze({ system, messages: [{ role: "user", content: [{ type: "text", text: input }] }] });
++					if (!observed && observer.checkRequest?.(JSON.stringify(request), "adapter-input") === false) throw new LlmError("Lookup answer input exceeds its request budget", "COMPANION_LOOKUP_INPUT_LIMIT");
++					guard();
+ 					// A generic adapter call is NOT evidence of a physical POST.
+ 					// Its own transport/retry behavior stays adapter-owned and unknown.
+ 					if (!observed) observer.observe({ type: "handoff", atMs: Date.now(), boundary: "adapter-invoked" });
+-					// Construct the entire request here; callers cannot supply tools,
+-					// session identity, histories or additional message roles.
+-					return adapterCall.stream(Object.freeze({ ...resolved, system,
+-						messages: deepFreeze([{ role: "user", content: [{ type: "text", text: input }] }]),
++					return adapterCall.stream(Object.freeze({ ...resolved, ...request,
+ 						...signal === void 0 ? {} : { signal }
+ 					}));
+ 				}
+--- a/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
+@@ -2113,6 +2113,7 @@
+ /** A dispatch is fetch invocation, never a claim of remote delivery or billing. */
+ function companionAuxiliaryFetch(auxiliary, url, init) {
+ 	if (auxiliary === void 0) return fetch(url, init);
++	if (auxiliary.observer.checkRequest?.(init.body, "provider-request") === false) throw new LlmError("Lookup answer input exceeds its request budget", "COMPANION_LOOKUP_INPUT_LIMIT");
+ 	auxiliary.observer.guard();
+ 	init.signal?.throwIfAborted();
+ 	if (auxiliary.dispatched) throw new LlmError("Auxiliary transport cannot make a second physical request", "COMPANION_AUXILIARY_RETRY_DENIED");

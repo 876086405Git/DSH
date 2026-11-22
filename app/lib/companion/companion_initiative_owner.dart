@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'dart:collection';
 import 'dart:math';
 
+import 'package:dsh_client/companion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -109,12 +110,16 @@ abstract interface class CompanionInitiativeRoom {
 }
 
 class _SignalRequest {
-  const _SignalRequest(this.room, this.candidate, this.isCurrent, this.present, this.hide);
+  _SignalRequest(this.room, this.candidate, this.isCurrent, this.present, this.hide, this.followupId, this.prepare);
   final CompanionInitiativeRoom room;
   final CompanionInitiativeSignal candidate;
   final bool Function() isCurrent;
   final bool Function(CompanionInitiativeDisplay) present;
   final void Function(String) hide;
+  final String? followupId;
+  final Future<bool> Function()? prepare;
+  bool preparing = false;
+  bool prepared = false;
 }
 
 class _QueuedInitiative {
@@ -127,9 +132,7 @@ class _QueuedInitiative {
 /// One installation owner serializes observations, presentation and persistence.
 /// A displayed message is charged even when its synchronous callback changes room.
 class CompanionInitiative {
-  CompanionInitiative(this._readClock) {
-    unawaited(_restore());
-  }
+  CompanionInitiative(this._readClock);
   final CompanionInitiativeClock Function() _readClock;
   bool _clockUnavailable = false;
   CompanionInitiativeClock _now() {
@@ -159,7 +162,7 @@ class CompanionInitiative {
   CompanionInitiativeRoom? _shownRoom;
   _SignalRequest? _shownSignal;
   String? _shownId;
-  Future<void> _writes = Future.value();
+  CompanionMemoryStore? _store;
   final _restored = Completer<void>();
   Future<void> get ready => _restored.future;
   String? get fault => _clockUnavailable
@@ -176,36 +179,59 @@ class CompanionInitiative {
   String? _trackedContext;
   CompanionInitiativeRoom? _trackedRoom;
 
+  /// The shared phone owner opens the database; this owner borrows it.
+  /// No optional prompt can run before the existing ledger has been restored.
+  Future<void> attachMemory(CompanionMemoryStore store) {
+    if (_store != null) return ready;
+    _store = store;
+    return _restore();
+  }
+
   Future<void> _restore() async {
-    CompanionInitiativeRestore restored;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.get(companionInitiativeKey);
-      if (raw == null) {
-        restored = const CompanionInitiativeRestore.newLedger();
-      } else if (raw is String) {
-        Object? value;
-        try {
-          value = jsonDecode(raw);
-        } on FormatException {
-          value = raw;
-        }
-        restored = CompanionInitiativeRestore.loaded(value);
+      final saved = _store!.initiativeRecord();
+      CompanionInitiativeRestore restored;
+      if (saved != null) {
+        restored = CompanionInitiativeRestore.loaded(saved);
       } else {
-        restored = CompanionInitiativeRestore.loaded(raw);
+        final raw = (await SharedPreferences.getInstance()).get(companionInitiativeKey);
+        if (raw == null) {
+          restored = const CompanionInitiativeRestore.newLedger();
+        } else {
+          Object? value = raw;
+          if (raw is String) {
+            try {
+              value = jsonDecode(raw);
+            } on FormatException {
+              // The strict reader below rejects the original malformed value.
+            }
+          }
+          restored = CompanionInitiativeRestore.loaded(value);
+        }
       }
-    } on Object {
-      restored = const CompanionInitiativeRestore.unavailable();
-    }
-    if (!_disposed) {
+      if (_disposed) return;
       final now = _now();
-      if (!_disposed) {
-        _controller = CompanionInitiativeController(now: now, restored: restored)..pace = _pace;
-        final view = _view;
-        if (_room != null && view != null) _run(CompanionInitiativeEvent.enter(view));
+      if (_disposed) return;
+      final controller = CompanionInitiativeController(now: now, restored: restored)..pace = _pace;
+      if (saved == null && controller.fault == null) {
+        _store!.initializeInitiative(controller.record!.toJson());
       }
+      _controller = controller;
+      final view = _view;
+      if (_room != null && view != null) _run(CompanionInitiativeEvent.enter(view));
+    } on Object {
+      if (!_disposed) {
+        final now = _now();
+        if (!_disposed) {
+          _controller = CompanionInitiativeController(
+            now: now,
+            restored: const CompanionInitiativeRestore.unavailable(),
+          );
+        }
+      }
+    } finally {
+      if (!_restored.isCompleted) _restored.complete();
     }
-    if (!_restored.isCompleted) _restored.complete();
   }
 
   /// The person's pick (「她多主动」), from the next check on: a quiet stretch
@@ -289,19 +315,22 @@ class CompanionInitiative {
     required bool Function(CompanionInitiativeDisplay) present,
     required void Function(String) hide,
     bool nightCareEnabled = false,
+    String? followupId,
+    Future<bool> Function()? prepare,
   }) {
     if (_disposed ||
         _controller == null ||
         !identical(room, _room) ||
         candidate.contextKey != view.contextKey ||
-        _signal?.candidate.id == candidate.id) {
+        _signal?.candidate.id == candidate.id ||
+        (followupId != null && _signal != null)) {
       return false;
     }
     final previous = _signal;
     _retireRequest();
     _view = view;
     _revision++;
-    final request = _SignalRequest(room, candidate, isCurrent, present, hide);
+    final request = _SignalRequest(room, candidate, isCurrent, present, hide, followupId, prepare);
     _signal = request;
     if (previous != null) _enqueue(CompanionInitiativeEvent.cancelSignal(previous.candidate.id), room);
     _enqueue(CompanionInitiativeEvent.signal(candidate, nightCareEnabled: nightCareEnabled, view: view), room);
@@ -389,6 +418,17 @@ class CompanionInitiative {
         }
         _apply(controller, controller.handle(op.event, _now()), op);
         _track(op.event);
+        final ticket = controller.offer;
+        final prepared = _signal;
+        if (_queue.isEmpty &&
+            ticket != null &&
+            prepared != null &&
+            prepared.prepared &&
+            ticket.signalId == prepared.candidate.id) {
+          // Preparation may span observations. Resume the still-pending offer
+          // under the current view, while reentrant render events stay queued.
+          _offer(controller, ticket, _QueuedInitiative(const CompanionInitiativeEvent.check(), _room, _revision));
+        }
       }
       final pending = _signal;
       if (pending != null && controller.pendingSignal?.id != pending.candidate.id) _retireRequest();
@@ -420,49 +460,117 @@ class CompanionInitiative {
     } on Object {
       allowed = false;
     }
-    final staged = allowed ? controller.stagePresentation(ticket.id, _now()) : null;
-    if (staged == null || room == null || !_same(op, room, request)) {
-      _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);
+    if (allowed && request != null && request.prepare != null && !request.prepared) {
+      if (!request.preparing) {
+        _prepare(controller, ticket, request);
+      }
       return;
     }
-    bool shown = false;
     try {
-      if (request != null) {
-        // All external current/canPresent callbacks ran before fresh-clock
-        // staging. No callback may cross a clock gate after this validation.
-        if (_same(op, room, request)) shown = request.present(staged.display);
-      } else {
-        room.show(staged.display);
-        shown = true;
+      String? reservation;
+      if (allowed && ticket.kind != CompanionPromptKind.greeting) {
+        final now = _now();
+        if (_disposed) return;
+        reservation = _store!.reserveInitiative(
+          kind: request?.followupId != null ? 'followup' : ticket.kind.name,
+          nowMs: now.wallMs,
+          maxPerDay: controller.pace.maxPerDay,
+          gapMs: controller.pace.gapMs,
+          followupId: request?.followupId,
+        );
+        allowed = reservation != null;
       }
-    } on Object {
-      shown = false;
-    }
-    if (!shown) {
+      // SQLite and the last external source check may cross a window boundary.
+      // Stage with a fresh clock only after both, immediately before rendering.
+      if (allowed && request != null) allowed = _requestCurrent(request);
+      final staged = allowed ? controller.stagePresentation(ticket.id, _now()) : null;
+      if (staged == null || room == null || !_same(op, room, request)) {
+        if (reservation != null) _store!.settleInitiative(reservation, outcome: 'released');
+        _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);
+        return;
+      }
+      var shown = false;
+      var unknown = false;
       try {
         if (request != null) {
-          request.hide(ticket.id);
+          shown = request.present(staged.display);
         } else {
-          room.hide(ticket.id);
+          room.show(staged.display);
+          shown = true;
         }
       } on Object {
-        /* best-effort partial render cleanup */
+        unknown = true;
       }
-      _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);
-      return;
-    }
-    _shownRoom = room;
-    _shownSignal = request;
-    _shownId = ticket.id;
-    // Reentrant observations are queued. A true render is committed before them.
-    final committed = controller.commitPresentation(staged);
-    if (committed.isEmpty) {
+      if (!shown) {
+        try {
+          if (request != null) {
+            request.hide(ticket.id);
+          } else {
+            room.hide(ticket.id);
+          }
+        } on Object {
+          // Cleanup cannot prove that nothing appeared.
+        }
+      }
+      if (shown) {
+        _shownRoom = room;
+        _shownSignal = request;
+        _shownId = ticket.id;
+      }
+      if (reservation != null) {
+        _store!.settleInitiative(
+          reservation,
+          outcome: shown
+              ? 'shown'
+              : unknown
+              ? 'unknown'
+              : 'released',
+        );
+      }
+      if (!shown && !unknown) {
+        _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);
+        return;
+      }
+      // Reentrant observations wait in the queue. True and uncertain renders
+      // both consume the cached gate; SQLite keeps their distinct outcomes.
+      final committed = controller.commitPresentation(staged);
+      if (committed.isEmpty) {
+        _hide(ticket.id);
+        _apply(controller, controller.handle(const CompanionInitiativeEvent.storageFault(), _now()), op);
+        return;
+      }
+      if (shown) _arm(ticket.id, staged.display.expiresAtMono);
+      _apply(controller, committed.where((e) => e.type != CompanionInitiativeEffectType.show).toList(), op);
+      if (unknown) {
+        _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);
+      }
+    } on Object {
+      // A persisted reservation whose settlement fails remains occupied.
+      // Do not show another prompt from a cache after the database failed.
       _hide(ticket.id);
       _apply(controller, controller.handle(const CompanionInitiativeEvent.storageFault(), _now()), op);
-      return;
     }
-    _arm(ticket.id, staged.display.expiresAtMono);
-    _apply(controller, committed.where((e) => e.type != CompanionInitiativeEffectType.show).toList(), op);
+  }
+
+  void _prepare(CompanionInitiativeController controller, CompanionInitiativeTicket ticket, _SignalRequest request) {
+    request.preparing = true;
+    unawaited(() async {
+      var ready = false;
+      try {
+        ready = await request.prepare!();
+      } on Object {
+        // Optional wording failures spend no presentation quota.
+      }
+      if (!identical(_signal, request)) {
+        return;
+      }
+      if (!ready || !_requestCurrent(request) || controller.offer?.id != ticket.id) {
+        cancelSignal(request.candidate.id);
+        return;
+      }
+      request.prepared = true;
+      _run(const CompanionInitiativeEvent.check());
+    }());
   }
 
   void _hide(String id) {
@@ -513,16 +621,11 @@ class CompanionInitiative {
   }
 
   void _write(CompanionInitiativeRecord record) {
-    final value = jsonEncode(record.toJson());
-    _writes = _writes.then((_) async {
-      var ok = false;
-      try {
-        ok = await (await SharedPreferences.getInstance()).setString(companionInitiativeKey, value);
-      } on Object {
-        /* close the owner below */
-      }
-      if (!ok) _run(const CompanionInitiativeEvent.storageFault());
-    });
+    try {
+      _store!.writeInitiativeMetadata(record.toJson());
+    } on Object {
+      _run(const CompanionInitiativeEvent.storageFault());
+    }
   }
 
   static bool _quietLooking(CompanionInitiativeView? view) =>
@@ -643,6 +746,7 @@ class CompanionInitiative {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    if (!_restored.isCompleted) _restored.complete();
     _revision++;
     _cancelQuietWake();
     _disarm();

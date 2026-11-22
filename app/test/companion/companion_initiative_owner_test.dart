@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:dsh_app/companion/companion_initiative.dart';
 import 'package:dsh_app/companion/companion_initiative_owner.dart';
 import 'package:dsh_app/companion/companion_elapsed_clock.dart';
+import 'package:dsh_client/companion.dart';
+import 'package:sqlite3/sqlite3.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,11 +66,15 @@ CompanionInitiativeView _view({
   contextKey: key,
 );
 
+late CompanionMemoryStore _memory;
+
 Future<CompanionInitiative> _owner(WidgetTester tester, _Clock clock) async {
   final container = ProviderContainer(overrides: [companionInitiativeClockProvider.overrideWithValue(clock.call)]);
   addTearDown(container.dispose);
   final owner = container.read(companionInitiativeProvider);
-  await tester.runAsync(() => owner.ready);
+  _memory = CompanionMemoryStore(sqlite3.openInMemory(), nowMilliseconds: () => clock.wall);
+  addTearDown(_memory.close);
+  await tester.runAsync(() => owner.attachMemory(_memory));
   return owner;
 }
 
@@ -90,13 +96,7 @@ Future<void> _pass(
   }
 }
 
-Future<Map<String, Object?>?> _ledger(WidgetTester tester) async {
-  // Let the queued write land.
-  await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
-  final prefs = await SharedPreferences.getInstance();
-  final raw = prefs.getString(companionInitiativeKey);
-  return raw == null ? null : jsonDecode(raw) as Map<String, Object?>;
-}
+Map<String, Object?>? _ledger() => _memory.initiativeRecord();
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -306,7 +306,7 @@ void main() {
     expect(display.ticket.kind, CompanionPromptKind.invite);
     expect(display.expiresAtMono, isNotNull);
 
-    final ledger = await _ledger(tester);
+    final ledger = _ledger();
     expect(ledger?['inviteAtMs'], [display.committedAtWallMs]);
 
     await _pass(tester, clock, const Duration(seconds: 9));
@@ -355,7 +355,7 @@ void main() {
     await _pass(tester, clock, const Duration(seconds: 50));
     expect(room.invites, hasLength(1));
     expect(room.shown, isEmpty);
-    final unspent = await _ledger(tester);
+    final unspent = _ledger();
     expect(unspent?['inviteAtMs'], isEmpty);
     expect(unspent?['signalAtMs'], isEmpty);
     expect(unspent?['lastGreetingAtMs'], isNull);
@@ -397,7 +397,7 @@ void main() {
     expect(owner.decline(room, id, _view()), isTrue);
     expect(room.hidden, [id]);
     expect(room.rests, isEmpty);
-    final ledger = await _ledger(tester);
+    final ledger = _ledger();
     expect(ledger?['declinedUntilMs'], clock.wall + CompanionInitiativeRules.inviteGapMs);
     // A second tap on a button already gone answers nothing.
     expect(owner.decline(room, id, _view()), isFalse);

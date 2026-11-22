@@ -184,7 +184,11 @@ enum RiskChoice {
 /// Shows [notice] (a medium one only until it was confirmed with 「不再提示」)
 /// and resolves true to go ahead. 「问 AI」 resolves false and opens the
 /// question in a new conversation.
-Future<bool> confirmRisk(BuildContext context, RiskNotice notice) async {
+Future<bool> confirmRisk(
+  BuildContext context,
+  RiskNotice notice, {
+  ValueChanged<ModalRoute<Object?>>? onRouteChanged,
+}) async {
   final container = ProviderScope.containerOf(context, listen: false);
   final store = container.read(riskNoticeStoreProvider);
   if (notice.level == RiskLevel.medium && await store.silenced(notice.id)) return true;
@@ -194,6 +198,7 @@ Future<bool> confirmRisk(BuildContext context, RiskNotice notice) async {
     context,
     dismissal: SheetDismissal.button,
     isScrollControlled: true,
+    onRouteChanged: onRouteChanged == null ? null : (route, _) => onRouteChanged(route),
     builder: (_) => RiskNoticeSheet(notice: notice, canAsk: ask != null),
   );
   switch (choice) {

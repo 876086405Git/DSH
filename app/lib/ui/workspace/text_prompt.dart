@@ -21,10 +21,12 @@ Future<String?> showTextPrompt(
   bool mono = false,
   TextInputType? keyboardType,
   String? Function(String text)? validate,
+  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged,
 }) {
   final l10n = context.l10n;
   return showAppDialog<String>(
     context: context,
+    onRouteChanged: onRouteChanged,
     builder: (_) => _TextPrompt(
       title: title,
       initial: initial,

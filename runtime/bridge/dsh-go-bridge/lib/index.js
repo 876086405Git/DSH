@@ -1,3 +1,4 @@
+import { mountCompanionTasks } from "./companion/task-service.js";
 // dsh-go-bridge, host half (docs/design/plugin-seams.md §5.2, §9.2).
 //
 //   GET  /dsh-go/v1/inventory   wire format v1: release, packages with browser halves, the last
@@ -327,6 +328,8 @@ export function apply(ctx, config) {
   let pluginConfig;
   ctx.on("internal/status", (fiber) => { native.markDirty(); pluginConfig?.statusChanged(fiber); });
 
+  mountCompanionTasks(ctx);
+
   ctx.inject(["webServer"], (webCtx) => {
     webCtx.effect(() => webCtx.webServer.tapIndex(injectPromiseWithResolvers),
       "dsh-go-bridge: browser Promise.withResolvers");
@@ -403,6 +406,7 @@ export function apply(ctx, config) {
     const speechRoutes = createSpeechRoutes(webCtx, { send, fetch: options.speech?.fetch, apiKeyEnv: options.speech?.apiKeyEnv });
     webCtx.effect(() => () => speechRoutes.dispose(), "dsh-go-bridge: speech routes");
     const companionRoutes = createCompanionRoutes({ send, store: companionStore, recall: companionRecall, signals: companionSignals, ctx: webCtx, promptContext: companionPrompt });
+    webCtx.effect(() => () => companionRoutes.dispose(), 'dsh-go-bridge: companion auxiliary requests');
     webCtx.effect(() => () => nativeRoutes.dispose(), "dsh-go-bridge: native routes");
     webCtx.effect(() => webCtx.webServer.registerUpgrade({
       path: STREAM_PATH,

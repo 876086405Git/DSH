@@ -126,6 +126,40 @@ class CompanionLocalStore {
     ),
   );
 
+  /// A missing old store stays missing. Never initialize it merely to migrate.
+  Future<CompanionMigrationSnapshot?> probeForMigration() => _enqueue(() async {
+    final doc = await _readExisting();
+    return doc == null
+        ? null
+        : CompanionMigrationSnapshot.fromJson({
+            'v': doc['v'],
+            'storeId': doc['storeId'],
+            'revision': doc['revision'],
+            'memoryRevision': doc['memoryRevision'],
+            'memories': doc['memories'],
+          });
+  });
+
+  /// Only a snapshot already committed and read back on the phone may call this.
+  Future<int> removeMigratedMemories(String storeId, int revision, Set<String> ids) {
+    _versionInput(storeId, revision);
+    if (!ids.every(_uuid)) throw _invalid;
+    final normalized = ids.map((id) => id.toLowerCase()).toSet();
+    return _enqueue(() async {
+      final doc = await _readExisting();
+      if (doc == null) throw _corrupt;
+      _checkVersion(doc, storeId, revision);
+      final rows = _records(doc);
+      final length = rows.length;
+      rows.removeWhere((row) => normalized.contains((row['id']! as String).toLowerCase()));
+      if (rows.length != length) {
+        doc['memories'] = rows;
+        await _commit(doc, memoryChanged: true);
+      }
+      return _integer(doc['revision'])!;
+    });
+  }
+
   /// Call only after the user has reviewed and confirmed the exact record.
   /// A model's text or a source.kind value is not evidence of confirmation.
   Future<int> saveCompanionMemory(String storeId, int revision, CompanionMemory memory) {
@@ -248,8 +282,7 @@ class CompanionLocalStore {
   }
 
   Future<T> _transaction<T>(FutureOr<T> Function(_Json, int) operation) {
-    final key = _file.path;
-    final result = (_queues[key] ?? Future<void>.value()).then((_) async {
+    return _enqueue(() async {
       final at = _now();
       if (at < 0 || at > _maxClock) {
         throw const DshRemoteException('companion/unavailable', 'Companion clock is unavailable', {'status': 503});
@@ -257,6 +290,11 @@ class CompanionLocalStore {
       final doc = await _read(at);
       return operation(doc, at);
     });
+  }
+
+  Future<T> _enqueue<T>(FutureOr<T> Function() operation) {
+    final key = _file.path;
+    final result = (_queues[key] ?? Future<void>.value()).then((_) => operation());
     final tail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     _queues[key] = tail;
     unawaited(
@@ -268,6 +306,14 @@ class CompanionLocalStore {
   }
 
   Future<_Json> _read(int at) async {
+    final existing = await _readExisting();
+    if (existing != null) return existing;
+    final doc = _initial(at);
+    await _write(doc);
+    return doc;
+  }
+
+  Future<_Json?> _readExisting() async {
     RandomAccessFile? handle;
     try {
       handle = await _file.open();
@@ -289,9 +335,7 @@ class CompanionLocalStore {
       return value;
     } on FileSystemException catch (error) {
       if (error.osError?.errorCode == 2 || (Platform.isWindows && error.osError?.errorCode == 3)) {
-        final doc = _initial(at);
-        await _write(doc);
-        return doc;
+        return null;
       }
       throw _ioError;
     } finally {

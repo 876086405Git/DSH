@@ -1,0 +1,1401 @@
+{
+  "create": {
+    "v": 1,
+    "hostStoreId": "dd627cc6-d5e9-45b9-9f35-954256725269",
+    "taskId": "receipts-one",
+    "taskRev": 1,
+    "kind": "host.receipts_to_sheet",
+    "origin": {
+      "sourceSessionId": "light:original-room",
+      "messageId": "receipt-message",
+      "itemNo": 0
+    },
+    "hostSessionId": null,
+    "args": {
+      "inputs": [
+        {
+          "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+          "version": "27:1336810:56:1795176000000000000:1795287759771208866"
+        },
+        {
+          "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+          "version": "27:1336811:56:1795176000000000000:1795287759783208276"
+        },
+        {
+          "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+          "version": "27:1336812:56:1795176000000000000:1795287759795207685"
+        },
+        {
+          "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+          "version": "27:1336813:56:1795176000000000000:1795287759811206897"
+        }
+      ],
+      "outputDirRef": "e71023c4-1e2b-42d6-9a6f-a75587e81865",
+      "outputName": "差旅小表.xlsx",
+      "writeMode": "createNew"
+    },
+    "deadlineAtMs": null,
+    "afterExit": "continue",
+    "allowQueue": true
+  },
+  "inputs": [
+    {
+      "v": 1,
+      "hostStoreId": "dd627cc6-d5e9-45b9-9f35-954256725269",
+      "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+      "displayName": "receipt-0.txt",
+      "version": "27:1336810:56:1795176000000000000:1795287759771208866",
+      "size": 56,
+      "mediaType": "text/plain"
+    },
+    {
+      "v": 1,
+      "hostStoreId": "dd627cc6-d5e9-45b9-9f35-954256725269",
+      "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+      "displayName": "receipt-1.txt",
+      "version": "27:1336811:56:1795176000000000000:1795287759783208276",
+      "size": 56,
+      "mediaType": "text/plain"
+    },
+    {
+      "v": 1,
+      "hostStoreId": "dd627cc6-d5e9-45b9-9f35-954256725269",
+      "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+      "displayName": "receipt-2.txt",
+      "version": "27:1336812:56:1795176000000000000:1795287759795207685",
+      "size": 56,
+      "mediaType": "text/plain"
+    },
+    {
+      "v": 1,
+      "hostStoreId": "dd627cc6-d5e9-45b9-9f35-954256725269",
+      "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+      "displayName": "receipt-3.txt",
+      "version": "27:1336813:56:1795176000000000000:1795287759811206897",
+      "size": 56,
+      "mediaType": "text/plain"
+    }
+  ],
+  "original": {
+    "v": 1,
+    "taskId": "receipts-one",
+    "hostExecutionId": "a6a65d5b-344c-41a6-b97d-ccd47eb45279",
+    "kind": "host.receipts_to_sheet",
+    "taskRev": 1,
+    "runnerReceiptSeq": 12,
+    "origin": {
+      "sourceSessionId": "light:original-room",
+      "messageId": "receipt-message",
+      "itemNo": 0
+    },
+    "hostSessionId": null,
+    "state": "running",
+    "waitReason": null,
+    "cancelRequested": false,
+    "createdAtMs": 1795287759827,
+    "updatedAtMs": 1795287760324,
+    "agreement": {
+      "args": {
+        "inputs": [
+          {
+            "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+            "version": "27:1336810:56:1795176000000000000:1795287759771208866"
+          },
+          {
+            "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+            "version": "27:1336811:56:1795176000000000000:1795287759783208276"
+          },
+          {
+            "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+            "version": "27:1336812:56:1795176000000000000:1795287759795207685"
+          },
+          {
+            "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+            "version": "27:1336813:56:1795176000000000000:1795287759811206897"
+          }
+        ],
+        "outputDirRef": "e71023c4-1e2b-42d6-9a6f-a75587e81865",
+        "outputName": "差旅小表.xlsx",
+        "writeMode": "createNew"
+      },
+      "deadlineAtMs": null,
+      "afterExit": "continue",
+      "allowQueue": true
+    },
+    "revisions": [
+      {
+        "taskRev": 1,
+        "operation": "create",
+        "acceptedAtMs": 1795287759831,
+        "agreement": {
+          "args": {
+            "inputs": [
+              {
+                "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                "version": "27:1336810:56:1795176000000000000:1795287759771208866"
+              },
+              {
+                "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                "version": "27:1336811:56:1795176000000000000:1795287759783208276"
+              },
+              {
+                "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                "version": "27:1336812:56:1795176000000000000:1795287759795207685"
+              },
+              {
+                "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                "version": "27:1336813:56:1795176000000000000:1795287759811206897"
+              }
+            ],
+            "outputDirRef": "e71023c4-1e2b-42d6-9a6f-a75587e81865",
+            "outputName": "差旅小表.xlsx",
+            "writeMode": "createNew"
+          },
+          "deadlineAtMs": null,
+          "afterExit": "continue",
+          "allowQueue": true
+        }
+      }
+    ],
+    "steps": [
+      {
+        "taskRev": 1,
+        "stepKey": "readInputs",
+        "attemptId": "326c79f7-e6c4-461f-8a39-b89122c3485a",
+        "state": "done",
+        "startedAtMs": 1795287760172,
+        "finishedAtMs": 1795287760257,
+        "reason": null,
+        "result": {
+          "completion": {
+            "report": {
+              "sources": [
+                {
+                  "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                  "version": "27:1336810:56:1795176000000000000:1795287759771208866",
+                  "displayName": "receipt-0.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                  "version": "27:1336811:56:1795176000000000000:1795287759783208276",
+                  "displayName": "receipt-1.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                  "version": "27:1336812:56:1795176000000000000:1795287759795207685",
+                  "displayName": "receipt-2.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                  "version": "27:1336813:56:1795176000000000000:1795287759811206897",
+                  "displayName": "receipt-3.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                }
+              ],
+              "rows": [
+                {
+                  "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                  "version": "27:1336810:56:1795176000000000000:1795287759771208866",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                  "version": "27:1336811:56:1795176000000000000:1795287759783208276",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                  "version": "27:1336812:56:1795176000000000000:1795287759795207685",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                  "version": "27:1336813:56:1795176000000000000:1795287759811206897",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                }
+              ],
+              "coverage": {
+                "inputCount": 4,
+                "readCompleteCount": 4,
+                "parseCompleteCount": 4,
+                "rowsWithVerifiedFields": 4,
+                "fullyVerifiedRows": 4,
+                "gaps": []
+              }
+            }
+          }
+        }
+      },
+      {
+        "taskRev": 1,
+        "stepKey": "writeSheet",
+        "attemptId": "e4998f98-ca19-4ed8-9881-2f60c551c114",
+        "state": "running",
+        "startedAtMs": 1795287760271,
+        "finishedAtMs": null,
+        "reason": null,
+        "result": null
+      }
+    ],
+    "artifacts": [],
+    "approval": null,
+    "budget": {
+      "limitMs": 300000,
+      "spentMs": 85,
+      "heldMs": 120000
+    },
+    "hostStoreId": "dd627cc6-d5e9-45b9-9f35-954256725269",
+    "originalCreatePresent": true
+  },
+  "operation": {
+    "v": 1,
+    "hostStoreId": "dd627cc6-d5e9-45b9-9f35-954256725269",
+    "kind": "host.receipts_to_sheet",
+    "operationId": "late-amend",
+    "expectedTaskRev": 1,
+    "taskRev": 2,
+    "changes": {
+      "args": {
+        "inputs": [
+          {
+            "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+            "version": "27:1336810:56:1795176000000000000:1795287759771208866"
+          },
+          {
+            "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+            "version": "27:1336811:56:1795176000000000000:1795287759783208276"
+          },
+          {
+            "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+            "version": "27:1336812:56:1795176000000000000:1795287759795207685"
+          },
+          {
+            "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+            "version": "27:1336813:56:1795176000000000000:1795287759811206897"
+          }
+        ],
+        "outputDirRef": "e71023c4-1e2b-42d6-9a6f-a75587e81865",
+        "outputName": "新的约定.xlsx",
+        "writeMode": "createNew"
+      },
+      "deadlineAtMs": null,
+      "afterExit": "continue",
+      "allowQueue": true
+    }
+  },
+  "accepted": {
+    "v": 1,
+    "taskId": "receipts-one",
+    "hostExecutionId": "a6a65d5b-344c-41a6-b97d-ccd47eb45279",
+    "kind": "host.receipts_to_sheet",
+    "taskRev": 2,
+    "runnerReceiptSeq": 13,
+    "origin": {
+      "sourceSessionId": "light:original-room",
+      "messageId": "receipt-message",
+      "itemNo": 0
+    },
+    "hostSessionId": null,
+    "state": "unknown",
+    "waitReason": "prior_step_unresolved",
+    "cancelRequested": false,
+    "createdAtMs": 1795287759827,
+    "updatedAtMs": 1795287760367,
+    "agreement": {
+      "args": {
+        "inputs": [
+          {
+            "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+            "version": "27:1336810:56:1795176000000000000:1795287759771208866"
+          },
+          {
+            "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+            "version": "27:1336811:56:1795176000000000000:1795287759783208276"
+          },
+          {
+            "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+            "version": "27:1336812:56:1795176000000000000:1795287759795207685"
+          },
+          {
+            "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+            "version": "27:1336813:56:1795176000000000000:1795287759811206897"
+          }
+        ],
+        "outputDirRef": "e71023c4-1e2b-42d6-9a6f-a75587e81865",
+        "outputName": "新的约定.xlsx",
+        "writeMode": "createNew"
+      },
+      "deadlineAtMs": null,
+      "afterExit": "continue",
+      "allowQueue": true
+    },
+    "revisions": [
+      {
+        "taskRev": 1,
+        "operation": "create",
+        "acceptedAtMs": 1795287759831,
+        "agreement": {
+          "args": {
+            "inputs": [
+              {
+                "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                "version": "27:1336810:56:1795176000000000000:1795287759771208866"
+              },
+              {
+                "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                "version": "27:1336811:56:1795176000000000000:1795287759783208276"
+              },
+              {
+                "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                "version": "27:1336812:56:1795176000000000000:1795287759795207685"
+              },
+              {
+                "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                "version": "27:1336813:56:1795176000000000000:1795287759811206897"
+              }
+            ],
+            "outputDirRef": "e71023c4-1e2b-42d6-9a6f-a75587e81865",
+            "outputName": "差旅小表.xlsx",
+            "writeMode": "createNew"
+          },
+          "deadlineAtMs": null,
+          "afterExit": "continue",
+          "allowQueue": true
+        }
+      },
+      {
+        "taskRev": 2,
+        "operation": "amend",
+        "acceptedAtMs": 1795287760367,
+        "agreement": {
+          "args": {
+            "inputs": [
+              {
+                "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                "version": "27:1336810:56:1795176000000000000:1795287759771208866"
+              },
+              {
+                "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                "version": "27:1336811:56:1795176000000000000:1795287759783208276"
+              },
+              {
+                "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                "version": "27:1336812:56:1795176000000000000:1795287759795207685"
+              },
+              {
+                "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                "version": "27:1336813:56:1795176000000000000:1795287759811206897"
+              }
+            ],
+            "outputDirRef": "e71023c4-1e2b-42d6-9a6f-a75587e81865",
+            "outputName": "新的约定.xlsx",
+            "writeMode": "createNew"
+          },
+          "deadlineAtMs": null,
+          "afterExit": "continue",
+          "allowQueue": true
+        }
+      }
+    ],
+    "steps": [
+      {
+        "taskRev": 1,
+        "stepKey": "readInputs",
+        "attemptId": "326c79f7-e6c4-461f-8a39-b89122c3485a",
+        "state": "done",
+        "startedAtMs": 1795287760172,
+        "finishedAtMs": 1795287760257,
+        "reason": null,
+        "result": {
+          "completion": {
+            "report": {
+              "sources": [
+                {
+                  "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                  "version": "27:1336810:56:1795176000000000000:1795287759771208866",
+                  "displayName": "receipt-0.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                  "version": "27:1336811:56:1795176000000000000:1795287759783208276",
+                  "displayName": "receipt-1.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                  "version": "27:1336812:56:1795176000000000000:1795287759795207685",
+                  "displayName": "receipt-2.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                  "version": "27:1336813:56:1795176000000000000:1795287759811206897",
+                  "displayName": "receipt-3.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                }
+              ],
+              "rows": [
+                {
+                  "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                  "version": "27:1336810:56:1795176000000000000:1795287759771208866",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                  "version": "27:1336811:56:1795176000000000000:1795287759783208276",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                  "version": "27:1336812:56:1795176000000000000:1795287759795207685",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                  "version": "27:1336813:56:1795176000000000000:1795287759811206897",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                }
+              ],
+              "coverage": {
+                "inputCount": 4,
+                "readCompleteCount": 4,
+                "parseCompleteCount": 4,
+                "rowsWithVerifiedFields": 4,
+                "fullyVerifiedRows": 4,
+                "gaps": []
+              }
+            }
+          }
+        }
+      },
+      {
+        "taskRev": 1,
+        "stepKey": "writeSheet",
+        "attemptId": "e4998f98-ca19-4ed8-9881-2f60c551c114",
+        "state": "running",
+        "startedAtMs": 1795287760271,
+        "finishedAtMs": null,
+        "reason": null,
+        "result": null
+      }
+    ],
+    "artifacts": [],
+    "approval": null,
+    "budget": {
+      "limitMs": 300000,
+      "spentMs": 85,
+      "heldMs": 120000
+    },
+    "hostStoreId": "dd627cc6-d5e9-45b9-9f35-954256725269",
+    "originalCreatePresent": true
+  },
+  "complete": {
+    "v": 1,
+    "taskId": "receipts-one",
+    "hostExecutionId": "a6a65d5b-344c-41a6-b97d-ccd47eb45279",
+    "kind": "host.receipts_to_sheet",
+    "taskRev": 2,
+    "runnerReceiptSeq": 14,
+    "origin": {
+      "sourceSessionId": "light:original-room",
+      "messageId": "receipt-message",
+      "itemNo": 0
+    },
+    "hostSessionId": null,
+    "state": "partial",
+    "waitReason": "prior_revision_effect",
+    "cancelRequested": false,
+    "createdAtMs": 1795287759827,
+    "updatedAtMs": 1795287760396,
+    "agreement": {
+      "args": {
+        "inputs": [
+          {
+            "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+            "version": "27:1336810:56:1795176000000000000:1795287759771208866"
+          },
+          {
+            "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+            "version": "27:1336811:56:1795176000000000000:1795287759783208276"
+          },
+          {
+            "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+            "version": "27:1336812:56:1795176000000000000:1795287759795207685"
+          },
+          {
+            "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+            "version": "27:1336813:56:1795176000000000000:1795287759811206897"
+          }
+        ],
+        "outputDirRef": "e71023c4-1e2b-42d6-9a6f-a75587e81865",
+        "outputName": "新的约定.xlsx",
+        "writeMode": "createNew"
+      },
+      "deadlineAtMs": null,
+      "afterExit": "continue",
+      "allowQueue": true
+    },
+    "revisions": [
+      {
+        "taskRev": 1,
+        "operation": "create",
+        "acceptedAtMs": 1795287759831,
+        "agreement": {
+          "args": {
+            "inputs": [
+              {
+                "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                "version": "27:1336810:56:1795176000000000000:1795287759771208866"
+              },
+              {
+                "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                "version": "27:1336811:56:1795176000000000000:1795287759783208276"
+              },
+              {
+                "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                "version": "27:1336812:56:1795176000000000000:1795287759795207685"
+              },
+              {
+                "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                "version": "27:1336813:56:1795176000000000000:1795287759811206897"
+              }
+            ],
+            "outputDirRef": "e71023c4-1e2b-42d6-9a6f-a75587e81865",
+            "outputName": "差旅小表.xlsx",
+            "writeMode": "createNew"
+          },
+          "deadlineAtMs": null,
+          "afterExit": "continue",
+          "allowQueue": true
+        }
+      },
+      {
+        "taskRev": 2,
+        "operation": "amend",
+        "acceptedAtMs": 1795287760367,
+        "agreement": {
+          "args": {
+            "inputs": [
+              {
+                "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                "version": "27:1336810:56:1795176000000000000:1795287759771208866"
+              },
+              {
+                "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                "version": "27:1336811:56:1795176000000000000:1795287759783208276"
+              },
+              {
+                "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                "version": "27:1336812:56:1795176000000000000:1795287759795207685"
+              },
+              {
+                "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                "version": "27:1336813:56:1795176000000000000:1795287759811206897"
+              }
+            ],
+            "outputDirRef": "e71023c4-1e2b-42d6-9a6f-a75587e81865",
+            "outputName": "新的约定.xlsx",
+            "writeMode": "createNew"
+          },
+          "deadlineAtMs": null,
+          "afterExit": "continue",
+          "allowQueue": true
+        }
+      }
+    ],
+    "steps": [
+      {
+        "taskRev": 1,
+        "stepKey": "readInputs",
+        "attemptId": "326c79f7-e6c4-461f-8a39-b89122c3485a",
+        "state": "done",
+        "startedAtMs": 1795287760172,
+        "finishedAtMs": 1795287760257,
+        "reason": null,
+        "result": {
+          "completion": {
+            "report": {
+              "sources": [
+                {
+                  "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                  "version": "27:1336810:56:1795176000000000000:1795287759771208866",
+                  "displayName": "receipt-0.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                  "version": "27:1336811:56:1795176000000000000:1795287759783208276",
+                  "displayName": "receipt-1.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                  "version": "27:1336812:56:1795176000000000000:1795287759795207685",
+                  "displayName": "receipt-2.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                  "version": "27:1336813:56:1795176000000000000:1795287759811206897",
+                  "displayName": "receipt-3.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": false,
+                  "pageCount": null,
+                  "reason": null
+                }
+              ],
+              "rows": [
+                {
+                  "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                  "version": "27:1336810:56:1795176000000000000:1795287759771208866",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                  "version": "27:1336811:56:1795176000000000000:1795287759783208276",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                  "version": "27:1336812:56:1795176000000000000:1795287759795207685",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                  "version": "27:1336813:56:1795176000000000000:1795287759811206897",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                }
+              ],
+              "coverage": {
+                "inputCount": 4,
+                "readCompleteCount": 4,
+                "parseCompleteCount": 4,
+                "rowsWithVerifiedFields": 4,
+                "fullyVerifiedRows": 4,
+                "gaps": []
+              }
+            }
+          }
+        }
+      },
+      {
+        "taskRev": 1,
+        "stepKey": "writeSheet",
+        "attemptId": "e4998f98-ca19-4ed8-9881-2f60c551c114",
+        "state": "done",
+        "startedAtMs": 1795287760271,
+        "finishedAtMs": 1795287760395,
+        "reason": null,
+        "result": {
+          "completion": {
+            "artifactId": "b757df17-2dec-405f-a6ea-36183415462d",
+            "report": {
+              "sources": [
+                {
+                  "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                  "version": "27:1336810:56:1795176000000000000:1795287759771208866",
+                  "displayName": "receipt-0.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": true,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                  "version": "27:1336811:56:1795176000000000000:1795287759783208276",
+                  "displayName": "receipt-1.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": true,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                  "version": "27:1336812:56:1795176000000000000:1795287759795207685",
+                  "displayName": "receipt-2.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": true,
+                  "pageCount": null,
+                  "reason": null
+                },
+                {
+                  "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                  "version": "27:1336813:56:1795176000000000000:1795287759811206897",
+                  "displayName": "receipt-3.txt",
+                  "mediaType": "text/plain",
+                  "size": 56,
+                  "readComplete": true,
+                  "parseComplete": true,
+                  "textLayerOnly": false,
+                  "verifiedAtPublish": true,
+                  "pageCount": null,
+                  "reason": null
+                }
+              ],
+              "rows": [
+                {
+                  "sourceRef": "e19d1cf6-53bc-410b-a004-ddf4f555eeb7",
+                  "version": "27:1336810:56:1795176000000000000:1795287759771208866",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "2280c1fc-f893-40dc-9929-de5925303e08",
+                  "version": "27:1336811:56:1795176000000000000:1795287759783208276",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "1bb9a84b-6556-4aa7-bb22-74b70b0ed77f",
+                  "version": "27:1336812:56:1795176000000000000:1795287759795207685",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                },
+                {
+                  "sourceRef": "2de8ff95-57c5-4e1f-a55e-6a05b08dcdb8",
+                  "version": "27:1336813:56:1795176000000000000:1795287759811206897",
+                  "date": {
+                    "state": "verified",
+                    "value": "2026-11-20",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 1,
+                      "lineEnd": 1,
+                      "quote": "日期：2026-11-20"
+                    },
+                    "reason": null
+                  },
+                  "item": {
+                    "state": "verified",
+                    "value": "交通",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 2,
+                      "lineEnd": 2,
+                      "quote": "项目：交通"
+                    },
+                    "reason": null
+                  },
+                  "amount": {
+                    "state": "verified",
+                    "value": "CNY 128.50",
+                    "evidence": {
+                      "page": null,
+                      "lineStart": 3,
+                      "lineEnd": 3,
+                      "quote": "金额：CNY 128.50"
+                    },
+                    "reason": null
+                  }
+                }
+              ],
+              "coverage": {
+                "inputCount": 4,
+                "readCompleteCount": 4,
+                "parseCompleteCount": 4,
+                "rowsWithVerifiedFields": 4,
+                "fullyVerifiedRows": 4,
+                "gaps": []
+              }
+            }
+          }
+        }
+      }
+    ],
+    "artifacts": [
+      {
+        "artifactId": "b757df17-2dec-405f-a6ea-36183415462d",
+        "taskRev": 1,
+        "stepKey": "writeSheet",
+        "relativePath": "差旅小表.xlsx",
+        "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "size": 4061,
+        "sha256": "6731e3a0858508ac0761179bbef5fcac60c094dfbd5cf7c0384398a0f81a9ed2",
+        "verifiedAtMs": 1795287760394,
+        "sourceCount": 4
+      }
+    ],
+    "approval": null,
+    "budget": {
+      "limitMs": 300000,
+      "spentMs": 85,
+      "heldMs": 120000
+    },
+    "hostStoreId": "dd627cc6-d5e9-45b9-9f35-954256725269",
+    "originalCreatePresent": true
+  }
+}

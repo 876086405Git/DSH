@@ -3,6 +3,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { CompanionError, invalid } from './schema.js';
 import { validRecallSessionId } from './recall-schema.js';
+import { createCompanionUsage } from './usage.js';
 
 export const FULL_PRESET = 'dsh-go-companion-full';
 const MAX_SESSIONS = 128, MAX_PENDING = 32, RECENT_MS = 30 * 60 * 1000;
@@ -15,6 +16,40 @@ const text = (v, max) => typeof v === 'string' && [...v].length <= max && !contr
 export const contextId = v => text(v, 128) && v.length > 0 && !/[\r\n\t]/.test(v);
 const time = v => Number.isSafeInteger(v) && v >= 0 && v <= 8640000000000000;
 export const contextJson = v => JSON.stringify(v).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e').replaceAll('&', '\\u0026');
+const sequence = v => Number.isSafeInteger(v) && v >= 0;
+const memoryKinds = new Set(['fact', 'preference', 'episode']);
+const phoneConfigEvents = new Set(['agent-preset/selected', 'model/selection',
+  'subagent/model-selection-policy', 'permission/preset', 'approval/policy', 'sandbox/mode', 'plan/mode']);
+
+function phoneMemoryOf(value) {
+  if (!fields(value, ['archiveId', 'controlRevision', 'historyAfterSeq', 'block']) ||
+    !contextId(value.archiveId) || !sequence(value.controlRevision) || !sequence(value.historyAfterSeq) ||
+    !text(value.block, 1200) || !value.block.isWellFormed()) throw invalid();
+  let block;
+  try { block = JSON.parse(value.block); } catch { throw invalid(); }
+  if (!fields(block, ['type', 'version', 'scope', 'items']) || block.type !== 'companion_memory' ||
+    block.version !== 2 || block.scope !== 'real' || !Array.isArray(block.items) || block.items.length > 12) throw invalid();
+  const ids = new Set();
+  for (const item of block.items) {
+    if (!fields(item, ['id', 'kind', 'text']) || !contextId(item.id) || !item.id.isWellFormed() ||
+      ids.has(item.id) || !memoryKinds.has(item.kind) || !text(item.text, 1200) ||
+      !item.text.trim() || !item.text.isWellFormed()) throw invalid();
+    ids.add(item.id);
+  }
+  // Keep the phone's exact serialization and order, including an empty items
+  // receipt. Only the final request boundary omits an empty selection.
+  return Object.freeze({ archiveId: value.archiveId, controlRevision: value.controlRevision,
+    historyAfterSeq: value.historyAfterSeq, block: value.block });
+}
+
+function cleanPhoneSession(session) {
+  if (session.header?.isSeeded !== false || session.header.parentSession !== undefined ||
+    session.inheritedEventCount !== 0 || !sequence(session.seq) || typeof session.eventAt !== 'function') return false;
+  for (let seq = 0; seq < session.seq; seq++) {
+    if (!phoneConfigEvents.has(session.eventAt(seq)?.type)) return false;
+  }
+  return true;
+}
 
 function profileOf(value) {
   const limits = { persona: 4000, name: 24, callMe: 40, moves: 1024 };
@@ -29,10 +64,11 @@ function profileOf(value) {
 
 export function validatePromptContext(value) {
   if (!fields(value, ['v', 'sessionId', 'requestId', 'instanceId', 'events'],
-    ['profile', 'expectedProfileRevision', 'query']) || value.v !== 1 ||
+    ['profile', 'expectedProfileRevision', 'query', 'phoneMemory']) || value.v !== 1 ||
     !contextId(value.sessionId) || !contextId(value.requestId) || !contextId(value.instanceId) ||
     !Array.isArray(value.events) || value.events.length > 8 ||
-    (value.query !== undefined && !text(value.query, 256))) throw invalid();
+    (value.query !== undefined && !text(value.query, 256)) ||
+    (Object.hasOwn(value, 'phoneMemory') && Object.hasOwn(value, 'query'))) throw invalid();
   const out = { v: 1, sessionId: value.sessionId, requestId: value.requestId, instanceId: value.instanceId };
   if (Object.hasOwn(value, 'profile') !== Object.hasOwn(value, 'expectedProfileRevision')) throw invalid();
   if (Object.hasOwn(value, 'profile')) {
@@ -48,14 +84,17 @@ export function validatePromptContext(value) {
     return Object.freeze({ id: e.id, kind: e.kind, at: e.at, ...(e.detail ? { detail: e.detail } : {}) });
   });
   if (value.query !== undefined) out.query = value.query;
+  if (Object.hasOwn(value, 'phoneMemory')) out.phoneMemory = phoneMemoryOf(value.phoneMemory);
   return out;
 }
 
 // Internal callers pass the actual Agent/Session objects, never just a reused
 // sessionId. A ticket fences a query that was already awaiting storage at bind.
 export function createCompanionPromptContext({ now = Date.now, instanceId = randomUUID(),
-  isCurrent = () => true, allowMemory = () => true } = {}) {
+  isCurrent = () => true, allowMemory = () => true, usageLimits } = {}) {
   const sessions = new Map(), tickets = new WeakMap(), disabledSessions = new WeakSet();
+  const phoneArchives = new Map(), phoneRequests = new WeakMap(), retiredPhoneAgents = new WeakSet();
+  const usage = createCompanionUsage({ now, instanceId, limits: usageLimits });
   let closed = false, highWater = 0;
   const available = () => {
     if (closed) throw new CompanionError(503, 'unavailable', 'Companion context instance was disposed');
@@ -68,6 +107,9 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
     return value;
   };
   const changed = () => new CompanionError(409, 'session-unavailable', 'Companion session changed; synchronize again');
+  const stalePhone = () => new CompanionError(409, 'memory-context-stale', 'Use a new clean companion session after memory control changes');
+  const phoneSupported = agent => agent.ctx?.get('llm')?.dshGoPhoneMemory === true;
+  const usageSupported = agent => agent.ctx?.get('llm')?.dshGoCompanionChatUsage === true;
   const live = agent => validRecallSessionId(agent?.id) && agent.session?.id === agent.id && isCurrent(agent) === true;
   const lookup = agent => {
     if (closed || !live(agent)) return undefined;
@@ -98,12 +140,19 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
       if (!sessions.has(agent.id) && sessions.size >= MAX_SESSIONS) {
         throw new CompanionError(409, 'limit-reached', 'Companion context session limit reached');
       }
+      const replaced = sessions.get(agent.id);
+      if (replaced) usage.retire(replaced.session);
+      if (replaced?.phone) {
+        retiredPhoneAgents.add(replaced.agent); replaced.phoneAbort.abort(stalePhone());
+      }
       // Reusing the id never copies leases, receipts or profile from an old
       // actual Agent/Session. A late callback cannot open or replace a state.
       value = { agent, session: agent.session, profile: undefined, revision: 0,
         pending: new Map(), parked: new Map(), receipts: new Map(), seen: new Set(),
         turn: undefined, events: [], memories: [], memoryEpoch: 0, memoryDisabled: false,
-        currentMemoryEpoch: 0, lastHumanAt: undefined, idleMinutes: undefined };
+        currentMemoryEpoch: 0, lastHumanAt: undefined, idleMinutes: undefined,
+        phone: undefined, phoneStale: false, phoneAbort: undefined, activePhone: undefined,
+        usageRequests: new Set() };
       for (let seq = (agent.session.seq ?? 0) - 1; seq >= 0; seq--) {
         const event = agent.session.eventAt(seq);
         if (event?.type === 'user/message' && owner(event.data) && time(event.time)) {
@@ -133,12 +182,47 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
   const describe = value => ({ v: 1, supported: true, instanceId, sessionId: value.agent.id,
     profileRevision: value.revision, persistence: 'connection', requestBinding: 'rpcId',
     maxEvents: 8, maxPersonaCodePoints: 4000,
-    memoryMode: value.memoryDisabled ? 'automatic' : 'query', memoryEpoch: value.memoryEpoch });
+    memoryMode: value.phone ? 'phone' : value.memoryDisabled ? 'automatic' : 'query', memoryEpoch: value.memoryEpoch,
+    ...(phoneSupported(value.agent) ? { phoneMemory: true } : {}),
+    ...(usageSupported(value.agent) ? { chatUsage: true } : {}) });
   function capture(agent) {
     const value = open(agent);
-    const token = Object.freeze({ allowed: !value.memoryDisabled });
+    const token = Object.freeze({ allowed: !value.memoryDisabled && !value.phone });
     tickets.set(token, { value, epoch: value.memoryEpoch });
     return token;
+  }
+  function preparePhone(current, phone) {
+    if (!phoneSupported(current.agent)) {
+      throw new CompanionError(409, 'phone-memory-unsupported', 'This engine does not support request-only phone memory');
+    }
+    if (current.memoryDisabled) {
+      throw new CompanionError(409, 'memory-mode-conflict', 'Automatic recall requires a separate clean companion session');
+    }
+    if (current.phone && current.phone.archiveId !== phone.archiveId) throw stalePhone();
+    const known = phoneArchives.get(phone.archiveId);
+    if (known && (phone.controlRevision < known.controlRevision || phone.historyAfterSeq < known.historyAfterSeq ||
+      phone.controlRevision === known.controlRevision && phone.historyAfterSeq !== known.historyAfterSeq)) throw stalePhone();
+    if (!known && phoneArchives.size >= MAX_SESSIONS) {
+      throw new CompanionError(409, 'limit-reached', 'Companion phone archive limit reached');
+    }
+    if (!known || phone.controlRevision > known.controlRevision) {
+      phoneArchives.set(phone.archiveId, { controlRevision: phone.controlRevision, historyAfterSeq: phone.historyAfterSeq });
+      for (const value of sessions.values()) {
+        if (value.phone?.archiveId !== phone.archiveId) continue;
+        value.phoneStale = true; value.activePhone = undefined;
+        value.phoneAbort.abort(stalePhone());
+        for (const lease of [...value.pending.values(), ...value.parked.values()]) lease.phoneMemory = undefined;
+      }
+    }
+    if (current.phoneStale || current.phone && (current.phone.archiveId !== phone.archiveId ||
+      current.phone.controlRevision !== phone.controlRevision || current.phone.historyAfterSeq !== phone.historyAfterSeq)) throw stalePhone();
+    if (!current.phone) {
+      if (!cleanPhoneSession(current.session)) throw stalePhone();
+      current.phone = { archiveId: phone.archiveId, controlRevision: phone.controlRevision, historyAfterSeq: phone.historyAfterSeq };
+      current.phoneAbort = new AbortController();
+      // Fences old queries that were awaiting storage before phone ownership.
+      invalidate(current);
+    }
   }
   return {
     info(agent) { at(); return describe(open(agent)); },
@@ -149,6 +233,9 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
     disableMemory(agent) {
       available();
       if (!live(agent)) throw changed();
+      if (lookup(agent)?.phone) {
+        throw new CompanionError(409, 'memory-mode-conflict', 'Phone memory and automatic recall cannot share a session');
+      }
       // A recall-only session must not consume a profile/sidecar slot, nor
       // inherit this endpoint's narrower 128-codepoint wire ID limit.
       disabledSessions.add(agent.session);
@@ -184,11 +271,18 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
         throw new CompanionError(409, 'profile-conflict', 'Reload companion profile revision');
       }
       let lease = current.pending.get(value.requestId) ?? current.parked.get(value.requestId);
+      if (!lease && !receipt?.committed && current.pending.size >= MAX_PENDING) {
+        throw new CompanionError(409, 'limit-reached', 'Too many pending companion contexts');
+      }
+      if (current.phone && value.query !== undefined) {
+        throw new CompanionError(409, 'memory-mode-conflict', 'Phone memory sessions do not read host query memory');
+      }
+      if (value.phoneMemory) preparePhone(current, value.phoneMemory);
       if (!lease && !receipt?.committed) {
-        if (current.pending.size >= MAX_PENDING) throw new CompanionError(409, 'limit-reached', 'Too many pending companion contexts');
         lease = { at: receipt?.at ?? highWater, events: value.events,
-          memories: !current.memoryDisabled && ticket.epoch === current.memoryEpoch
-            ? structuredClone(memories) : [], memoryEpoch: current.memoryEpoch };
+          memories: !current.memoryDisabled && !current.phone && ticket.epoch === current.memoryEpoch
+            ? structuredClone(memories) : [], memoryEpoch: current.memoryEpoch,
+          phoneMemory: value.phoneMemory };
         current.pending.set(value.requestId, lease);
       }
       // A retry reuses its original lease/expiry and never reapplies a profile
@@ -207,23 +301,37 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
         current.lastHumanAt = lastHumanAt;
       }
       prune(current);
+      if (value.phoneMemory && usageSupported(agent)) usage.prepare(current.session, {
+        sessionId: value.sessionId, requestId: value.requestId, archiveId: value.phoneMemory.archiveId,
+        controlRevision: value.phoneMemory.controlRevision, historyAfterSeq: value.phoneMemory.historyAfterSeq,
+      });
       return { ...describe(current), ...(value.profile ? {
         profileAccepted: JSON.stringify(current.profile) === JSON.stringify(value.profile) } : {}) };
     },
     claim(agent, message, turn) {
-      if (!owner(message)) return;
+      if (!owner(message)) {
+        if (message?.source?.kind === 'user') lookup(agent)?.usageRequests.clear();
+        return;
+      }
       const current = lookup(agent);
       if (!current) return;
       const clock = at();
       refreshMemory(current); prune(current);
       if (current.turn !== turn) {
         current.turn = turn; current.events = []; current.memories = [];
+        current.usageRequests.clear();
       }
+      // Billing ownership survives the memory-selection TTL once claimed.
+      // A human without a prepared phone sidecar cannot borrow an old owner.
+      if (contextId(message.source.rpcId) && usage.claim(current.session, agent.id, message.source.rpcId, turn)) {
+        current.usageRequests.add(message.source.rpcId);
+      } else current.usageRequests.clear();
       // Recompute for EVERY owner human claim, including a same-turn steer
       // with no sidecar. A short or negative gap explicitly clears old idle.
       const gap = current.lastHumanAt === undefined ? undefined : clock - current.lastHumanAt;
       current.idleMinutes = gap !== undefined && gap >= RECENT_MS ? Math.floor(gap / 60000) : undefined;
       current.memories = [];
+      current.activePhone = undefined;
       current.currentMemoryEpoch = current.memoryEpoch;
       // A human claim can originate outside the RPC transport. It still
       // refreshes temporal/current-query state, but cannot claim a lease.
@@ -237,6 +345,9 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
       }
       current.events = current.events.slice(-8);
       if (!current.memoryDisabled && pending.memoryEpoch === current.memoryEpoch) current.memories = pending.memories;
+      if (!current.phoneStale && pending.phoneMemory) {
+        current.activePhone = { requestId: message.source.rpcId, at: pending.at, phoneMemory: pending.phoneMemory };
+      }
     },
     commit(session, message, committedAt) {
       if (closed || !owner(message)) return;
@@ -266,15 +377,77 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
       if (closed) return;
       const current = sessions.get(session?.id);
       if (current?.session === session) {
+        usage.end(session, current.turn);
         current.turn = undefined; current.events = []; current.memories = []; current.idleMinutes = undefined;
+        current.activePhone = undefined;
+        current.usageRequests.clear();
       }
     },
     retire(agent) {
       const current = sessions.get(agent?.id);
       if (current?.agent === agent) {
+        usage.retire(current.session);
+        if (current.phone) {
+          retiredPhoneAgents.add(agent); current.phoneAbort.abort(stalePhone());
+        }
         invalidate(current, true);
         sessions.delete(agent.id);
       }
+    },
+    // Called only for a marked main-loop request by the final LlmRuntime
+    // adapter boundary. No text is added to Session, projections or snapshots.
+    forRequest(agent, options) {
+      if (retiredPhoneAgents.has(agent)) throw stalePhone();
+      const current = lookup(agent);
+      if (!current?.phone) return options;
+      at();
+      if (options.sessionId !== agent.id || current.phoneStale) throw stalePhone();
+      const signal = options.signal ? AbortSignal.any([options.signal, current.phoneAbort.signal]) : current.phoneAbort.signal;
+      signal.throwIfAborted();
+      if (current.activePhone && expired(current.activePhone)) current.activePhone = undefined;
+      const active = current.activePhone;
+      let result = { ...options, signal };
+      // A tool step may have other user-role runtime records after this human.
+      // A different owner human (even without a usable RPC id) replaces it.
+      const index = options.messages.findLastIndex(message => message.role === 'user' && owner(message));
+      const message = options.messages[index];
+      if (active && !expired(active) && JSON.parse(active.phoneMemory.block).items.length !== 0 &&
+        message?.source.rpcId === active.requestId) {
+        const content = Object.freeze([...message.content, Object.freeze({ type: 'text', text: active.phoneMemory.block })]);
+        const messages = options.messages.slice();
+        messages[index] = Object.freeze({ ...message, content });
+        result.messages = Object.freeze(messages);
+      }
+      result = Object.freeze(result);
+      phoneRequests.set(result, { current, active, usageRequestIds: [...current.usageRequests],
+        humanRequestId: message?.source.rpcId, turn: current.turn });
+      return result;
+    },
+    // Called only at the marked runtime adapter boundary, with the exact
+    // Agent and request copy already verified above. No wire-supplied owner.
+    observeUsageRequest(agent, options, observed) {
+      const request = phoneRequests.get(options);
+      if (!request || request.current !== lookup(agent) || !usageSupported(agent) ||
+          !request.usageRequestIds.includes(request.humanRequestId)) return undefined;
+      try {
+        return usage.open(request.current.session, agent.id, request.usageRequestIds, request.turn,
+          { provider: options.provider, model: options.model }, observed);
+      } catch {
+        usage.failed(request.current.session, agent.id, request.usageRequestIds);
+        return undefined;
+      }
+    },
+    usageSnapshot(query) { return usage.snapshot(query); },
+    // The default direct adapter invokes this synchronously at its physical
+    // fetch boundary, after asynchronous credentials/attachment preparation.
+    guardRequest(agent, options) {
+      const request = phoneRequests.get(options);
+      if (!request) return;
+      at();
+      const current = lookup(agent);
+      if (current !== request.current || current.phoneStale || current.activePhone !== request.active ||
+        request.active && expired(request.active)) throw stalePhone();
+      options.signal?.throwIfAborted();
     },
     render(agent) {
       const current = lookup(agent);
@@ -289,6 +462,12 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
         ...(memories.length ? { memories } : {}),
         ...(current.idleMinutes === undefined ? {} : { idleSinceHumanMinutes: current.idleMinutes }) })}</companion_context>`;
     },
-    clear() { closed = true; sessions.clear(); },
+    clear() {
+      usage.dispose();
+      for (const current of sessions.values()) if (current.phone) {
+        retiredPhoneAgents.add(current.agent); current.phoneAbort.abort(stalePhone());
+      }
+      closed = true; sessions.clear(); phoneArchives.clear();
+    },
   };
 }

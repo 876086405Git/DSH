@@ -1,0 +1,41 @@
+--- a/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
+@@ -980,6 +980,16 @@
+ 			return { ...result, bytes: undefined, text: decodeUtf8(result.bytes, "read", entry.name) };
+ 		});
+ 	}
++	/** Read one selected receipt version as complete bytes; never decode or follow another file. */
++	async dshGoReadReceipt(directory, entry, maxBytes, signal) {
++		if (typeof directory?.identity !== "string" || !directory.identity ||
++			typeof entry?.version !== "string" || !entry.version)
++			throw new FsError("receipt read requires the bound directory and file version", "FS_NOT_OBSERVED");
++		if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 4 * 1024 * 1024)
++			throw new FsError("receipt byte limit must be between 1 and 4 MiB", "FS_TOO_LARGE");
++		return companionWithDirectory(this, directory, signal, current =>
++			companionReadFile(join(current.path, companionBasename(entry.name)), maxBytes, { version: entry.version }, signal));
++	}
+ 	/** Query before model work; an unknown or remote filesystem is not offered retained publication. */
+ 	async dshGoNotesPublicationSupport(directory, signal) {
+ 		const current = await companionDirectory(this, directory, signal);
+@@ -1058,6 +1068,21 @@
+ 			const result = await companionReadFile(join(current.path, companionBasename(outputName)),
+ 				artifact.size, { identity: artifact.identity, sha256: artifact.sha256 }, signal);
+ 			return { ...result, bytes: undefined, text: decodeUtf8(result.bytes, "read", outputName) };
++		});
++	}
++	/** Read only the registered task artifact object and digest, with a bounded byte response. */
++	async dshGoReadTaskArtifactBytes(directory, outputName, artifact, signal) {
++		if (typeof directory?.identity !== "string" || !directory.identity ||
++			typeof artifact?.identity !== "string" || !artifact.identity ||
++			typeof artifact.sha256 !== "string" || !artifact.sha256)
++			throw new FsError("artifact read requires the bound directory, object and digest", "FS_NOT_OBSERVED");
++		if (!Number.isInteger(artifact.size) || artifact.size < 0 || artifact.size > 256 * 1024)
++			throw new FsError("task artifact byte limit is 256 KiB", "FS_TOO_LARGE");
++		return companionWithDirectory(this, directory, signal, async current => {
++			const result = await companionReadFile(join(current.path, companionBasename(outputName)),
++				artifact.size, { identity: artifact.identity, sha256: artifact.sha256 }, signal);
++			if (result.size !== artifact.size) throw new FsError("task artifact size changed", "FS_STALE_VERSION");
++			return result;
+ 		});
+ 	}
+ 

@@ -25,6 +25,8 @@ app/android/build/
 app/assets/companion/whale-girl.zip
 .harness-tmp*/
 .claude/
+# bridge PDF extraction dependency; install from the committed npm lock
+runtime/bridge/dsh-go-bridge/node_modules/
 # the media plugin carries its own JS package
 runtime/media/dsh-media/node_modules/
 # the OHOS virtual process backend installs its pinned deps (npm ci) in place

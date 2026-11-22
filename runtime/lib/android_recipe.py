@@ -57,8 +57,11 @@ def recipe_inputs(runtime, version):
         root = runtime / directory
         if not root.is_dir():
             raise FileNotFoundError(root)
+        # Installed bridge dependencies are determined by its committed npm lock,
+        # not by whether this checkout has already run npm ci.
         paths.update(path.relative_to(runtime).as_posix() for path in root.rglob("*")
-                     if path.is_file() and not path.is_symlink())
+                     if path.is_file() and not path.is_symlink()
+                     and (directory != 'bridge' or 'node_modules' not in path.relative_to(root).parts))
 
     # Absent from the baseline recipe. Preserve it, but never hide a changed helper.
     if digest(runtime / "lib/android_recipe.py") != compatibility["helperSha256"]:

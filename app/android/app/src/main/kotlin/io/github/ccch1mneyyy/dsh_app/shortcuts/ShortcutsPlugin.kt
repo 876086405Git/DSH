@@ -24,7 +24,7 @@ import java.util.concurrent.Executors
  * Launcher shortcuts and the Quick Settings tile: MethodChannel `dsh/shortcuts`.
  *
  * Entries ([EntryActivity] → MainActivity as [ACTION_ENTRY]) are pushed to Dart as `entry`
- * calls, `{kind: new | voice | chat | screenshot, sessionId?, host?, text?, path?}`, after
+ * calls, `{kind: new | voice | chat | screenshot | companion_task, sessionId?, host?, text?, path?, taskId?, taskRev?}`, after
  * Dart's `ready` (held until then, like links/LinksPlugin). An entry without this process's
  * [token] is ignored. `text` is
  * 问一句's text the floating pet couldn't send itself (pet/PetOverlay.kt): it waits in the composer.
@@ -147,6 +147,14 @@ class ShortcutsPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         }
         // Consumed either way: an entry without our token goes nowhere.
         if (intent.getStringExtra(EXTRA_TOKEN) != token) return true
+        if (kind == KIND_COMPANION_TASK) {
+            val taskId = intent.getStringExtra(EXTRA_TASK)
+            val revision = intent.getLongExtra(EXTRA_TASK_REV, 0)
+            if (taskId.isNullOrEmpty() || revision < 1) return true
+            val event = mapOf("kind" to kind, "taskId" to taskId, "taskRev" to revision)
+            if (ready) methods.invokeMethod("entry", event) else pending += event
+            return true
+        }
         if (kind != KIND_NEW && kind != KIND_VOICE && kind != KIND_CHAT) return true
         val sessionId = intent.getStringExtra(EXTRA_SESSION)
         if (kind == KIND_CHAT && sessionId.isNullOrEmpty()) return true
@@ -167,12 +175,15 @@ class ShortcutsPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         const val EXTRA_TEXT = "io.github.ccch1mneyyy.dsh_app.entry.TEXT"
         const val EXTRA_PATH = "io.github.ccch1mneyyy.dsh_app.entry.PATH"
         const val EXTRA_TOKEN = "io.github.ccch1mneyyy.dsh_app.entry.TOKEN"
+        const val EXTRA_TASK = "io.github.ccch1mneyyy.dsh_app.entry.TASK"
+        const val EXTRA_TASK_REV = "io.github.ccch1mneyyy.dsh_app.entry.TASK_REV"
         private const val EXTRA_TAKEN = "io.github.ccch1mneyyy.dsh_app.entry.TAKEN"
 
         const val KIND_NEW = "new"
         const val KIND_VOICE = "voice"
         const val KIND_CHAT = "chat"
         const val KIND_SCREENSHOT = "screenshot"
+        const val KIND_COMPANION_TASK = "companion_task"
 
         const val MAX_RECENT = 3
         const val RECENT_PREFIX = "chat:"

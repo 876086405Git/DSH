@@ -1,0 +1,56 @@
+# Phone-owned 09s memory: copy the final marked main-loop request only.
+# No selected memory is appended to Session or system-prompt projections.
+# Reuse the existing synchronous direct-provider fetch guard after its awaits.
+--- a/node_modules/@deepseek-ai/dsh-llm/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm/lib/index.js
+@@ -14,6 +14,7 @@
+ const RECALL_HISTORY_TYPE = "plugin:dsh-go/companion-recall";
+ const recallDrivers = new WeakMap();
+ const recallRequests = new WeakMap();
++const phoneMemoryRequests = new WeakMap();
+ const recallPhysicalRequests = new WeakMap();
+ const recallAssemblies = new WeakMap();
+ const recallToolExecutions = new WeakMap();
+@@ -182,6 +183,11 @@
+ 		recallDrivers.get(origin.agent).physicalPermit = permit;
+ 	},
+ 	guardFetch(options) {
++		const phone = phoneMemoryRequests.get(options);
++		if (phone) {
++			if (phone.ctx.get("dshGoCompanionContext") !== phone.context) throw new LlmError("Companion context changed before dispatch", "COMPANION_PHONE_MEMORY_STALE");
++			phone.context.guardRequest(phone.agent, options);
++		}
+ 		const origin = recallRequests.get(options);
+ 		if (origin === void 0) {
+ 			if (recallProtected(options.sessionId)) throw recallFailure("COMPANION_RECALL_AUXILIARY_BLOCKED");
+@@ -2041,6 +2047,7 @@
+ 			});
+ 		}
+ 		dshGoRecallVersion = 1;
++		dshGoPhoneMemory = true;
+ 		adapters = (__runInitializers(this, _instanceExtraInitializers), /* @__PURE__ */ new Map());
+ 		directory = /* @__PURE__ */ new Map();
+ 		discoveries = /* @__PURE__ */ new Map();
+@@ -2596,7 +2603,21 @@
+ 					};
+ 					if (Object.isFrozen(resolvedOptions)) deepFreeze(projectedOptions);
+ 				}
+-				iterator = dispatch(dshGoRecall.inheritRequest(options, this.forAdapter(projectedOptions, adapter)))[Symbol.asyncIterator]();
++				let adapterOptions = this.forAdapter(projectedOptions, adapter);
++				// The original marked request identifies the main loop. The initiator
++				// is the actual Agent, not a lookup by a potentially reused session id.
++				if (isAgentLoopRequest(options)) {
++					const context = this.ctx.get("dshGoCompanionContext");
++					if (typeof context?.forRequest === "function" && typeof context.guardRequest === "function") {
++						const agent = this.ctx.get("agents")?.currentInitiator();
++						if (agent) {
++							const request = context.forRequest(agent, adapterOptions);
++							if (request !== adapterOptions) phoneMemoryRequests.set(request, { ctx: this.ctx, context, agent });
++							adapterOptions = request;
++						}
++					}
++				}
++				iterator = dispatch(dshGoRecall.inheritRequest(options, adapterOptions))[Symbol.asyncIterator]();
+ 			} catch (error) {
+ 				yield adapterFailureChunk(error, options.signal);
+ 				return;

@@ -3,6 +3,8 @@ import { createCompanionStore } from "./store.js";
 import { contextId, FULL_PRESET, validatePromptContext } from './prompt-context.js';
 import { createRecallCoordinator } from "./recall.js";
 import { recallError } from "./recall-schema.js";
+import { createCompanionAuxiliaryRoutes } from './auxiliary.js';
+import { createCompanionLookupRoutes } from './lookup.js';
 
 const ROOT = "/dsh-go/v1/companion";
 
@@ -73,6 +75,29 @@ function readJson(req, maxBytes = MAX_BODY_BYTES, strictKeys = false) {
 // Store construction does no I/O, including on hosts that never open this page.
 export function createCompanionRoutes({ send, store = createCompanionStore(), signals, ctx, promptContext,
   recall = createRecallCoordinator({ store, promptContext }) }) {
+  let tasks;
+  const auxiliary = createCompanionAuxiliaryRoutes({ ctx, send, readJson });
+  const lookup = createCompanionLookupRoutes({ ctx, send, readJson, resolve: auxiliary.resolve });
+  function usageRoute(req) {
+    const connection = ctx?.get('connection');
+    if (typeof connection?.admit !== 'function' || typeof promptContext?.usageSnapshot !== 'function') {
+      throw new CompanionError(503, 'usage-unavailable', 'Companion usage observations are unavailable');
+    }
+    const admission = connection.admit(req);
+    if (admission?.peer?.principal?.kind !== 'owner') {
+      throw new CompanionError(admission?.rejection ?? 403, 'usage-forbidden', 'Companion usage observations require the host owner');
+    }
+    if (req.method !== 'GET') throw new CompanionError(405, 'usage-invalid-request', 'Use GET');
+    const params = new URL(req.url, 'http://dsh-go.invalid').searchParams;
+    const names = ['instanceId', 'sessionId', 'requestId'];
+    if ([...params.keys()].some(name => !names.includes(name)) ||
+        names.some(name => params.getAll(name).length !== 1 || !contextId(params.get(name)))) {
+      throw new CompanionError(400, 'usage-invalid-request', 'A bridge instance, session and original request are required');
+    }
+    // Historical accounting remains readable after Agent retirement. Do not
+    // resolve a new Agent with the same id to authenticate an old receipt.
+    return promptContext.usageSnapshot(Object.fromEntries(names.map(name => [name, params.get(name)])));
+  }
   async function promptRoute(req) {
     const connection = ctx?.get('connection');
     if (!promptContext || typeof connection?.admit !== 'function') {
@@ -140,9 +165,27 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
   return {
     async handle(req, res, path) {
       if (path !== ROOT && !path.startsWith(`${ROOT}/`)) return false;
+      if (path === `${ROOT}/tasks` || path.startsWith(`${ROOT}/tasks/`)) {
+        try {
+          tasks ??= import('./task-routes.js').then(module => module.createCompanionTaskRoutes({ctx, send, readJson}));
+          return await (await tasks).handle(req, res, path);
+        } catch {
+          req.resume();
+          send(res, 503, {error: {code: 'companion/task-unavailable', message: 'Task service is unavailable'}});
+          return true;
+        }
+      }
+      if (await auxiliary.handle(req, res, path)) return true;
+      if (await lookup.handle(req, res, path)) return true;
       if (signals && await signals.handle(req, res, path, send)) return true;
       const isRecall = path === `${ROOT}/recall` || path.startsWith(`${ROOT}/recall/`);
       try {
+        if (path === `${ROOT}/usage`) {
+          const result = usageRoute(req);
+          req.resume();
+          if (!res.destroyed) send(res, 200, result);
+          return true;
+        }
         if (path === `${ROOT}/prompt-context`) {
           const result = await promptRoute(req);
           req.resume();
@@ -185,5 +228,6 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
       }
       return true;
     },
+    dispose() { lookup.dispose(); auxiliary.dispose(); },
   };
 }

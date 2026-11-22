@@ -41,7 +41,8 @@ Future<Map<String, Object?>> companionAdaptAsk({
   String? note,
   Map<String, Object?>? current,
   CompanionAdaptEvidence evidence = const CompanionAdaptEvidence(),
-  void Function(int input, int output)? onUsage,
+  void Function()? onSent,
+  void Function(CompanionUsage usage)? onUsage,
   void Function(Map<String, Object?> usage, {required bool partial})? onUsageSettled,
 }) async {
   final text = StringBuffer();
@@ -51,6 +52,7 @@ Future<Map<String, Object?>> companionAdaptAsk({
     system: companionAdaptSystem,
     lines: [CompanionLine.user(companionAdaptRequest(probe, note: note, current: current, evidence: evidence))],
     maxTokens: 3000,
+    onSent: onSent,
     onUsage: onUsage,
     onUsageSettled: onUsageSettled,
   )) {

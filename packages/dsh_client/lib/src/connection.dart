@@ -372,12 +372,13 @@ class DshConnection {
   /// this connection's client, Host and cookie policy. Redirects are refused.
   /// [headerTimeout] bounds connection/headers; [idleTimeout] bounds an active
   /// body read and does not run while the consumer pauses for playback capacity.
+  /// Explicit null keeps a task's approval wait open until its owner aborts.
   Future<DshHttpStreamResponse> postJsonStream(
     String path,
     Object? body, {
     required DshHttpAbort abort,
     Duration? headerTimeout,
-    Duration idleTimeout = const Duration(seconds: 20),
+    Duration? idleTimeout = const Duration(seconds: 20),
   }) {
     return _DshHttpStream(
       this,
@@ -745,7 +746,8 @@ final class _DshHttpStream {
   final Uri uri;
   final List<int> payload;
   final DshHttpAbort abort;
-  final Duration headerTimeout, idleTimeout;
+  final Duration headerTimeout;
+  final Duration? idleTimeout;
   final _cancelled = Completer<DshHttpStreamResponse>();
   HttpClientRequest? _request;
   StreamIterator<List<int>>? _reader;
@@ -758,7 +760,8 @@ final class _DshHttpStream {
 
   Future<DshHttpStreamResponse> start() async {
     if (connection._closed || abort.isAborted) throw const DshClosedException('HTTP request cancelled');
-    if (headerTimeout <= Duration.zero || idleTimeout <= Duration.zero) {
+    final idle = idleTimeout;
+    if (headerTimeout <= Duration.zero || (idle != null && idle <= Duration.zero)) {
       throw ArgumentError('stream timeouts must be positive');
     }
     final opened = _open();
@@ -828,7 +831,8 @@ final class _DshHttpStream {
       while (!_closed) {
         final next = _first ?? reader.moveNext();
         _first = null;
-        final more = await next.timeout(idleTimeout);
+        final limit = idleTimeout;
+        final more = await (limit == null ? next : next.timeout(limit));
         if (_closed || !more) break;
         final chunk = reader.current;
         yield chunk is Uint8List ? chunk : Uint8List.fromList(chunk);

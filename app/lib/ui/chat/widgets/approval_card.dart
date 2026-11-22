@@ -39,13 +39,21 @@ typedef ApprovalAllowAll = Future<void> Function(ApprovalRequest request);
 /// └──────────────────────────────────┘
 /// ```
 class ApprovalCard extends StatefulWidget {
-  const ApprovalCard({super.key, required this.request, required this.onRespond, this.onAllowAll, this.view});
+  const ApprovalCard({
+    super.key,
+    required this.request,
+    required this.onRespond,
+    this.onAllowAll,
+    this.view,
+    this.onRiskRouteChanged,
+  });
 
   final ApprovalRequest request;
   final ApprovalResponder onRespond;
 
   /// null 时不显示"本对话都允许"。
   final ApprovalAllowAll? onAllowAll;
+  final ValueChanged<ModalRoute<Object?>>? onRiskRouteChanged;
 
   /// 对应的工具调用(有的话用它的命令 / 路径做正文)。
   final ToolView? view;
@@ -71,7 +79,9 @@ class _ApprovalCardState extends State<ApprovalCard> {
     if (_busy != null || allowAll == null) return;
     HapticFeedback.selectionClick();
     // The whole conversation stops asking: said once, then trusted.
-    if (!await confirmRisk(context, RiskNotices.allowForChat) || !mounted) return;
+    if (!await confirmRisk(context, RiskNotices.allowForChat, onRouteChanged: widget.onRiskRouteChanged) || !mounted) {
+      return;
+    }
     setState(() => _busy = ApprovalDecision.allowOnce);
     await allowAll(widget.request);
     if (mounted) setState(() => _busy = null);

@@ -1,525 +1,297 @@
-// The real memory page and CompanionApi codecs; only the HTTP boundary is
-// controlled so normal host changes can complete requests in either order.
-import 'dart:async';
+// Real SQLite owner and real memory page. Only the native widget channel is
+// replaced. No host or model is needed to edit, control or delete a memory.
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
+import 'package:dsh_app/companion/companion_local.dart';
+import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/connection_state.dart';
-import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/ui/companion/companion_memory_page.dart';
 import 'package:dsh_app/ui/theme/app_theme.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite3/sqlite3.dart';
 
-DshHttpResponse _json(Object value, [int status = 200]) =>
-    DshHttpResponse(status, 'application/json', Uint8List.fromList(utf8.encode(jsonEncode(value))));
+const _id = '11111111-1111-4111-8111-111111111111';
+const _oldStore = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const _channel = MethodChannel('dsh/companion_widget');
 
-const _memoryId = '11111111-1111-4111-8111-111111111111';
-
-class _Bridge extends DshConnection {
-  _Bridge(this.store, this.text) : super(Uri.parse('http://127.0.0.1:9'));
-  final String store;
-  String? text;
-  Map<String, Object?> source = const {'kind': 'manual'};
-  int? expiresAt;
-  int revision = 0;
-  int snapshotReads = 0;
-  int listReads = 0;
-  Future<DshHttpResponse> Function()? nextSnapshot;
-  Future<DshHttpResponse> Function()? nextList;
-  Future<DshHttpResponse> Function()? nextWrite;
-  final writes = <(String, Map<String, Object?>)>[];
-
-  DshHttpResponse snapshot() => _json({
-    'storeId': store,
-    'revision': 0,
-    'memoryRevision': revision,
-    'capabilities': {'memories': true},
-    'state': {'activity': 'idle'},
-  });
-
-  DshHttpResponse memories() => _json({
-    'storeId': store,
-    'revision': revision,
-    'memories': [
-      if (text != null)
-        {
-          'id': _memoryId,
-          'text': text,
-          'kind': 'preference',
-          'keywords': ['kept'],
-          'pinned': true,
-          'source': source,
-          'expiresAt': expiresAt,
-        },
-    ],
-  });
-
-  @override
-  Future<DshHttpResponse> get(
-    String path, {
-    Map<String, String>? query,
-    Map<String, String>? headers,
-    Duration? timeout,
-    bool followRedirects = true,
-    int? maxResponseBytes,
-  }) async {
-    if (path == '$dshGoCompanionPath/memories') {
-      listReads++;
-      final handler = nextList;
-      nextList = null;
-      return handler == null ? memories() : await handler();
-    }
-    expect(path, dshGoCompanionPath);
-    snapshotReads++;
-    final handler = nextSnapshot;
-    nextSnapshot = null;
-    return handler == null ? snapshot() : await handler();
+class _Phone {
+  _Phone() {
+    store = CompanionMemoryStore(db, nowMilliseconds: () => now);
+    owner = CompanionMemoryOwner(
+      store,
+      CompanionLocal.at(Directory('/unused-companion-ui-test')),
+      nowMilliseconds: () => now,
+    );
+    addTearDown(owner.dispose);
   }
 
-  @override
-  Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
-    final request = Map<String, Object?>.from(body! as Map);
-    writes.add((path, request));
-    final handler = nextWrite;
-    nextWrite = null;
-    if (handler != null) return await handler();
-    if (path.endsWith('/delete')) {
-      text = null;
-    } else {
-      text = (request['memory']! as Map)['text'] as String;
-    }
-    revision++;
-    return _json({'revision': revision});
-  }
-}
+  final db = sqlite3.openInMemory();
+  int now = DateTime.utc(2026, 11, 21, 1).millisecondsSinceEpoch;
+  late final CompanionMemoryStore store;
+  late final CompanionMemoryOwner owner;
 
-class _Host extends ActiveHostController {
-  @override
-  HostRef build() => HostRef.local;
-  void change(HostRef host) => state = host;
-}
-
-class _Room {
-  _Room() {
-    a = connect(HostRef.local, 'A memory');
-    addTearDown(() async {
-      for (final client in clients) {
-        await client.close();
-      }
-    });
-  }
-  late final _Bridge a;
-  final host = _Host();
-  final clients = <DshClient>[];
-  final connections = <HostRef, HostConnection>{};
-  late ProviderContainer container;
-
-  _Bridge connect(HostRef host, String text) {
-    final bridge = _Bridge('store-${host.id}-${clients.length}', text);
-    final client = DshClient(bridge);
-    clients.add(client);
-    connections[host] = HostConnection(client: client, isLocal: host.isLocal, kind: host.kind, hostId: host.id);
-    return bridge;
+  MemoryRow manual(String text) {
+    store.saveManual(
+      CompanionMemory(id: _id, text: text),
+      expectedRowRev: null,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    return store.cards().single;
   }
 
-  Widget app(Widget child) => ProviderScope(
-    overrides: [
-      activeHostProvider.overrideWith(() => host),
-      activeConnectionProvider.overrideWith((ref) => AsyncData(connections[ref.watch(activeHostProvider)])),
-      hostNameProvider.overrideWith((ref, host) => host.isLocal ? 'A host' : 'B host'),
-    ],
+  MemoryRow automatic(
+    String text, {
+    String source = 'original',
+    String kind = 'fact',
+    List<String> keywords = const [],
+  }) {
+    store.submitMessage(id: source, sessionId: store.lightSessionId, text: text, saidAtUtc: now, offsetMinutes: 480);
+    final batch = store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+    final proposal = parseExtractionProposal(
+      jsonEncode({
+        'schema_version': 2,
+        'batch_id': batch.id,
+        'covered_message_ids': [source],
+        'completion': 'complete',
+        'operations': [
+          {
+            'op': 'create',
+            'kind': kind,
+            'text': text,
+            'keywords': keywords,
+            'evidence': [
+              {'message_id': source, 'quote': text},
+            ],
+          },
+        ],
+      }),
+      batch,
+    );
+    expect(store.commitExtraction(batch, proposal), isTrue);
+    return store.cards().singleWhere(
+      (row) => (row['evidence'] as List).any((evidence) => (evidence as Map)['message_id'] == source),
+    );
+  }
+
+  Widget app() => ProviderScope(
+    overrides: [activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null))],
     child: MaterialApp(
       theme: buildDarkTheme(),
       localizationsDelegates: L10n.localizationsDelegates,
       supportedLocales: L10n.supportedLocales,
       locale: const Locale('zh'),
-      home: child,
+      home: CompanionMemoryPage(memory: owner),
     ),
   );
-
-  Future<void> open(WidgetTester tester) async {
-    await tester.pumpWidget(app(const CompanionMemoryPage()));
-    container = ProviderScope.containerOf(tester.element(find.byType(CompanionMemoryPage)));
-    await flush(tester);
-  }
-
-  Future<void> close(WidgetTester tester) async {
-    await tester.pumpWidget(app(const SizedBox()));
-    await tester.pumpAndSettle();
-  }
 }
 
-Future<void> flush(WidgetTester tester) async {
-  for (var i = 0; i < 8; i++) {
-    await tester.pump(const Duration(milliseconds: 10));
-  }
-}
-
-Future<void> edit(WidgetTester tester, String oldText, String newText, {bool save = true}) async {
-  await tester.tap(find.text(oldText));
-  await tester.pumpAndSettle();
-  await tester.enterText(find.byType(TextField), newText);
+Future<void> _edit(WidgetTester tester, String text, {bool save = true}) async {
+  await tester.enterText(find.byType(TextField), text);
   if (save) {
     await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
   }
 }
 
+Future<void> _menu(WidgetTester tester, String action) async {
+  await tester.tap(find.byTooltip('这件事的选项').first);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(action).last);
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
-
-  testWidgets('switching host clears old entries while the new list is pending', (tester) async {
-    final room = _Room();
-    const next = HostRef.ssh('b');
-    final b = room.connect(next, 'B memory');
-    final list = Completer<DshHttpResponse>();
-    b.nextList = () => list.future;
-    await room.open(tester);
-    expect(find.text('A memory'), findsOneWidget);
-    room.host.change(next);
-    await flush(tester);
-    expect(find.textContaining('保存在B host上'), findsOneWidget);
-    expect(find.text('A memory'), findsNothing);
-    expect(b.listReads, 1);
-    list.complete(b.memories());
-    await flush(tester);
-    expect(find.text('B memory'), findsOneWidget);
-    await room.close(tester);
+  late List<Map<String, Object?>> native;
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    native = [];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (call) async {
+      native.add(Map<String, Object?>.from(call.arguments as Map));
+      return true;
+    });
   });
+  tearDown(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_channel, null),
+  );
 
-  testWidgets('a late old list cannot replace the current host list', (tester) async {
-    final room = _Room();
-    final old = Completer<DshHttpResponse>();
-    room.a.nextList = () => old.future;
-    const next = HostRef.ssh('b');
-    room.connect(next, 'B memory');
-    await room.open(tester);
-    room.host.change(next);
-    await flush(tester);
-    old.complete(room.a.memories());
-    await flush(tester);
-    expect(find.text('A memory'), findsNothing);
-    expect(find.text('B memory'), findsOneWidget);
-    await room.close(tester);
-  });
-
-  testWidgets('a retired capability read does not begin an old-host list read', (tester) async {
-    final room = _Room();
-    final old = Completer<DshHttpResponse>();
-    room.a.nextSnapshot = () => old.future;
-    const next = HostRef.ssh('b');
-    room.connect(next, 'B memory');
-    await room.open(tester);
-    room.host.change(next);
-    await flush(tester);
-    old.complete(room.a.snapshot());
-    await flush(tester);
-    expect(room.a.listReads, 0);
-    expect(find.text('B memory'), findsOneWidget);
-    await room.close(tester);
-  });
-
-  testWidgets('replacing a client on the same host reloads its memory list', (tester) async {
-    final room = _Room();
-    await room.open(tester);
-    final replacement = room.connect(HostRef.local, 'Replacement memory');
-    // Publish the replacement, rather than only marking this lazy provider
-    // invalid. The page must respond to the new value without a host change.
-    expect(
-      identical(
-        room.container.refresh(activeConnectionProvider).value?.client,
-        room.connections[HostRef.local]!.client,
-      ),
-      isTrue,
+  testWidgets('local consolidation notifies the real memories page when the host has no model route', (tester) async {
+    final phone = _Phone();
+    const text = '我只买原味酸奶';
+    phone.store.submitMessage(
+      id: 'duplicate-source',
+      sessionId: phone.store.lightSessionId,
+      text: text,
+      saidAtUtc: phone.now,
+      offsetMinutes: 480,
     );
-    await flush(tester);
-    expect(replacement.listReads, 1);
-    expect(find.text('A memory'), findsNothing);
-    expect(find.text('Replacement memory'), findsOneWidget);
-    await room.close(tester);
+    final batch = phone.store.nextBatch(forceTail: true, estimateTokens: (text) => text.runes.length)!;
+    final proposal = parseExtractionProposal(
+      jsonEncode({
+        'schema_version': 2,
+        'batch_id': batch.id,
+        'covered_message_ids': ['duplicate-source'],
+        'completion': 'complete',
+        'operations': [
+          for (var i = 0; i < 2; i++)
+            {
+              'op': 'create',
+              'kind': 'preference',
+              'text': text,
+              'keywords': ['酸奶'],
+              'evidence': [
+                {'message_id': 'duplicate-source', 'quote': text},
+              ],
+            },
+        ],
+      }),
+      batch,
+    );
+    expect(phone.store.commitExtraction(batch, proposal), isTrue);
+    await tester.pumpWidget(phone.app());
+    await tester.pumpAndSettle();
+    expect(find.text(text), findsNWidgets(2));
+    final room = Object();
+    phone.owner.enter(room, transport: () => null, estimateTokens: (text) => text.runes.length);
+    await phone.owner.consolidate(room);
+    await tester.pumpAndSettle();
+    expect(find.text(text), findsOneWidget);
+    expect(phone.store.cards(), hasLength(1));
+    expect(phone.store.requests(), isEmpty);
+    await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('an A to B to A visit does not revive the first A read', (tester) async {
-    final room = _Room();
-    final old = Completer<DshHttpResponse>();
-    final oldList = room.a.memories();
-    room.a.nextList = () => old.future;
-    const next = HostRef.ssh('b');
-    room.connect(next, 'B memory');
-    await room.open(tester);
-    room.host.change(next);
-    await flush(tester);
-    room.a.text = 'New A memory';
-    room.host.change(HostRef.local);
-    await flush(tester);
-    old.complete(oldList);
-    await flush(tester);
-    expect(find.text('A memory'), findsNothing);
-    expect(find.text('New A memory'), findsOneWidget);
-    await room.close(tester);
+  testWidgets('the phone page opens without any host and saves directly to its shared owner', (tester) async {
+    final phone = _Phone();
+    await tester.pumpWidget(phone.app());
+    await tester.pumpAndSettle();
+    expect(find.textContaining('两种模式共用'), findsOneWidget);
+    await tester.tap(find.byTooltip('添加'));
+    await tester.pumpAndSettle();
+    await _edit(tester, '我的咖啡甜度是无糖');
+    expect(phone.store.cards().single['text'], '我的咖啡甜度是无糖');
+    expect(phone.owner.select('咖啡甜度').ids, hasLength(1));
+    expect(phone.store.messages(), isEmpty, reason: 'A manual edit must not invent a user chat source');
+    await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('an edit dialog opened on A cannot write after switching host', (tester) async {
-    final room = _Room();
-    const next = HostRef.ssh('b');
-    final b = room.connect(next, 'B memory');
-    await room.open(tester);
-    await edit(tester, 'A memory', 'A changed', save: false);
-    room.host.change(next);
-    await flush(tester);
+  testWidgets('a dialog keeps row revision and cannot overwrite a later same-phone change', (tester) async {
+    final phone = _Phone();
+    final initial = phone.manual('我的咖啡甜度是低糖');
+    await tester.pumpWidget(phone.app());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('我的咖啡甜度是低糖'));
+    await tester.pumpAndSettle();
+    await _edit(tester, '我的咖啡甜度是无糖', save: false);
+    phone.store.saveManual(
+      const CompanionMemory(id: _id, text: '我的咖啡甜度是半糖'),
+      expectedRowRev: initial['row_rev']! as int,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    phone.owner.changed();
     await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
-    expect(room.a.writes, isEmpty);
-    expect(b.writes, isEmpty);
-    await room.close(tester);
-  });
-
-  testWidgets('a delete confirmation opened on A cannot act after switching host', (tester) async {
-    final room = _Room();
-    const next = HostRef.ssh('b');
-    final b = room.connect(next, 'B memory');
-    await room.open(tester);
-    await tester.tap(find.byTooltip('忘掉'));
-    await tester.pumpAndSettle();
-    room.host.change(next);
-    await flush(tester);
-    await tester.tap(find.widgetWithText(FilledButton, '忘掉'));
-    await tester.pumpAndSettle();
-    expect(room.a.writes, isEmpty);
-    expect(b.writes, isEmpty);
-    await room.close(tester);
-  });
-
-  testWidgets('a late A write does not refresh B or keep B controls busy', (tester) async {
-    final room = _Room();
-    final old = Completer<DshHttpResponse>();
-    room.a.nextWrite = () => old.future;
-    const next = HostRef.ssh('b');
-    final b = room.connect(next, 'B memory');
-    await room.open(tester);
-    await edit(tester, 'A memory', 'A changed');
-    expect(room.a.writes, hasLength(1));
-    room.host.change(next);
-    await flush(tester);
-    expect(find.text('B memory'), findsOneWidget);
-    expect(
-      tester.widget<IconButton>(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == '添加')).onPressed,
-      isNotNull,
-    );
-    final readsBeforeOldCompletion = b.listReads;
-    old.complete(_json({'revision': 1}));
-    await flush(tester);
-    expect(b.listReads, readsBeforeOldCompletion);
-    await room.close(tester);
-  });
-
-  testWidgets('an old failed write cannot unlock or show errors over a new write', (tester) async {
-    final room = _Room();
-    final old = Completer<DshHttpResponse>();
-    room.a.nextWrite = () => old.future;
-    const next = HostRef.ssh('b');
-    final b = room.connect(next, 'B memory');
-    final current = Completer<DshHttpResponse>();
-    b.nextWrite = () => current.future;
-    await room.open(tester);
-    await edit(tester, 'A memory', 'A changed');
-    room.host.change(next);
-    await flush(tester);
-    await edit(tester, 'B memory', 'B changed');
-    expect(b.writes, hasLength(1));
-    old.completeError(const DshClosedException('A closed'));
-    await flush(tester);
-    expect(find.text('没保存上，再试一次吧'), findsNothing);
-    expect(
-      tester.widget<IconButton>(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == '添加')).onPressed,
-      isNull,
-    );
-    current.complete(_json({'revision': 1}));
-    await flush(tester);
-    expect(
-      tester.widget<IconButton>(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == '添加')).onPressed,
-      isNotNull,
-    );
-    await room.close(tester);
-  });
-
-  testWidgets('late failure of an earlier retry cannot erase a newer successful list', (tester) async {
-    final room = _Room();
-    room.a.nextSnapshot = () async => throw const DshClosedException('initial read failed');
-    await room.open(tester);
-    final old = Completer<DshHttpResponse>();
-    room.a.nextSnapshot = () => old.future;
-    final retry = find.text('重试');
-    expect(retry, findsOneWidget);
-    await tester.tap(retry);
-    await tester.tap(retry);
-    await flush(tester);
-    expect(find.text('A memory'), findsOneWidget);
-    old.completeError(const DshClosedException('older retry failed'));
-    await flush(tester);
-    expect(find.text('A memory'), findsOneWidget);
-    await room.close(tester);
-  });
-
-  testWidgets('same-owner edit and delete keep store revision and memory fields', (tester) async {
-    final room = _Room();
-    await room.open(tester);
-    await edit(tester, 'A memory', 'A changed');
-    expect(find.text('A changed'), findsOneWidget);
-    final saved = room.a.writes.single.$2;
-    expect(saved['storeId'], room.a.store);
-    expect(saved['expectedRevision'], 0);
-    expect(saved['memory'], {
-      'id': _memoryId,
-      'kind': 'preference',
-      'text': 'A changed',
-      'keywords': ['kept'],
-      'pinned': true,
-      'source': {'kind': 'manual'},
-      'expiresAt': null,
-    });
-    await tester.tap(find.byTooltip('忘掉'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '忘掉'));
-    await tester.pumpAndSettle();
-    expect(room.a.writes.last.$2, {'storeId': room.a.store, 'expectedRevision': 1, 'id': _memoryId});
-    expect(find.text('A changed'), findsNothing);
-    await room.close(tester);
-  });
-
-  testWidgets('a same-owner conflict rereads the host without retrying the write', (tester) async {
-    final room = _Room();
-    room.a.nextWrite = () async {
-      room.a.text = 'Changed elsewhere';
-      return _json({
-        'error': {'code': 'companion/conflict'},
-      }, 409);
-    };
-    await room.open(tester);
-    await edit(tester, 'A memory', 'A changed');
-    expect(room.a.writes, hasLength(1));
-    expect(find.text('Changed elsewhere'), findsOneWidget);
+    expect(phone.store.cards().single['text'], '我的咖啡甜度是半糖');
     expect(find.text('刚才另一处改过了，已经刷新'), findsOneWidget);
-    await room.close(tester);
+    await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a write whose reply is lost rereads what the host kept', (tester) async {
-    final room = _Room();
-    room.a.nextWrite = () async {
-      room.a.text = 'A changed';
-      room.a.revision++;
-      throw const DshClosedException('reply lost after the write landed');
-    };
-    await room.open(tester);
-    final reads = room.a.listReads;
-    await edit(tester, 'A memory', 'A changed');
-    expect(room.a.writes, hasLength(1));
-    expect(room.a.listReads, greaterThan(reads));
-    expect(find.text('A changed'), findsOneWidget);
-    await room.close(tester);
-  });
-
-  testWidgets('a pending list can finish after the page is disposed', (tester) async {
-    final room = _Room();
-    final old = Completer<DshHttpResponse>();
-    room.a.nextList = () => old.future;
-    await room.open(tester);
-    await room.close(tester);
-    old.complete(room.a.memories());
-    await flush(tester);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('C435: editing preserves source and expiry from the real memory GET', (tester) async {
-    final room = _Room();
-    const source = {'kind': 'user-confirmed', 'sessionId': 'confirmed-session', 'messageId': 'confirmed-message'};
-    final expiry = DateTime.utc(2030, 1, 1).millisecondsSinceEpoch;
-    room.a
-      ..source = source
-      ..expiresAt = expiry;
-    await room.open(tester);
-    await edit(tester, 'A memory', 'Only the text changes');
-    expect(room.a.writes, hasLength(1));
-    expect(room.a.writes.single.$2, {
-      'storeId': room.a.store,
-      'expectedRevision': 0,
-      'memory': {
-        'id': _memoryId,
-        'text': 'Only the text changes',
-        'kind': 'preference',
-        'keywords': ['kept'],
-        'pinned': true,
-        'source': source,
-        'expiresAt': expiry,
-      },
-    });
-    await room.close(tester);
-  });
-
-  testWidgets('C435: adding a memory keeps the manual source and null expiry', (tester) async {
-    final room = _Room();
-    room.a.text = null;
-    await room.open(tester);
-    await tester.tap(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == '添加'));
+  testWidgets('editing what she remembers is a new current value, without inventing history', (tester) async {
+    final phone = _Phone();
+    final initial = phone.manual('我的咖啡甜度是低糖');
+    await tester.pumpWidget(phone.app());
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'A new manual memory');
-    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.tap(find.text('我的咖啡甜度是低糖'));
     await tester.pumpAndSettle();
-    expect(room.a.writes, hasLength(1));
-    final request = room.a.writes.single.$2;
-    expect(request['storeId'], room.a.store);
-    expect(request['expectedRevision'], 0);
-    final memory = request['memory']! as Map;
-    expect(memory['source'], {'kind': 'manual'});
-    expect(memory['expiresAt'], isNull);
-    expect(memory['text'], 'A new manual memory');
-    expect(memory['kind'], 'fact');
-    expect(memory['keywords'], isEmpty);
-    expect(memory['pinned'], isFalse);
-    await room.close(tester);
+    await _edit(tester, '我的咖啡甜度是半糖');
+    expect(phone.store.cards().single['current_basis_seq'], greaterThan(initial['current_basis_seq']! as int));
+    expect(phone.store.cards(), hasLength(1));
+    expect(phone.store.messages(), isEmpty);
+    await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('C436: an empty list cannot open another editor while its first save is pending', (tester) async {
-    final room = _Room();
-    room.a.text = null;
-    final pending = Completer<DshHttpResponse>();
-    room.a.nextWrite = () => pending.future;
-    await room.open(tester);
-    try {
-      final emptyAdd = find.widgetWithText(OutlinedButton, '添加');
-      await tester.tap(emptyAdd);
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'First memory');
-      await tester.tap(find.widgetWithText(FilledButton, '保存'));
-      await tester.pumpAndSettle();
-      expect(room.a.writes, hasLength(1));
-      expect(
-        tester.widget<IconButton>(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == '添加')).onPressed,
-        isNull,
-      );
-      expect(tester.widget<OutlinedButton>(emptyAdd).onPressed, isNull);
-      await tester.tap(emptyAdd);
-      await tester.pumpAndSettle();
-      expect(find.byType(TextField), findsNothing);
-      expect(room.a.writes, hasLength(1));
-      room.a
-        ..text = 'First memory'
-        ..revision = 1;
-      pending.complete(_json({'revision': 1}));
-      await flush(tester);
-      expect(find.text('First memory'), findsOneWidget);
-      expect(
-        tester.widget<IconButton>(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == '添加')).onPressed,
-        isNotNull,
-      );
-    } finally {
-      await room.close(tester);
-      if (!pending.isCompleted) pending.complete(_json({'revision': 1}));
-    }
+  testWidgets('the page offers only edit and forget, no mechanism controls', (tester) async {
+    final phone = _Phone();
+    phone.automatic('我的咖啡甜度是无糖');
+    await tester.pumpWidget(phone.app());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('这件事的选项').first);
+    await tester.pumpAndSettle();
+    expect(find.byType(PopupMenuItem<String>), findsNWidgets(2));
+    expect(find.byTooltip('模型用量'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('hand-written memories carried over from before count as real', (tester) async {
+    final phone = _Phone();
+    phone.store.importLegacy(
+      CompanionMigrationSnapshot.fromJson({
+        'v': 1,
+        'storeId': _oldStore,
+        'revision': 2,
+        'memoryRevision': 2,
+        'memories': [
+          {
+            'id': _id,
+            'kind': 'fact',
+            'text': '我的咖啡甜度是无糖',
+            'keywords': [],
+            'pinned': false,
+            'source': {'kind': 'manual'},
+            'expiresAt': null,
+            'createdAt': 1000,
+            'updatedAt': 2000,
+          },
+        ],
+      }),
+      realityKnownIds: {_id},
+    );
+    expect(phone.store.cards().single['eligible'], isTrue);
+    expect(phone.owner.select('咖啡甜度').ids, hasLength(1));
+  });
+
+  testWidgets('forget removes the card and clears line and saidAt with native acknowledgement', (tester) async {
+    final phone = _Phone();
+    phone.automatic('我的咖啡甜度是无糖');
+    await tester.pumpWidget(phone.app());
+    await tester.pumpAndSettle();
+    native.clear();
+    await _menu(tester, '忘掉');
+    await tester.tap(find.widgetWithText(FilledButton, '忘掉'));
+    await tester.pumpAndSettle();
+    expect(phone.store.cards(), isEmpty);
+    expect(phone.store.messages().single['text'], '我的咖啡甜度是无糖');
+    expect(native.last['line'], isNull);
+    expect(native.last.containsKey('line'), isTrue);
+    expect(native.last['saidAt'], isNull);
+    expect(native.last.containsKey('saidAt'), isTrue);
+    expect(phone.store.archive['widget_clear_pending'], 0);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('native failure leaves clear pending after a successful forget', (tester) async {
+    final phone = _Phone();
+    phone.manual('我的咖啡甜度是无糖');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      _channel,
+      (_) async => null,
+    );
+    await tester.pumpWidget(phone.app());
+    await tester.pumpAndSettle();
+    await _menu(tester, '忘掉');
+    await tester.tap(find.widgetWithText(FilledButton, '忘掉'));
+    await tester.pumpAndSettle();
+    expect(phone.store.cards(), isEmpty);
+    expect(phone.store.archive['widget_clear_pending'], 1);
+    expect(find.text('小组件上那句旧话稍后会清掉。'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
   });
 }

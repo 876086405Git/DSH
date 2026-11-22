@@ -39,6 +39,7 @@ import '../../state/settings_state.dart';
 import '../../state/ui_mode_state.dart';
 import '../common/discard_guard.dart';
 import '../common/empty_view.dart';
+import '../companion/companion_tasks_page.dart';
 import '../forum/forum_link_host.dart';
 import '../notify/chat_alert_host.dart';
 import '../pets/pet_settings_page.dart';
@@ -347,6 +348,14 @@ class _WebEntryHostState extends ConsumerState<WebEntryHost> {
         // The page follows the current conversation (WebHome).
         ref.read(activeHostProvider.notifier).select(host);
         ref.read(currentSessionProvider.notifier).select(sessionId);
+      case OpenCompanionTaskEntry(:final taskId, :final taskRev):
+        if (mounted) {
+          await Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute<void>(
+              builder: (_) => CompanionTasksPage(taskId: taskId, openedRevision: taskRev),
+            ),
+          );
+        }
     }
   }
 

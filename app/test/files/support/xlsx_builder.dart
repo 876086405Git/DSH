@@ -18,6 +18,12 @@ class Inline {
   final String text;
 }
 
+/// Separate text elements in an inline rich string.
+class InlineRuns {
+  const InlineRuns(this.runs);
+  final List<String> runs;
+}
+
 /// A formula cell with its saved string result (`t="str"`).
 class Formula {
   const Formula(this.formula, this.result);
@@ -31,7 +37,7 @@ class TestSheet {
 
   final String name;
 
-  /// Cell values: String, num, bool, DateTime, [Pct], [Inline], [Formula],
+  /// Cell values: String, num, bool, DateTime, [Pct], [Inline], [InlineRuns], [Formula],
   /// null (no cell).
   final List<List<Object?>> rows;
   final bool hidden;
@@ -53,9 +59,9 @@ String _col(int i) {
   return String.fromCharCodes(out.reversed);
 }
 
-/// The workbook as XLSX bytes. [rich] adds a shared string made of two runs
-/// and a phonetic hint (index after the plain strings).
-Uint8List buildXlsx(List<TestSheet> sheets, {bool date1904 = false, bool stored = false}) {
+/// The workbook as XLSX bytes. [richText] supplies separate runs for the
+/// extra shared string; by default it has two runs and a phonetic hint.
+Uint8List buildXlsx(List<TestSheet> sheets, {bool date1904 = false, bool stored = false, List<String>? richText}) {
   final shared = <String>[];
   int sharedIndex(String s) {
     final i = shared.indexOf(s);
@@ -81,6 +87,8 @@ Uint8List buildXlsx(List<TestSheet> sheets, {bool date1904 = false, bool stored 
         return '<c r="$ref" s="2"><v>${p.value}</v></c>';
       case Inline i:
         return '<c r="$ref" t="inlineStr"><is><t>${_esc(i.text)}</t></is></c>';
+      case InlineRuns i:
+        return '<c r="$ref" t="inlineStr"><is>${[for (final run in i.runs) '<r><t>${_esc(run)}</t></r>'].join()}</is></c>';
       case Formula f:
         return '<c r="$ref" t="str"><f>${_esc(f.formula)}</f><v>${_esc(f.result)}</v></c>';
       case num n:
@@ -134,7 +142,7 @@ Uint8List buildXlsx(List<TestSheet> sheets, {bool date1904 = false, bool stored 
   files['xl/sharedStrings.xml'] =
       '<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${shared.length + 1}">'
       '${[for (final s in shared) '<si><t xml:space="preserve">${_esc(s)}</t></si>'].join()}'
-      '<si><r><rPr><b/></rPr><t>富</t></r><r><t>文本</t></r><rPh sb="0" eb="1"><t>ふ</t></rPh></si>'
+      '${richText == null ? '<si><r><rPr><b/></rPr><t>富</t></r><r><t>文本</t></r><rPh sb="0" eb="1"><t>ふ</t></rPh></si>' : '<si>${[for (final run in richText) '<r><t>${_esc(run)}</t></r>'].join()}</si>'}'
       '</sst>';
   files['xl/styles.xml'] =
       '<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'

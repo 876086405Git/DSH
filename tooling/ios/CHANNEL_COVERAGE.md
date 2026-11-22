@@ -2,10 +2,12 @@
 
 Flutter 的 `MethodChannel` 能编译通过，即使 iOS 没有注册同名通道。2026-11-16 清点 `app/lib` 中直接声明的 46 条 `dsh/*` 通道：iOS 注册或显式提供空事件流的有 35 条。语音通话和普通消息朗读共用的 `dsh/speech` 已补齐；`test-channel-contract.py` 检查语音方法和 iOS 分发器一致，也要求新增的共享通道有 iOS 注册或在下表明确归类，避免再把缺少通道误报为麦克风故障。
 
-其余 11 条没有同名 iOS 通道，按源码调用路径处理：
+其余 13 条没有同名 iOS 通道，按源码调用路径处理：
 
 | 通道 | 当前 iOS 路径 | 后续工作 |
 | --- | --- | --- |
+| `dsh/companion_maps` | 本期地图交接只接了 Android；iOS 缺少通道时如实显示不可用，已有记录仍可查看和复制地址，不声称已经打开地图 | iOS 地图交接需单独实现 |
+| `dsh/companion_reminders` | 伙伴小屋本机提醒只接了 Android 精确闹钟；iOS 上调用失败时提醒如实显示「还没设上」 | iOS 本机提醒需用 UNUserNotificationCenter 单独实现 |
 | `dsh/attachment-files` | OHOS 专用附件接口 | 无需移植；iOS 走自己的文件入口 |
 | `dsh/authorized-workspaces` | OHOS 手机文件夹授权（系统目录选择与持久授权）；Dart 侧尚未接入界面 | 无需移植；iOS 的工作目录授权走自己的路径 |
 | `dsh/dynamic_color` | 缺失时退回预设配色 | 壁纸取色未实现 |

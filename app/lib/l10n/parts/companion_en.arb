@@ -10,7 +10,7 @@
   "companionNotConnected": "I can't reach the engine right now. Tell me again in a bit?",
   "companionSendFailed": "That didn't get through. Say it again?",
   "companionLogTitle": "Log",
-  "companionContextUnsupported": "This host can't take her context yet: her name, persona and what just happened won't reach her, only what you say. Update the host or switch to light mode.",
+  "companionContextUnsupported": "This host can't take her context yet: her name, persona, recent events and memories on your phone won't reach her, only what you say. Update the host or switch to light mode.",
   "companionLogEmpty": "Nothing said yet.",
   "companionLogYou": "You",
   "companionLogOpenChat": "Open in chat",
@@ -77,15 +77,15 @@
   "companionArriving": "She's swimming over…",
   "companionPrivacyLine": "Assets stay on this phone. Chats go through the current host.",
   "companionMemoryTitle": "What she remembers",
-  "companionMemoryScope": "Kept on {host}. She doesn't bring these up by herself yet; a later version will.",
+  "companionMemoryScope": "Saved on {host}, shared by both modes. You can edit or forget these anytime.",
   "companionMemoryAdd": "Add",
-  "companionMemoryEdit": "Edit",
+  "companionMemoryEdit": "Update current details",
   "companionMemorySave": "Save",
   "companionMemoryHint": "For example: I like unsweetened tea and don't drink coffee",
   "companionMemoryForget": "Forget",
   "companionMemoryForgetTitle": "Have her forget this?",
   "companionMemoryEmpty": "Nothing saved yet",
-  "companionMemoryEmptyHint": "Write down what you'd like her to remember. It stays on the current host, and you can edit or delete it anytime.",
+  "companionMemoryEmptyHint": "She picks up what you talk about on her own. If there is something you want her to keep in mind, you can write it here.",
   "companionMemoryUnsupported": "This host can't keep her memories yet",
   "companionMemoryUnsupportedHint": "It isn't available over the DSH Remote relay, or this host's dsh-go bridge is older.",
   "companionMemoryLoadFailed": "Couldn't load",
@@ -114,8 +114,8 @@
   "companionLightBadKey": "The API key seems wrong, or it is no longer valid.",
   "companionLightBusy": "It is busy over there. Tell me again in a bit?",
   "companionNotConnectedTryLight": "I can't reach the host right now. If you just want to chat, switch to Light in the menu at the top right.",
-  "companionMenuRestartLightHint": "Clear the chat on this phone",
-  "companionMenuRestartLightConfirm": "She will forget this conversation, and the chat on this phone is deleted.",
+  "companionMenuRestartLightHint": "Start a new conversation and keep earlier records",
+  "companionMenuRestartLightConfirm": "Start a new conversation. Memories and earlier chat records will be kept.",
   "companionInviteRest": "Rest on the cushion with me for a bit?",
   "companionInviteAccept": "Sure",
   "companionInviteDecline": "Not now",
@@ -272,5 +272,730 @@
   "companionAdaptFailed": "That didn't work ({reason}). You can try again from Fit this model in the menu.",
   "companionAdaptUnreadable": "the model's answer made no sense",
   "companionAdaptEmpty": "the model found nothing to match",
-  "companionAdaptNetwork": "no connection"
+  "companionAdaptNetwork": "no connection",
+  "companionMemoryMigrationPending": "Some older memories have not moved yet. The originals are still kept. You can try again later.",
+  "companionMemoryWaiting": "Memory extraction is waiting. Your original words are saved on this phone.",
+  "companionMemoryWidgetPending": "The old line on the widget will clear shortly.",
+  "companionMemoryConfiguration": "This channel is not ready to save new memories automatically. Your words are kept; you can still edit memories.",
+  "companionMemoryWording": "Edit wording only",
+  "companionMemoryPin": "Pin",
+  "companionMemoryUnpin": "Unpin",
+  "companionMemoryConfirmReality": "This is true of my real life",
+  "companionMemorySources": "My original words",
+  "companionMemoryEditSource": "Edit these words",
+  "companionMemoryDeleteSource": "Delete the phone copy",
+  "companionMemoryDeleteSourceHint": "Delete these words from the phone and memories supported only by them. Old host conversations and separate copies remain.",
+  "companionMemoryNoSource": "This was written by hand, or its original source is no longer available.",
+  "companionMemoryCleanupUnknown": "I can't confirm all the original messages that should be deleted. Nothing was deleted.",
+  "companionMemoryTooLong": "Too long to extract automatically from this version",
+  "companionMemoryNotExtracted": "This batch was not saved as memories",
+  "companionMemoryPending": "Not processed yet",
+  "companionMemorySourceKept": "Original words kept",
+  "companionMemoryDisplayOnly": "Old record, kept for viewing",
+  "companionMemoryCancelled": "Plan cancelled",
+  "companionMemoryLess": "Bring this up less",
+  "companionMemoryNever": "Do not bring this up",
+  "companionMemoryNormal": "Okay to bring up again",
+  "companionMemoryCancelPlan": "Cancel this plan",
+  "companionMemoryActions": "Options for this memory",
+  "companionMemoryWhich": "Which one do you mean?",
+  "companionMemoryForgotten": "Okay, it's forgotten.",
+  "companionMemoryNeverDone": "Okay, I won't bring it up.",
+  "companionMemoryLessDone": "Okay, I'll mention it less.",
+  "companionMemoryNormalDone": "Sure, we can talk about it whenever you like.",
+  "companionMemoryCancelledDone": "Okay, I won't wait to ask you about it.",
+  "companionMemoryCorrected": "Oh, I had that mixed up.",
+  "companionMemoryHostSourceRemaining": "The phone copy is deleted. The old host conversation remains; you can delete that conversation from the chat list.",
+  "companionMemoryHostRestarted": "The host has restarted. Your message is saved; tap Send again to continue.",
+  "companionMemoryUsage": "Model usage",
+  "companionMemoryUsageHint": "Recent request records. Unknown does not mean free; costs are estimates using verified rates, not provider bills. Host records cover only captured companion chat calls.",
+  "companionMemoryUsageUnknown": "Unknown",
+  "companionMemoryUsageExtract": "Memory extraction",
+  "companionMemoryUsageOrganize": "Memory consolidation",
+  "companionMemoryUsageChat": "Chat",
+  "companionMemoryUsageWaiting": "Waiting for usage records",
+  "companionMemoryUsageIncomplete": "Usage coverage is incomplete; known records are kept",
+  "companionMemoryUsageInput": "Uncached input",
+  "companionMemoryUsageCacheRead": "Cache read",
+  "companionMemoryUsageCacheWrite": "Cache write",
+  "companionMemoryUsageOutput": "Output",
+  "companionMemoryUsageCost": "Estimated cost",
+  "companionMemoryUsageNotSent": "Not sent locally",
+  "companionMemoryUsageEmpty": "No usage recorded yet",
+  "companionMemoryHostUnsupported": "This host is a bit out of date, so here she can't recall what you've talked about. Updating the host fixes it.",
+  "companionMemoryPostponedDone": "Okay, let's pick it up once you have a new time.",
+  "companionTasksTitle": "Errands",
+  "companionTasksEmpty": "You haven't asked me to do anything yet.",
+  "companionTasksEarlier": "Earlier errands",
+  "companionTaskMissing": "I can't find this one anymore.",
+  "companionTaskChanged": "This was changed later. I'm going with the latest.",
+  "companionReminderEdit": "Change reminder",
+  "companionReminderCancel": "Don't remind me",
+  "companionReminderText": "Remind you about",
+  "companionReminderWhen": "Date and time",
+  "companionReminderWhenHint": "Like 2026-11-21 08:00",
+  "companionReminderZone": "Time zone",
+  "companionReminderZoneHint": "Like Asia/Shanghai or +08:00",
+  "companionReminderQueued": "Okay, I've saved the reminder request. I haven't confirmed it's set.",
+  "companionReminderDone": "All set. I'll ping you on time.",
+  "companionReminderUnknown": "I'm not sure this one got set. Mind checking your system alarms?",
+  "companionReminderFailed": "Sorry, I couldn't set this one.",
+  "companionReminderCancelled": "Okay, I won't remind you about this.",
+  "companionReminderTextMissing": "What should I remind you about?",
+  "companionReminderDateMissing": "Which day should I remind you?",
+  "companionReminderTimeMissing": "What time that day?",
+  "companionReminderZoneMissing": "Which time zone should I use?",
+  "companionReminderGap": "That time gets skipped that day (daylight saving). Pick another time?",
+  "companionReminderOverlap": "That time happens twice that day. Which one?",
+  "companionReminderFirst": "The first one",
+  "companionReminderSecond": "The second one",
+  "companionReminderExactMissing": "Your phone won't let me remind you on the dot yet, so this isn't set. Turn on “Alarms & reminders” in system settings.",
+  "companionReminderNotificationsMissing": "Notifications are off, so this isn't set yet. Turn them on in system settings.",
+  "companionReminderChannelMissing": "Reminder notifications are turned off, so this isn't set yet. Turn them on in system settings.",
+  "companionReminderGroupMissing": "The notification group for reminders is turned off, so this isn't set yet. Turn it on in system settings.",
+  "companionReminderTimePassed": "That time has already passed, so I didn't ring late.",
+  "companionReminderInvalidTime": "I didn't quite get that time. Tell me the date, time and time zone again?",
+  "companionReminderCancelUnknown": "Your request to cancel is saved. I haven't confirmed that this reminder has been removed.",
+  "companionReminderWhich": "Which one do you mean? Tap it in Errands.",
+  "companionReminderSyntax": "Tell me the day and time, like “Remind me at tomorrow 08:00 to bring my ID”.",
+  "companionReminderSaveFailed": "That didn't save. What you wrote is still here. Try again?",
+  "companionReminderSettings": "Open system settings",
+  "companionReminderCheck": "Refresh",
+  "companionReminderUnknownNotification": "This reminder may have gone off already. I'm not sure.",
+  "companionReminderUnhandled": "I can't help with this part yet: {text}",
+  "companionReminderCancelSource": "Cancel the reminder to {text}",
+  "@companionReminderUnhandled": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "@companionReminderCancelSource": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReminderNotHere": "This one wasn't set on this phone, so I can't change or cancel it here.",
+  "companionReminderPlatformUnavailable": "I can't see your phone's reminders right now. Check back in a bit?",
+  "companionReminderPastRegistration": "It was set up before.",
+  "companionLookupAccepted": "Okay, I'll look it up and leave what I find in Errands.",
+  "companionLookupSyntax": "Which museum or library, and which day? Tell me its full name and the date.",
+  "companionLookupDateMissing": "Which day should I check? Give me a specific date.",
+  "companionLookupZoneMissing": "What time zone is it in? Tell me the date and time zone together.",
+  "companionLookupWhich": "Which lookup should I drop? Tap it in Errands.",
+  "companionLookupQueued": "I'm looking it up. One moment.",
+  "companionLookupDone": "Found it. Where I read it is below.",
+  "companionLookupPartial": "I found some of it, but I still can't say for sure about that day.",
+  "companionLookupFailed": "I couldn't find anything solid this time, so I can't say.",
+  "companionLookupUnknown": "I didn't get a clear answer this time. I won't look it up again for now.",
+  "companionLookupCancelled": "Okay, I won't look it up.",
+  "companionLookupCancelUnknown": "Your request to stop is saved. I haven't confirmed that the original lookup has stopped.",
+  "companionLookupUnavailable": "I can't reach anywhere to look this up right now, so no answer yet.",
+  "companionLookupDeadline": "The time we agreed on has passed, so I stopped here.",
+  "companionLookupInputLimit": "There's too much to read at once, so here's where I looked.",
+  "companionLookupQueryLong": "That name is a bit long. Is there a shorter name I won't mix up?",
+  "companionLookupAnswerIncomplete": "I found the pages but haven't pieced it together yet. Here's where I looked.",
+  "companionLookupNotHere": "This wasn't looked up on this phone, so I can only show you what I found.",
+  "companionLookupSources": "Where I looked",
+  "companionLookupSearchOnly": "Only saw the search snippet; didn't open the page",
+  "companionLookupNoTitle": "No title",
+  "companionLookupCancel": "Don't look it up",
+  "companionLookupSaveFailed": "That didn't go through. Try again in a bit?",
+  "companionLookupCancelSource": "Cancel the lookup for {name}",
+  "@companionLookupCancelSource": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionLookupObservedAt": "Read at {time}",
+  "@companionLookupObservedAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionLookupViewSources": "See where I looked · {name}",
+  "@companionLookupViewSources": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionNotesTitle": "Turn notes into a to-do list",
+  "companionNotesView": "Take a look",
+  "companionNotesSyntax": "Which day’s notes should I tidy up, and should the computer keep going after you leave? Then you can pick the folder.",
+  "companionNotesDateMissing": "The date, time zone or deadline isn't clear yet. Tell me again?",
+  "companionNotesConnect": "Connect the computer with your notes first, then pick the folder.",
+  "companionNotesOriginalHost": "This lives on the computer you used before. Connect to it and I'll pick it back up.",
+  "companionNotesUnavailable": "This computer can't take this on right now.",
+  "companionNotesNoDirectory": "No folder picked yet, so I haven't started.",
+  "companionNotesChooseDirectory": "Pick the notes folder",
+  "companionNotesChooseOutput": "Pick where to save it",
+  "companionNotesKeepDirectory": "Same notes folder",
+  "companionNotesKeepOutput": "Same save folder",
+  "companionNotesWhich": "Which one should I drop? Tap it in Errands.",
+  "companionNotesQueued": "Got it. Waiting for the computer to pick it up.",
+  "companionNotesRunning": "The computer has accepted this task. The result isn't ready yet.",
+  "companionNotesDone": "Done. The to-do list is saved as a new file. Tap to read it.",
+  "companionNotesPartial": "It stopped partway. You can look at what’s there so far.",
+  "companionNotesFailed": "This one didn't work out.",
+  "companionNotesWaiting": "This can't continue yet. The request is still here.",
+  "companionNotesUnknown": "I'm not sure what's happening on the computer right now.",
+  "companionNotesCancelUnknown": "Your request to stop is saved, but I haven't confirmed that the computer has stopped. Files it already wrote will stay.",
+  "companionNotesCancelled": "Okay, I've stopped. Files already written are still there.",
+  "companionNotesPauseUnavailable": "You said to stop when you leave, but I can't tell right now whether you've left, so I haven't started. Want it to keep going after you leave instead?",
+  "companionNotesOpportunityLost": "I missed handing it to the computer, and you said not to wait for it to come online. Tell me if you still want it done.",
+  "companionNotesDeadline": "The deadline we agreed on has passed, so I won't keep going.",
+  "companionNotesOriginalPending": "The computer got your change. Give it a moment to catch up.",
+  "companionNotesSaveFailed": "That didn't go through. It's still here. Try again in a bit?",
+  "companionNotesModifiedDay": "I'll turn the notes in this folder changed that day (Markdown and plain text) into a to-do list. Your files stay as they are.",
+  "companionNotesNoInputs": "No notes in this folder changed that day, so there's no to-do list.",
+  "companionNotesOutputExists": "A file with that name already exists, so I left it alone. Pick a new name.",
+  "companionNotesFileCountLimit": "More than 20 notes match. That’s a lot. Try a smaller folder, or split it up?",
+  "companionNotesFileSizeLimit": "One note is over 64 KiB, too long for me. Narrow it down; I'd rather not read just half.",
+  "companionNotesTotalSizeLimit": "These notes add up to more than 256 KiB. Narrow it down, or split it up?",
+  "companionNotesModelLimit": "That's more than I can read at once. Narrow it down; I'd rather not read just half.",
+  "companionNotesPause": "Stop when I leave",
+  "companionNotesForegroundStart": "Continue here",
+  "companionNotesForegroundReady": "I'll ask the computer to continue while you stay here. When you leave, I'll ask it to pause; we'll check its progress when you return.",
+  "companionNotesForegroundUnknown": "I haven't confirmed the computer's progress yet. Refresh to check.",
+  "companionNotesContinue": "Keep going after I leave",
+  "companionNotesAllowQueue": "If the computer is offline, wait for it",
+  "companionNotesNoQueue": "If the computer is offline, don't wait",
+  "companionNotesApproval": "The computer needs your okay to keep going.",
+  "companionNotesOpenFile": "Read the to-do list",
+  "companionNotesFileMissing": "I can't find this file anymore, and I didn't remake it.",
+  "companionNotesFileChanged": "This file was changed later; it's not what I wrote anymore.",
+  "companionNotesFileUnknown": "I can't open this file right now.",
+  "companionNotesCancel": "Don't do it",
+  "companionNotesEdit": "Change it",
+  "companionNotesDate": "Which day’s notes",
+  "companionNotesFilename": "New file name (.md or .txt)",
+  "companionNotesDeadlineField": "New deadline (leave blank to keep it)",
+  "companionNotesClearDeadline": "No deadline",
+  "companionNotesKeepDeadline": "Same deadline",
+  "companionNotesSourceDirectory": "Notes in: {path}",
+  "@companionNotesSourceDirectory": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "companionNotesOutputDirectory": "Saved to: {path}",
+  "@companionNotesOutputDirectory": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "companionNotesDue": "Done by {time}",
+  "@companionNotesDue": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionNotesCancelSource": "Cancel the notes task for “{name}”",
+  "@companionNotesCancelSource": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionNotesAmendSource": "Change the notes task: notes from {date}, save as “{name}”, deadline: {deadline}; {afterExit}; {queue}; {source}; {output}.",
+  "@companionNotesAmendSource": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      },
+      "deadline": {
+        "type": "String"
+      },
+      "afterExit": {
+        "type": "String"
+      },
+      "queue": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      },
+      "output": {
+        "type": "String"
+      }
+    }
+  },
+  "companionNotesRetry": "Let the computer keep going",
+  "companionNotesSubmitSaved": "Hand it to the computer now",
+  "companionNotesResendOriginal": "Hand it to the computer again",
+  "companionNotesResendCancel": "Tell the computer to stop again",
+  "companionNotesResendAmend": "Send the change to the computer again",
+  "companionMapChoose": "Which map app would you like to use?",
+  "companionMapSystemChoice": "Let me choose in the system",
+  "companionMapDone": "The address was handed to the map app.",
+  "companionMapUnknown": "I cannot yet tell whether the map opened. I will not open it again automatically.",
+  "companionMapCancelled": "This opening has been cancelled. If the map is already open, it will stay open.",
+  "companionMapUnavailable": "Maps are unavailable right now. You can still copy the address.",
+  "companionMapNotHere": "This record is from earlier. You can copy the address or open it again if you need it now.",
+  "companionMapFailed": "The map did not open. The address is here to copy.",
+  "companionMapChoiceWaiting": "The app selection screen opened. I cannot yet tell which map received the address.",
+  "companionMapWaiting": "The map has not opened this time. The address is saved.",
+  "companionMapQueued": "The address is saved. The map has not opened yet.",
+  "companionMapSyntax": "Give one complete address, for example: 在地图打开“文华路 18 号东门”. Choose one if there are several.",
+  "companionMapWhich": "Which address would you like to change or open again? You can select it in your tasks.",
+  "companionMapNoTarget": "No map was selected, so nothing has opened.",
+  "companionMapSaveFailed": "I could not confirm whether the map opened. I will not retry automatically.",
+  "companionMapTarget": "Selected map: {label}",
+  "@companionMapTarget": {"placeholders": {"label": {"type": "String"}}},
+  "companionMapCopy": "Copy original address",
+  "companionMapView": "View address",
+  "companionMapReopen": "Open again",
+  "companionMapCancel": "Cancel this opening",
+  "companionMapReopenSource": "Open this address in a map again",
+  "companionMapCancelSource": "Cancel opening this address in a map",
+  "companionFindTitle": "Find drafts",
+  "companionFindSyntax": "Tell me which folder to search at this level, when the drafts were modified, and whether to continue after you leave. Include a deadline if you have one.",
+  "companionFindWhich": "Which search would you like to stop? You can select it in your tasks.",
+  "companionFindConnect": "No folder has been selected on this computer yet. Connect to it and choose one first.",
+  "companionFindSavedDirectory": "Choose a folder you used before",
+  "companionFindSeven": "Did you mean seven in the morning or evening?",
+  "companionFindMorningSeven": "07:00 in the morning",
+  "companionFindEveningSeven": "19:00 in the evening",
+  "companionFindDeadlineMissing": "The deadline is not settled yet, so this search has not started.",
+  "companionFindChooseDirectory": "Choose the “{name}” folder",
+  "@companionFindChooseDirectory": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindChooseAgain": "Choose another folder",
+  "companionFindKeepDirectory": "Keep the same folder",
+  "companionFindUnavailable": "This computer cannot find and open your drafts yet.",
+  "companionFindNoDirectory": "No folder has been selected, so this search has not started.",
+  "companionFindDone": "The search is finished. The results are below.",
+  "companionFindPartial": "I could not finish the whole search. Found drafts and unfinished areas are listed below.",
+  "companionFindFailed": "This search could not finish. The earlier record is still here.",
+  "companionFindWaiting": "The search cannot continue yet. You can check again later.",
+  "companionFindCancelled": "The search has stopped. The earlier results are still here.",
+  "companionFindCancelUnknown": "Your request to stop is saved, but I have not confirmed that the computer stopped. Earlier results remain.",
+  "companionFindCancel": "Stop searching",
+  "companionFindCancelSource": "Cancel this draft search",
+  "companionFindAmendSource": "Change this search: only {formats} files modified on {date} at this level. Deadline: {deadline}; {afterExit}; {queue}; {source}.",
+  "@companionFindAmendSource": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "formats": {
+        "type": "String"
+      },
+      "deadline": {
+        "type": "String"
+      },
+      "afterExit": {
+        "type": "String"
+      },
+      "queue": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindDate": "Draft modification date",
+  "companionFindScope": "Only {formats} files modified on this day at this level. Originals stay unchanged.",
+  "@companionFindScope": {
+    "placeholders": {
+      "formats": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindSourceDirectory": "Search folder: {path}",
+  "@companionFindSourceDirectory": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindReport": "Drafts found this time",
+  "companionFindPreviousReport": "Earlier search results",
+  "companionFindCoverage": "Checked {entries} entries, including {supported} in the selected formats, and found {matches} drafts matching the date.",
+  "@companionFindCoverage": {
+    "placeholders": {
+      "entries": {
+        "type": "String"
+      },
+      "supported": {
+        "type": "String"
+      },
+      "matches": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindEnumerationComplete": "The file names in this level have been checked. See below for which files could be opened. Files added during the search may not be included.",
+  "companionFindEnumerationPartial": "Some areas have not been searched completely.",
+  "companionFindEntryLimit": "This search checks up to 200 entries. The remaining entries have not been checked.",
+  "companionFindCandidateLimit": "More than 20 drafts match the date. The first 20 are listed here.",
+  "companionFindEmpty": "No draft in the selected formats and date was found in the area searched.",
+  "companionFindGap": "This item still needs checking: {name}",
+  "@companionFindGap": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindModified": "Modified: {time}",
+  "@companionFindModified": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionFindWasOpenable": "This draft opened at the time. Opening it now will check whether it has changed.",
+  "companionFindWasUnreadable": "This draft could not be read at the time.",
+  "companionFindOpenSource": "Open this original",
+  "companionFindSourceOffline": "The list is still here. Connect to the original computer to open a draft.",
+  "companionFindSourceMissing": "This draft can no longer be found. The earlier search list is still here.",
+  "companionFindSourceChanged": "This draft has been replaced or modified. I cannot confirm it is still the same draft.",
+  "companionFindSourceUnreadable": "This draft could not be opened in full. It has not been replaced with a different file.",
+  "companionFindSourceUnknown": "This draft cannot be opened right now. Connect to the original computer and try again.",
+  "companionFindDeadline": "The agreed deadline has passed. No new search will start. Existing results will stay here.",
+  "companionFindOriginalPending": "The computer received the changes and still needs to confirm the original search.",
+  "companionFindUnknown": "I have not confirmed whether the computer received this search or how far it got.",
+  "companionCompareTitle": "Compare two drafts",
+  "companionCompareA": "A · earlier draft",
+  "companionCompareB": "B · later draft",
+  "companionCompareSyntax": "Please choose A as the earlier draft and B as the later draft, and say whether to wait for the computer and continue after you leave. Include a deadline if you have one.",
+  "companionCompareWhich": "Which comparison should stop? Open that task and choose Stop.",
+  "companionCompareDeadlineMissing": "The deadline is not clear yet. Please specify the date, time, and time zone.",
+  "companionCompareUnavailable": "This computer cannot compare two drafts yet.",
+  "companionCompareConnect": "Connect the original computer to select A and B first. No previously selected drafts are available offline yet.",
+  "companionCompareAmbiguousFile": "More than one selected draft has this name. Connect to the original computer to choose it again.",
+  "companionCompareNoInputs": "Both original drafts have not been selected, so this comparison has not started.",
+  "companionCompareOriginalHost": "The agreement and any existing result are kept. Connect the original computer to check again.",
+  "companionCompareSaveFailed": "The comparison could not be confirmed yet. Please check this task again later.",
+  "companionCompareSaved": "Choose a previously selected {side}",
+  "@companionCompareSaved": {
+    "placeholders": {
+      "side": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareChooseDirectory": "Choose the folder containing {side}",
+  "@companionCompareChooseDirectory": {
+    "placeholders": {
+      "side": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareFilename": "Enter the file name for {side}",
+  "@companionCompareFilename": {
+    "placeholders": {
+      "side": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareFileLimit": "Enter the exact name inside the selected folder. Markdown and txt files up to 64 KiB each are supported. The originals will not be changed.",
+  "companionCompareFilenameMissing": "Enter a file name.",
+  "companionCompareQueued": "Both drafts are saved, waiting for the computer.",
+  "companionCompareRunning": "The computer has accepted this task. The comparison isn't ready yet.",
+  "companionCompareDone": "The comparison of the two drafts is ready.",
+  "companionComparePartial": "This comparison is only partly complete. Verified changes and remaining gaps are shown below.",
+  "companionCompareCancelled": "Further comparison has stopped. Any previous comparison is kept.",
+  "companionCompareCancelUnknown": "The stop request is saved, but the computer has not confirmed it yet. Existing results are kept.",
+  "companionCompareWaiting": "This comparison cannot continue yet. The original selections and agreement are kept.",
+  "companionCompareUnknown": "The computer’s progress is not clear yet. The comparison will not automatically restart.",
+  "companionCompareFailed": "The comparison could not be completed. This task did not edit the original files.",
+  "companionCompareDeadline": "The original deadline has passed. This comparison will not be moved to a later time.",
+  "companionCompareOriginalPending": "The change is saved, but the original comparison agreement still needs to be delivered.",
+  "companionCompareReport": "This comparison",
+  "companionCompareUnfinishedReport": "An unfinished comparison",
+  "companionComparePreviousReport": "Previous comparison",
+  "companionCompareUnread": "This draft has not been read completely.",
+  "companionCompareChanged": "This draft was read, but its original version could not be confirmed when the result was prepared.",
+  "companionCompareIncomplete": "Some parts are still unfinished. The verified text changes are kept.",
+  "companionCompareIdentical": "The two drafts read for this comparison contain no text changes.",
+  "companionCompareCoverage": "This comparison found {total} groups of text changes and shows {shown} of them.",
+  "@companionCompareCoverage": {
+    "placeholders": {
+      "total": {
+        "type": "String"
+      },
+      "shown": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareSourceOrder": "The verified changes below follow their order in the text. Rehearsal priorities have not been ranked.",
+  "companionCompareDifference": "Text change {number}",
+  "@companionCompareDifference": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareNoExcerpt": "There is no short source excerpt to show on this side.",
+  "companionCompareSuggestions": "Rehearsal suggestions",
+  "companionComparePractice": "Change {number}: {practice}",
+  "@companionComparePractice": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      },
+      "practice": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareSuggestionsUnknown": "Rehearsal suggestions are still unconfirmed. Verified text changes are kept.",
+  "companionCompareSuggestionsMissing": "Rehearsal suggestions are not ready. Verified text changes are kept.",
+  "companionCompareParagraph": "Paragraph {range}",
+  "@companionCompareParagraph": {
+    "placeholders": {
+      "range": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareBetween": "Between paragraphs {before} and {after}",
+  "@companionCompareBetween": {
+    "placeholders": {
+      "before": {
+        "type": "String"
+      },
+      "after": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareAfter": "After paragraph {number}",
+  "@companionCompareAfter": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareBefore": "Before paragraph {number}",
+  "@companionCompareBefore": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareLines": "Near line {range}",
+  "@companionCompareLines": {
+    "placeholders": {
+      "range": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareCancel": "Stop comparing",
+  "companionCompareCancelSource": "Cancel this comparison and keep any result already returned.",
+  "companionCompareAmendSource": "Change this comparison: {deadline}; {exit}; {queue}; {inputs}. Leave both original files unchanged.",
+  "@companionCompareAmendSource": {
+    "placeholders": {
+      "deadline": {
+        "type": "String"
+      },
+      "exit": {
+        "type": "String"
+      },
+      "queue": {
+        "type": "String"
+      },
+      "inputs": {
+        "type": "String"
+      }
+    }
+  },
+  "companionCompareChooseAgain": "Choose A and B again",
+  "companionCompareKeepInputs": "Keep the originally selected A and B",
+  "companionCompareNewDeadline": "A new deadline uses the local time zone of this change. Leave blank to keep the original deadline.",
+  "companionReceiptTitle": "Receipt table",
+  "companionReceiptSyntax": "Please specify four receipts, a new workbook name, and whether to continue after you leave. I can create a new file, not overwrite one.",
+  "companionReceiptUnavailable": "This computer cannot prepare this receipt table yet.",
+  "companionReceiptConnect": "Connect the original computer to choose all four receipts and an output folder. I cannot guess originals that have never been selected.",
+  "companionReceiptWhich": "Which table should stop? Open that task and cancel it there.",
+  "companionReceiptSaveFailed": "This request has not been handed over successfully. Your words are kept for another try.",
+  "companionReceiptOriginalHost": "Reconnect the original computer to continue or check the result.",
+  "companionReceiptNoInputs": "The four receipts and output folder have not all been chosen. Nothing will be handed over yet.",
+  "companionReceiptInput": "Receipt {index}",
+  "@companionReceiptInput": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptSavedInput": "Choose a previously selected receipt for position {index}",
+  "@companionReceiptSavedInput": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptChooseDirectory": "Which folder contains receipt {index}?",
+  "@companionReceiptChooseDirectory": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptFilename": "Filename of receipt {index}",
+  "@companionReceiptFilename": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptFormats": "This computer can read {formats}, up to 4 MiB each. Enter a filename within the selected folder.",
+  "@companionReceiptFormats": {
+    "placeholders": {
+      "formats": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptSavedOutput": "Which previously selected folder should hold the new workbook?",
+  "companionReceiptQueued": "Saved on the phone; not yet handed to the computer.",
+  "companionReceiptRunning": "The computer accepted the request; no workbook is ready yet.",
+  "companionReceiptDone": "The new workbook is ready and the requested fields are verified.",
+  "companionReceiptPartial": "The new workbook is ready, with the unverified fields noted in it.",
+  "companionReceiptCancelled": "No further work will be done. Any workbook already written remains.",
+  "companionReceiptFailed": "No new workbook could be delivered. The observations already made are kept below.",
+  "companionReceiptWaiting": "This task is waiting for what it needs; the workbook is not ready.",
+  "companionReceiptUnknown": "It is not yet clear whether the workbook was written. Check the original task before making another.",
+  "companionReceiptCancelUnknown": "The stop request is saved. The original computer still needs to confirm whether a workbook was already written.",
+  "companionReceiptNoFields": "These four receipts currently have no verified fields available for the workbook, so no empty workbook was created.",
+  "companionReceiptOutputExists": "A file with that name already exists. It was not overwritten; you can choose a new name.",
+  "companionReceiptDeadline": "The agreed deadline has passed. No new work will start, and earlier results can still be checked.",
+  "companionReceiptOriginalPending": "The computer has not received the complete original request and will not start the workbook yet.",
+  "companionReceiptReport": "Receipt fields observed",
+  "companionReceiptPreviousReport": "Earlier receipt observations",
+  "companionReceiptCoverage": "In this result, {count} of the four receipts have verified fields.",
+  "@companionReceiptCoverage": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptImageScope": "Only the PDF text layer was read. Dates or other fields in images remain unverified.",
+  "companionReceiptUnread": "This original has not been read completely.",
+  "companionReceiptParseFailed": "Text could not be fully extracted from this original.",
+  "companionReceiptChanged": "The original version could not be confirmed before publication. This row cannot be treated as verified.",
+  "companionReceiptDate": "Date",
+  "companionReceiptItem": "Item",
+  "companionReceiptAmount": "Amount",
+  "companionReceiptUnverified": "Unverified: {reason}",
+  "@companionReceiptUnverified": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptFieldUnknown": "the original text does not establish this field",
+  "companionReceiptSourcePosition": "Lines {from}–{to}",
+  "@companionReceiptSourcePosition": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptPdfPosition": "Page {page}, extracted text lines {from}–{to}",
+  "@companionReceiptPdfPosition": {
+    "placeholders": {
+      "page": {
+        "type": "String"
+      },
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptOpenWorkbook": "Open {name}",
+  "@companionReceiptOpenWorkbook": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptOpenFailed": "The original workbook cannot be opened now. Its earlier completion record is kept; it will not be recreated automatically.",
+  "companionReceiptChooseAgain": "Choose the four receipts again",
+  "companionReceiptKeepInputs": "Keep the same four receipts",
+  "companionReceiptOutputName": "New workbook filename (.xlsx)",
+  "companionReceiptCancelSource": "Cancel this receipt task; stop unfinished work and keep any workbook already written.",
+  "companionReceiptAmendSource": "Amend this receipt task to create {name}; deadline: {deadline}; after leaving: {afterExit}; wait for computer: {queue}; originals: {inputs}; output folder: {output}.",
+  "@companionReceiptAmendSource": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "deadline": {
+        "type": "String"
+      },
+      "afterExit": {
+        "type": "String"
+      },
+      "queue": {
+        "type": "String"
+      },
+      "inputs": {
+        "type": "String"
+      },
+      "output": {
+        "type": "String"
+      }
+    }
+  },
+  "companionReceiptNoText": "No usable text layer was read. Fields in images remain unverified.",
+  "companionReceiptPassword": "The original requires a password and could not be read.",
+  "companionReceiptPdfUnavailable": "This computer cannot extract PDF text yet.",
+  "companionReceiptLimit": "The file exceeds this task’s size, page, or text limit.",
+  "companionReceiptDateUnknown": "A complete date could not be verified, or the date is ambiguous.",
+  "companionReceiptItemUnknown": "A clear item description could not be verified.",
+  "companionReceiptAmountUnknown": "The amount or currency could not be confirmed.",
+  "companionReceiptKeepOutput": "Keep the original output folder",
+  "companionReceiptPriorResult": "The workbook from the earlier agreement was found; the new agreement has not been completed."
 }

@@ -10,6 +10,7 @@ import { rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { createCompanionRoutes } from '../bridge/dsh-go-bridge/lib/companion/routes.js';
+import { phoneMemoryRules } from '../bridge/dsh-go-bridge/lib/companion/full-context.js';
 import { createFixture, requestSystemText, assertNoRealNetwork } from './fixtures/companion-recall-engine.mjs';
 
 const execute = promisify(execFile);
@@ -210,6 +211,7 @@ integration('HTTP memory clear retires the actual driver; a new clean session se
   assert.equal(accepted.status, 200);
   await f.send(a.agent, 'before clear');
   assert(requestSystemText(f.requests[0]).includes('DELETE_SENTINEL_SYNTHETIC'));
+  assert.equal((requestSystemText(f.requests[0]).match(/<companion_memory v="1">/g) ?? []).length, 1);
   const snapshot = (await request()).body;
   const cleared = await request('/memories/clear', version(snapshot));
   assert.equal(cleared.status, 200); assert.equal(cleared.body.deletedCount, 1);
@@ -221,8 +223,12 @@ integration('HTTP memory clear retires the actual driver; a new clean session se
   assert.equal((await request('/recall/bind', await f.bindInput(b.agent.id))).body.status, 'ready');
   await f.send(b.agent, 'after clear, new session');
   assert.equal(f.requests.length, 2);
-  assert(!requestSystemText(f.requests[1]).includes('companion_memory'));
-  assert(!requestSystemText(f.requests[1]).includes('DELETE_SENTINEL_SYNTHETIC'));
+  const after = requestSystemText(f.requests[1]);
+  assert(after.includes(phoneMemoryRules), 'Static interpretation rules remain after the library is cleared');
+  assert(!after.includes('<companion_memory'));
+  assert.doesNotMatch(after, /"type"\s*:\s*"companion_memory"/);
+  assert(!JSON.stringify(f.requests[1].body).includes('DELETE_SENTINEL_SYNTHETIC'));
+  assertNoRealNetwork(f);
 });
 
 integration('persisted marker survives a real engine teardown and blocks old identity at actual Session creation', { timeout: 15000 }, async () => {

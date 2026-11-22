@@ -1,0 +1,142 @@
+--- a/node_modules/@deepseek-ai/dsh-web-deepseek-api/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-web-deepseek-api/lib/index.js
+@@ -11,13 +11,13 @@
+ * @param config - Literal key and credential reference from the settings snapshot.
+ * @returns Authentication sources for one operation.
+ */
+-function deepSeekWebAuth(ctx, config) {
++function deepSeekWebAuth(ctx, config, llmProvider) {
+ 	const apiKeyEnv = credentialRef(config.apiKeyEnv);
+ 	const literalApiKey = config.apiKey !== void 0 && config.apiKey.length > 0 ? config.apiKey : void 0;
+ 	return {
+ 		...literalApiKey === void 0 ? {} : { apiKey: literalApiKey },
+ 		resolveAccountToken: async (endpoint) => {
+-			if (ctx.get("agents")?.currentInitiator()?.session.requestContext()?.provider !== ACCOUNT_PROVIDER) return void 0;
++			if ((llmProvider ?? ctx.get("agents")?.currentInitiator()?.session.requestContext()?.provider) !== ACCOUNT_PROVIDER) return void 0;
+ 			return await ctx.get("deepseekAccount")?.resolveToken(endpoint);
+ 		},
+ 		resolveApiKey: async () => {
+@@ -97,9 +97,10 @@
+ 	throwIfSearchAborted(signal);
+ 	recordRequest?.(endpoint);
+ 	throwIfSearchAborted(signal);
++	options.companionObserver?.guard();
+ 	let response;
+ 	try {
+-		response = await fetch(endpoint, {
++		response = await companionLookupFetch(options.companionObserver, endpoint, {
+ 			method: "POST",
+ 			redirect: "error",
+ 			headers: {
+@@ -116,6 +117,7 @@
+ 		if (signal?.aborted === true || isAbortError(error)) throw searchAborted(signal, error);
+ 		throw searchEndpointError(guidance, endpoint, `DeepSeek web request failed: ${String(error)}`, error);
+ 	}
++	options.companionObserver?.observe({ type: "http", status: response.status, atMs: Date.now() });
+ 	if (!response.ok) {
+ 		const status = response.status;
+ 		let message = `DeepSeek API error (HTTP ${status})`;
+@@ -134,10 +136,22 @@
+ 	try {
+ 		const payload = await response.json();
+ 		throwIfSearchAborted(signal);
++		options.companionObserver?.observe({ type: "provider-result", raw: structuredClone(payload) });
+ 		return decode(payload);
+ 	} catch (error) {
+ 		if (signal?.aborted === true || isAbortError(error)) throw searchAborted(signal, error);
+ 		throw searchEndpointError(guidance, endpoint, error instanceof WebError ? error.message : `DeepSeek returned an unprocessable response body: ${String(error)}`, error);
++	}
++}
++/** The optional task observer sees invocation, never a claim of remote billing. */
++function companionLookupFetch(observer, endpoint, init) {
++	if (observer === void 0) return fetch(endpoint, init);
++	throwIfSearchAborted(init.signal);
++	const atMs = Date.now();
++	try {
++		return fetch(endpoint, init);
++	} finally {
++		observer.observe({ type: "dispatch", atMs, boundary: "fetch-invoked" });
+ 	}
+ }
+ /** Replace endpoint guidance with sign-in guidance when DeepSeek rejects the account token. */
+@@ -403,6 +417,72 @@
+ 	const prompt = session?.deriveMessages().findLast((message) => message.role === "user" && message.source.kind === "user");
+ 	if (prompt === void 0) return void 0;
+ 	return prompt.content.flatMap((block) => block.type === "text" ? [block.text] : []).join("\n");
++}
++/** A fixed direct-call entry point owned by this live plugin configuration. */
++function installCompanionLookup(ctx, config) {
++	const web = ctx.web[Symbol.for("cordis.original")] ?? ctx.web;
++	const snapshot = () => ({
++		apiKey: config.apiKey.get(), apiKeyEnv: config.apiKeyEnv.get(), baseURL: config.baseURL.get()
++	});
++	const unchanged = (value) => {
++		const current = snapshot();
++		return current.apiKey === value.apiKey && current.apiKeyEnv === value.apiKeyEnv && current.baseURL === value.baseURL;
++	};
++	let alive = true;
++	const capability = async (llmProvider) => {
++		const value = snapshot();
++		const ready = alive && URL.canParse(value.baseURL) && await deepSeekWebCredentialReady(ctx, value, llmProvider);
++		return Object.freeze({ search: Boolean(ready && alive && unchanged(value)), fetch: Boolean(ready && alive && unchanged(value)),
++			physicalDispatch: "fetch-invoked", maxPhysicalRequests: 1 });
++	};
++	const prepare = (request, signal, observer) => {
++		if (!isRecord(request) || !["search", "fetch"].includes(request.kind) ||
++			typeof request.llmProvider !== "string" || request.llmProvider.length === 0 ||
++			Object.keys(request).some((key) => !["kind", "llmProvider", request.kind === "search" ? "query" : "url"].includes(key)) ||
++			typeof observer?.guard !== "function" || typeof observer.observe !== "function") {
++			throw new WebError("Invalid companion lookup controls", "WEB_COMPANION_INVALID");
++		}
++		const kind = request.kind, value = request[kind === "search" ? "query" : "url"], llmProvider = request.llmProvider;
++		if (typeof value !== "string" || value.trim().length === 0 ||
++			kind === "search" && Array.from(value).length > 128) {
++			throw new WebError("Invalid companion lookup input", "WEB_COMPANION_INVALID");
++		}
++		if (kind === "fetch") {
++			let url;
++			try { url = new URL(value); } catch {}
++			if (value.length > 8192 || !url || !["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password) {
++				throw new WebError("Invalid companion lookup URL", "WEB_COMPANION_INVALID");
++			}
++		}
++		const settings = snapshot();
++		const guard = () => {
++			throwIfSearchAborted(signal);
++			if (!alive || !unchanged(settings)) throw new WebError("Companion lookup configuration changed", "WEB_COMPANION_STALE");
++			const checked = observer.guard();
++			if (checked != null && typeof checked.then === "function") throw new WebError("Lookup guard must be synchronous", "WEB_COMPANION_INVALID");
++		};
++		guard();
++		const options = { ...deepSeekWebAuth(ctx, settings, llmProvider), baseURL: settings.baseURL, count: 5,
++			companionObserver: { guard, observe: observer.observe } };
++		const provider = kind === "search" ? new DeepSeekSearchApiProvider(() => options) : new DeepSeekFetchApiProvider(() => options);
++		if (!provider.available()) throw new WebError("Direct companion lookup is unavailable", "WEB_PROVIDER_UNAVAILABLE");
++		let used = false;
++		return Object.freeze({ invoke: () => {
++			if (used) throw new WebError("Companion lookup handle already used", "WEB_COMPANION_USED");
++			used = true;
++			guard();
++			return kind === "search" ? provider.search({ query: value, maxResults: 5 }, signal) : provider.fetch({ url: value }, signal);
++		} });
++	};
++	ctx.effect(() => {
++		web.companionLookupCapability = capability;
++		web.prepareCompanionLookupCall = prepare;
++		return () => {
++			alive = false;
++			if (web.companionLookupCapability === capability) delete web.companionLookupCapability;
++			if (web.prepareCompanionLookupCall === prepare) delete web.prepareCompanionLookupCall;
++		};
++	}, "dsh-go: companion direct lookup");
+ }
+ /**
+ * Register the Search API and Fetch API providers over one live settings section. Each provider's
+@@ -443,6 +523,7 @@
+ 		ready,
+ 		fetch: (request, signal) => fetchApi.fetch(request, signal)
+ 	});
++	installCompanionLookup(ctx, config);
+ }
+ //#endregion
+ export { Config, DEEPSEEK_DEFAULT_COUNT, DEEPSEEK_FETCH_API_PROVIDER_ID, DEEPSEEK_SEARCH_API_PROVIDER_ID, DEEPSEEK_WEB_API_BASE_URL, DeepSeekFetchApiProvider, DeepSeekSearchApiProvider, apply, inject, mapSearchResponse, name };

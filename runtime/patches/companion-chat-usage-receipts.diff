@@ -1,0 +1,248 @@
+--- a/node_modules/@deepseek-ai/dsh-llm/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm/lib/index.js
+@@ -15,6 +15,7 @@
+ const recallDrivers = new WeakMap();
+ const recallRequests = new WeakMap();
+ const phoneMemoryRequests = new WeakMap();
++const companionChatRequests = new WeakMap();
+ const recallPhysicalRequests = new WeakMap();
+ const recallAssemblies = new WeakMap();
+ const recallToolExecutions = new WeakMap();
+@@ -181,6 +182,14 @@
+ 		recallOriginCurrent(origin);
+ 		recallPhysicalRequests.set(options, { origin, permit });
+ 		recallDrivers.get(origin.agent).physicalPermit = permit;
++	},
++	chatUsage(options) {
++		return companionChatRequests.get(options);
++	},
++	// Accounting failures must not change the ordinary provider stream.
++	chatObserve(observer, method, ...args) {
++		try { return observer?.[method]?.(...args); }
++		catch { try { observer?.failed?.(); } catch {} }
+ 	},
+ 	guardFetch(options) {
+ 		const phone = phoneMemoryRequests.get(options);
+@@ -2048,6 +2057,7 @@
+ 		}
+ 		dshGoRecallVersion = 1;
+ 		dshGoPhoneMemory = true;
++		dshGoCompanionChatUsage = true;
+ 		adapters = (__runInitializers(this, _instanceExtraInitializers), /* @__PURE__ */ new Map());
+ 		directory = /* @__PURE__ */ new Map();
+ 		discoveries = /* @__PURE__ */ new Map();
+@@ -2615,7 +2625,7 @@
+ 		* downstream consumer failures remain thrown plugin or consumer errors.
+ 		*/
+ 		async *adapterStream(options, prepared) {
+-			let iterator;
++			let iterator, chatUsage;
+ 			try {
+ 				const registration = prepared?.registration ?? this.registration(options.provider);
+ 				const adapter = registration.adapter;
+@@ -2665,12 +2675,15 @@
+ 						if (agent) {
+ 							const request = context.forRequest(agent, adapterOptions);
+ 							if (request !== adapterOptions) phoneMemoryRequests.set(request, { ctx: this.ctx, context, agent });
++							chatUsage = dshGoRecall.chatObserve(context, "observeUsageRequest", agent, request, adapter.dshGoCompanionChatUsage === true);
++							if (chatUsage) companionChatRequests.set(request, chatUsage);
+ 							adapterOptions = request;
+ 						}
+ 					}
+ 				}
+ 				iterator = dispatch(dshGoRecall.inheritRequest(options, adapterOptions))[Symbol.asyncIterator]();
+ 			} catch (error) {
++				dshGoRecall.chatObserve(chatUsage, "close", error, options.signal?.aborted === true);
+ 				yield adapterFailureChunk(error, options.signal);
+ 				return;
+ 			}
+@@ -2686,6 +2699,7 @@
+ 						};
+ 					} catch (error) {
+ 						completed = true;
++						dshGoRecall.chatObserve(chatUsage, "close", error, options.signal?.aborted === true);
+ 						yield adapterFailureChunk(error, options.signal);
+ 						return;
+ 					}
+@@ -2693,12 +2707,17 @@
+ 						completed = true;
+ 						return;
+ 					}
++					dshGoRecall.chatObserve(chatUsage, "chunk", item.value);
+ 					yield item.value;
+ 				}
+ 			} finally {
+-				if (!completed) {
+-					const close = iterator.return?.bind(iterator);
+-					if (close) await close();
++				try {
++					if (!completed) {
++						const close = iterator.return?.bind(iterator);
++						if (close) await close();
++					}
++				} finally {
++					dshGoRecall.chatObserve(chatUsage, "close", void 0, options.signal?.aborted === true || !completed);
+ 				}
+ 			}
+ 		}
+--- a/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
+@@ -1943,7 +1943,7 @@
+ * @param model - requested model id stored in durable replay state.
+ * @returns blocks, one final usage value, and exactly one terminal finish.
+ */
+-async function* translate(events, model, auxiliary) {
++async function* translate(events, model, auxiliary, chat) {
+ 	const blocks = /* @__PURE__ */ new Map();
+ 	const usage = {
+ 		inputTokens: 0,
+@@ -1974,6 +1974,7 @@
+ 		if (event.type === "message_start") {
+ 			if (started) return malformed("duplicate message_start");
+ 			companionAuxiliaryUsage(auxiliary, "message_start", object(event.message).usage);
++			companionChatUsage(chat, "message_start", object(event.message).usage);
+ 			if (object(event.message).usage !== void 0) {
+ 				recordUsage(object(event.message).usage, false);
+ 				yield usageChunk(false);
+@@ -2031,9 +2032,11 @@
+ 			const delta = object(event.delta);
+ 			if (delta.stop_reason != null) {
+ 				auxiliary?.observer.observe({ type: "stop", stopReason: delta.stop_reason });
++				dshGoRecall.chatObserve(chat, "observe", { type: "stop", stopReason: delta.stop_reason });
+ 				reason = stopReason(delta.stop_reason);
+ 			}
+ 			companionAuxiliaryUsage(auxiliary, "message_delta", event.usage);
++			companionChatUsage(chat, "message_delta", event.usage);
+ 			if (event.usage !== void 0) {
+ 				recordUsage(event.usage, true);
+ 				yield usageChunk(false);
+@@ -2043,6 +2046,8 @@
+ 			// A well-formed message_stop is a complete transport even when the
+ 			// proposal is empty and the normal chat adapter rejects that content.
+ 			auxiliary?.observer.observe({ type: "complete" });
++			dshGoRecall.chatObserve(chat, "observe", { type: "complete" });
++			dshGoRecall.chatObserve(chat, "observe", { type: "terminal", reason });
+ 			if (blocks.size === 0 && reason.kind === "stop") throw new LlmError("DeepSeek Messages returned no content", "EMPTY_RESPONSE");
+ 			if (reason.kind !== "max-tokens") for (const { content } of blocks.values()) {
+ 				if (content.type !== "tool-call") continue;
+@@ -2147,10 +2152,22 @@
+ 		type: "usage", event, semantics: "cumulative", raw: structuredClone(raw)
+ 	});
+ }
++// Ordinary chat uses an independent read-only observer. It must not inherit
++// the auxiliary path's one-POST guard, extension bypass or retry restriction.
++function companionChatFetch(chat, physical, auxiliary, url, init) {
++	if (chat === void 0) return companionAuxiliaryFetch(auxiliary, url, init);
++	const atMs = Date.now();
++	try { return companionAuxiliaryFetch(auxiliary, url, init); }
++	finally { physical.observer = dshGoRecall.chatObserve(chat, "beginPhysical", atMs); }
++}
++function companionChatUsage(chat, event, raw) {
++	if (raw !== void 0) dshGoRecall.chatObserve(chat, "observe", { type: "usage", event, raw });
++}
+ /** DeepSeek provider using Messages content and native thinking replay. */
+ var DeepSeekAdapter = class extends LlmAdapter {
+ 	dshGoRecallVersion = 1;
+ 	dshGoCompanionAuxiliary = true;
++	dshGoCompanionChatUsage = true;
+ 	dependencies;
+ 	files;
+ 	imageAccess = (ref) => {
+@@ -2248,6 +2265,7 @@
+ 		}
+ 	}
+ 	async *request(options, connection, signal, activity, auxiliary) {
++		const chat = auxiliary === void 0 ? dshGoRecall.chatUsage(options) : void 0;
+ 		signal.throwIfAborted();
+ 		const { messages, versions } = await prepareImages(options.messages, connection, options.model, this.dependencies.resolveAttachments?.(), this.imageAccess, signal);
+ 		const auth = await this.dependencies.resolveAuth(connection);
+@@ -2300,42 +2318,55 @@
+ 				await dshGoRecall.beforeFetch(options);
+ 				signal.throwIfAborted();
+ 				dshGoRecall.guardFetch(options);
+-				const response = await companionAuxiliaryFetch(auxiliary, `${messagesApiRoot(connection.baseURL)}/messages`, {
+-					method: "POST",
+-					signal,
+-					body: extensions.payload,
+-					redirect: "error",
+-					headers: {
+-						...attributionHeaders(),
+-						"content-type": "application/json",
+-						"accept": "text/event-stream",
+-						...auth.headers,
+-						"anthropic-version": "2023-06-01",
+-						...betas.length === 0 ? {} : { "anthropic-beta": betas.join(",") },
+-						"x-deepseek-harness-user-id": this.dependencies.resolveUserId(),
+-						...options.sessionId === void 0 ? {} : { "x-deepseek-harness-session-id": String(options.sessionId) },
+-						...requestIdentity.purpose === "compaction" ? { "x-deepseek-harness-compact": "1" } : {}
+-					}
+-				});
+-				auxiliary?.observer.observe({ type: "http", status: response.status });
+-				if (!response.ok) {
+-					const text = await response.text();
+-					let raw;
+-					try {
+-						raw = JSON.parse(text);
+-					} catch (_nonJsonGatewayError) {}
+-					const detail = providerErrorDetail(raw);
+-					if (auxiliary === void 0 && await files.retry(detail)) continue;
+-					const failure = providerError(raw, response.status, response.headers);
+-					throw new LlmError(files.errorMessage(response.status, failure.message, detail), failure.code, {
+-						...failure.failure,
+-						cause: new Error(text)
++				const physical = { observer: void 0 };
++				let observationError;
++				try {
++					const response = await companionChatFetch(chat, physical, auxiliary, `${messagesApiRoot(connection.baseURL)}/messages`, {
++						method: "POST",
++						signal,
++						body: extensions.payload,
++						redirect: "error",
++						headers: {
++							...attributionHeaders(),
++							"content-type": "application/json",
++							"accept": "text/event-stream",
++							...auth.headers,
++							"anthropic-version": "2023-06-01",
++							...betas.length === 0 ? {} : { "anthropic-beta": betas.join(",") },
++							"x-deepseek-harness-user-id": this.dependencies.resolveUserId(),
++							...options.sessionId === void 0 ? {} : { "x-deepseek-harness-session-id": String(options.sessionId) },
++							...requestIdentity.purpose === "compaction" ? { "x-deepseek-harness-compact": "1" } : {}
++						}
+ 					});
++					auxiliary?.observer.observe({ type: "http", status: response.status });
++					dshGoRecall.chatObserve(physical.observer, "observe", { type: "http", status: response.status });
++					if (!response.ok) {
++						const text = await response.text();
++						let raw;
++						try {
++							raw = JSON.parse(text);
++						} catch (_nonJsonGatewayError) {}
++						const detail = providerErrorDetail(raw);
++						if (auxiliary === void 0 && await files.retry(detail)) continue;
++						const failure = providerError(raw, response.status, response.headers);
++						throw new LlmError(files.errorMessage(response.status, failure.message, detail), failure.code, {
++							...failure.failure,
++							cause: new Error(text)
++						});
++					}
++					await extensions.accept();
++					if (response.body === null) throw new LlmError("DeepSeek Messages returned no response body", "EMPTY_RESPONSE");
++					yield* translate(parseSse(response.body, activity), options.model, auxiliary, physical.observer);
++					return;
++				} catch (error) {
++					observationError = error;
++					throw error;
++				} finally {
++					const timedOut = timeoutOf(signal, "MESSAGES_IDLE") !== void 0;
++					const observedError = timedOut ? { code: "TIMEOUT" } : observationError instanceof LlmError
++						? observationError : observationError === void 0 ? void 0 : { code: "TRANSPORT" };
++					dshGoRecall.chatObserve(physical.observer, "close", void 0, observedError, signal.aborted && !timedOut);
+ 				}
+-				await extensions.accept();
+-				if (response.body === null) throw new LlmError("DeepSeek Messages returned no response body", "EMPTY_RESPONSE");
+-				yield* translate(parseSse(response.body, activity), options.model, auxiliary);
+-				return;
+ 			}
+ 		} catch (error) {
+ 			if (auth.onRequestError !== void 0) {

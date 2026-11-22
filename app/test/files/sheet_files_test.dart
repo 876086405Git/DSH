@@ -82,6 +82,32 @@ void main() {
   });
 
   group('xlsx', () {
+    test('ST_Xstring text cells decode once without changing XML attributes or literal escapes', () {
+      final grids = parseXlsx(
+        buildXlsx(
+          [
+            const TestSheet('原_x0041_', [
+              ['前_x000D_后', Inline('_x005F_x0041_'), Formula('1+1', '_x0041_')],
+              ['_xD83D__xDE80_', Inline('行_x000A_二'), '_x005f_x000D_'],
+              ['&amp;_x005F_x0041_', Inline('_x004G_'), '=HYPERLINK("x","y")'],
+              [
+                InlineRuns(['_x00', '41_', '_x000D_']),
+              ],
+            ]),
+          ],
+          richText: const ['_x00', '41_', '_x000D_'],
+        ),
+      );
+      expect(grids.single.name, '原_x0041_');
+      expect(grids.single.rows.take(3), [
+        ['前\r后', '_x0041_', 'A'],
+        ['🚀', '行\n二', '_x000D_'],
+        ['&amp;_x0041_', '_x004G_', '=HYPERLINK("x","y")'],
+      ]);
+      expect(grids.single.rows[3][0], '_x0041_\r');
+      expect(grids.single.rows[98][0], '_x0041_\r');
+    });
+
     final book = buildXlsx([
       TestSheet(
         '销售',
@@ -215,13 +241,7 @@ void main() {
         [''],
       ]);
       expect(grids.last.truncated, isTrue);
-      expect(
-        grids.fold<int>(
-          0,
-          (sum, grid) => sum + grid.rows.length * grid.columns,
-        ),
-        lessThanOrEqualTo(12),
-      );
+      expect(grids.fold<int>(0, (sum, grid) => sum + grid.rows.length * grid.columns), lessThanOrEqualTo(12));
     });
 
     test('a first row wider than the budget is left out', () {

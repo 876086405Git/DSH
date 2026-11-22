@@ -1,0 +1,230 @@
+--- a/node_modules/@deepseek-ai/dsh-llm/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm/lib/index.js
+@@ -2512,6 +2512,58 @@
+ 						modelInfo,
+ 						dispatch: (options) => adapterCall.stream(options)
+ 					});
++				}
++			});
++		}
++		/** Keep every callable selected route; report observation limits honestly. */
++		companionAuxiliaryCapability(provider) {
++			const adapter = this.registration(provider).adapter;
++			if (adapter.dshGoCompanionAuxiliary === true && typeof adapter.prepareCompanionAuxiliaryCall === "function") {
++				return Object.freeze({ physicalDispatch: "fetch-invoked", rawUsage: "deepseek-messages-cumulative", maxPhysicalRequests: 1, noTools: true });
++			}
++			if (typeof adapter.prepareCall !== "function") return;
++			return Object.freeze({ physicalDispatch: "unknown", rawUsage: "unavailable", maxPhysicalRequests: null, noTools: true });
++		}
++		/** Owner bridge only: no Session, AgentLoop, tools or llm/stream middleware. */
++		async prepareCompanionAuxiliaryCall(config, signal, observer) {
++			if (config == null || Object.keys(config).some((key) => !["provider", "model", "reasoningEffort", "maxTokens"].includes(key)) ||
++				typeof config.provider !== "string" || typeof config.model !== "string" || config.reasoningEffort !== void 0 && typeof config.reasoningEffort !== "string" ||
++				!Number.isSafeInteger(config.maxTokens) || config.maxTokens < 1 || config.maxTokens > 3000) throw new LlmError("Invalid auxiliary call controls", "INVALID_PREPARED_CALL");
++			const registration = this.registration(config.provider);
++			const capability = this.companionAuxiliaryCapability(config.provider);
++			if (capability === void 0) throw new LlmError("This provider has no callable model transport", "COMPANION_AUXILIARY_UNAVAILABLE");
++			if (typeof observer?.guard !== "function" || typeof observer.observe !== "function") throw new LlmError("Auxiliary transport requires an owner guard and observer", "INVALID_PREPARED_CALL");
++			const guard = () => {
++				signal?.throwIfAborted();
++				if (this.adapters.get(config.provider) !== registration) throw new LlmError("Auxiliary provider registration changed", "COMPANION_AUXILIARY_STALE");
++				const result = observer.guard();
++				if (result != null && typeof result.then === "function") throw new LlmError("Auxiliary dispatch guard must be synchronous", "INVALID_PREPARED_CALL");
++			};
++			guard();
++			const observed = capability.physicalDispatch === "fetch-invoked";
++			const adapterCall = observed
++				? await registration.adapter.prepareCompanionAuxiliaryCall(config.provider, config.model, signal, { guard, observe: observer.observe })
++				: await registration.adapter.prepareCall(config.provider, config.model, signal);
++			guard();
++			const info = this.normalizeModelInfo(registration, config.model, adapterCall.model);
++			const resolved = deepFreeze(structuredClone(this.resolveCallWithInfo(config, info).config));
++			let used = false;
++			return Object.freeze({
++				config: resolved, capability,
++				stream: ({ system, input }) => {
++					if (used) throw new LlmError("An auxiliary handle can only be dispatched once", "INVALID_PREPARED_CALL");
++					if (typeof system !== "string" || typeof input !== "string") throw new LlmError("Auxiliary requests require plain text", "INVALID_PREPARED_CALL");
++					used = true;
++					guard();
++					// A generic adapter call is NOT evidence of a physical POST.
++					// Its own transport/retry behavior stays adapter-owned and unknown.
++					if (!observed) observer.observe({ type: "handoff", atMs: Date.now(), boundary: "adapter-invoked" });
++					// Construct the entire request here; callers cannot supply tools,
++					// session identity, histories or additional message roles.
++					return adapterCall.stream(Object.freeze({ ...resolved, system,
++						messages: deepFreeze([{ role: "user", content: [{ type: "text", text: input }] }]),
++						...signal === void 0 ? {} : { signal }
++					}));
+ 				}
+ 			});
+ 		}
+--- a/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
+@@ -1943,7 +1943,7 @@
+ * @param model - requested model id stored in durable replay state.
+ * @returns blocks, one final usage value, and exactly one terminal finish.
+ */
+-async function* translate(events, model) {
++async function* translate(events, model, auxiliary) {
+ 	const blocks = /* @__PURE__ */ new Map();
+ 	const usage = {
+ 		inputTokens: 0,
+@@ -1973,6 +1973,7 @@
+ 	for await (const event of events) {
+ 		if (event.type === "message_start") {
+ 			if (started) return malformed("duplicate message_start");
++			companionAuxiliaryUsage(auxiliary, "message_start", object(event.message).usage);
+ 			if (object(event.message).usage !== void 0) {
+ 				recordUsage(object(event.message).usage, false);
+ 				yield usageChunk(false);
+@@ -2028,13 +2029,20 @@
+ 			}
+ 		} else if (event.type === "message_delta") {
+ 			const delta = object(event.delta);
+-			if (delta.stop_reason != null) reason = stopReason(delta.stop_reason);
++			if (delta.stop_reason != null) {
++				auxiliary?.observer.observe({ type: "stop", stopReason: delta.stop_reason });
++				reason = stopReason(delta.stop_reason);
++			}
++			companionAuxiliaryUsage(auxiliary, "message_delta", event.usage);
+ 			if (event.usage !== void 0) {
+ 				recordUsage(event.usage, true);
+ 				yield usageChunk(false);
+ 			}
+ 		} else {
+ 			if (reason === void 0 || [...blocks.values()].some((block) => !block.closed)) return malformed("message_stop without settled blocks and stop reason");
++			// A well-formed message_stop is a complete transport even when the
++			// proposal is empty and the normal chat adapter rejects that content.
++			auxiliary?.observer.observe({ type: "complete" });
+ 			if (blocks.size === 0 && reason.kind === "stop") throw new LlmError("DeepSeek Messages returned no content", "EMPTY_RESPONSE");
+ 			if (reason.kind !== "max-tokens") for (const { content } of blocks.values()) {
+ 				if (content.type !== "tool-call") continue;
+@@ -2118,9 +2126,31 @@
+ 	var e = new Error(message);
+ 	return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
+ });
++/** A dispatch is fetch invocation, never a claim of remote delivery or billing. */
++function companionAuxiliaryFetch(auxiliary, url, init) {
++	if (auxiliary === void 0) return fetch(url, init);
++	auxiliary.observer.guard();
++	init.signal?.throwIfAborted();
++	if (auxiliary.dispatched) throw new LlmError("Auxiliary transport cannot make a second physical request", "COMPANION_AUXILIARY_RETRY_DENIED");
++	auxiliary.dispatched = true;
++	const atMs = Date.now();
++	// All local preparation has completed. The finally also records a
++	// synchronous fetch throw as an invocation with unknown remote delivery.
++	try {
++		return fetch(url, init);
++	} finally {
++		auxiliary.observer.observe({ type: "dispatch", atMs, boundary: "fetch-invoked" });
++	}
++}
++function companionAuxiliaryUsage(auxiliary, event, raw) {
++	if (auxiliary !== void 0 && raw !== void 0) auxiliary.observer.observe({
++		type: "usage", event, semantics: "cumulative", raw: structuredClone(raw)
++	});
++}
+ /** DeepSeek provider using Messages content and native thinking replay. */
+ var DeepSeekAdapter = class extends LlmAdapter {
+ 	dshGoRecallVersion = 1;
++	dshGoCompanionAuxiliary = true;
+ 	dependencies;
+ 	files;
+ 	imageAccess = (ref) => {
+@@ -2163,6 +2193,16 @@
+ 			stream: (options) => this.generate(options, connection)
+ 		};
+ 	}
++	/** Bound connection and private observer for a text-only, one-POST call. */
++	async prepareCompanionAuxiliaryCall(provider, model, signal, observer) {
++		const connection = await this.connection(signal);
++		this.dependencies.admit?.(connection, model);
++		const auxiliary = { observer, dispatched: false };
++		return {
++			model: modelInfo(connection, provider, model),
++			stream: (options) => this.generate(options, connection, auxiliary)
++		};
++	}
+ 	stream(options) {
+ 		const connection = this.dependencies.options();
+ 		this.dependencies.admit?.(connection, options.model);
+@@ -2171,7 +2211,7 @@
+ 	connection(signal) {
+ 		return this.dependencies.connect?.(signal) ?? Promise.resolve(this.dependencies.options());
+ 	}
+-	async *generate(options, connection) {
++	async *generate(options, connection, auxiliary) {
+ 		const env_1 = {
+ 			stack: [],
+ 			error: void 0,
+@@ -2182,7 +2222,7 @@
+ 			const watchdog = __addDisposableResource(env_1, idleWatchdog(options.signal === void 0 ? consumer.signal : AbortSignal.any([consumer.signal, options.signal]), connection.streamIdleTimeoutMs, "MESSAGES_IDLE"), false);
+ 			const iterator = this.request(options, connection, watchdog.signal, () => {
+ 				watchdog.pulse();
+-			});
++			}, auxiliary);
+ 			try {
+ 				while (true) {
+ 					const next = await watchdog.next(iterator);
+@@ -2207,7 +2247,7 @@
+ 			__disposeResources(env_1);
+ 		}
+ 	}
+-	async *request(options, connection, signal, activity) {
++	async *request(options, connection, signal, activity, auxiliary) {
+ 		signal.throwIfAborted();
+ 		const { messages, versions } = await prepareImages(options.messages, connection, options.model, this.dependencies.resolveAttachments?.(), this.imageAccess, signal);
+ 		const auth = await this.dependencies.resolveAuth(connection);
+@@ -2240,7 +2280,7 @@
+ 					...options.sessionId === void 0 ? {} : { sessionId: String(options.sessionId) },
+ 					...options.purpose === void 0 ? {} : { purpose: options.purpose }
+ 				};
+-				const extensions = await prepareRequestExtensions(body, requestIdentity, this.dependencies.prepareExtensions, (fields, error) => {
++				const extensions = auxiliary === void 0 ? await prepareRequestExtensions(body, requestIdentity, this.dependencies.prepareExtensions, (fields, error) => {
+ 					this.dependencies.onExtensionsOmitted?.({
+ 						provider: options.provider,
+ 						model: options.model,
+@@ -2253,14 +2293,14 @@
+ 						model: options.model,
+ 						error
+ 					});
+-				});
++				}) : { payload: JSON.stringify(body), accept: async () => {} };
+ 				signal.throwIfAborted();
+ 				const betas = [...fileIds !== void 0 && fileIds.size > 0 ? [MESSAGES_FILES_BETA] : [], ...body.messages.some((message) => message.content.some((block) => block.type === "tool_addition" || block.type === "tool_removal")) ? [MESSAGES_TOOL_CHANGES_BETA] : []];
+ 				// Includes every stale-file retry; no SDK hides additional model POSTs.
+ 				await dshGoRecall.beforeFetch(options);
+ 				signal.throwIfAborted();
+ 				dshGoRecall.guardFetch(options);
+-				const response = await fetch(`${messagesApiRoot(connection.baseURL)}/messages`, {
++				const response = await companionAuxiliaryFetch(auxiliary, `${messagesApiRoot(connection.baseURL)}/messages`, {
+ 					method: "POST",
+ 					signal,
+ 					body: extensions.payload,
+@@ -2277,6 +2317,7 @@
+ 						...requestIdentity.purpose === "compaction" ? { "x-deepseek-harness-compact": "1" } : {}
+ 					}
+ 				});
++				auxiliary?.observer.observe({ type: "http", status: response.status });
+ 				if (!response.ok) {
+ 					const text = await response.text();
+ 					let raw;
+@@ -2284,7 +2325,7 @@
+ 						raw = JSON.parse(text);
+ 					} catch (_nonJsonGatewayError) {}
+ 					const detail = providerErrorDetail(raw);
+-					if (await files.retry(detail)) continue;
++					if (auxiliary === void 0 && await files.retry(detail)) continue;
+ 					const failure = providerError(raw, response.status, response.headers);
+ 					throw new LlmError(files.errorMessage(response.status, failure.message, detail), failure.code, {
+ 						...failure.failure,
+@@ -2293,7 +2334,7 @@
+ 				}
+ 				await extensions.accept();
+ 				if (response.body === null) throw new LlmError("DeepSeek Messages returned no response body", "EMPTY_RESPONSE");
+-				yield* translate(parseSse(response.body, activity), options.model);
++				yield* translate(parseSse(response.body, activity), options.model, auxiliary);
+ 				return;
+ 			}
+ 		} catch (error) {

@@ -33,7 +33,7 @@
     "importer": "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js",
     "specifier": "koffi",
     "occurrences": 1,
-    "importerSha256": "fe8d6fa69462b0a76d73db9d857edbc9b82f8d7f8a793168e04e3e817d6ba2ba",
+    "importerSha256": "1a57974e2fdbea0f5e8d8690e3ecf11df9f3daedb7450176fda498354b175f4e",
     "reason": "The fixed filesystem implementation enters Win32 ACL helpers only when process.platform is win32; OHOS takes the POSIX/publication branch."
   },
   {

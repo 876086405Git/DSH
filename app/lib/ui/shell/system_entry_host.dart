@@ -38,6 +38,7 @@ import '../../state/draft_store.dart';
 import '../../state/hosts_state.dart';
 import '../../state/sessions_state.dart';
 import '../common/discard_guard.dart';
+import '../companion/companion_tasks_page.dart';
 import '../tavern/tavern_deepseek_import.dart';
 import '../tavern/tavern_intake.dart';
 
@@ -169,6 +170,15 @@ class _SystemEntryHostState extends ConsumerState<SystemEntryHost> {
         // one from switching away on a cold start (as notification taps do).
         ref.read(activeHostProvider.notifier).select(host);
         ref.read(currentSessionProvider.notifier).select(sessionId);
+      case OpenCompanionTaskEntry(:final taskId, :final taskRev):
+        await _untilResumed();
+        if (mounted) {
+          await Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute<void>(
+              builder: (_) => CompanionTasksPage(taskId: taskId, openedRevision: taskRev),
+            ),
+          );
+        }
     }
   }
 

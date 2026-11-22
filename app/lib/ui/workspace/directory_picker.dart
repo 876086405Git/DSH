@@ -34,14 +34,21 @@ import 'workspace_format.dart';
 
 /// Picks a folder on the active host; null when dismissed. [confirmLabel]
 /// is the verb on the browser's button (「添加」 → 「添加「dsh-app」」).
-Future<String?> showDirectoryPicker(BuildContext context, {String? title, String? confirmLabel}) {
+Future<String?> showDirectoryPicker(
+  BuildContext context, {
+  String? title,
+  String? confirmLabel,
+  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged,
+}) {
   final l10n = context.l10n;
   return showAppSheet<String>(
     context,
     isScrollControlled: true,
+    onRouteChanged: onRouteChanged,
     builder: (_) => DirectoryLocationsSheet(
       title: title ?? l10n.remoteDirectoryPickerTitle,
       confirmLabel: confirmLabel ?? l10n.remoteDirectoryChoose,
+      onRouteChanged: onRouteChanged,
     ),
   );
 }
@@ -98,10 +105,11 @@ List<DirectoryShortcut> directoryShortcuts({required bool local, required bool p
 /// The picker's first step (a sheet): places to start, recent places,
 /// 「输入路径」.
 class DirectoryLocationsSheet extends ConsumerWidget {
-  const DirectoryLocationsSheet({super.key, required this.title, required this.confirmLabel});
+  const DirectoryLocationsSheet({super.key, required this.title, required this.confirmLabel, this.onRouteChanged});
 
   final String title;
   final String confirmLabel;
+  final void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -120,16 +128,18 @@ class DirectoryLocationsSheet extends ConsumerWidget {
 
     Future<void> browse(String? path) async {
       final navigator = Navigator.of(context);
-      final picked = await navigator.push<String>(
-        MaterialPageRoute(
-          builder: (_) => DirectoryBrowserPage(start: path, confirmLabel: confirmLabel),
-        ),
+      final route = _DirectoryPickerRoute<String>(
+        builder: (_) => DirectoryBrowserPage(start: path, confirmLabel: confirmLabel, onRouteChanged: onRouteChanged),
+        onRouteChanged: onRouteChanged,
       );
+      onRouteChanged?.call(route, null);
+      final picked = await navigator.push(route);
+      onRouteChanged?.call(route, null);
       if (picked != null && navigator.mounted) navigator.pop(picked);
     }
 
     Future<void> typePath() async {
-      final path = await askFolderPath(context);
+      final path = await askFolderPath(context, onRouteChanged: onRouteChanged);
       if (path == null || !context.mounted) return;
       // Without the browser the typed folder is the answer; the host checks it.
       if (canBrowse) {
@@ -197,12 +207,28 @@ class DirectoryLocationsSheet extends ConsumerWidget {
   }
 }
 
+/// Only this chosen browser reports its route, including an unrelated page
+/// subsequently pushed above it. Other callers keep the same navigation.
+class _DirectoryPickerRoute<T> extends MaterialPageRoute<T> {
+  _DirectoryPickerRoute({required super.builder, this.onRouteChanged});
+  final void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged;
+
+  @override
+  void didChangeNext(Route<dynamic>? nextRoute) {
+    super.didChangeNext(nextRoute);
+    onRouteChanged?.call(this, nextRoute);
+  }
+}
+
 /// A Windows host's absolute path (C:/Users/me, C:\Users\me) and its drive root.
 final _drivePath = RegExp(r'^[A-Za-z]:[\\/]');
 final _driveRoot = RegExp(r'^[A-Za-z]:[\\/]$');
 
 /// Asks for an absolute folder path, as the host writes it.
-Future<String?> askFolderPath(BuildContext context) async {
+Future<String?> askFolderPath(
+  BuildContext context, {
+  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged,
+}) async {
   final l10n = context.l10n;
   final path = await showTextPrompt(
     context,
@@ -210,6 +236,7 @@ Future<String?> askFolderPath(BuildContext context) async {
     hint: localWorkspaceDir,
     confirm: l10n.remoteDirectoryGo,
     mono: true,
+    onRouteChanged: onRouteChanged,
     keyboardType: TextInputType.url,
     validate: (v) => v.startsWith('/') || _drivePath.hasMatch(v) ? null : l10n.remoteDirectoryAbsolutePath,
   );
@@ -218,13 +245,18 @@ Future<String?> askFolderPath(BuildContext context) async {
 }
 
 /// Asks for a new folder's name.
-Future<String?> askFolderName(BuildContext context, {required String parentName}) => showTextPrompt(
+Future<String?> askFolderName(
+  BuildContext context, {
+  required String parentName,
+  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged,
+}) => showTextPrompt(
   context,
   title: context.l10n.remoteDirectoryNewFolder,
   caption: context.l10n.remoteDirectoryParentCaption(parentName),
   hint: context.l10n.remoteDirectoryFolderName,
   confirm: context.l10n.commonCreate,
   maxLength: 120,
+  onRouteChanged: onRouteChanged,
   validate: folderNameProblem,
 );
 
@@ -255,11 +287,12 @@ String levelTitle(DirectoryLevel level, {required bool local}) {
 /// The full-page browser: one level of the host's folders at a time.
 /// Pops with the chosen folder's path.
 class DirectoryBrowserPage extends ConsumerStatefulWidget {
-  const DirectoryBrowserPage({super.key, this.start, this.confirmLabel});
+  const DirectoryBrowserPage({super.key, this.start, this.confirmLabel, this.onRouteChanged});
 
   /// Folder to open first; null opens the host's home folder.
   final String? start;
   final String? confirmLabel;
+  final void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged;
 
   @override
   ConsumerState<DirectoryBrowserPage> createState() => _DirectoryBrowserPageState();
@@ -322,7 +355,11 @@ class _DirectoryBrowserPageState extends ConsumerState<DirectoryBrowserPage> {
     final client = _client;
     if (level == null || client == null) return;
     final local = ref.read(activeConnectionProvider).value?.isLocal ?? true;
-    final name = await askFolderName(context, parentName: levelTitle(level, local: local));
+    final name = await askFolderName(
+      context,
+      parentName: levelTitle(level, local: local),
+      onRouteChanged: widget.onRouteChanged,
+    );
     if (name == null || !mounted) return;
     try {
       final created = await client.createDirectory(level.path, name);

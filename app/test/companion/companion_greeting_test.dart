@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_pack.dart';
+import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/chat_state.dart';
@@ -21,6 +22,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite3/sqlite3.dart';
+
+import 'companion_test_settle.dart';
 
 const _session = 'synthetic-greeting-session';
 const _now = 1793937600000;
@@ -31,6 +35,8 @@ class _Bridge extends DshConnection {
   final posts = <Map<String, Object?>>[];
   final getPaths = <String>[];
   final postPaths = <String>[];
+  DshHttpResponse json(Object body, [int status = 200]) =>
+      DshHttpResponse(status, 'application/json', Uint8List.fromList(utf8.encode(jsonEncode(body))));
   int revision = 0;
   int getCount = 0;
   DshHttpResponse snapshot() => DshHttpResponse(
@@ -61,10 +67,35 @@ class _Bridge extends DshConnection {
     bool followRedirects = true,
     int? maxResponseBytes,
   }) async {
+    if (path == '$dshGoCompanionPath/memories') {
+      return json({
+        'v': 1,
+        'storeId': '33333333-3333-4333-8333-333333333333',
+        'revision': 0,
+        'memoryRevision': 0,
+        'memories': [],
+      });
+    }
+    if (path != dshGoCompanionPath) {
+      return json({
+        'error': {'code': 'companion/not-found'},
+      }, 404);
+    }
     getPaths.add(path);
     getCount++;
     return getCount == 1 ? initialRead.future : snapshot();
   }
+
+  @override
+  Future<DshHttpResponse> getBounded(
+    String path, {
+    Map<String, String>? query,
+    required int maxBytes,
+    bool autoUncompress = false,
+    Duration timeout = const Duration(seconds: 30),
+  }) async => json({
+    'error': {'code': 'companion/not-found'},
+  }, 404);
 
   @override
   Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
@@ -86,6 +117,7 @@ class _Client extends DshClient {
   _Client(super.connection);
   final events = StreamController<DshEvent>();
   Completer<SessionProjections?>? projectionRead;
+  final projectionStarted = Completer<void>();
   int projectionCalls = 0;
   late final _fakeMux = _Mux(carrier);
   @override
@@ -98,6 +130,7 @@ class _Client extends DshClient {
   @override
   Future<SessionProjections?> projections(String sessionId) async {
     projectionCalls++;
+    if (!projectionStarted.isCompleted) projectionStarted.complete();
     return projectionRead?.future ?? SessionProjections.empty;
   }
 }
@@ -166,6 +199,9 @@ class _Room {
     expect(events, isNotNull);
     container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
     container.read(companionSessionsProvider);
+    final memory = await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+    await tester.pump();
+    await settleMixed(tester, memory!.migrateLocal());
     await flush(tester);
     expect(container.read(companionSessionsProvider.notifier).of(HostRef.local)?.sessionId, _session);
     events!.onReady();
@@ -337,12 +373,19 @@ class _Wire {
 void main() {
   late Directory temporary;
   setUp(() {
+    temporary = Directory.systemTemp.createTempSync('companion-greeting-');
+    final memory = CompanionMemoryStore(sqlite3.open('${temporary.path}/memory.sqlite'), nowMilliseconds: () => _now);
     SharedPreferences.setMockInitialValues({
       'companion_sessions': jsonEncode({
-        '${HostRef.local.kind.name}:${HostRef.local.id}': {'id': _session, 'full': true},
+        '${HostRef.local.kind.name}:${HostRef.local.id}': {
+          'id': _session,
+          'full': true,
+          'memoryArchiveId': memory.archive['id'],
+          'memoryControlRevision': memory.archive['control_revision'],
+        },
       }),
     });
-    temporary = Directory.systemTemp.createTempSync('companion-greeting-');
+    memory.close();
   });
   tearDown(() => temporary.deleteSync(recursive: true));
 
@@ -413,6 +456,7 @@ void main() {
       await tester.enterText(find.byType(TextField), '稍等这一句');
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('send')));
+      await settleMixed(tester, room.client.projectionStarted.future);
       await flush(tester);
       expect(room.client.projectionCalls, 1);
       expect(tester.widget<CompanionComposer>(find.byType(CompanionComposer)).busy, isTrue);

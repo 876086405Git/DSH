@@ -1,0 +1,17 @@
+{
+  "scope": "EXACT_PROVIDER_SOURCE_BODY_BINDING_ONLY_NOT_FULL_ENGINE",
+  "targets": {
+    "android": {
+      "dsh-fs-local": "d68bfbdfdd9afbfa2a1d2819f6f0cd2565da25b4ba84436e94626db54e944061",
+      "dsh-fs-sandbox": "162870e0ef6e9c8fd9e94f767bba29e7a1cdebc7f06256eba42ab4384369570c",
+      "dsh-fs": "b749b4d67d0249d7416a8a409ee171c453f928f7920a9bc26a23451369280761",
+      "dsh-sandbox": "cc4f6b7e84eaff0bb692413f59c1bc8de457dbe5569d02985ea8e87f68281ea7"
+    },
+    "ohos": {
+      "dsh-fs-local": "1a57974e2fdbea0f5e8d8690e3ecf11df9f3daedb7450176fda498354b175f4e",
+      "dsh-fs-sandbox": "be457e123f63d9b44c1bb310ebb064d69d9c994310b36f4edb737323457d2482",
+      "dsh-fs": "b749b4d67d0249d7416a8a409ee171c453f928f7920a9bc26a23451369280761",
+      "dsh-sandbox": "cc4f6b7e84eaff0bb692413f59c1bc8de457dbe5569d02985ea8e87f68281ea7"
+    }
+  }
+}

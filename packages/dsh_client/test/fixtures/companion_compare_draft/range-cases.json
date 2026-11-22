@@ -1,0 +1,701 @@
+{
+  "provenance": {
+    "scope": "Actual frozen comparator outputs from synthetic complete texts; not Host HTTP or file receipts. Dart consumer tests NOT_RUN.",
+    "moduleSha256": "c05d77aa5010965d335bd0060f6be82a47b9419f89cbced321b8959920fe9bf8"
+  },
+  "cases": [
+    {
+      "name": "same-paragraph-two-groups",
+      "comparison": {
+        "algorithm": "unique-line-anchors-v1",
+        "minimumEditScriptGuaranteed": false,
+        "complete": true,
+        "identical": false,
+        "totalChanges": 2,
+        "a": {
+          "utf8Bytes": 33,
+          "utf16Length": 13,
+          "lineCount": 3,
+          "paragraphCount": 1,
+          "sha256": "305b4db3f240ed04efdf4a73db7e1882ed84a4feb344565df875efdec9924941"
+        },
+        "b": {
+          "utf8Bytes": 33,
+          "utf16Length": 13,
+          "lineCount": 3,
+          "paragraphCount": 1,
+          "sha256": "71dba9eebfcfd6d775c7ce4fa9467b79ad522462af5f4b85ff62e6f9a5c8b37f"
+        },
+        "changes": [
+          {
+            "id": "change:d614e386ad971c0ef9ad5712fde05afbcc074c640dc0c6da685daadd08638025:0-4:0-4",
+            "kind": "replace",
+            "a": {
+              "from": 0,
+              "to": 4,
+              "lineStart": 1,
+              "lineEnd": 2,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 0,
+                  "to": 4,
+                  "text": "旧开头\n",
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null
+                }
+              ]
+            },
+            "b": {
+              "from": 0,
+              "to": 4,
+              "lineStart": 1,
+              "lineEnd": 2,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 0,
+                  "to": 4,
+                  "text": "新开头\n",
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null
+                }
+              ]
+            }
+          },
+          {
+            "id": "change:d614e386ad971c0ef9ad5712fde05afbcc074c640dc0c6da685daadd08638025:9-13:9-13",
+            "kind": "replace",
+            "a": {
+              "from": 9,
+              "to": 13,
+              "lineStart": 3,
+              "lineEnd": 4,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 9,
+                  "to": 13,
+                  "text": "旧结尾\n",
+                  "lineStart": 3,
+                  "lineEnd": 4,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null
+                }
+              ]
+            },
+            "b": {
+              "from": 9,
+              "to": 13,
+              "lineStart": 3,
+              "lineEnd": 4,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 9,
+                  "to": 13,
+                  "text": "新结尾\n",
+                  "lineStart": 3,
+                  "lineEnd": 4,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "separator-only-whitespace",
+      "comparison": {
+        "algorithm": "unique-line-anchors-v1",
+        "minimumEditScriptGuaranteed": false,
+        "complete": true,
+        "identical": false,
+        "totalChanges": 1,
+        "a": {
+          "utf8Bytes": 15,
+          "utf16Length": 7,
+          "lineCount": 3,
+          "paragraphCount": 2,
+          "sha256": "e074c347750360384690711cb2ba75a2775ad7bd2610bcd995309ca5020c7808"
+        },
+        "b": {
+          "utf8Bytes": 17,
+          "utf16Length": 9,
+          "lineCount": 3,
+          "paragraphCount": 2,
+          "sha256": "cccf9a86eb0bc51749c16062db1985ff22ff08df48ea56c0e4dde237f6557780"
+        },
+        "changes": [
+          {
+            "id": "change:1f2e02ce2949e8dbce56647704290790969fea5dc14c5587df22d095d0950198:3-4:3-6",
+            "kind": "replace",
+            "a": {
+              "from": 3,
+              "to": 4,
+              "lineStart": 2,
+              "lineEnd": 3,
+              "paragraphs": null,
+              "boundary": {
+                "beforeParagraph": 1,
+                "afterParagraph": 2
+              },
+              "excerpts": [
+                {
+                  "from": 3,
+                  "to": 4,
+                  "text": "\n",
+                  "lineStart": 2,
+                  "lineEnd": 3,
+                  "paragraphs": null,
+                  "boundary": {
+                    "beforeParagraph": 1,
+                    "afterParagraph": 2
+                  }
+                }
+              ]
+            },
+            "b": {
+              "from": 3,
+              "to": 6,
+              "lineStart": 2,
+              "lineEnd": 3,
+              "paragraphs": null,
+              "boundary": {
+                "beforeParagraph": 1,
+                "afterParagraph": 2
+              },
+              "excerpts": [
+                {
+                  "from": 3,
+                  "to": 6,
+                  "text": " \t\n",
+                  "lineStart": 2,
+                  "lineEnd": 3,
+                  "paragraphs": null,
+                  "boundary": {
+                    "beforeParagraph": 1,
+                    "afterParagraph": 2
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "unicode-and-crlf",
+      "comparison": {
+        "algorithm": "unique-line-anchors-v1",
+        "minimumEditScriptGuaranteed": false,
+        "complete": true,
+        "identical": false,
+        "totalChanges": 1,
+        "a": {
+          "utf8Bytes": 28,
+          "utf16Length": 14,
+          "lineCount": 3,
+          "paragraphCount": 2,
+          "sha256": "2a934b9eb438f3d25560d1c804dee878ff011b39d9d45f0a83752c789ae2f818"
+        },
+        "b": {
+          "utf8Bytes": 25,
+          "utf16Length": 11,
+          "lineCount": 3,
+          "paragraphCount": 2,
+          "sha256": "1a7165b479c73a127907ac28d2d6eb17caf773dd7b300e5ff81ca1551fe7d29a"
+        },
+        "changes": [
+          {
+            "id": "change:f43f1aa6e6c9d35ac871e761cf96a40b21a51e0e13ed2d9b977091750f5dfa2b:0-14:0-11",
+            "kind": "replace",
+            "a": {
+              "from": 0,
+              "to": 14,
+              "lineStart": 1,
+              "lineEnd": 4,
+              "paragraphs": {
+                "from": 1,
+                "to": 2
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 0,
+                  "to": 14,
+                  "text": "🙂第一句\r\n\r\n末段？\r\n",
+                  "lineStart": 1,
+                  "lineEnd": 4,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 2
+                  },
+                  "boundary": null
+                }
+              ]
+            },
+            "b": {
+              "from": 0,
+              "to": 11,
+              "lineStart": 1,
+              "lineEnd": 4,
+              "paragraphs": {
+                "from": 1,
+                "to": 2
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 0,
+                  "to": 11,
+                  "text": "🙂第一句\n\n末段。\n",
+                  "lineStart": 1,
+                  "lineEnd": 4,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 2
+                  },
+                  "boundary": null
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "insertion-into-empty",
+      "comparison": {
+        "algorithm": "unique-line-anchors-v1",
+        "minimumEditScriptGuaranteed": false,
+        "complete": true,
+        "identical": false,
+        "totalChanges": 1,
+        "a": {
+          "utf8Bytes": 0,
+          "utf16Length": 0,
+          "lineCount": 0,
+          "paragraphCount": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "b": {
+          "utf8Bytes": 17,
+          "utf16Length": 7,
+          "lineCount": 1,
+          "paragraphCount": 1,
+          "sha256": "4d36a4df99eae2df6671b0d3311884971b185987b231fa7a7c38ac8bc784c377"
+        },
+        "changes": [
+          {
+            "id": "change:304f959759daaf0f37e0a307d8814a99589fc21f9489a1469b34551b7cd9f742:0-0:0-7",
+            "kind": "insert",
+            "a": {
+              "from": 0,
+              "to": 0,
+              "lineStart": 1,
+              "lineEnd": 1,
+              "paragraphs": null,
+              "boundary": {
+                "beforeParagraph": null,
+                "afterParagraph": null
+              },
+              "excerpts": []
+            },
+            "b": {
+              "from": 0,
+              "to": 7,
+              "lineStart": 1,
+              "lineEnd": 2,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 0,
+                  "to": 7,
+                  "text": "🙂新增一段\n",
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "deletion-to-empty",
+      "comparison": {
+        "algorithm": "unique-line-anchors-v1",
+        "minimumEditScriptGuaranteed": false,
+        "complete": true,
+        "identical": false,
+        "totalChanges": 1,
+        "a": {
+          "utf8Bytes": 20,
+          "utf16Length": 8,
+          "lineCount": 1,
+          "paragraphCount": 1,
+          "sha256": "3a8e7c790e3d3bb7208321b2451a39a4de40899755883c68079f504315bb2187"
+        },
+        "b": {
+          "utf8Bytes": 0,
+          "utf16Length": 0,
+          "lineCount": 0,
+          "paragraphCount": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "changes": [
+          {
+            "id": "change:1e2ac781ea784680020b873ebcff67b31ebe4e50ddab5d374540c40df5c7a527:0-8:0-0",
+            "kind": "delete",
+            "a": {
+              "from": 0,
+              "to": 8,
+              "lineStart": 1,
+              "lineEnd": 2,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 0,
+                  "to": 8,
+                  "text": "🙂删去这一段\n",
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null
+                }
+              ]
+            },
+            "b": {
+              "from": 0,
+              "to": 0,
+              "lineStart": 1,
+              "lineEnd": 1,
+              "paragraphs": null,
+              "boundary": {
+                "beforeParagraph": null,
+                "afterParagraph": null
+              },
+              "excerpts": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty-identical",
+      "comparison": {
+        "algorithm": "unique-line-anchors-v1",
+        "minimumEditScriptGuaranteed": false,
+        "complete": true,
+        "identical": true,
+        "totalChanges": 0,
+        "a": {
+          "utf8Bytes": 0,
+          "utf16Length": 0,
+          "lineCount": 0,
+          "paragraphCount": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "b": {
+          "utf8Bytes": 0,
+          "utf16Length": 0,
+          "lineCount": 0,
+          "paragraphCount": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "changes": []
+      }
+    },
+    {
+      "name": "unicode-excerpt-window",
+      "comparison": {
+        "algorithm": "unique-line-anchors-v1",
+        "minimumEditScriptGuaranteed": false,
+        "complete": true,
+        "identical": false,
+        "totalChanges": 1,
+        "a": {
+          "utf8Bytes": 800,
+          "utf16Length": 400,
+          "lineCount": 1,
+          "paragraphCount": 1,
+          "sha256": "636a7a988b3bd50d85661b91870f7fb29e052e789c51f492ff4df1c5abd00318"
+        },
+        "b": {
+          "utf8Bytes": 800,
+          "utf16Length": 400,
+          "lineCount": 1,
+          "paragraphCount": 1,
+          "sha256": "7d23bdb541fbc23759a161d7ca5860b7d6ce3c66f6e4542b8e8c6c3dcf8f3e56"
+        },
+        "changes": [
+          {
+            "id": "change:128ddd9ef1f8e243552ede54efe0f447a4cd43a189d2d0a9d15fdd9993f4bb6c:0-400:0-400",
+            "kind": "replace",
+            "a": {
+              "from": 0,
+              "to": 400,
+              "lineStart": 1,
+              "lineEnd": 2,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 80,
+                  "to": 400,
+                  "text": "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂",
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null
+                }
+              ]
+            },
+            "b": {
+              "from": 0,
+              "to": 400,
+              "lineStart": 1,
+              "lineEnd": 2,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 80,
+                  "to": 400,
+                  "text": "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙃",
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "65536-byte-final-character",
+      "comparison": {
+        "algorithm": "unique-line-anchors-v1",
+        "minimumEditScriptGuaranteed": false,
+        "complete": true,
+        "identical": false,
+        "totalChanges": 1,
+        "a": {
+          "utf8Bytes": 65536,
+          "utf16Length": 65536,
+          "lineCount": 1,
+          "paragraphCount": 1,
+          "sha256": "d173346e2f8cbf9557fc3250a23ff07975efc16d8ae7558b0ae1de234e356ebd"
+        },
+        "b": {
+          "utf8Bytes": 65536,
+          "utf16Length": 65536,
+          "lineCount": 1,
+          "paragraphCount": 1,
+          "sha256": "701c3362363fc75d5c23c144047ead9d25b9eaaa6cdbb54a7ab261aab1a839f6"
+        },
+        "changes": [
+          {
+            "id": "change:c44a79c9d17a04961a7bc415d7ee223c9ccb2fe9b266474b7a1e3653d52fe1ef:0-65536:0-65536",
+            "kind": "replace",
+            "a": {
+              "from": 0,
+              "to": 65536,
+              "lineStart": 1,
+              "lineEnd": 2,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 65376,
+                  "to": 65536,
+                  "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxA",
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null
+                }
+              ]
+            },
+            "b": {
+              "from": 0,
+              "to": 65536,
+              "lineStart": 1,
+              "lineEnd": 2,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 65376,
+                  "to": 65536,
+                  "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxB",
+                  "lineStart": 1,
+                  "lineEnd": 2,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "65536-lines-final-character",
+      "comparison": {
+        "algorithm": "unique-line-anchors-v1",
+        "minimumEditScriptGuaranteed": false,
+        "complete": true,
+        "identical": false,
+        "totalChanges": 1,
+        "a": {
+          "utf8Bytes": 65536,
+          "utf16Length": 65536,
+          "lineCount": 65536,
+          "paragraphCount": 0,
+          "sha256": "fbd7cceab2e0f5696b4628188d3d6e4ec3f4222c02638db114d8611cb3b7f2c3"
+        },
+        "b": {
+          "utf8Bytes": 65536,
+          "utf16Length": 65536,
+          "lineCount": 65536,
+          "paragraphCount": 1,
+          "sha256": "cbf965b8106fd3fe486e52bf2f6daf0f96e25d573f172cf7943c69190560a59c"
+        },
+        "changes": [
+          {
+            "id": "change:09e34ebd66841a1b557d1a41942133b1f01e3173c60c48471667107d6996d054:65535-65536:65535-65536",
+            "kind": "replace",
+            "a": {
+              "from": 65535,
+              "to": 65536,
+              "lineStart": 65536,
+              "lineEnd": 65537,
+              "paragraphs": null,
+              "boundary": {
+                "beforeParagraph": null,
+                "afterParagraph": null
+              },
+              "excerpts": [
+                {
+                  "from": 65535,
+                  "to": 65536,
+                  "text": "\n",
+                  "lineStart": 65536,
+                  "lineEnd": 65537,
+                  "paragraphs": null,
+                  "boundary": {
+                    "beforeParagraph": null,
+                    "afterParagraph": null
+                  }
+                }
+              ]
+            },
+            "b": {
+              "from": 65535,
+              "to": 65536,
+              "lineStart": 65536,
+              "lineEnd": 65537,
+              "paragraphs": {
+                "from": 1,
+                "to": 1
+              },
+              "boundary": null,
+              "excerpts": [
+                {
+                  "from": 65535,
+                  "to": 65536,
+                  "text": "x",
+                  "lineStart": 65536,
+                  "lineEnd": 65537,
+                  "paragraphs": {
+                    "from": 1,
+                    "to": 1
+                  },
+                  "boundary": null
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

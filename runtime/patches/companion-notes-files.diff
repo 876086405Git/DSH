@@ -1,0 +1,242 @@
+--- a/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js
+@@ -1,3 +1,6 @@
++import { createHash } from "node:crypto";
++import { constants as fsConstants } from "node:fs";
++import { rmdir, statfs, unlink } from "node:fs/promises";
+ import { applyHunks } from "@deepseek-ai/dsh-fs-patch";
+ import { constants } from "node:buffer";
+ import { once } from "node:events";
+@@ -797,7 +800,209 @@
+ * capability-seam Agent Note); enforce
+ * containment with a stricter backend or a `tools/execute` permission plugin.
+ */
++//#region dsh-go companion notes filesystem
++// These operations are for the fixed notes task. Ordinary writeText keeps its existing semantics.
++// Linux local ext2/3/4, XFS and Btrfs magic values: linux/uapi/linux/magic.h.
++const COMPANION_LOCAL_FILESYSTEMS = new Set([0xef53n, 0x58465342n, 0x9123683en]);
++function companionFileIdentity(info) {
++	if (info.ino === 0n) throw new FsError("notes file identity is unavailable", "FS_IO_ERROR");
++	return String(info.dev) + ":" + String(info.ino);
++}
++function companionFileInfo(info) {
++	return { type: pathLinkType(info), size: Number(info.size), modifiedAtMs: Number(info.mtimeMs),
++		identity: companionFileIdentity(info), version: versionOf(info) };
++}
++function companionBasename(name) {
++	if (!name || name === "." || name === ".." || /[\\/\0]/u.test(name))
++		throw new FsError("notes task requires one file name", "FS_NOT_OBSERVED");
++	return name;
++}
++async function companionDirectory(fs, reference, signal) {
++	throwIfAborted(signal, "notes");
++	const fresh = await fs.resolve(reference.target.displayPath, { signal });
++	if (fresh.targetKey !== reference.target.targetKey) throw new FsError("notes directory target changed", "FS_STALE_VERSION");
++	const info = await lstat(fresh.targetKey, { bigint: true });
++	if (!info.isDirectory()) throw new FsError("notes target is not a directory", "FS_NOT_DIRECTORY");
++	const identity = companionFileIdentity(info);
++	if (reference.identity !== undefined && reference.identity !== identity)
++		throw new FsError("notes directory was replaced", "FS_STALE_VERSION");
++	throwIfAborted(signal, "notes");
++	return { target: fresh, identity };
++}
++async function companionSyncDirectory(path) {
++	const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
++	try { await handle.sync(); } finally { await handle.close(); }
++}
++async function companionReadFile(path, maxBytes, expected, signal) {
++	throwIfAborted(signal, "notes read");
++	const handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
++	try {
++		const before = await handle.stat({ bigint: true });
++		if (!before.isFile()) throw new FsError("notes input is not a regular file", "FS_NOT_REGULAR_FILE");
++		const info = companionFileInfo(before);
++		if (expected.version !== undefined && info.version !== expected.version ||
++			expected.identity !== undefined && info.identity !== expected.identity)
++			throw new FsError("notes file changed", "FS_STALE_VERSION");
++		if (info.size > maxBytes) throw new FsError("notes file exceeds the byte limit", "FS_TOO_LARGE");
++		const bytes = Buffer.alloc(maxBytes + 1);
++		let used = 0;
++		while (used <= maxBytes) {
++			throwIfAborted(signal, "notes read");
++			const read = await handle.read(bytes, used, bytes.length - used, used);
++			if (read.bytesRead === 0) break;
++			used += read.bytesRead;
++		}
++		if (used > maxBytes) throw new FsError("notes file grew beyond the byte limit", "FS_TOO_LARGE");
++		if (versionOf(await handle.stat({ bigint: true })) !== info.version ||
++			versionOf(await lstat(path, { bigint: true })) !== info.version)
++			throw new FsError("notes file changed during read", "FS_STALE_VERSION");
++		throwIfAborted(signal, "notes read");
++		const content = bytes.subarray(0, used);
++		const sha256 = createHash("sha256").update(content).digest("hex");
++		if (expected.sha256 !== undefined && expected.sha256 !== sha256)
++			throw new FsError("notes file content changed", "FS_STALE_VERSION");
++		return { ...info, sha256, bytes: content };
++	} finally { await handle.close(); }
++}
++async function companionWithDirectory(fs, reference, signal, operation) {
++	if (process.platform !== "linux") throw new FsError("anchored notes IO is unsupported on this platform", "FS_IO_ERROR");
++	const directory = await companionDirectory(fs, reference, signal);
++	const handle = await open(directory.target.targetKey, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
++	try {
++		if (companionFileIdentity(await handle.stat({ bigint: true })) !== directory.identity)
++			throw new FsError("notes directory changed before open", "FS_STALE_VERSION");
++		await companionDirectory(fs, directory, signal);
++		const result = await operation({ directory, path: "/proc/self/fd/" + handle.fd, handle });
++		await companionDirectory(fs, directory, signal);
++		return result;
++	} finally { await handle.close(); }
++}
++async function companionWithStage(fs, reference, signal, operation) {
++	const stageName = companionBasename(reference.stageName);
++	if (!/^\.dsh-companion-[0-9a-f-]{36}\.stage$/u.test(stageName))
++		throw new FsError("invalid notes staging reference", "FS_NOT_OBSERVED");
++	return companionWithDirectory(fs, reference.directory, signal, async current => {
++		const stageDirectory = join(current.path, stageName);
++		const handle = await open(stageDirectory, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
++		try {
++			if (companionFileIdentity(await handle.stat({ bigint: true })) !== reference.stageDirectoryIdentity)
++				throw new FsError("notes staging directory changed", "FS_STALE_VERSION");
++			return await operation({ ...current, stageDirectory, stagePath: "/proc/self/fd/" + handle.fd + "/content",
++				targetPath: join(current.path, companionBasename(reference.outputName)) });
++		} finally { await handle.close(); }
++	});
++}
++//#endregion
++
+ var LocalFileSystem = class extends FileSystem {
++	/** Bind the explicitly selected directory without enumerating its private contents. */
++	async dshGoBindNotesDirectory(target, signal) {
++		return companionDirectory(this, { target }, signal);
++	}
++	/** Capture real metadata without following direct-child links or interpreting FsVersion. */
++	async dshGoListNotes(directory, signal) {
++		if (typeof directory?.identity !== "string" || !directory.identity)
++			throw new FsError("notes list requires the bound directory identity", "FS_NOT_OBSERVED");
++		return companionWithDirectory(this, directory, signal, async current => {
++			const entries = [];
++			for (const name of (await readdir(current.path)).sort()) {
++				throwIfAborted(signal, "notes list");
++				const info = await probeStats(join(current.path, name), path => lstat(path, { bigint: true }));
++				entries.push(info ? { name, ...companionFileInfo(info) } : { name, type: "missing" });
++			}
++			return { directory: current.directory, entries };
++		});
++	}
++	/** Read the selected whole version through one no-follow descriptor, under the task's byte cap. */
++	async dshGoReadNote(directory, entry, maxBytes, signal) {
++		return companionWithDirectory(this, directory, signal, async current => {
++			const path = join(current.path, companionBasename(entry.name));
++			const result = await companionReadFile(path, maxBytes, { version: entry.version }, signal);
++			if (result.bytes.includes(0)) throw new FsError("notes input contains binary data", "FS_NOT_TEXT");
++			return { ...result, bytes: undefined, text: decodeUtf8(result.bytes, "read", entry.name) };
++		});
++	}
++	/** Query before model work; an unknown or remote filesystem is not offered retained publication. */
++	async dshGoNotesPublicationSupport(directory, signal) {
++		const current = await companionDirectory(this, directory, signal);
++		if (process.platform !== "linux") return { supported: false, reason: "local_filesystem_not_verified" };
++		const info = await (this.internals.companionStatfs ?? statfs)(current.target.targetKey, { bigint: true });
++		return { supported: COMPANION_LOCAL_FILESYSTEMS.has(info.type), filesystemType: info.type.toString(16),
++			reason: COMPANION_LOCAL_FILESYSTEMS.has(info.type) ? null : "local_filesystem_not_verified" };
++	}
++	/** The caller persists the returned reference before attempting publication. No destination is created here. */
++	async dshGoStageNotesFile(directory, outputName, content, signal) {
++		companionBasename(outputName);
++		if (!(await this.dshGoNotesPublicationSupport(directory, signal)).supported)
++			throw new FsError("retained notes publication is unsupported on this filesystem", "FS_IO_ERROR");
++		return companionWithDirectory(this, directory, signal, async current => {
++			const stageName = ".dsh-companion-" + randomUUID() + ".stage";
++			const stageDirectory = join(current.path, stageName);
++			await mkdir(stageDirectory, { mode: 448 });
++			const stageDirectoryIdentity = companionFileIdentity(await lstat(stageDirectory, { bigint: true }));
++			const handle = await open(join(stageDirectory, "content"), "wx", 384);
++			let info;
++			try {
++				await handle.writeFile(content, { encoding: "utf8", ...signal ? { signal } : {} });
++				await handle.sync();
++				info = companionFileInfo(await handle.stat({ bigint: true }));
++			} finally { await handle.close(); }
++			await companionSyncDirectory(stageDirectory);
++			await current.handle.sync();
++			return { directory: current.directory, outputName, stageName, stageDirectoryIdentity, fileIdentity: info.identity,
++				size: Buffer.byteLength(content, "utf8"), sha256: createHash("sha256").update(content, "utf8").digest("hex") };
++		});
++	}
++	/** One hard-link attempt, never replacement, rename or an exclusive-write fallback. Keep staging for recovery. */
++	async dshGoPublishNotesFile(reference, signal) {
++		const targetPath = join(reference.directory.target.targetKey, companionBasename(reference.outputName));
++		return this.withLock(targetPath, () => companionWithStage(this, reference, signal, async paths => {
++			await companionReadFile(paths.stagePath, reference.size,
++				{ identity: reference.fileIdentity, sha256: reference.sha256 }, signal);
++			await companionDirectory(this, reference.directory, signal);
++			throwIfAborted(signal, "notes publication");
++			await (this.internals.linkFile ?? link)(paths.stagePath, paths.targetPath);
++			// Once link has been invoked, a cancellation cannot turn a real effect into "not written".
++			await paths.handle.sync();
++			return this.dshGoInspectNotesPublication(reference);
++		}));
++	}
++	/** Read-only reconciliation: matching content alone is insufficient; the retained inode must also match. */
++	async dshGoInspectNotesPublication(reference, signal) {
++		return companionWithStage(this, reference, signal, async paths => {
++			await companionReadFile(paths.stagePath, reference.size,
++				{ identity: reference.fileIdentity, sha256: reference.sha256 }, signal);
++			const info = await probeStats(paths.targetPath, path => lstat(path, { bigint: true }));
++			if (!info) return { state: "absent" };
++			if (!info.isFile() || companionFileIdentity(info) !== reference.fileIdentity) return { state: "different_object" };
++			const result = await companionReadFile(paths.targetPath, reference.size,
++				{ identity: reference.fileIdentity, sha256: reference.sha256 }, signal);
++			return { state: "verified", target: { targetKey: FsTargetKey(join(paths.directory.target.targetKey, reference.outputName)),
++				displayPath: join(paths.directory.target.displayPath, reference.outputName) },
++				identity: result.identity, size: result.size, sha256: result.sha256, version: result.version };
++		});
++	}
++	/** After the artifact receipt is durably committed, remove only this stage, never the published file. */
++	async dshGoReleaseNotesStage(reference, signal) {
++		return companionWithStage(this, reference, signal, async paths => {
++			const info = await lstat(paths.stagePath, { bigint: true });
++			if (!info.isFile() || companionFileIdentity(info) !== reference.fileIdentity)
++				throw new FsError("notes staging file changed", "FS_STALE_VERSION");
++			throwIfAborted(signal, "notes stage cleanup");
++			await unlink(paths.stagePath);
++			await rmdir(paths.stageDirectory);
++			await paths.handle.sync();
++		});
++	}
++	/** Registered artifacts only: the runner supplies its saved identity, size and digest, not a client path. */
++	async dshGoReadNotesArtifact(directory, outputName, artifact, signal) {
++		return companionWithDirectory(this, directory, signal, async current => {
++			const result = await companionReadFile(join(current.path, companionBasename(outputName)),
++				artifact.size, { identity: artifact.identity, sha256: artifact.sha256 }, signal);
++			return { ...result, bytes: undefined, text: decodeUtf8(result.bytes, "read", outputName) };
++		});
++	}
++
+ 	async watch(target, changed, signal) {
+ 		signal.throwIfAborted();
+ 		const path = resolve(this.processPath(target));
+--- a/node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-fs-sandbox/lib/index.js
+@@ -101,6 +101,20 @@
+ * approved escalation may stamp a strictly wider mode for one call.
+ */
+ var SandboxedFileSystem = class extends LocalFileSystem {
++	/** Fixed notes mutations retain the same per-call policy as ordinary filesystem tools. */
++	async dshGoStageNotesFile(directory, outputName, content, signal, sandboxPolicy) {
++		const checked = await this.checkedTarget(directory.target, sandboxPolicy);
++		return super.dshGoStageNotesFile({ ...directory, target: checked }, outputName, content, signal);
++	}
++	async dshGoPublishNotesFile(reference, signal, sandboxPolicy) {
++		const checked = await this.checkedTarget(reference.directory.target, sandboxPolicy);
++		return super.dshGoPublishNotesFile({ ...reference, directory: { ...reference.directory, target: checked } }, signal);
++	}
++	async dshGoReleaseNotesStage(reference, signal, sandboxPolicy) {
++		const checked = await this.checkedTarget(reference.directory.target, sandboxPolicy);
++		return super.dshGoReleaseNotesStage({ ...reference, directory: { ...reference.directory, target: checked } }, signal);
++	}
++
+ 	static inject = ["sandboxPolicy"];
+ 	defaultMode;
+ 	constructor(ctx, config) {

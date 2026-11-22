@@ -30,7 +30,7 @@ class InputTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.config = json.loads((ROOT / 'runtime/ohos/package/composition.json').read_text())
         self.prefixes = {}
-        for name in ('dsh', 'process'):
+        for name in ('dsh', 'process', 'bridge'):
             prefix = self.root / name
             (prefix / 'node_modules/example').mkdir(parents=True)
             (prefix / 'package.json').write_text('{"name":"fixture"}\n')
@@ -54,9 +54,13 @@ class InputTests(unittest.TestCase):
         self.assertEqual(self.verify(), hashlib.sha256(self.receipt.read_bytes()).hexdigest())
 
     def test_same_package_version_does_not_excuse_changed_source(self):
-        (self.prefixes['dsh'] / 'node_modules/example/index.js').write_text('module.exports = 2;\n')
-        with self.assertRaisesRegex(ValueError, 'input bytes/file set changed'):
-            self.verify()
+        for prefix in self.prefixes.values():
+            source = prefix / 'node_modules/example/index.js'
+            before = source.read_bytes()
+            source.write_text('module.exports = 2;\n')
+            with self.assertRaisesRegex(ValueError, 'input bytes/file set changed'):
+                self.verify()
+            source.write_bytes(before)
 
     def test_added_and_removed_files_are_rejected(self):
         source = self.prefixes['process'] / 'node_modules/example/extra.json'

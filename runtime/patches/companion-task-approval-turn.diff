@@ -1,0 +1,139 @@
+--- a/node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js
+@@ -641,6 +641,48 @@
+ 			}
+ 		})();
+ 	}
++	/** Fixed Companion work owns a real turn, without claiming inbox or inventing a model step. */
++	dshGoRunTaskTurn(job) {
++		dshGoRecall.guardSession(this.loopCtx, { sessionId: this.id, agent: this, operation: "wake" });
++		if (this.dshGoDeleting) throw new Error("session is being deleted");
++		this.loopCtx.get("sessionPersistence")?.dshGoDeletion?.assertAdmit(this.id);
++		if (this.phase.kind !== "idle") throw new Error(`agent "${this.id}" already has active work`);
++		const done = Promise.withResolvers();
++		const phase = { kind: "companion-task", abort: new AbortController(), lastTurn: this.phase.lastTurn, wakeRequested: false };
++		this.activityDone = done.promise;
++		this.setPhase(phase);
++		return (async () => {
++			try {
++				return await this.loopCtx.agents.withInitiator(this, async () => {
++					const { signal } = phase.abort;
++					signal.throwIfAborted();
++					const turn = phase.lastTurn + 1;
++					this.session.append("turn/start", { turn });
++					phase.lastTurn = turn;
++					let reason = { kind: "completed" };
++					try {
++						if (!await this.loopCtx.sessions.flush(this.session)) throw new Error("Companion task requires durable Session storage");
++						signal.throwIfAborted();
++						const value = await job(signal);
++						signal.throwIfAborted();
++						return value;
++					} catch (error) {
++						const cause = abortedCancelCause(signal);
++						reason = cause === void 0 ? { kind: "error", error: { message: errorChain(error), code: "UNKNOWN" } } : { kind: "aborted", reason: cause };
++						throw error;
++					} finally {
++						this.session.append("turn/end", { turn, reason });
++						if (!await this.loopCtx.sessions.flush(this.session)) throw new Error("Companion task turn was not durably flushed");
++					}
++				});
++			} finally {
++				try {
++					this.setPhase({ kind: "idle", lastTurn: phase.lastTurn });
++					if (abortedCancelCause(phase.abort.signal)?.kind !== "disposed" && phase.wakeRequested && this.inbox.hasPending) this.wakeDriver();
++				} finally { done.resolve(); }
++			}
++		})();
++	}
+ 	/**
+ 	* Start one driver, or latch its wake behind maintenance or an aborted
+ 	* activity. A wake sent while idle always opens its turn boundary, even
+@@ -654,7 +696,7 @@
+ 		if (this.dshGoDeleting) throw new Error("session is being deleted");
+ 		this.loopCtx.get("sessionPersistence")?.dshGoDeletion?.assertAdmit(this.id);
+ 		if (this.phase.kind !== "idle") {
+-			if (abortedCancelCause(this.phase.abort.signal)?.kind !== "disposed" && (this.phase.kind === "maintenance" || wakeAfterAbort)) this.phase.wakeRequested = true;
++			if (abortedCancelCause(this.phase.abort.signal)?.kind !== "disposed" && (this.phase.kind === "maintenance" || this.phase.kind === "companion-task" || wakeAfterAbort)) this.phase.wakeRequested = true;
+ 			return;
+ 		}
+ 		// Direct wakes also restore held claims before a new terminal can settle them.
+--- a/node_modules/@deepseek-ai/dsh-user-approval/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-user-approval/lib/index.js
+@@ -90,6 +90,8 @@
+ */
+ var ApprovalService = class extends Service {
+ 	config;
++	/** Process-local observers; never projected into a Remote request. */
++	dshGoTaskRequests = new WeakMap();
+ 	static inject = ["sessionProjections"];
+ 	static Config = z.object({ policy: z.union(["ask", "never"]).default("ask") });
+ 	approvalProjectionHandle;
+@@ -150,6 +152,20 @@
+ 	* @throws when no turn is open or either audit event fails before the session
+ 	*   append commit point.
+ 	*/
++	async dshGoRequestTask(req, observer) {
++		const request = { ...req };
++		// approveEscalation supplies an own undefined callId when fixed work has no model call.
++		if (request.callId === void 0) delete request.callId;
++		const binding = { observer, approvalId: void 0 };
++		this.dshGoTaskRequests.set(request, binding);
++		try {
++			const outcome = await this.request(request);
++			return { approvalId: binding.approvalId, outcome };
++		} finally { this.dshGoTaskRequests.delete(request); }
++	}
++	dshGoTaskApproval(req) {
++		return this.dshGoTaskRequests.get(req);
++	}
+ 	async request(req) {
+ 		const session = req.agent.session;
+ 		if (!this.approvalStateOf(session).turnOpen) throw new Error("approval.request() outside an open turn: the approval/asked + approval/decided audit pair must be turn-enclosed (a bare event between turns is crash-tail garbage on reload). Ask from inside the turn that needs the decision.");
+@@ -160,6 +176,15 @@
+ 			...req.callId !== void 0 ? { callId: req.callId } : {},
+ 			...req.reason !== void 0 ? { reason: req.reason } : {}
+ 		});
++		const task = this.dshGoTaskRequests.get(req);
++		if (task !== void 0) {
++			task.approvalId = id;
++			try { await task.observer.asked({ approvalId: id }); }
++			catch (error) {
++				session.append("approval/decided", { id, outcome: "unavailable" });
++				throw error;
++			}
++		}
+ 		const outcome = await this.decide(req, session);
+ 		session.append("approval/decided", {
+ 			id,
+--- a/node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js
+@@ -1130,15 +1130,28 @@
+ 					for (const signal of signals) signal.removeEventListener("abort", abort);
+ 				}
+ 			};
++			const task = source.event === "approval/request" ? this.ctx.get("approval")?.dshGoTaskApproval?.(source.request) : void 0;
++			if (task !== void 0) pending.dshGoTaskReady = false;
+ 			this.pendingRemoteEvents.set(id, pending);
+ 			for (const signal of signals) signal.addEventListener("abort", abort, { once: true });
+ 			if ([...signals].some((signal) => signal.aborted)) abort();
++			else if (task !== void 0) {
++				Promise.resolve().then(() => {
++					if (this.pendingRemoteEvents.get(id) !== pending) return;
++					return task.observer.remote({ approvalId: task.approvalId, eventId: id, agentId: source.context.agentId });
++				}).then(() => {
++					if (this.pendingRemoteEvents.get(id) !== pending) return;
++					pending.dshGoTaskReady = true;
++					for (const client of this.remoteEventClients.values()) if (client.answers) this.deliverRemoteEvent(pending, client);
++				}, (error) => this.cancelRemoteEvent(pending, error));
++			}
+ 			else for (const client of this.remoteEventClients.values()) if (client.answers) this.deliverRemoteEvent(pending, client);
+ 		} catch (error) {
+ 			source.reject(error);
+ 		}
+ 	}
+ 	deliverRemoteEvent(pending, client) {
++		if (pending.dshGoTaskReady === false) return;
+ 		pending.deliveries.add(client);
+ 		client.deliveries.set(pending.id, pending);
+ 		client.queue.push(pending.frame);

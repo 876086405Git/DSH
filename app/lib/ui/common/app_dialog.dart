@@ -10,13 +10,29 @@ Future<T?> showAppDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool barrierDismissible = true,
+  void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute)? onRouteChanged,
 }) {
+  // This opaque identity belongs only to the opted-in caller of this exact
+  // dialog. The previous owned route can identify it before its builder runs.
+  final settings = onRouteChanged == null ? null : RouteSettings(arguments: onRouteChanged);
+  Widget content(BuildContext context) => onRouteChanged == null
+      ? builder(context)
+      : _DialogRouteObservation(
+          onRouteChanged: onRouteChanged,
+          child: Builder(builder: builder),
+        );
   if (!AppMotion.fluid(context)) {
-    return showDialog<T>(context: context, builder: builder, barrierDismissible: barrierDismissible);
+    return showDialog<T>(
+      context: context,
+      builder: content,
+      barrierDismissible: barrierDismissible,
+      routeSettings: settings,
+    );
   }
   return showDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
+    routeSettings: settings,
     animationStyle: AnimationStyle(
       duration: AppMotion.popCurve.duration,
       reverseDuration: AppMotion.quick,
@@ -24,8 +40,33 @@ Future<T?> showAppDialog<T>({
       curve: const Interval(0, 0.35, curve: Curves.easeOut),
       reverseCurve: Curves.easeOut,
     ),
-    builder: (context) => _DialogPop(child: Builder(builder: builder)),
+    builder: (context) => _DialogPop(child: Builder(builder: content)),
   );
+}
+
+/// Observe the actual dialog route without replacing showDialog's platform
+/// behaviour. Its owner checks after this frame, when the builder has run.
+class _DialogRouteObservation extends StatefulWidget {
+  const _DialogRouteObservation({required this.onRouteChanged, required this.child});
+  final void Function(ModalRoute<Object?> route, Route<dynamic>? nextRoute) onRouteChanged;
+  final Widget child;
+
+  @override
+  State<_DialogRouteObservation> createState() => _DialogRouteObservationState();
+}
+
+class _DialogRouteObservationState extends State<_DialogRouteObservation> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of<Object?>(context);
+    if (route != null) {
+      widget.onRouteChanged(route, null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _DialogPop extends StatefulWidget {

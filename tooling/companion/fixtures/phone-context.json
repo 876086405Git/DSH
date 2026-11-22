@@ -1,0 +1,37 @@
+{
+  "fixture_version": 1,
+  "ruleset": "09e-r2+r2.1",
+  "description": "Author-specified synthetic seed and exact expected bytes; neither model capture nor executed result. Both Dart selector/light request and real Node engine must independently equal this shared block.",
+  "query": "这学期练长笛有点烦。",
+  "empty_query": "今天天气如何？",
+  "cards": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "kind": "preference",
+      "text": "先听我讲完，再给建议",
+      "keywords": [
+        "先听",
+        "讲完",
+        "建议"
+      ],
+      "pinned": true
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "kind": "fact",
+      "text": "我这学期学长笛 🐋，练的是“回声”。",
+      "keywords": [
+        "这学期",
+        "长笛"
+      ],
+      "pinned": false
+    }
+  ],
+  "selected_ids": [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222"
+  ],
+  "block": "{\"type\":\"companion_memory\",\"version\":2,\"scope\":\"real\",\"items\":[{\"id\":\"11111111-1111-4111-8111-111111111111\",\"kind\":\"preference\",\"text\":\"先听我讲完，再给建议\"},{\"id\":\"22222222-2222-4222-8222-222222222222\",\"kind\":\"fact\",\"text\":\"我这学期学长笛 🐋，练的是“回声”。\"}]}",
+  "empty_block": "{\"type\":\"companion_memory\",\"version\":2,\"scope\":\"real\",\"items\":[]}",
+  "empty_precondition": "No qualified pinned response preference remains, and the current input hits no ordinary card; do not apply empty expectation to the two-card seed unchanged."
+}

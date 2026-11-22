@@ -35,7 +35,9 @@ async function probe(kind, timing, outcome, directory) {
     logger: { warn: error => warnings.push(String(error)) },
     provide(name, value) { services[name] = value; },
     effect(fn) { const dispose = fn(); if (typeof dispose === 'function') disposers.push(dispose); return dispose; },
-    on() {}, inject(_names, fn) { fn(ctx); },
+    on() {}, inject(names, fn) {
+      if (names.every(name => ctx.get(name) ?? ctx[name])) fn(ctx);
+    },
     webServer: {
       tapIndex() { return () => {}; },
       register(route) { routes.push(route); return () => {}; },

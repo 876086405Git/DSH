@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_keeper.dart';
+import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
@@ -26,6 +27,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'phone_keeper_fake.dart';
+import 'companion_test_settle.dart';
 
 DshHttpResponse _json(Object value, [int status = 200]) =>
     DshHttpResponse(status, 'application/json', Uint8List.fromList(utf8.encode(jsonEncode(value))));
@@ -56,10 +58,35 @@ class _Bridge extends DshConnection {
     bool followRedirects = true,
     int? maxResponseBytes,
   }) async {
+    if (path == '$dshGoCompanionPath/memories') {
+      return _json({
+        'v': 1,
+        'storeId': '33333333-3333-4333-8333-333333333333',
+        'revision': 0,
+        'memoryRevision': 0,
+        'memories': [],
+      });
+    }
+    if (path != dshGoCompanionPath) {
+      return _json({
+        'error': {'code': 'companion/not-found'},
+      }, 404);
+    }
     final handler = nextGet;
     nextGet = null;
     return handler == null ? snapshot() : await handler();
   }
+
+  @override
+  Future<DshHttpResponse> getBounded(
+    String path, {
+    Map<String, String>? query,
+    required int maxBytes,
+    bool autoUncompress = false,
+    Duration timeout = const Duration(seconds: 30),
+  }) async => _json({
+    'error': {'code': 'companion/not-found'},
+  }, 404);
 
   @override
   Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
@@ -81,6 +108,7 @@ class _Host extends ActiveHostController {
 
 class _Sessions extends CompanionSessions {
   Future<CompanionBinding>? pending;
+  final ensureStarted = Completer<void>();
   final bindings = <HostRef, CompanionBinding>{};
 
   @override
@@ -88,9 +116,24 @@ class _Sessions extends CompanionSessions {
   @override
   CompanionBinding? of(HostRef host) => bindings[host];
   @override
-  Future<CompanionBinding> ensure() async {
+  Future<CompanionBinding> ensure({String? memoryArchiveId, int? memoryControlRevision}) async {
     final host = ref.read(activeHostProvider);
-    return await (pending ?? Future.value(CompanionBinding('companion-${host.id}')));
+    if (!ensureStarted.isCompleted) ensureStarted.complete();
+    final result = await (pending ?? Future.value(CompanionBinding('companion-${host.id}')));
+    final binding = CompanionBinding(
+      result.sessionId,
+      inlinePersona: result.inlinePersona,
+      full: result.full,
+      memoryArchiveId: memoryArchiveId,
+      memoryControlRevision: memoryControlRevision,
+    );
+    bindings[host] = binding;
+    return binding;
+  }
+
+  @override
+  Future<void> forgetAll() async {
+    bindings.clear();
   }
 }
 
@@ -212,6 +255,10 @@ class _Room {
     }
     expect(events, isNotNull);
     container = ProviderScope.containerOf(tester.element(find.byType(CompanionPage)));
+    final memory = await tester.runAsync(() => container.read(companionMemoryOwnerProvider(root.absolute.path).future));
+    await tester.pump();
+    await settleMixed(tester, memory!.migrateLocal());
+    await tester.pump();
     events!.onReady();
     await flush(tester);
   }
@@ -314,6 +361,8 @@ void main() {
     await room.open(tester);
     await tester.enterText(find.byType(TextField), '属于 A 的句子');
     tester.widget<CompanionComposer>(find.byType(CompanionComposer)).onSend();
+    // The source must be durable before this session-read race starts.
+    await settleMixed(tester, room.sessions.ensureStarted.future);
     await flush(tester);
     room.host.change(nextHost);
     await flush(tester);

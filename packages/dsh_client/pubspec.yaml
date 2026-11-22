@@ -13,6 +13,10 @@ environment:
 executables:
   dsh_probe: probe
 
+dependencies:
+  crypto: ^3.0.7
+  sqlite3: ^3.9.1
+
 dev_dependencies:
   fake_async: ^1.3.3
   lints: ^6.0.0

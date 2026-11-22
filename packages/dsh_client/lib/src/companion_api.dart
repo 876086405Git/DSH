@@ -200,6 +200,12 @@ class CompanionMemory {
     'source': source.toJson(),
     'expiresAt': expiresAt?.millisecondsSinceEpoch,
   };
+
+  void validateWrite() {
+    if (!_migrationMemory(toWrite(), stored: false)) {
+      throw const DshRemoteException('companion/invalid-request', 'Invalid companion memory', {'status': 400});
+    }
+  }
 }
 
 class CompanionMemories {
@@ -214,6 +220,154 @@ class CompanionMemories {
   final int revision;
   final int memoryRevision;
   final List<CompanionMemory> memories;
+}
+
+/// A complete v1 read that can be used to migrate, unlike the tolerant UI DTO.
+class CompanionMigrationSnapshot extends CompanionMemories {
+  const CompanionMigrationSnapshot._({
+    required super.storeId,
+    required super.revision,
+    required super.memoryRevision,
+    required super.memories,
+  });
+
+  factory CompanionMigrationSnapshot.fromJson(Object? value) {
+    final map = asMap(value);
+    final rows = map?['memories'];
+    if (map == null ||
+        map['v'] != 1 ||
+        !_migrationUuid(map['storeId']) ||
+        !_migrationInteger(map['revision']) ||
+        !_migrationInteger(map['memoryRevision']) ||
+        (map['memoryRevision']! as num) > (map['revision']! as num) ||
+        rows is! List ||
+        rows.length > 256 ||
+        !rows.every(_migrationMemory)) {
+      throw const DshProtocolException('Invalid companion migration snapshot');
+    }
+    final memories = <CompanionMemory>[];
+    for (final row in rows) {
+      final memory = CompanionMemory.fromJson(row)!;
+      memories.add(
+        CompanionMemory(
+          id: memory.id,
+          text: memory.text,
+          kind: memory.kind,
+          keywords: List.unmodifiable(memory.keywords),
+          pinned: memory.pinned,
+          source: memory.source,
+          expiresAt: memory.expiresAt,
+          createdAt: memory.createdAt,
+          updatedAt: memory.updatedAt,
+        ),
+      );
+    }
+    if (memories.map((m) => m.id.toLowerCase()).toSet().length != memories.length) {
+      throw const DshProtocolException('Duplicate companion migration memory');
+    }
+    return CompanionMigrationSnapshot._(
+      storeId: (map['storeId']! as String).toLowerCase(),
+      revision: (map['revision']! as num).toInt(),
+      memoryRevision: (map['memoryRevision']! as num).toInt(),
+      memories: List.unmodifiable(memories),
+    );
+  }
+
+  /// Advance only from the acknowledgement for our own conditional deletion.
+  CompanionMigrationSnapshot afterDeletion(String id, Object? value) {
+    final map = asMap(value);
+    final deleted = map?['deleted'];
+    if (map == null ||
+        map['v'] != 1 ||
+        map['storeId'] is! String ||
+        (map['storeId']! as String).toLowerCase() != storeId ||
+        deleted is! bool ||
+        map['revision'] != revision + (deleted ? 1 : 0) ||
+        map['memoryRevision'] != memoryRevision + (deleted ? 1 : 0)) {
+      throw const DshProtocolException('Unconfirmed companion migration deletion');
+    }
+    return CompanionMigrationSnapshot._(
+      storeId: storeId,
+      revision: revision + (deleted ? 1 : 0),
+      memoryRevision: memoryRevision + (deleted ? 1 : 0),
+      memories: List.unmodifiable(memories.where((m) => m.id.toLowerCase() != id.toLowerCase())),
+    );
+  }
+}
+
+bool _migrationUuid(Object? value) =>
+    value is String &&
+    RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+      caseSensitive: false,
+    ).hasMatch(value);
+
+bool _migrationInteger(Object? value) =>
+    value is num && value.isFinite && value >= 0 && value <= 9007199254740991 && value == value.truncateToDouble();
+
+bool _migrationTime(Object? value) => _migrationInteger(value) && (value! as num) <= 8640000000000000;
+
+bool _migrationText(Object? value, int limit, {bool multiline = false}) {
+  if (value is! String ||
+      value.runes.length > limit ||
+      RegExp(
+        r'^[\u0009-\u000D\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]*$',
+      ).hasMatch(value) ||
+      RegExp(
+        multiline ? r'[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]' : r'[\u0000-\u001f\u007f]',
+      ).hasMatch(value)) {
+    return false;
+  }
+  for (var i = 0; i < value.length; i++) {
+    final unit = value.codeUnitAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      if (++i >= value.length || value.codeUnitAt(i) < 0xdc00 || value.codeUnitAt(i) > 0xdfff) return false;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _migrationMemory(Object? value, {bool stored = true}) {
+  final map = asMap(value);
+  final keys = {
+    'id',
+    'kind',
+    'text',
+    'keywords',
+    'pinned',
+    'source',
+    'expiresAt',
+    if (stored) ...['createdAt', 'updatedAt'],
+  };
+  if (map == null ||
+      map.keys.toSet().difference(keys).isNotEmpty ||
+      !keys.every(map.containsKey) ||
+      !_migrationUuid(map['id']) ||
+      !const ['fact', 'preference', 'episode'].contains(map['kind']) ||
+      !_migrationText(map['text'], 512, multiline: true) ||
+      map['pinned'] is! bool ||
+      !(map['expiresAt'] == null || _migrationTime(map['expiresAt'])) ||
+      (stored &&
+          (!_migrationTime(map['createdAt']) ||
+              !_migrationTime(map['updatedAt']) ||
+              (map['createdAt']! as num) > (map['updatedAt']! as num)))) {
+    return false;
+  }
+  final keywords = map['keywords'];
+  final source = asMap(map['source']);
+  return keywords is List &&
+      keywords.length <= 8 &&
+      keywords.every((k) => _migrationText(k, 24)) &&
+      source != null &&
+      const ['manual', 'user-confirmed'].contains(source['kind']) &&
+      source.keys.every(const {'kind', 'sessionId', 'messageId'}.contains) &&
+      ['sessionId', 'messageId'].every(
+        (key) =>
+            !source.containsKey(key) ||
+            (source[key] is String && (source[key]! as String).length <= 128 && _migrationText(source[key], 128)),
+      );
 }
 
 DateTime? _time(Object? value) {
@@ -231,6 +385,8 @@ class CompanionPromptCapability {
     this.profileAccepted,
     this.memoryMode = 'query',
     this.memoryEpoch,
+    this.phoneMemory = false,
+    this.chatUsage = false,
   });
   final String instanceId;
   final String sessionId;
@@ -245,6 +401,14 @@ class CompanionPromptCapability {
   /// Host-owned memory generation, when advertised. Clients may suppress an
   /// unnecessary query but cannot grant or restore memory using this value.
   final int? memoryEpoch;
+
+  /// The runtime can attach the phone's already selected block to this
+  /// request without writing it into the Session or system projections.
+  final bool phoneMemory;
+
+  /// Owner-only observations for marked ordinary chat calls. This is not
+  /// complete billing coverage for background, compaction, or other agents.
+  final bool chatUsage;
 
   static CompanionPromptCapability? fromJson(Object? value) {
     final map = asMap(value);
@@ -262,7 +426,10 @@ class CompanionPromptCapability {
         revision == null ||
         revision < 0 ||
         revision > 9007199254740991 ||
-        (memoryMode != 'query' && memoryMode != 'automatic') ||
+        (memoryMode != 'query' && memoryMode != 'automatic' && memoryMode != 'phone') ||
+        (map.containsKey('phoneMemory') && map['phoneMemory'] is! bool) ||
+        (map.containsKey('chatUsage') && map['chatUsage'] is! bool) ||
+        (memoryMode == 'phone' && map['phoneMemory'] != true) ||
         (map.containsKey('memoryEpoch') &&
             (memoryEpoch == null || memoryEpoch < 0 || memoryEpoch > 9007199254740991)) ||
         (map.containsKey('profileAccepted') && map['profileAccepted'] is! bool)) {
@@ -275,6 +442,8 @@ class CompanionPromptCapability {
       profileAccepted: map['profileAccepted'] as bool?,
       memoryMode: memoryMode!,
       memoryEpoch: memoryEpoch,
+      phoneMemory: map['phoneMemory'] == true,
+      chatUsage: map['chatUsage'] == true,
     );
   }
 }
@@ -432,6 +601,26 @@ extension CompanionApi on DshClient {
     const path = '$dshGoCompanionPath/memories';
     final response = await _bridge.get(path, timeout: timeout);
     return _memories(path, response);
+  }
+
+  Future<CompanionMigrationSnapshot> companionMemoriesForMigration({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    const path = '$dshGoCompanionPath/memories';
+    final response = await _bridge.get(path, timeout: timeout);
+    if (response.statusCode != 200) throw companionHttpError(path, response);
+    return CompanionMigrationSnapshot.fromJson(tryDecodeJson(response.text));
+  }
+
+  Future<CompanionMigrationSnapshot> deleteMigratedCompanionMemory(CompanionMigrationSnapshot read, String id) async {
+    const path = '$dshGoCompanionPath/memories/delete';
+    final response = await _bridge.postJson(path, {
+      'storeId': read.storeId,
+      'expectedRevision': read.revision,
+      'id': id,
+    }, timeout: const Duration(seconds: 8));
+    if (response.statusCode != 200) throw companionHttpError(path, response);
+    return read.afterDeletion(id, tryDecodeJson(response.text));
   }
 
   /// Adds [memory], or replaces the one with its id. Returns the new revision.

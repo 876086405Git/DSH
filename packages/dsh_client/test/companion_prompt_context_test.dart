@@ -57,7 +57,28 @@ void main() {
     expect(value.profileRevision, 3);
     expect(value.memoryMode, 'query');
     expect(value.memoryEpoch, isNull);
+    expect(value.phoneMemory, isFalse);
+    expect(value.chatUsage, isFalse);
     expect(requests, ['GET']);
+  });
+  test('phone selection and chat usage are explicit typed capabilities', () async {
+    handler = (req) =>
+        reply(req, 200, {...capability(), 'memoryMode': 'phone', 'phoneMemory': true, 'chatUsage': true});
+    final value = (await client.companionPromptCapability(session))!;
+    expect(value.phoneMemory, isTrue);
+    expect(value.chatUsage, isTrue);
+    expect(value.memoryMode, 'phone');
+    for (final changes in [
+      {'memoryMode': 'phone'},
+      {'memoryMode': 'phone', 'phoneMemory': false},
+      {'phoneMemory': 'true'},
+      {'phoneMemory': null},
+      {'chatUsage': 'true'},
+      {'chatUsage': null},
+    ]) {
+      handler = (req) => reply(req, 200, {...capability(), ...changes});
+      await expectLater(client.companionPromptCapability(session), throwsA(isA<DshProtocolException>()));
+    }
   });
   test('memory authority capability is advisory, typed and backwards compatible', () async {
     handler = (req) => reply(req, 200, {...capability(), 'memoryMode': 'automatic', 'memoryEpoch': 7});
