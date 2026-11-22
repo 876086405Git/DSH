@@ -1242,7 +1242,9 @@ void main() {
       }
 
       for (final sameWordsFromWake in [false, true]) {
-        testWidgets('a completed hidden reply is presented only by its actual bubble: $sameWordsFromWake', (tester) async {
+        testWidgets('a completed hidden reply is presented only by its actual bubble: $sameWordsFromWake', (
+          tester,
+        ) async {
           _resumeApp(tester);
           final clock = _Clock()..wall = DateTime.now().toUtc().millisecondsSinceEpoch;
           final db = sqlite3.open('${root.path}/memory.sqlite');
@@ -1291,8 +1293,8 @@ void main() {
           final container = ProviderScope.containerOf(page);
           final agent = container.read(companionAgentProvider);
           final navigator = Navigator.of(page);
-          final memoryTitle = L10n.of(page)!.companionMemoryTitle;
-          if (sameWordsFromWake) words = L10n.of(page)!.companionWake;
+          final memoryTitle = L10n.of(page).companionMemoryTitle;
+          if (sameWordsFromWake) words = L10n.of(page).companionWake;
           // Keep independent invitations out of this reply-presentation scenario.
           await settleMixed(tester, container.read(companionInitiativeEnabledProvider.notifier).set(false));
           expect(container.read(companionInitiativeEnabledProvider) ?? false, isFalse);
@@ -1329,7 +1331,10 @@ void main() {
           await _drained(tester, memory);
           // The worker can notify after the Agent's retained turn has settled.
           // Finish that work and its frames while the room is still hidden.
-          await _until2(tester, () => !memory.working && memory.store.requests().every((r) => r['state'] == 'finished'));
+          await _until2(
+            tester,
+            () => !memory.working && memory.store.requests().every((r) => r['state'] == 'finished'),
+          );
           await _drained(tester, memory);
           await _settle(tester);
           expect(agent.running, isFalse);

@@ -92,15 +92,13 @@ class _ReplayPageState extends State<_ReplayPage> {
       throw StateError('Invalid local key handoff');
     }
     final client = HttpClient()
-      ..findProxy = (_) => 'DIRECT'
+      ..findProxy = ((_) => 'DIRECT')
       ..connectionTimeout = const Duration(seconds: 5);
     configurationClient = client;
     try {
       return await (() async {
         if (!mounted || cancelled) throw StateError('Manual configuration stopped');
-        final request = await client.postUrl(Uri(
-          scheme: 'http', host: '127.0.0.1', port: port, path: '/a3-key',
-        ));
+        final request = await client.postUrl(Uri(scheme: 'http', host: '127.0.0.1', port: port, path: '/a3-key'));
         request.followRedirects = false;
         request.contentLength = 0;
         request.headers.set('X-DSH-A3-Token', token);
@@ -113,10 +111,13 @@ class _ReplayPageState extends State<_ReplayPage> {
           throw StateError('Local key handoff was not current');
         }
         return key;
-      })().timeout(const Duration(seconds: 15), onTimeout: () {
-        client.close(force: true);
-        throw TimeoutException('Local key handoff expired');
-      });
+      })().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          client.close(force: true);
+          throw TimeoutException('Local key handoff expired');
+        },
+      );
     } finally {
       client.close(force: true);
       if (identical(configurationClient, client)) configurationClient = null;

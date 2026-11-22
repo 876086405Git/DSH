@@ -606,7 +606,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _affinityCharacter = role;
     _bondTier = tier;
     _affinitySettledDay = settledDay;
-    if (role != null && role == previousRole && tier > previousTier && settledDay != null && settledDay != previousDay) {
+    if (role != null &&
+        role == previousRole &&
+        tier > previousTier &&
+        settledDay != null &&
+        settledDay != previousDay) {
       _closer(tier);
     }
     if (_vitals case final snapshot?) {

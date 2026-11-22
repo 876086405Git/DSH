@@ -823,7 +823,9 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       // Keep old terms still present in that body; otherwise use its text.
       final previousKeywords = (jsonDecode(retained['keywords'] as String) as List).cast<String>();
       final normalizedText = normalizeMemoryText(text);
-      final safeKeywords = previousKeywords.where((word) => normalizedText.contains(normalizeMemoryText(word))).toList();
+      final safeKeywords = previousKeywords
+          .where((word) => normalizedText.contains(normalizeMemoryText(word)))
+          .toList();
       if (previousKeywords.isEmpty || safeKeywords.isNotEmpty) keywords = safeKeywords;
     }
     return _AgentEntryWrite(
