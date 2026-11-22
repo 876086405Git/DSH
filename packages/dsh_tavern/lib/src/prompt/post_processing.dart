@@ -117,6 +117,9 @@ List<PromptSegment> _mergeMessages(
         !(separateLast && index == input.length - 1) &&
         merged.last.message['role'] == message['role'] &&
         presetTruthy(text) &&
+        // W11 owner correction: ST 1.19 merges only content here and loses
+        // later tool calls. Preserve their message boundary and call metadata.
+        !(tools && message['tool_calls'] is List && (message['tool_calls']! as List).isNotEmpty) &&
         message['role'] != 'tool') {
       final previous = merged.removeLast();
       final joined = {
@@ -187,14 +190,28 @@ PromptSegment _restoreMedia(
   final text = segment.message['content']! as String;
   if (!media.keys.any(text.contains)) return segment;
   final content = <Map<String, Object?>>[];
+  final pattern = RegExp(media.keys.map(RegExp.escape).join('|'));
   for (final part in text.split('\n\n')) {
-    final item = media[part];
-    if (item != null) {
-      content.add(item);
-    } else if (content.isNotEmpty && content.last['type'] == 'text') {
-      content.last['text'] = '${content.last['text']}\n\n$part';
-    } else {
-      content.add({'type': 'text', 'text': part});
+    var at = 0;
+    var found = false;
+    for (final match in pattern.allMatches(part)) {
+      final prefix = part.substring(at, match.start);
+      if (prefix.isNotEmpty) {
+        if (!found && content.isNotEmpty && content.last['type'] == 'text') {
+          content.last['text'] = '${content.last['text']}\n\n$prefix';
+        } else {
+          content.add({'type': 'text', 'text': prefix});
+        }
+      }
+      content.add(media[match[0]]!);
+      at = match.end;
+      found = true;
+    }
+    final suffix = part.substring(at);
+    if (!found && content.isNotEmpty && content.last['type'] == 'text') {
+      content.last['text'] = '${content.last['text']}\n\n$suffix';
+    } else if (!found || suffix.isNotEmpty) {
+      content.add({'type': 'text', 'text': suffix});
     }
   }
   return _replace(segment, {...segment.message, 'content': content}, counter);

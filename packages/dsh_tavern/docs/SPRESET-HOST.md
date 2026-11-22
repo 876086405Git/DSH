@@ -42,6 +42,7 @@ abstract interface class TavernSPresetRequestObserver {
 | source | 用户函数表达式或 ToolBindings 的函数体；不是 URL。 |
 | cacheKey | 单个 toolDefinition 兼容通道的身份提示；主引擎用 toolRegistry 内的原始 UUID 和 callback sessionId。 |
 | reset | true 时重编译该普通函数 session 并清空状态。 |
+| captureLogs | 仅 App 全局 opt-in 打开且本次启用日志时为 true；缺省 false。 |
 | arguments | 函数实参的 JSON 数组；返回中携带修改后的数组。 |
 
 页面 RPC 调用 `globalThis.DshSPresetPageRuntime.evaluate(request, signal)` 并等待其返回对象。通过 JSON/RPC 传 request 对象；不要把未经编码的 source 拼进另一层 JavaScript 字符串。
@@ -91,8 +92,9 @@ FinalRequestProcessing 的 request 是直连 provider HTTP body；ST 后端代�
 - `committed:null`：事实未知；任意 JS 正常 return 本身不证明 false。
 
 adapter 不替任意脚本伪造 committed。owner 应关联原有 Helper/native bridge 的实际提交回执；无法确认时保留 null。
-逻辑取消可立即结束 turn 展示；原 Future settle 后已知 true/false 回填同 executionId 的 unresolved receipt，保留此前封存的 wire_result_json 字节，不再生成下一次模型请求。
-引擎 close/backup 会等待真实 host 操作排空，然后 `releaseSPresetSession`。owner 在页面销毁时必须结算 RPC，携带已有事实或 unknown 错误；丢弃响应而永不 settle 会阻止排空。没有新增任意超时来替代真实结算。
+逻辑取消可立即结束 turn 展示；若原 host Future 随后确实返回已知 true/false，可回填同 executionId 的 unresolved receipt，保留此前封存的 wire_result_json 字节，不再生成下一次模型请求。
+ADDENDUM-02 的实际 App 在取消时立即让 host Future 以错误/结果未知结算，不等待 JS 函数返回；该路径不保证另有晚事实回传。close/backup 等待的是 host Future 结算，并不证明任意 JS 已终止。页面销毁也必须结算 RPC；没有新增超时。
+runtime 的 signal 仅在入口检查；任意 JS 中途继续运行及其外部副作用不能靠 AbortSignal 强停。本次沿用 App 已有立即结算方式，不添加另一套取消竞速或伪造 committed。
 已有 hostVersion/cancellation/turn ownership 防止取消或页面换代后再采用结果。formatMessage await 返回后、action 进入前还会再次验证 ownership。
 
 ## 6. 页面缓存生命周期
@@ -100,7 +102,7 @@ adapter 不替任意脚本伪造 committed。owner 应关联原有 Helper/native
 普通函数状态保留到 `releaseSession(sessionId)`；ToolBindings 按原 UUID+code 共享闭包，另有 runtime:identifier:code 的1秒求值缓存（最多512项）。缺 UUID 不进入持久定义缓存；同步后裁剪未使用 UUID。
 一次 toolRegistry 处理整个活跃集合，使重复 UUID 跨 identifier 共享、同名首项优先、注销顺序与原源相同。原源还会保留同名且 UUID 未变的已注册对象，即使此时定义代码求值已变化；adapter 保留该行为。
 每个注册拥有独立 ToolDefinition receiver；普通 function 的 action 与 formatMessage 共用这个 this，原始定义对象的附加属性不会被复制到它。receiver提供原公开invoke/formatMessage/shouldRegister/toFunctionOpenAI及displayName/stealth；缺自定义formatter仍返回默认“Invoking tool”文本。此项已与固定ST类及SPreset wrapper实跑对照。
-owner 在切换预设或更换页面时，应在排空活动求值后调用 `DshSPresetPageRuntime.resetPreset()`。普通 generation 结束只 releaseSession；绑定变化由下一次 toolRegistry 同步处理，不额外把全部缓存清空。resetPreset 清定义/注册/session，而上游1秒求值缓存继续按TTL过期。
+owner 在切换预设或更换页面时，应在结算活动 host RPC 后调用 `DshSPresetPageRuntime.resetPreset()`。普通 generation 结束只 releaseSession；绑定变化由下一次 toolRegistry 同步处理，不额外把全部缓存清空。resetPreset 清定义/注册/session，而上游1秒求值缓存继续按TTL过期。
 同一工具上的 action 由引擎顺序执行；owner 不应把一个 action 的重试当成 transport 重试。
 
 ## 7. 原生/外部 runtime 选择
@@ -112,12 +114,15 @@ owner 可通过既有 settings API 写 `spresetRuntimeMode: 'external'`。该模
 
 ## 8. 日志与导出
 
-`spresetLogUploadEnabled` App setting 缺省 false，预设的 LogUpload.enabled 不得单独开启。owner 开启后才收集模型请求/transport/本求值通道日志。
+`spresetLogUploadEnabled` 只读 App 全局 setting，缺省 false；聊天级同名配置忽略，聊天级写入拒绝。预设的 LogUpload.enabled 不得单独开启。owner 开启后才收集模型请求/transport/本求值通道日志。
 TavernEngine 额外 implements 可选 `TavernSPresetLogApi`；`exportSPresetLogs(chatId)` 返回当前预设报告，`uploadSPresetLogs(chatId, address: ...)` 显式上传。它们没有加入原 Tavern 抽象接口；现有 Preview/Deferred wrapper 不因日志功能新增必实现成员。owner 要暴露日志时先检查实际 delegate 是否支持此能力，再显式实现/转发；不能假设所有 Tavern 都是 TavernEngine。没有自动上传。
 报告形状 `{schemaVersion:1,exportedAt,client,tavernHelper,browserConsole,records}`。导出/上传均接收可选 `tavernHelper` 和 `browserConsole` Map；App 从当前持久页面采集后传入，引擎在调用入口复制并脱敏。未传时报告标记 `available:false`，不能表示实际浏览器控制台已采集。
 Helper快照应区分 `configuredEnabled` 和实际iframe的 `runtimePresent`，浏览器控制台按原源500事件/512KiB字符、优先保留warn/error；这些页面采集、显示与授权入口由owner接线，不由Dart虚构。外部runtime模式关闭原生采集。
-日志会脱敏，限制20条、字段和总量；HTTP文本按流式UTF-8解码后1MiB UTF-16字符截断，中文不按字节提前截断。日志观察不改变原生流的同步事件顺序。文件为 engine directory 内 `spreset-generation-logs.json`。缺省关闭不是限制脚本功能。
-显式上传只接受 HTTP(S) 且无 URL credentials，60秒超时对应原源。可选 `bearerToken` 只用于此次请求的Authorization头，不加入报告；owner负责原源Discord登录UI和session，Dart不冒充登录完成。
+日志会脱敏，限制20条、字段和总量；每代求值日志在采集时最多500条/512KiB UTF-16字符，独立报告丢弃求值数、截断值数、页面丢弃console数。页面每次最多500条/512KiB，captureLogs=false不收集但仍转发原console。诊断对象限制深度6、节点500、集合前50项；超过8192字符的诊断字符串整条省略，不保存可能含认证片段的前缀；单条最多64KiB。
+已解析API key只传给日志脱敏器，不重复调用key提供函数；已合并的HTTP文本先替换原值，因此跨chunk仍能遮蔽。完整JSON/SSE再按字段脱敏，截断/无法解析的body只存省略原因。authToken、JSON字符串、行内Bearer/Basic以及两种App快照均覆盖。上传地址和presetName在首次await前一起捕获。
+已授权创建的 pending 记录在响应结束时仍会结算，不因等待日志加载或 API key 期间关闭全局开关而悬挂。若结算时全局开关关闭，记录标记 `logging_disabled`、省略响应并释放 transport 缓冲；已取得的 key 仍用于已授权记录的脱敏。此决定读取结算时的开关，不另设“本次曾关闭过”的粘滞状态。
+HTTP文本按流式UTF-8解码后1MiB UTF-16字符截断，中文不按字节提前截断。日志观察不改变原生流的同步事件顺序。文件为 engine directory 内 `spreset-generation-logs.json`。缺省关闭不是限制脚本功能。
+按 ADDENDUM-02 的明确要求，显式上传只接受 HTTPS 且无 URL credentials（固定 SP 源允许 HTTP，本处是 owner 指定收紧）；60秒上传超时沿原源，不是求值超时。可选 `bearerToken` 只用于此次请求的Authorization头，不加入报告；owner负责原源Discord登录UI和session，Dart不冒充登录完成。
 
 ## 9. 数据/验证变化
 

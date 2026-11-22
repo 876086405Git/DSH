@@ -438,7 +438,7 @@ extension ToolStore on ChatStore {
           'id = ?',
           [_toolText(receipt, 'id')],
         );
-      } else if (receipt['status'] == 'prepared' && _toolText(receipt, 'tool_name') == 'roll') {
+      } else if (receipt['status'] == 'prepared') {
         _toolUpdate(
           'tool_receipts',
           {
@@ -1744,6 +1744,7 @@ extension ToolStore on ChatStore {
     if (offered is! List<Object?> || !offered.contains(row['tool_name'])) {
       throw StateError('This receipt does not belong to an offered SPreset action.');
     }
+    if (late && committed == null) return _toolReceiptView(row);
     final status = committed == null
         ? 'unresolved'
         : committed

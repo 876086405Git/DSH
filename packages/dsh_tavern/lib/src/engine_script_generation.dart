@@ -452,6 +452,7 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
         onUsageReport: (_) {},
         onResponseStarted: record.spreset?.observeResponseStarted,
         onResponseBytes: record.spreset?.observeResponseBytes,
+        onResponseSecret: record.spreset?.observeResponseSecret,
       );
       final modelStream = engine._modelClient.generate(
         config: transportConfig,

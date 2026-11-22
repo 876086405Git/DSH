@@ -20,7 +20,7 @@ void main() {
           },
         }),
       );
-      await h.engine.setSettings({'spresetLogUploadEnabled': true}, chatId: h.chatId);
+      await h.engine.setSettings({'spresetLogUploadEnabled': true});
       final call = h.model.prepare();
       final first = T24Events(h.engine.send(h.chatId, 'question'));
       await call.listening.future;
@@ -73,7 +73,7 @@ void main() {
       await h.engine.setSettings({
         if (setting.appEnabled) 'spresetLogUploadEnabled': true,
         if (setting.external) 'spresetRuntimeMode': 'external',
-      }, chatId: h.chatId);
+      });
       final call = h.model.prepare();
       final events = T24Events(h.engine.send(h.chatId, 'question'));
       await call.listening.future;
@@ -94,12 +94,18 @@ void main() {
         {'id': 'fixture-script', 'configuredEnabled': true, 'runtimePresent': false},
       ],
       'api_key': 'fixture-secret',
+      'authToken': 'fixture-auth-secret',
+      'json': '{"authToken":"fixture-json-secret"}',
     };
     final console = <String, Object?>{
       'events': [
         {
           'level': 'warn',
-          'args': ['https://fixture.invalid/?token=fixture-secret'],
+          'args': [
+            'https://fixture.invalid/?token=fixture-secret',
+            'inline Bearer fixture-bearer-secret',
+            'Basic Zml4dHVyZTpzZWNyZXQ=',
+          ],
         },
       ],
     };
@@ -113,6 +119,14 @@ void main() {
     final savedConsole = report['browserConsole']! as Map<String, Object?>;
     expect(savedConsole['events'], hasLength(1));
     expect(jsonEncode(report), isNot(contains('fixture-secret')));
+    for (final secret in [
+      'fixture-auth-secret',
+      'fixture-json-secret',
+      'fixture-bearer-secret',
+      'Zml4dHVyZTpzZWNyZXQ=',
+    ]) {
+      expect(jsonEncode(report), isNot(contains(secret)));
+    }
     savedHelper['available'] = false;
     expect(helper['available'], isTrue);
     final absent = await h.engine.exportSPresetLogs(h.chatId);

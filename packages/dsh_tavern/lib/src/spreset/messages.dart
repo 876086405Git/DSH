@@ -226,7 +226,7 @@ Future<List<SPresetTool>> resolveSPresetTools(
 }) async {
   final active = <String>{};
   for (final group in _spRows(preset['prompt_order'])) {
-    if (group['character_id'] != 100001) continue;
+    if (_spString(group['character_id']) != '100001') continue;
     for (final row in _spRows(group['order'])) {
       if (row['enabled'] != false) active.add(_spString(row['identifier']));
     }

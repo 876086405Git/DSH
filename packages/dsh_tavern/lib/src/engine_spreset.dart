@@ -1,5 +1,7 @@
 part of 'engine.dart';
 
+const _reservedNativeToolNames = {'roll', 'remember', 'update_state'};
+
 class _SPresetGeneration {
   _SPresetGeneration(
     this.engine, {
@@ -31,10 +33,19 @@ class _SPresetGeneration {
   final token = _ScriptCancellation();
   final sessions = <String>{};
   final pending = <Future<void>>{};
-  final logs = <Map<String, Object?>>[];
+  final logs = SPresetScriptLogBuffer();
+  final _logSecrets = <String>{};
+  final _loggedResponses = <int>{};
+  void observeResponseSecret(String secret) {
+    // A response may already be collecting while its key Future is pending.
+    // Turning the App setting off must not disable its credential redactor.
+    // The key stays only in this generation's memory, never in a log record.
+    if (secret.isNotEmpty) _logSecrets.add(secret);
+  }
+
   final _transportLogs = <int, List<Map<String, Object?>>>{};
   void observeResponseStarted(int attempt, int status, Map<String, String> headers) {
-    if (!logEnabled) return;
+    if (!logEnabled || !_loggedResponses.contains(_response)) return;
     final attempts = _transportLogs.putIfAbsent(_response, () => []);
     attempts.add({'attempt': attempt, 'status': status, 'headers': headers, 'capture': SPresetResponseLogCapture()});
   }
@@ -49,11 +60,17 @@ class _SPresetGeneration {
   List<Map<String, Object?>> _finishTransportLog(int number) {
     final records = _transportLogs.remove(number) ?? <Map<String, Object?>>[];
     for (final record in records) {
-      final captured = (record.remove('capture')! as SPresetResponseLogCapture).finish();
-      record['body'] = captured.text;
+      final captured = (record.remove('capture')! as SPresetResponseLogCapture).finish(secrets: _logSecrets);
+      record['body'] = redactSPresetResponseBody(captured.text, truncated: captured.truncated);
       record['truncated'] = captured.truncated;
     }
     return records;
+  }
+
+  void _discardTransportLog(int number) {
+    for (final record in _transportLogs.remove(number) ?? <Map<String, Object?>>[]) {
+      (record['capture']! as SPresetResponseLogCapture).discard();
+    }
   }
 
   late final config = SPresetConfig.fromPreset(preset);
@@ -63,7 +80,9 @@ class _SPresetGeneration {
   int _sequence = 0, _response = 0;
   bool _closed = false;
   bool get logEnabled =>
-      config.present && settings['spresetLogUploadEnabled'] == true && config.module('LogUpload')['enabled'] != false;
+      config.present &&
+      _readMap(engine._document['settings'])['spresetLogUploadEnabled'] == true &&
+      config.module('LogUpload')['enabled'] != false;
 
   void diagnose(String stage, Object error) {
     onIssue(
@@ -115,6 +134,7 @@ class _SPresetGeneration {
       identifier: identifier,
       kind: kind,
       reset: reset,
+      captureLogs: logEnabled,
       arguments: arguments,
       cacheKey:
           kind == TavernSPresetEvaluationKind.toolDefinition ||
@@ -148,14 +168,18 @@ class _SPresetGeneration {
       onIssue(issue);
     }
     if (logEnabled) {
-      logs.add({
-        'stage': stage,
-        'identifier': identifier,
-        'arguments': arguments,
-        'result': response.value,
-        'argumentsAfter': response.arguments,
-        'console': response.scriptLogs,
-      });
+      logs.add(
+        {
+          'stage': stage,
+          'identifier': identifier,
+          'arguments': arguments,
+          'result': response.value,
+          'argumentsAfter': response.arguments,
+          'console': response.scriptLogs,
+        },
+        secrets: _logSecrets,
+        upstreamDropped: response.scriptLogsDropped,
+      );
     }
     return response;
   }
@@ -202,16 +226,26 @@ class _SPresetGeneration {
           },
       ];
     }
-    tools = await resolveSPresetTools(
+    final resolved = await resolveSPresetTools(
       config,
       preset,
       evaluate,
       diagnose,
       synchronizeEmpty: host is TavernSPresetScriptHost,
     );
-    for (final tool in tools) {
+    final offered = <SPresetTool>[];
+    for (final tool in resolved) {
       sessions.add('$generationId:${tool.sessionId}');
+      if (_reservedNativeToolNames.contains(tool.name)) {
+        diagnose(
+          'ToolBindings',
+          SPresetException('ToolBindings', 'Tool name conflicts with a reserved native tool: ${tool.name}'),
+        );
+      } else {
+        offered.add(tool);
+      }
     }
+    tools = offered;
     cancellation.check();
     return preset;
   }
@@ -247,11 +281,24 @@ class _SPresetGeneration {
 
   List<String> offeredNames(Map<String, Object?> body) {
     if (!canPerformTools) return const [];
-    final nativeNames = const {'roll', 'remember', 'update_state'};
-    final offered = {for (final tool in _spRows(body['tools'])) _spMap(tool['function'])['name']};
+    final choice = body['tool_choice'];
+    String? selected;
+    if (choice != null && choice != 'auto' && choice != 'required') {
+      if (choice is! Map<String, Object?> || choice['type'] != 'function') return const [];
+      final name = _spMap(choice['function'])['name'];
+      if (name is! String) return const [];
+      selected = name;
+    }
+    final offered = {
+      for (final tool in _spRows(body['tools']))
+        if (tool['type'] == 'function') _spMap(tool['function'])['name'],
+    };
     return [
       for (final tool in tools)
-        if (offered.contains(tool.name) && !nativeNames.contains(tool.name)) tool.name,
+        if (offered.contains(tool.name) &&
+            (selected == null || selected == tool.name) &&
+            !_reservedNativeToolNames.contains(tool.name))
+          tool.name,
     ];
   }
 
@@ -310,8 +357,9 @@ class _SPresetGeneration {
           'presetName': _presetName,
           'request': finalBody,
           'apiConfig': {'provider': provider.toJson(), 'baseUrl': model.baseUrl, 'headers': model.headers},
-          'scriptLogs': logs,
-        });
+          ..._scriptLogFields,
+        }, secrets: _logSecrets);
+        _loggedResponses.add(_response + 1);
       } catch (error) {
         diagnose('LogUpload', error);
       }
@@ -323,12 +371,21 @@ class _SPresetGeneration {
       ? _spString(preset['preset_settings_openai'], 'current')
       : engine._store.listPresets().where((item) => item.id == presetId).firstOrNull?.name ?? presetId!;
 
+  Map<String, Object?> get _scriptLogFields => {
+    'scriptLogs': logs.records,
+    'scriptLogsDropped': logs.dropped,
+    'scriptLogValuesTruncated': logs.truncatedValues,
+    'scriptConsoleLogsDropped': logs.consoleDropped,
+  };
+
   Stream<({ModelDelta delta, String? text})> response(Stream<ModelDelta> source, Map<String, Object?> body) {
     if (!config.present || !presetTruthy(config.module('OutputPreprocessing')['enabled'])) {
       final number = ++_response;
       // A disabled hook must not turn synchronous producer callbacks into
       // queued async events: resume snapshots and cancellation observe them.
-      return logEnabled ? _observeResponse(source, number) : source.map((delta) => (delta: delta, text: null));
+      return _loggedResponses.contains(number)
+          ? _observeResponse(source, number)
+          : source.map((delta) => (delta: delta, text: null));
     }
     return _processedResponse(source, body);
   }
@@ -369,7 +426,10 @@ class _SPresetGeneration {
   }
 
   Future<void> _writeResponseLog(int number, String raw, bool finished, Map<String, Object?>? originalMessage) async {
+    if (!_loggedResponses.remove(number)) return;
     try {
+      final enabled = logEnabled;
+      if (!enabled) _discardTransportLog(number);
       final now = engine._clock().toUtc().toIso8601String();
       final record = engine._spresetLogs.records
           .where((value) => value['id'] == '$generationId:request:$number')
@@ -378,14 +438,20 @@ class _SPresetGeneration {
         engine._spresetLogs.add({
           ...record,
           'endedAt': now,
-          'status': finished ? 'completed' : 'response_error',
-          'response': {'text': raw, 'message': ?originalMessage, 'transport': _finishTransportLog(number)},
-          'scriptLogs': logs,
-        });
+          'status': !enabled ? 'logging_disabled' : (finished ? 'completed' : 'response_error'),
+          'response': enabled
+              ? {'text': raw, 'message': ?originalMessage, 'transport': _finishTransportLog(number)}
+              : {'omitted': true, 'reason': 'App global logging is disabled at response settlement'},
+          ..._scriptLogFields,
+        }, secrets: _logSecrets);
       }
       await engine._saveSPresetLogs();
     } catch (error) {
       diagnose('LogUpload', error);
+    } finally {
+      // Another generation can evict this record before its response settles.
+      // Its transport capture still needs releasing when no record remains.
+      _discardTransportLog(number);
     }
   }
 
@@ -535,7 +601,7 @@ class _SPresetGeneration {
         }
       }
     } finally {
-      if (logEnabled) await _writeResponseLog(number, raw, finished, originalMessage);
+      if (_loggedResponses.contains(number)) await _writeResponseLog(number, raw, finished, originalMessage);
     }
   }
 
@@ -715,6 +781,9 @@ Future<bool> _processSPresetToolCall(
     value: payload(result),
     committed: committed,
     error: error,
+    // Terminal cleanup can settle an in-flight intent before this continuation.
+    // Only an unresolved result may then adopt the observed completion facts.
+    late: engine._store.readToolReceipt(receipt.executionId)?.status == 'unresolved',
     onCommitted: (next) {
       request.receipts[call.index] = next;
     },

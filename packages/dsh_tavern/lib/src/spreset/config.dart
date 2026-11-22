@@ -3,9 +3,9 @@ part of '../spreset.dart';
 /// Read-only projection: preserving large, unrelated extension scripts needs no
 /// extra serialization. Import/export retains the owner's complete raw preset.
 class SPresetConfig {
-  SPresetConfig._(this.value, this.present);
+  SPresetConfig._(this.value, this.present, {bool external = false}) : _external = external;
   factory SPresetConfig.fromPreset(Map<String, Object?> settings) {
-    if (settings['dsh_spreset_runtime'] == 'external') return SPresetConfig._(const {}, false);
+    if (settings['dsh_spreset_runtime'] == 'external') return SPresetConfig._(const {}, false, external: true);
     final direct = _spMap(settings['extensions'])['SPreset'];
     if (direct is Map<String, Object?>) return SPresetConfig._(direct, true);
     for (final prompt in _spRows(settings['prompts'])) {
@@ -21,6 +21,7 @@ class SPresetConfig {
   }
   final Map<String, Object?> value;
   final bool present;
+  final bool _external;
   bool get macroNest => present && presetTruthy(value['MacroNest']);
   Map<String, Object?> module(String name) => _spMap(value[name]);
   Map<String, Object?> get chatSquash {
@@ -44,7 +45,7 @@ class SPresetConfig {
 
   List<Map<String, Object?>> presetRegexes(Map<String, Object?> preset) {
     final native = _spRows(_spMap(preset['extensions'])['regex_scripts']);
-    if (native.isNotEmpty || !present) return native;
+    if (native.isNotEmpty || _external) return native;
     final bound = [..._spRows(module('RegexBinding')['regexes'])];
     if (bound.isEmpty) {
       for (final prompt in _spRows(preset['prompts'])) {

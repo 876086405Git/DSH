@@ -118,6 +118,7 @@ class ModelRequestContext extends ModelCancellation {
     this.preparedBody = false,
     this.onResponseStarted,
     this.onResponseBytes,
+    this.onResponseSecret,
   }) : _cancellation = cancellation,
        _onUsageReport = onUsageReport;
 
@@ -127,6 +128,19 @@ class ModelRequestContext extends ModelCancellation {
   /// synchronous, detached from response ownership and cannot alter retries.
   final void Function(int attempt, int status, Map<String, String> headers)? onResponseStarted;
   final void Function(int attempt, List<int> bytes)? onResponseBytes;
+
+  /// Supplies the already-resolved credential only to an opt-in log redactor.
+  /// It is never included in a report or resolved a second time for logging.
+  final void Function(String secret)? onResponseSecret;
+  void observeResponseSecret(String secret) {
+    if (_observationsClosed) return;
+    try {
+      onResponseSecret?.call(secret);
+    } catch (_) {
+      /* observation only */
+    }
+  }
+
   void observeResponseStarted(int attempt, int status, Map<String, String> headers) {
     if (_observationsClosed) return;
     try {
@@ -220,6 +234,9 @@ class TavernModelClient {
       key = await cancellation.wait(config.apiKey());
       cancellation.check();
       key = key?.trim();
+      if (key != null && key.isNotEmpty && cancellation is ModelRequestContext) {
+        cancellation.observeResponseSecret(key);
+      }
       if (config.deepseek && (key == null || key.isEmpty)) {
         throw const TavernModelException(TavernFailure.noKey, 'no_api_key');
       }

@@ -366,6 +366,93 @@ void main() {
     expect(h.store.readToolTurn(active.owner.logicalTurnId)!.toJson(), once);
   });
 
+  for (final terminal in ['rollback', 'audit', 'partial', 'modelTerminal']) {
+    test('SPreset prepared receipt becomes unknown at $terminal and only later facts can upgrade it', () async {
+      final h = await _StoreHarness.open();
+      final active = h.owned(spresetTools: const ['fixture_tool']);
+      final receipt = h.store.prepareSPresetToolReceipt(
+        active.owner,
+        call: h.call(active, 0, 'fixture_tool', const {}),
+        onCommitted: (_) {},
+      );
+      expect(() => h.finish(active), throwsStateError);
+      expect(h.store.readToolReceipt(receipt.executionId)!.status, 'prepared');
+      switch (terminal) {
+        case 'rollback':
+          h.store.rollbackOwnedToolTurn(
+            active.owner,
+            plan: h.plan(user: active.user.source),
+            outcome: 'cancelled',
+            summary: const {},
+            audit: (facts) => facts,
+            onCommitted: (_) {},
+          );
+        case 'audit':
+          h.store.terminateToolTurnAudit(
+            active.owner,
+            outcome: 'cancelled',
+            summary: const {},
+            audit: () => null,
+            onCommitted: (_) {},
+          );
+        default:
+          h.store.finishToolTurn(
+            active.owner,
+            kind: terminal == 'partial' ? StoredToolFinishKind.failedPartial : StoredToolFinishKind.modelTerminal,
+            outcome: terminal == 'partial' ? 'cancelled' : 'model_terminal',
+            summary: const {},
+            stateSettlements: const [],
+            action: () => h.store.updateMessage(h.chat, active.reply.nodeId, text: 'partial'),
+            onCommitted: (_) {},
+          );
+      }
+      final settled = h.store.readToolReceipt(receipt.executionId)!;
+      expect(settled.status, 'unresolved');
+      expect(settled.committed, isNull);
+      expect(settled.error!['code'], 'turn_terminated');
+      expect(h.store.hasPendingToolRecords(), isFalse);
+      const wire = '{"spresetResult":"Error: outcome unknown"}';
+      h.store.sealToolReceiptWireResult(receipt.executionId, wireResultJson: wire, onCommitted: (_) {});
+      final sealed = h.store.readToolReceipt(receipt.executionId)!;
+      final stillUnknown = h.store.finishSPresetToolReceipt(
+        receipt.executionId,
+        value: null,
+        committed: null,
+        error: 'cancelled without an actual result',
+        late: true,
+        onCommitted: (_) {},
+      );
+      expect(stillUnknown.toJson(), sealed.toJson());
+      final committed = terminal == 'audit' || terminal == 'modelTerminal';
+      final observed = h.store.finishSPresetToolReceipt(
+        receipt.executionId,
+        value: {'actual': 'result'},
+        committed: committed,
+        late: true,
+        onCommitted: (_) {},
+      );
+      expect(observed.status, committed ? 'committed' : 'completed_no_change');
+      expect(observed.committed, committed);
+      expect(observed.result, {
+        'value': {'actual': 'result'},
+      });
+      expect(h.store.toolWireResult(receipt.executionId), wire);
+      // A second, conflicting completion cannot rewrite a known outcome.
+      final duplicate = h.store.finishSPresetToolReceipt(
+        receipt.executionId,
+        value: 'contradiction',
+        committed: !committed,
+        late: true,
+        onCommitted: (_) {},
+      );
+      expect(duplicate.toJson(), observed.toJson());
+      expect(h.store.toolWireResult(receipt.executionId), wire);
+      expect(h.database.select('PRAGMA foreign_key_check'), isEmpty);
+      await h.reopen();
+      expect(h.store.readToolReceipt(receipt.executionId)!.toJson(), observed.toJson());
+    });
+  }
+
   test('an accepted memory identity cannot be reused after deletion by a later decision', () async {
     final h = await _StoreHarness.open();
     final first = h.owned(mode: 'auto');
@@ -527,7 +614,7 @@ class _StoreHarness {
         onCommitted: (_) {},
       )
       .value;
-  _Owned owned({String mode = 'ask'}) {
+  _Owned owned({String mode = 'ask', List<String> spresetTools = const []}) {
     final owner = begin(mode: mode);
     seal(owner);
     final user = appendUser(owner);
@@ -545,8 +632,8 @@ class _StoreHarness {
         .value;
     final registered = store.registerToolRequest(
       owner,
-      offeredTools: const ['roll', 'remember'],
-      wireAuthorization: const {'rollAllowed': true, 'rememberAllowed': true},
+      offeredTools: ['roll', 'remember', ...spresetTools],
+      wireAuthorization: {'rollAllowed': true, 'rememberAllowed': true, 'spresetTools': spresetTools},
       onCommitted: (_) {},
     );
     final request = store.finishToolRequest(

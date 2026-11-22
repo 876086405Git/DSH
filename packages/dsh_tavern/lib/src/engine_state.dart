@@ -753,6 +753,10 @@ void _captureStateAssembly(_Turn turn, PromptAssembly assembly) {
 }
 
 bool _finalStateToolAllowed(Map<String, Object?> body) {
+  if (body.containsKey('thinking')) {
+    final thinking = body['thinking'];
+    if (thinking is! Map<String, Object?> || thinking['type'] != 'disabled') return false;
+  }
   final tools = body['tools'];
   if (tools is! List<Object?> ||
       !tools.any(

@@ -51,6 +51,17 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
     );
   }
 
+  TavernScriptException? _bookDirectoryEntriesFailure(Map<String, Object?> raw) {
+    final entries = raw['entries'];
+    if (entries is Map<String, Object?> || entries is List<Object?>) return null;
+    return _scriptError(
+      TavernScriptErrorCode.shapeMismatch,
+      'bookDirectory',
+      'The book entries field is not an object or array.',
+      fieldPath: 'entries',
+    );
+  }
+
   void _updateStandaloneDirectoryVersion() {
     final state = scriptResources.directory;
     if (!state.loaded) {
@@ -68,6 +79,7 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
     final state = scriptResources.directory;
     final before = state.standalone[id];
     final oldIssue = state.issues[id];
+    final failure = error ?? (raw == null ? null : _bookDirectoryEntriesFailure(raw));
     if (raw == null && error == null) {
       state.standalone.remove(id);
       state.issues.remove(id);
@@ -76,12 +88,12 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
         ref: TavernScriptBookRef.standalone(bookId: id),
         name: raw?['name'] is String ? raw!['name']! as String : null,
         stWorldName: sourceName,
-        readable: error == null,
+        readable: failure == null,
       );
-      if (error == null) {
+      if (failure == null) {
         state.issues.remove(id);
       } else {
-        state.issues[id] = _bookDirectoryIssue('standalone:$id', error);
+        state.issues[id] = _bookDirectoryIssue('standalone:$id', failure);
       }
     }
     final after = state.standalone[id];
@@ -120,6 +132,8 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
                 'bookDirectory',
                 'The embedded book root is not an object.',
               )
+            : raw is Map<String, Object?>
+            ? _bookDirectoryEntriesFailure(raw)
             : null);
     final entry = present
         ? TavernScriptBookDirectoryEntry(

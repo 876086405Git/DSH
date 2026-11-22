@@ -58,15 +58,56 @@
     const logger = Object.create(console);
     for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
       logger[level] = (...values) => {
-        const formatted = values.map(value => {
-          try { return typeof value === 'string' ? value : JSON.stringify(value); }
-          catch { return String(value); }
-        });
-        sink.logs.push({ level, stage: sink.request.stage, values: formatted });
+        const capture = sink.capture;
+        if (capture.enabled) {
+          const budget = {nodes: 0};
+          const formatted = values.slice(0, 8).map(value => {
+            const saved = logValue(value, budget);
+            return typeof saved === 'string' ? saved : JSON.stringify(saved);
+          });
+          let event = {level, stage: sink.request.stage, values: formatted};
+          let encoded = JSON.stringify(event);
+          if (encoded.length > 65536) {
+            event = {level, stage: sink.request.stage, truncated: true, preview: encoded.slice(0, 16384)};
+            encoded = JSON.stringify(event);
+          }
+          while (capture.logs.length && (capture.logs.length >= 500 || capture.chars + encoded.length > 512 * 1024)) {
+            capture.chars -= JSON.stringify(capture.logs.shift()).length;
+            capture.dropped++;
+          }
+          capture.logs.push(event);
+          capture.chars += encoded.length;
+        }
         console[level](...values);
       };
     }
     return logger;
+  }
+  // Snapshot a bounded number of own data properties. Do not invoke getters
+  // or serialize an unbounded object merely to discover that it is too large.
+  function logValue(value, budget, depth = 0, seen = new Set()) {
+    if (++budget.nodes > 500 || depth > 6) return '[TRUNCATED]';
+    if (typeof value === 'string') return value.length > 8192 ? `[OMITTED string: ${value.length} chars]` : value;
+    if (value === undefined) return '[undefined]';
+    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
+      const text = typeof value === 'function' ? Function.prototype.toString.call(value) : String(value);
+      return text.length > 8192 ? `[OMITTED string: ${text.length} chars]` : text;
+    }
+    if (value === null || typeof value !== 'object') return value;
+    if (seen.has(value)) return '[Circular]';
+    seen.add(value);
+    let result;
+    try {
+      const own = key => {
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        return descriptor && 'value' in descriptor ? logValue(descriptor.value, budget, depth + 1, seen) : '[Accessor]';
+      };
+      result = Array.isArray(value)
+        ? Array.from({length: Math.min(value.length, 50)}, (_, index) => own(String(index)))
+        : Object.fromEntries(Object.keys(value).slice(0, 50).map(key => [key, own(key)]));
+    } catch { result = '[UNSERIALIZABLE]'; }
+    seen.delete(value);
+    return result;
   }
   const check = signal => {
     if (signal?.aborted || signal?.isCancelled) throw new Error('SPreset evaluation cancelled.');
@@ -104,8 +145,8 @@
   async function evaluate(request, signal) {
     check(signal);
     const args = copy(request.arguments ?? []);
-    const logs = [];
-    const sink = { request, logs };
+    const capture = {enabled: request.captureLogs === true, logs: [], chars: 0, dropped: 0};
+    const sink = { request, capture };
     const logger = loggerFor(sink);
     let value;
     if (request.kind === 'validateFunctionExpression') {
@@ -160,7 +201,7 @@
       if (!request.cacheKey) throw new TypeError('ToolBindings requires a stable cacheKey.');
       const retained = retainDefinition(String(request.source ?? ''), request.identifier, request.cacheKey, sink);
       retained.sink.request = request;
-      retained.sink.logs = logs;
+      retained.sink.capture = capture;
       const { definition } = retained;
       retained.receiver ??= new ToolDefinition(definition.name,definition.displayName||definition.name,
         definition.description,definition.parameters,definition.action,definition.formatMessage,()=>true,definition.stealth??false);
@@ -171,7 +212,7 @@
       const retained = session?.retained ?? (session?.definition ? session : definitions.get(request.cacheKey));
       if (!retained) throw new Error('The retained SPreset tool definition is unavailable.');
       retained.sink.request = request;
-      retained.sink.logs = logs;
+      retained.sink.capture = capture;
       const receiver = session?.receiver ?? retained.receiver;
       if (receiver) {
         value = request.kind === 'toolAction'
@@ -191,7 +232,7 @@
         sessions.set(request.sessionId, session);
       }
       session.sink.request = request;
-      session.sink.logs = logs;
+      session.sink.capture = capture;
       if (request.stage === 'OutputPreprocessing') {
         // JS state can contain functions, Maps, cycles or page objects. Keep it
         // in this realm rather than pretending it can round-trip through JSON.
@@ -213,13 +254,14 @@
     // cancellation arrived. The App must keep its real bridge receipt facts;
     // this evaluator does not invent committed=false for arbitrary JS.
     return { requestId: request.requestId, value: copy(value), isUndefined: value === undefined,
-      arguments: copy(args), scriptLogs: logs };
+      arguments: copy(args), scriptLogs: capture.logs, scriptLogsDropped: capture.dropped };
   }
   globalThis.DshSPresetPageRuntime = Object.freeze({
     evaluate,
     releaseSession(sessionId) { sessions.delete(sessionId); },
-    // Call when the active preset/page is replaced, after draining outstanding
-    // evaluations. Generation completion alone must retain tool closures.
+    // Call when the active preset/page is replaced, after settling old host
+    // RPCs. This does not stop already executing JS. Keep closures on normal
+    // generation completion; release only that generation's session entries.
     resetPreset() { sessions.clear(); definitions.clear(); registrations.clear(); activeIdentifiers.clear(); },
   });
 })();

@@ -10,7 +10,7 @@ const runtime = context.DshSPresetPageRuntime;
 let serial = 0;
 function request(source, extra = {}) {
   return { requestId: String(++serial), chatId: 'chat', generationId: 'generation',
-    sessionId: 'session', stage: 'FinalRequestProcessing', source, kind: 'functionExpression', arguments: [], ...extra };
+    sessionId: 'session', stage: 'FinalRequestProcessing', source, kind: 'functionExpression', captureLogs: true, arguments: [], ...extra };
 }
 (async () => {
   const changed = await runtime.evaluate(request('async ({request}) => { request.model = localStorage.getItem("owner-setting"); }',
@@ -48,6 +48,35 @@ function request(source, extra = {}) {
   const statements = await runtime.evaluate(request('const prefix = "ok:"; value => prefix + value;',
     {kind:'syncFunctionExpression',stage:'ChatSquash',reset:true,arguments:['text']}));
   assert.equal(statements.value, 'ok:text');
+  const disabled = await runtime.evaluate(request('() => { console.warn("visible console"); return 1; }', {captureLogs: false}));
+  assert.equal(disabled.scriptLogs.length, 0);
+  assert.equal(disabled.scriptLogsDropped, 0);
+  const bounded = await runtime.evaluate(request('() => { for(let i=0;i<600;i++) console.info("event", i); return 600; }'));
+  assert.equal(bounded.value, 600);
+  assert.equal(bounded.scriptLogs.length, 500);
+  assert.equal(bounded.scriptLogsDropped, 100);
+  const large = await runtime.evaluate(request('() => { let reads=0; const x={get value(){reads++;return "secret";}}; x.self=x; for(let i=0;i<200;i++) console.info("x".repeat(8000),x); return reads; }'));
+  assert.equal(large.value, 0);
+  assert.ok(large.scriptLogsDropped > 0);
+  assert.ok(large.scriptLogs.reduce((n, item) => n + JSON.stringify(item).length, 0) <= 512 * 1024);
+  assert.ok(JSON.stringify(large.scriptLogs).includes('[Accessor]'));
+  const oversized = await runtime.evaluate(request('() => { console.info(JSON.stringify({authToken:"CUT_SECRET_"+"x".repeat(10000)})); return 1; }'));
+  assert.ok(!JSON.stringify(oversized.scriptLogs).includes('CUT_SECRET_'));
+  assert.ok(JSON.stringify(oversized.scriptLogs).includes('[OMITTED string:'));
+  const functionText = await runtime.evaluate(request('() => { console.info(Function("/*"+"x".repeat(9000)+"*/")); return 1; }'));
+  assert.ok(JSON.stringify(functionText.scriptLogs).includes('[OMITTED string:'));
+  await assert.rejects(runtime.evaluate(request('() => 1'), {aborted:true}), /cancelled/);
+  let resume;
+  context.pending = new Promise(resolve => { resume=resolve; });
+  const signal = {aborted:false};
+  const late = runtime.evaluate(request('async () => { await pending; localStorage.setItem("late-effect", "yes"); return 1; }'), signal);
+  signal.aborted=true;
+  resume();
+  const lateResult=await late;
+  assert.equal(lateResult.committed, undefined);
+  assert.equal(local.get('late-effect'), 'yes');
+  // The App, not this function, immediately settles its cancelled RPC as
+  // unknown. AbortSignal cannot stop arbitrary user JS or establish no effect.
   await assert.rejects(runtime.evaluate(request('function declared(value) { return value; }',
     {kind:'syncFunctionExpression',stage:'ChatSquash',reset:true,arguments:['text']})), /must evaluate/);
   // Optional differential against the fixed original function only. Do not

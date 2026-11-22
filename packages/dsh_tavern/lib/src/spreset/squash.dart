@@ -142,9 +142,13 @@ Future<List<PromptSegment>> _spSquashGroup(
     'system': expand(_spString(settings['suffix_system'])),
   };
   final configuredRole = _spString(settings['role'], 'assistant');
+  const mergeRoles = {'user', 'system', 'assistant'};
+  final firstRole = _spString(input.firstOrNull?.message['role'], 'user');
   var role = configuredRole == 'follow'
-      ? _spString(input.firstOrNull?.message['role'], 'user')
-      : const {'user', 'system', 'assistant'}.contains(configuredRole)
+      ? mergeRoles.contains(firstRole)
+            ? firstRole
+            : 'user'
+      : mergeRoles.contains(configuredRole)
       ? configuredRole
       : 'assistant';
   final output = <PromptSegment>[];
@@ -208,6 +212,10 @@ Future<List<PromptSegment>> _spSquashGroup(
         (content is Map<String, Object?>);
     if (nativePayload) {
       await flush();
+      if (configuredRole == 'follow' && sourceRole == 'tool') {
+        output.add(_spSegment(segment, message, counter));
+        continue;
+      }
       final cleaned = content is String
           ? clean(content)
           : content is List<Object?>
@@ -225,7 +233,7 @@ Future<List<PromptSegment>> _spSquashGroup(
             ]
           : content;
       output.add(_spSegment(segment, {...message, 'content': cleaned}, counter));
-      if (configuredRole == 'follow') role = sourceRole;
+      if (configuredRole == 'follow' && mergeRoles.contains(sourceRole)) role = sourceRole;
       continue;
     }
     if (!presetTruthy(content)) continue;
@@ -249,7 +257,7 @@ Future<List<PromptSegment>> _spSquashGroup(
     if (separate) {
       await flush();
       output.add(_spSegment(segment, {...message, 'role': currentRole, 'content': text}, counter));
-      if (configuredRole == 'follow') role = currentRole;
+      if (configuredRole == 'follow' && mergeRoles.contains(currentRole)) role = currentRole;
       continue;
     }
     if (currentRole == previousRole) {

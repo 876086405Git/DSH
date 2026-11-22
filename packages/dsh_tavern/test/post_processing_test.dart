@@ -8,6 +8,79 @@ void main() {
   final fixture = jsonDecode(File('test/fixtures/st-postprocessing.json').readAsStringSync()) as Map<String, Object?>;
   final names = fixture['names']! as Map<String, Object?>;
   const counter = EstimatedTokenCounter();
+  test('owner correction preserves later nonempty assistant tool calls in tools modes', () {
+    Map<String, Object?> call(String id) => {
+      'id': id,
+      'type': 'function',
+      'function': {'name': 'fixture', 'arguments': '{}'},
+      'thought_signature': 'signature-$id',
+    };
+    final input = [
+      {'role': 'assistant', 'content': 'before'},
+      {
+        'role': 'assistant',
+        'content': 'call one',
+        'tool_calls': [call('one')],
+      },
+      {
+        'role': 'assistant',
+        'content': 'call two',
+        'tool_calls': [call('two')],
+      },
+      {'role': 'tool', 'tool_call_id': 'one', 'content': 'result one'},
+      {'role': 'tool', 'tool_call_id': 'two', 'content': 'result two'},
+    ];
+    final before = jsonEncode(input);
+    for (final mode in ['merge_tools', 'semi_tools', 'strict_tools']) {
+      final result = postProcessPrompt(
+        [
+          for (var i = 0; i < input.length; i++)
+            PromptSegment(id: '$i', message: input[i], sources: const [], tokens: 0),
+        ],
+        mode,
+        userName: 'User',
+        characterName: 'Character',
+        counter: counter,
+      );
+      final calls = [for (final segment in result) ...((segment.message['tool_calls'] as List?) ?? [])];
+      expect(calls, [call('one'), call('two')], reason: mode);
+      expect(
+        result.where((segment) => segment.message['role'] == 'tool').map((segment) => segment.message).toList(),
+        input.sublist(3),
+      );
+    }
+    expect(jsonEncode(input), before);
+  });
+
+  test('owner correction restores a media token inside a retained name prefix', () {
+    const media = {
+      'type': 'image_url',
+      'image_url': {'url': 'data:image/png;base64,AA=='},
+    };
+    for (final row in [
+      (role: 'assistant', name: 'Alice', prefix: 'Alice: '),
+      (role: 'system', name: 'example_assistant', prefix: 'Character: '),
+    ]) {
+      final input = {
+        'role': row.role,
+        'name': row.name,
+        'content': [media],
+      };
+      final result = postProcessPrompt(
+        [PromptSegment(id: 'image', message: input, sources: const [], tokens: 0)],
+        'merge',
+        userName: 'User',
+        characterName: 'Character',
+        counter: counter,
+      );
+      expect(result.single.message['content'], [
+        {'type': 'text', 'text': row.prefix},
+        media,
+      ]);
+      expect(input['content'], [media]);
+    }
+  });
+
   test('all recorded ST 1.19.0 conversion modes match real source output', () {
     for (final item in (fixture['cases']! as List<Object?>).cast<Map<String, Object?>>()) {
       final messages = (item['messages']! as List<Object?>).cast<Map<String, Object?>>();

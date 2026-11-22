@@ -22,9 +22,10 @@ part 'spreset/log.dart';
 /// Evaluate in the active chat's persistent page realm, including that page's
 /// localStorage, TavernHelper and SillyTavern facades. Never evaluate in a fresh
 /// unrelated iframe. A session retains the compiled function and its closures.
-/// The actual Future must eventually settle after cancellation/page teardown;
-/// cancellation does not prove that an action had no effects. Engine close and
-/// backup wait for that real host operation before releasing its session.
+/// The host Future must settle after cancellation/page teardown; an App may
+/// immediately return an error with unknown effects while page JS still runs.
+/// Engine close/backup wait for that host Future, not proof of JS termination.
+/// Cancellation must never be reported as committed=false without evidence.
 abstract interface class TavernSPresetScriptHost {
   Future<TavernSPresetEvaluationResult> evaluateSPreset(
     TavernSPresetEvaluationRequest request,
@@ -99,6 +100,7 @@ class TavernSPresetEvaluationRequest {
     this.cacheKey,
     this.kind = TavernSPresetEvaluationKind.functionExpression,
     this.reset = false,
+    this.captureLogs = false,
     List<Object?> arguments = const [],
   }) : _arguments = _spCopy(arguments)! as List<Object?>;
   final String requestId, chatId, generationId, sessionId, stage, source;
@@ -110,6 +112,7 @@ class TavernSPresetEvaluationRequest {
   final String? cacheKey;
   final TavernSPresetEvaluationKind kind;
   final bool reset;
+  final bool captureLogs;
   final List<Object?> _arguments;
   List<Object?> get arguments => _spCopy(_arguments)! as List<Object?>;
   Map<String, Object?> toJson() => {
@@ -123,6 +126,7 @@ class TavernSPresetEvaluationRequest {
     'cacheKey': cacheKey,
     'kind': kind.name,
     'reset': reset,
+    'captureLogs': captureLogs,
     'arguments': arguments,
   };
 }
@@ -133,6 +137,7 @@ class TavernSPresetEvaluationResult {
     Object? value,
     this.isUndefined = false,
     this.committed,
+    this.scriptLogsDropped = 0,
     List<Object?> arguments = const [],
     List<TavernScriptIssue> issues = const [],
     List<Map<String, Object?>> scriptLogs = const [],
@@ -148,12 +153,14 @@ class TavernSPresetEvaluationResult {
     committed: value['committed'] as bool?,
     arguments: value['arguments'] as List<Object?>? ?? const [],
     scriptLogs: _spRows(value['scriptLogs']),
+    scriptLogsDropped: (value['scriptLogsDropped'] as num?)?.toInt() ?? 0,
   );
   final Object? _value;
   final List<Map<String, Object?>> _scriptLogs;
   Object? get value => _spCopy(_value);
   List<Map<String, Object?>> get scriptLogs => _scriptLogs.map(_spObjectCopy).toList();
   final bool isUndefined;
+  final int scriptLogsDropped;
 
   /// Actual side-effect fact for tool actions: true = known committed effects,
   /// false = known no committed effects, null = unknown. Returning normally

@@ -1889,11 +1889,12 @@ class TavernEngine implements Tavern, TavernSPresetLogApi {
     final helper = tavernHelper == null ? null : _copy(tavernHelper);
     final console = browserConsole == null ? null : _copy(browserConsole);
     return _operation(() async {
-      final settings = _effectiveReadSettings(_store.chat(chatId));
+      final chat = _store.chat(chatId);
+      final settings = _effectiveReadSettings(chat);
       final preset = _readMap(settings['preset']);
-      await _loadSPresetLogs();
-      final selected = _resolvePreset(_store.chat(chatId));
+      final selected = _resolvePreset(chat);
       final name = selected.preset?.name ?? _spString(preset['preset_settings_openai'], 'current');
+      await _loadSPresetLogs();
       return _spresetLogs.report(presetName: name, at: _clock(), tavernHelper: helper, browserConsole: console);
     });
   }
@@ -1909,16 +1910,17 @@ class TavernEngine implements Tavern, TavernSPresetLogApi {
     final helper = tavernHelper == null ? null : _copy(tavernHelper);
     final console = browserConsole == null ? null : _copy(browserConsole);
     return _operation(() async {
-      final settings = _effectiveReadSettings(_store.chat(chatId));
-      final config = SPresetConfig.fromPreset(_readMap(settings['preset']));
+      final chat = _store.chat(chatId);
+      final settings = _effectiveReadSettings(chat);
+      final preset = _readMap(settings['preset']);
+      final selected = _resolvePreset(chat);
+      final name = selected.preset?.name ?? _spString(preset['preset_settings_openai'], 'current');
+      final config = SPresetConfig.fromPreset(preset);
       final target = address ?? _spString(config.module('LogUpload')['url']);
-      final report = await exportSPresetLogs(chatId, tavernHelper: helper, browserConsole: console);
-      return uploadSPresetLogReport(
-        Uri.parse(target),
-        report,
-        enabled: settings['spresetLogUploadEnabled'] == true,
-        bearerToken: bearerToken,
-      );
+      final enabled = _readMap(_document['settings'])['spresetLogUploadEnabled'] == true;
+      await _loadSPresetLogs();
+      final report = _spresetLogs.report(presetName: name, at: _clock(), tavernHelper: helper, browserConsole: console);
+      return uploadSPresetLogReport(Uri.parse(target), report, enabled: enabled, bearerToken: bearerToken);
     });
   }
 
@@ -2255,6 +2257,9 @@ class TavernEngine implements Tavern, TavernSPresetLogApi {
   }
 
   Future<void> _setSettingsCaptured(Map<String, Object?> patch, {String? chatId, bool replacePreset = false}) async {
+    if (chatId != null && patch.containsKey('spresetLogUploadEnabled')) {
+      throw ArgumentError('spresetLogUploadEnabled is an App global setting; chat-level writes are not allowed.');
+    }
     try {
       if (chatId == null) {
         final hasPreset = patch.containsKey('preset');
@@ -3383,6 +3388,12 @@ class TavernEngine implements Tavern, TavernSPresetLogApi {
     // Project only after every global/source/chat merge. A read->set roundtrip
     // cannot duplicate the collection or replace it with a supplied snapshot.
     result.remove('managedRegexScripts');
+    // Imported/legacy chat settings must not grant or revoke the App opt-in.
+    if (global.containsKey('spresetLogUploadEnabled')) {
+      result['spresetLogUploadEnabled'] = global['spresetLogUploadEnabled'];
+    } else {
+      result.remove('spresetLogUploadEnabled');
+    }
     final managed = _managedRegexView ??= _regexLibrary.executionScripts;
     if (managed.isNotEmpty) result['managedRegexScripts'] = managed;
     return result;
@@ -5096,6 +5107,7 @@ class TavernEngine implements Tavern, TavernSPresetLogApi {
             preparedBody: turn.spreset != null,
             onResponseStarted: turn.spreset?.observeResponseStarted,
             onResponseBytes: turn.spreset?.observeResponseBytes,
+            onResponseSecret: turn.spreset?.observeResponseSecret,
             cancellation: requestCancellation,
             onUsageReport: (report) {
               if (completed.isCompleted) return;

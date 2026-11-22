@@ -908,6 +908,10 @@ class _ScriptPromptRun {
         expand: (text) => environment.expand(text, const {}),
         evaluate: spreset!.evaluate,
         diagnose: spreset!.diagnose,
+        historyIds: {
+          for (final piece in explicit)
+            if (piece.source.kind == 'history') piece.id,
+        },
       );
       converted = convertExplicitPromptMessages(
         postProcessPrompt(
@@ -924,6 +928,16 @@ class _ScriptPromptRun {
         groupNames: capture.groupView?.names ?? const [],
         counter: owner.engine._counter,
       );
+      // This explicit-preset raw API promises a final budget. Recount only;
+      // the fixed ST/SP hook itself does not repeat admission after scripts.
+      if (promptPreset != null &&
+          converted.fold<int>(0, (total, item) => total + owner.engine._counter.countMessage(item.message)) >
+              environment.maxContext - environment.maxResponse) {
+        throw const TavernModelException(
+          TavernFailure.contextTooLong,
+          'The final explicit raw messages exceed the selected parameter preset budget.',
+        );
+      }
     }
     return explicitPromptRequestBody(
       messages: converted,

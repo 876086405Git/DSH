@@ -417,9 +417,11 @@ Future<void> _failOrdinaryToolTurn(TavernEngine engine, _Turn turn, Object error
 }
 
 class _OrdinaryToolRequest {
-  _OrdinaryToolRequest(this.authorization, this.stateAllowed);
+  _OrdinaryToolRequest(this.authorization, this.stateAllowed, Iterable<String> spresetNames)
+    : spresetNames = Set.unmodifiable(spresetNames);
   final ToolWireAuthorization authorization;
   final bool stateAllowed;
+  final Set<String> spresetNames;
   final accumulator = ModelToolAccumulator();
   final streamingUsage = StreamingToolUsage();
   late TavernToolRequestSnapshot snapshot;
@@ -539,16 +541,14 @@ _OrdinaryToolRequest _registerOrdinaryRequest(TavernEngine engine, _Turn turn, M
     final request = _OrdinaryToolRequest(
       authorization,
       turn.stateAutomatic && !turn.effectiveThinking && _finalStateToolAllowed(body),
+      turn.spreset?.offeredNames(body) ?? const <String>[],
     );
     final requests = [...turn.toolRequests, request];
     final inspection = requests.length < 2 ? turn.inspection : turn.inspection.copyWith(clearReportedUsage: true);
     engine._store.registerToolRequest(
       turn.toolOwner!,
       offeredTools: authorization.offeredTools,
-      wireAuthorization: {
-        ...authorization.toJson(),
-        'spresetTools': turn.spreset?.offeredNames(body) ?? const <String>[],
-      },
+      wireAuthorization: {...authorization.toJson(), 'spresetTools': request.spresetNames.toList()},
       requestLimit: turn.spreset == null ? 4 : turn.spreset!.requestLimit,
       onCommitted: (snapshot) {
         request.snapshot = snapshot;
@@ -575,17 +575,10 @@ void _finishOrdinaryRequest(TavernEngine engine, _Turn turn, _OrdinaryToolReques
     final active = turn.spreset;
     // A valid SPreset follow-up keeps its own budget even if this response also
     // contains a now-exhausted native roll. Actual offer names were persisted.
-    final offered = request.authorization.offeredTools;
     final needsSPreset =
         active != null &&
         active.permitsDepth(request.snapshot.requestIndex - 1) &&
-        batch.calls.any(
-          (call) =>
-              offered.contains(call.name) &&
-              active.tools.any(
-                (tool) => tool.name == call.name && !const {'roll', 'remember', 'update_state'}.contains(tool.name),
-              ),
-        );
+        batch.calls.any((call) => request.spresetNames.contains(call.name));
     final rejection = _ordinaryBatchRejection(request, skipNativeBudget: needsSPreset);
     final pending = request.streamingUsage.record(request.usage);
     final diagnostics = <String, Object?>{
@@ -632,7 +625,9 @@ void _finishOrdinaryRequest(TavernEngine engine, _Turn turn, _OrdinaryToolReques
     } catch (_) {
       // Only an adopted complete response can supply this primary preflight
       // failure when publication of its durable response seal itself fails.
-      if (request.rowFinished) turn.toolFailureCode ??= _ordinaryBatchRejection(request)?.code;
+      if (request.rowFinished) {
+        turn.toolFailureCode ??= _ordinaryBatchRejection(request, skipNativeBudget: needsSPreset)?.code;
+      }
       rethrow;
     }
     _toolActivity(turn, requestId: request.snapshot.requestId);
@@ -762,7 +757,7 @@ Future<void> _consumeOrdinaryTools(TavernEngine engine, _Turn turn, Map<String, 
     final nativeRollExhausted = request.snapshot.requestIndex >= 4;
     final needsRoll = !nativeRollExhausted && request.authorization.rollAllowed && batch.rollNameObserved;
     final spreset = turn.spreset;
-    final spresetNames = spreset?.offeredNames(wireBody).toSet() ?? const <String>{};
+    final spresetNames = request.spresetNames;
     final needsSPreset =
         spreset != null &&
         spreset.permitsDepth(request.snapshot.requestIndex - 1) &&
