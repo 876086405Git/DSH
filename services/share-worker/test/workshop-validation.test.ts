@@ -105,4 +105,14 @@ it('validates theme packs, referenced PNGs/fonts, and rejects undeclared extras'
     ['secret.txt', Buffer.from('nope')],
   ]);
   expect(() => validatePack(withExtra, metaFor(withExtra, { kind: 'theme' }), 6)).toThrow('theme_extra_file');
+
+  const missingHeroImage = zip([
+    ['theme.json', Buffer.from(JSON.stringify({ ...themeManifest, surfaces: { preset: 'paper' }, typography: {}, emptyState: { heroStyle: 'customImage' } }))],
+  ]);
+  expect(() => validatePack(missingHeroImage, metaFor(missingHeroImage, { kind: 'theme' }), 6)).toThrow('theme_schema');
+
+  const unknownKey = zip([
+    ['theme.json', Buffer.from(JSON.stringify({ ...themeManifest, surfaces: { preset: 'paper' }, typography: {}, extraField: true }))],
+  ]);
+  expect(() => validatePack(unknownKey, metaFor(unknownKey, { kind: 'theme' }), 6)).toThrow('theme_schema');
 });

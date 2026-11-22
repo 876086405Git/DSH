@@ -162,14 +162,46 @@ void main() {
       assets: {'paper-grain.png': textureBytes},
     );
     expect(savedWithAsset.id, 'user-warm-editorial');
+    // Creating a new theme with allowOverwrite: false must reject collisions.
+    await expectLater(
+      () => library.saveCustom(withTexture, assets: {'paper-grain.png': textureBytes}, allowOverwrite: false),
+      throwsA(isA<ThemeImportException>()),
+    );
     // Re-saving without passing assets again preserves existing referenced files.
     final saved = await library.saveCustom(
       savedWithAsset.copyWith(name: '暖纸手稿 v2'),
+      editingLocalId: savedWithAsset.id,
     );
     expect(saved.id, 'user-warm-editorial');
     expect(saved.name, '暖纸手稿 v2');
     expect(saved.surfaces.backdropImage, 'paper-grain.png');
     expect((await library.list()).single.id, 'user-warm-editorial');
+
+    // Public ID starting with 'user-' maps reversibly without colliding with the stripped ID.
+    final prefixed = ThemePack.paper.copyWith(id: 'user-warm-editorial', name: 'Prefixed Public');
+    final savedPrefixed = await library.saveCustom(prefixed, allowOverwrite: false);
+    expect(savedPrefixed.id, 'user-user-warm-editorial');
+    expect(savedPrefixed.publicId, 'user-warm-editorial');
+    expect((await library.list()).map((t) => t.id).toSet(), {'user-warm-editorial', 'user-user-warm-editorial'});
+
+    // Adding a Workshop cover renames colliding artwork named preview.png automatically.
+    final withPreviewArtwork = custom.copyWith(
+      id: 'cover-rename',
+      surfaces: const ThemeSurfaceSpec(preset: ThemeSurfacePreset.paper, backdropImage: 'preview.png'),
+    );
+    final savedCollision = await library.saveCustom(
+      withPreviewArtwork,
+      assets: {'preview.png': textureBytes},
+      allowOverwrite: false,
+    );
+    final collisionExport = File('${temp.path}/collision.zip');
+    await library.exportZip(savedCollision.id, collisionExport, publicId: 'cover-rename');
+    final renamedCoverZip = workshopThemePreviewZip(
+      (await collisionExport.readAsBytes(), WorkshopPreviewInput.themePng(workshopPng(24, 24))),
+    );
+    final validatedCoverZip = ThemePackValidator.validateArchive(renamedCoverZip);
+    expect(validatedCoverZip.pack.surfaces.backdropImage, 'theme-asset-preview.png');
+    expect(ZipDecoder().decodeBytes(renamedCoverZip).files.any((f) => f.name == 'preview.png'), isTrue);
 
     final exportedFile = File('${temp.path}/exported.zip');
     await library.exportZip(

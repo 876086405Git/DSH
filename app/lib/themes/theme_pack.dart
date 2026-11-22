@@ -8,10 +8,13 @@ const userThemePrefix = 'user-';
 
 bool isUserThemeId(String id) => id.startsWith(userThemePrefix);
 
-String userThemeIdFor(String id) => isUserThemeId(id) ? id : '$userThemePrefix$id';
+/// Maps a public theme ID to its local storage folder ID without collisions
+/// (e.g. `ink` -> `user-ink`, `user-ink` -> `user-user-ink`).
+String userThemeIdFor(String publicId) => '$userThemePrefix$publicId';
 
-String publicThemeIdFor(String id) =>
-    isUserThemeId(id) ? id.substring(userThemePrefix.length) : id;
+/// Inverse of [userThemeIdFor] for a local storage folder ID.
+String publicThemeIdFor(String localId) =>
+    isUserThemeId(localId) ? localId.substring(userThemePrefix.length) : localId;
 
 final _themeIdPattern = RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$');
 final _hexColorPattern = RegExp(r'^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$');
@@ -919,6 +922,7 @@ class ThemePack {
     this.components = const ThemeComponentSpec(),
     this.emptyState = const ThemeEmptyStateSpec(),
     this.folderPath,
+    this.assetRevision = 0,
   });
 
   final String id;
@@ -940,7 +944,11 @@ class ThemePack {
   /// Local folder path when loaded from disk. Never serialized into theme.json.
   final String? folderPath;
 
-  String get publicId => publicThemeIdFor(id);
+  /// Monotonic disk revision so replaced same-name images reload instead of
+  /// hitting stale FileImage cache entries. Never serialized into theme.json.
+  final int assetRevision;
+
+  String get publicId => folderPath != null ? publicThemeIdFor(id) : id;
 
   String displayName([String? languageCode]) {
     if (languageCode == 'en' && titleEn != null && titleEn!.trim().isNotEmpty) {
@@ -1102,6 +1110,7 @@ class ThemePack {
     ThemeComponentSpec? components,
     ThemeEmptyStateSpec? emptyState,
     String? folderPath,
+    int? assetRevision,
   }) => ThemePack(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -1119,6 +1128,7 @@ class ThemePack {
     components: components ?? this.components,
     emptyState: emptyState ?? this.emptyState,
     folderPath: folderPath ?? this.folderPath,
+    assetRevision: assetRevision ?? this.assetRevision,
   );
 
   Map<String, Object?> toJson() => {
@@ -1522,7 +1532,8 @@ class ThemePack {
       other.shapes == shapes &&
       other.components == components &&
       other.emptyState == emptyState &&
-      other.folderPath == folderPath;
+      other.folderPath == folderPath &&
+      other.assetRevision == assetRevision;
 
   @override
   int get hashCode => Object.hash(
@@ -1542,5 +1553,6 @@ class ThemePack {
     components,
     emptyState,
     folderPath,
+    assetRevision,
   );
 }

@@ -270,7 +270,11 @@ class WorkshopClient {
   Future<WorkshopSubmissionPage> submissions({required WorkshopCredential credential, int limit = 20, String? cursor, WorkshopSubmissionStatus? status}) async {
     if (limit < 1 || limit > 100) workshopInvalid('workshop_bad_query');
     if (cursor != null) _submissionId(cursor);
-    final map = workshopMap(await _json('GET', '/api/workshop/v1/submissions', headers: await _identity(credential),
+    final headers = {
+      ...await _identity(credential),
+      'X-Workshop-Supported-Kinds': 'pet,companion,theme',
+    };
+    final map = workshopMap(await _json('GET', '/api/workshop/v1/submissions', headers: headers,
       maxBytes: 8 * 1024 * 1024, query: {
       'limit': '$limit', 'cursor': ?cursor, if (status != null) 'status': status.name,
     }));

@@ -205,11 +205,17 @@ class _ThemePacksSectionState extends ConsumerState<ThemePacksSection> {
     );
   }
 
-  Future<void> _openStudio([ThemePack? initial]) async {
+  Future<void> _openStudio([ThemePack? initial, bool editing = false]) async {
+    final existing = ref.read(userThemesProvider).value ?? const <ThemePack>[];
+    final existingIds = {for (final t in existing) t.publicId};
     final saved = await showAppSheet<ThemePack>(
       context,
       isScrollControlled: true,
-      builder: (_) => ThemeStudioSheet(initial: initial),
+      builder: (_) => ThemeStudioSheet(
+        initial: initial,
+        editing: editing,
+        existingIds: existingIds,
+      ),
     );
     if (saved == null || !mounted) return;
     ref.invalidate(userThemesProvider);
@@ -269,7 +275,7 @@ class _ThemePacksSectionState extends ConsumerState<ThemePacksSection> {
             languageCode: lang,
             selected: activeId == pack.id,
             onTap: () => unawaited(_selectPack(pack.id)),
-            onCustomize: () => unawaited(_openStudio(pack)),
+            onCustomize: () => unawaited(_openStudio(pack, true)),
             onExport: () => unawaited(_exportZip(pack)),
             onDelete: () => unawaited(_removePack(pack)),
           ),
@@ -427,9 +433,16 @@ class _ThemePackRow extends StatelessWidget {
 /// Interactive visual Theme Studio with live preview, arbitrary hex colors,
 /// and local PNG / TTF / OTF asset bundling into a valid schema-1 ThemePack.
 class ThemeStudioSheet extends ConsumerStatefulWidget {
-  const ThemeStudioSheet({super.key, this.initial});
+  const ThemeStudioSheet({
+    super.key,
+    this.initial,
+    this.editing = false,
+    this.existingIds = const {},
+  });
 
   final ThemePack? initial;
+  final bool editing;
+  final Set<String> existingIds;
 
   @override
   ConsumerState<ThemeStudioSheet> createState() => _ThemeStudioSheetState();
@@ -474,6 +487,11 @@ class _ThemeStudioSheetState extends ConsumerState<ThemeStudioSheet> {
   late bool _useReadingFontForGreeting;
   late bool _showConnectedSubtitle;
   late ThemeSuggestionsDisplay _suggestionsDisplay;
+  late String _initialLightBgHex;
+  late String _initialDarkBgHex;
+  late String _initialBubbleHex;
+  late String _initialReadingFont;
+  late ThemeSurfacePreset _initialSurfacePreset;
 
   final Map<String, Uint8List> _pickedAssets = {};
   bool _previewDark = false;
@@ -496,31 +514,40 @@ class _ThemeStudioSheetState extends ConsumerState<ThemeStudioSheet> {
   void initState() {
     super.initState();
     final base = widget.initial ?? ThemePack.paper;
-    final isBuiltIn = ThemePack.builtInById(base.id) != null;
+    String nextAvailableId(String stem) {
+      final baseStem = stem.length > 30 ? stem.substring(0, 30).replaceAll(RegExp(r'-+$'), '') : stem;
+      var candidate = '$baseStem-custom';
+      var seq = 2;
+      while (widget.existingIds.contains(candidate) || ThemePack.builtInById(candidate) != null) {
+        candidate = '$baseStem-custom-$seq';
+        seq++;
+      }
+      return candidate;
+    }
+
     _nameController = TextEditingController(
-      text: isBuiltIn ? '${base.name} · 自定义' : base.name,
+      text: widget.editing ? base.name : '${base.name} · 自定义',
     );
     _idController = TextEditingController(
-      text: isBuiltIn ? '${base.publicId}-custom' : base.publicId,
+      text: widget.editing ? base.publicId : nextAvailableId(base.publicId),
     );
     _descController = TextEditingController(text: base.description);
     _seed = base.palette.seed;
     _seedHexController = TextEditingController(text: formatThemeHexColor(_seed));
-    _lightBgHexController = TextEditingController(
-      text: base.palette.light.backdropTop != null
-          ? formatThemeHexColor(base.palette.light.backdropTop!)
-          : '',
-    );
-    _darkBgHexController = TextEditingController(
-      text: base.palette.dark.backdropTop != null
-          ? formatThemeHexColor(base.palette.dark.backdropTop!)
-          : '',
-    );
-    _bubbleHexController = TextEditingController(
-      text: base.palette.light.userBubble != null
-          ? formatThemeHexColor(base.palette.light.userBubble!)
-          : '',
-    );
+    _initialLightBgHex = base.palette.light.backdropTop != null
+        ? formatThemeHexColor(base.palette.light.backdropTop!)
+        : '';
+    _initialDarkBgHex = base.palette.dark.backdropTop != null
+        ? formatThemeHexColor(base.palette.dark.backdropTop!)
+        : '';
+    _initialBubbleHex = base.palette.light.userBubble != null
+        ? formatThemeHexColor(base.palette.light.userBubble!)
+        : '';
+    _initialReadingFont = base.typography.readingFont;
+    _initialSurfacePreset = base.surfaces.preset;
+    _lightBgHexController = TextEditingController(text: _initialLightBgHex);
+    _darkBgHexController = TextEditingController(text: _initialDarkBgHex);
+    _bubbleHexController = TextEditingController(text: _initialBubbleHex);
     _tintHue = base.palette.tintHue ?? 74;
     _tintChroma = base.palette.tintChroma;
     _glowOpacity = base.palette.glowOpacity;
@@ -568,39 +595,74 @@ class _ThemeStudioSheetState extends ConsumerState<ThemeStudioSheet> {
   }
 
   ThemePack _buildDraftPack({required String id, required String name}) {
-    final lightBg = parseThemeHexColor(_lightBgHexController.text);
-    final darkBg = parseThemeHexColor(_darkBgHexController.text);
-    final lightBubble = parseThemeHexColor(_bubbleHexController.text);
+    final base = widget.initial ?? ThemePack.paper;
+    final lightBgText = _lightBgHexController.text.trim();
+    final darkBgText = _darkBgHexController.text.trim();
+    final bubbleText = _bubbleHexController.text.trim();
+    final lightBgEdited = lightBgText != _initialLightBgHex;
+    final darkBgEdited = darkBgText != _initialDarkBgHex;
+    final bubbleEdited = bubbleText != _initialBubbleHex;
+    final surfacePresetEdited = _surfacePreset != _initialSurfacePreset;
+    final readingFontEdited = _readingFont != _initialReadingFont;
+    final lightBg = parseThemeHexColor(lightBgText);
+    final darkBg = parseThemeHexColor(darkBgText);
+    final lightBubble = parseThemeHexColor(bubbleText);
     final isPaper = _surfacePreset == ThemeSurfacePreset.paper;
-    final baseLight = widget.initial?.palette.light ?? const ThemeColorOverrides();
-    final baseDark = widget.initial?.palette.dark ?? const ThemeColorOverrides();
+    final baseLight = base.palette.light;
+    final baseDark = base.palette.dark;
+    final seedEdited = _seed != base.palette.seed;
 
     return ThemePack(
       id: id,
       name: name,
-      titleZh: name,
-      titleEn: name,
+      titleZh: widget.editing && name == base.name ? base.titleZh : name,
+      titleEn: widget.editing && name == base.name ? base.titleEn : name,
       description: _descController.text.trim(),
-      tags: [
-        _surfacePreset.name,
-        if (_readingFont != 'system' && !ThemeTypographySpec.isCustomFontAsset(_readingFont)) _readingFont,
-        if (_backdropImage != null) 'wallpaper',
-      ],
-      folderPath: widget.initial?.folderPath,
+      tags: widget.editing && base.tags.isNotEmpty
+          ? base.tags
+          : [
+              _surfacePreset.name,
+              if (_readingFont != 'system' && !ThemeTypographySpec.isCustomFontAsset(_readingFont)) _readingFont,
+              if (_backdropImage != null) 'wallpaper',
+            ],
+      author: widget.editing ? base.author : null,
+      license: widget.editing ? base.license : null,
+      source: widget.editing ? base.source : null,
+      folderPath: base.folderPath,
       palette: ThemePaletteSpec(
         seed: _seed,
+        seedDark: seedEdited ? null : base.palette.seedDark,
         tintHue: _tintHue,
         tintChroma: _tintChroma,
         glowOpacity: _glowOpacity,
         light: ThemeColorOverrides(
-          backdropTop: lightBg ?? (isPaper ? 0xFFF7F4EC : null),
-          backdropBottom: lightBg ?? (isPaper ? 0xFFF5F1E7 : null),
-          userBubble: lightBubble ?? (isPaper ? 0xFFECE8E2 : null),
-          onUserBubble: lightBubble != null
-              ? (ThemeData.estimateBrightnessForColor(Color(lightBubble)) == Brightness.dark
-                  ? 0xFFF7F7F7
-                  : 0xFF1F1E1B)
-              : (isPaper ? 0xFF1F1E1B : null),
+          backdropTop: lightBgEdited
+              ? lightBg
+              : (baseLight.backdropTop ?? (isPaper ? 0xFFF7F4EC : null)),
+          backdropBottom: lightBgEdited
+              ? lightBg
+              : (baseLight.backdropBottom ?? (isPaper ? 0xFFF5F1E7 : null)),
+          glowPrimary: baseLight.glowPrimary,
+          glowSecondary: baseLight.glowSecondary,
+          surface: baseLight.surface,
+          onSurface: baseLight.onSurface,
+          onSurfaceVariant: baseLight.onSurfaceVariant,
+          outline: baseLight.outline,
+          outlineVariant: baseLight.outlineVariant,
+          primary: seedEdited ? null : baseLight.primary,
+          onPrimary: baseLight.onPrimary,
+          primaryContainer: baseLight.primaryContainer,
+          onPrimaryContainer: baseLight.onPrimaryContainer,
+          userBubble: bubbleEdited
+              ? lightBubble
+              : (baseLight.userBubble ?? (isPaper ? 0xFFECE8E2 : null)),
+          onUserBubble: bubbleEdited
+              ? (lightBubble != null
+                  ? (ThemeData.estimateBrightnessForColor(Color(lightBubble)) == Brightness.dark
+                      ? 0xFFF7F7F7
+                      : 0xFF1F1E1B)
+                  : null)
+              : (baseLight.onUserBubble ?? (isPaper ? 0xFF1F1E1B : null)),
           assistantBubble: baseLight.assistantBubble,
           onAssistantBubble: baseLight.onAssistantBubble,
           codeWellBg: baseLight.codeWellBg,
@@ -609,10 +671,25 @@ class _ThemeStudioSheetState extends ConsumerState<ThemeStudioSheet> {
           codeWellBorder: baseLight.codeWellBorder,
         ),
         dark: ThemeColorOverrides(
-          backdropTop: darkBg ?? (isPaper ? 0xFF181614 : null),
-          backdropBottom: darkBg ?? (isPaper ? 0xFF161412 : null),
-          userBubble: isPaper ? 0xFF2F2A25 : baseDark.userBubble,
-          onUserBubble: isPaper ? 0xFFECE9E2 : baseDark.onUserBubble,
+          backdropTop: darkBgEdited
+              ? darkBg
+              : (baseDark.backdropTop ?? (isPaper ? 0xFF181614 : null)),
+          backdropBottom: darkBgEdited
+              ? darkBg
+              : (baseDark.backdropBottom ?? (isPaper ? 0xFF161412 : null)),
+          glowPrimary: baseDark.glowPrimary,
+          glowSecondary: baseDark.glowSecondary,
+          surface: baseDark.surface,
+          onSurface: baseDark.onSurface,
+          onSurfaceVariant: baseDark.onSurfaceVariant,
+          outline: baseDark.outline,
+          outlineVariant: baseDark.outlineVariant,
+          primary: seedEdited ? null : baseDark.primary,
+          onPrimary: baseDark.onPrimary,
+          primaryContainer: baseDark.primaryContainer,
+          onPrimaryContainer: baseDark.onPrimaryContainer,
+          userBubble: baseDark.userBubble ?? (isPaper ? 0xFF2F2A25 : null),
+          onUserBubble: baseDark.onUserBubble ?? (isPaper ? 0xFFECE9E2 : null),
           assistantBubble: baseDark.assistantBubble,
           onAssistantBubble: baseDark.onAssistantBubble,
           codeWellBg: baseDark.codeWellBg,
@@ -623,7 +700,15 @@ class _ThemeStudioSheetState extends ConsumerState<ThemeStudioSheet> {
       ),
       surfaces: ThemeSurfaceSpec(
         preset: _surfacePreset,
-        hairlineWidth: isPaper || _surfacePreset == ThemeSurfacePreset.outlined ? 1.0 : 0.6,
+        chromeBlur: surfacePresetEdited ? null : base.surfaces.chromeBlur,
+        sheetBlur: surfacePresetEdited ? null : base.surfaces.sheetBlur,
+        cardOpacity: surfacePresetEdited ? null : base.surfaces.cardOpacity,
+        pillOpacity: surfacePresetEdited ? null : base.surfaces.pillOpacity,
+        hairlineWidth: surfacePresetEdited
+            ? (isPaper || _surfacePreset == ThemeSurfacePreset.outlined ? 1.0 : 0.6)
+            : base.surfaces.hairlineWidth,
+        rimOpacity: surfacePresetEdited ? null : base.surfaces.rimOpacity,
+        shadowOpacity: surfacePresetEdited ? null : base.surfaces.shadowOpacity,
         backdropImage: _backdropImage,
         backdropOpacity: _backdropOpacity,
         backdropRepeat: _backdropRepeat,
@@ -631,14 +716,19 @@ class _ThemeStudioSheetState extends ConsumerState<ThemeStudioSheet> {
       typography: ThemeTypographySpec(
         uiFont: _uiFont,
         readingFont: _readingFont,
-        headingFont: _readingFont,
+        headingFont: readingFontEdited ? _readingFont : base.typography.headingFont,
         codeFont: _codeFont,
+        readingScale: base.typography.readingScale,
         readingLineHeight: _readingLineHeight,
-        headingScale: _useReadingFontForGreeting ? 1.12 : 1.0,
+        headingScale: _useReadingFontForGreeting != base.emptyState.useReadingFontForGreeting
+            ? (_useReadingFontForGreeting ? 1.12 : 1.0)
+            : base.typography.headingScale,
       ),
       shapes: ThemeShapeSpec(
         cornerScale: _cornerScale,
-        borderWidth: isPaper || _surfacePreset == ThemeSurfacePreset.outlined ? 1.0 : 0.6,
+        borderWidth: surfacePresetEdited
+            ? (isPaper || _surfacePreset == ThemeSurfacePreset.outlined ? 1.0 : 0.6)
+            : base.shapes.borderWidth,
         turnGap: _turnGap,
         inTurnGap: _inTurnGap,
         gutter: _gutter,
@@ -760,11 +850,22 @@ class _ThemeStudioSheetState extends ConsumerState<ThemeStudioSheet> {
       _saving = true;
       _error = null;
     });
+    final editingSameId = widget.editing && widget.initial != null && rawId == widget.initial!.publicId;
+    if (!editingSameId && widget.existingIds.contains(rawId)) {
+      setState(
+        () => _error = english
+            ? 'A theme with ID "$rawId" already exists. Pick a different ID.'
+            : '主题 ID「$rawId」已存在，请换一个 ID 以免覆盖原主题。',
+      );
+      return;
+    }
     try {
       final pack = _buildDraftPack(id: rawId, name: name);
       final saved = await ref.read(themeLibraryProvider).saveCustom(
         pack,
         assets: _pickedAssets,
+        allowOverwrite: editingSameId,
+        editingLocalId: editingSameId ? widget.initial!.id : null,
       );
       if (!mounted) return;
       Navigator.of(context).pop(saved);

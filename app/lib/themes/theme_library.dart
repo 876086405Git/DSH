@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show FileImage, PaintingBinding;
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -186,29 +187,37 @@ class ThemeLibrary {
       ),
     );
     ThemeFonts.instance.forget(id);
+    await _evictFolderImages(Directory('${root.path}/$id'));
     if (backup != null) await _discard(Directory(backup));
     return (id: id, replaced: backup != null);
   });
 
   /// Saves a user-created or edited theme pack directly into the local library.
-  /// Any referenced asset not provided in [assets] is preserved from
-  /// [pack.folderPath] (or the existing folder for the same id) when present.
+  /// [pack.id] must be the public theme ID (unless [editingLocalId] is given).
+  /// When [allowOverwrite] is false, an existing folder with the same ID is
+  /// rejected with `theme_exists` instead of silently replacing it.
   Future<ThemePack> saveCustom(
     ThemePack pack, {
     Map<String, Uint8List> assets = const {},
+    bool allowOverwrite = true,
+    String? editingLocalId,
   }) => _exclusive(() async {
     final root = await _root();
     await _tidy(root);
     await root.create(recursive: true);
-    final publicId = publicThemeIdFor(pack.id);
+    final publicId = editingLocalId != null ? publicThemeIdFor(editingLocalId) : pack.id;
     if (!isValidThemeId(publicId)) {
       throw const ThemeImportException(ThemeImportProblem.badPack, 'id');
     }
     final localId = userThemeIdFor(publicId);
+    final live = Directory('${root.path}/$localId');
+    if (!allowOverwrite && await live.exists()) {
+      throw const ThemeImportException(ThemeImportProblem.badPack, 'theme_exists');
+    }
     final mergedAssets = <String, Uint8List>{...assets};
     final sourceFolders = <String>[
       if (pack.folderPath != null) pack.folderPath!,
-      '${root.path}/$localId',
+      if (allowOverwrite) '${root.path}/$localId',
     ];
     for (final name in <String>{...pack.referencedImages, ...pack.referencedFonts}) {
       if (mergedAssets.containsKey(name)) continue;
@@ -234,9 +243,7 @@ class ThemeLibrary {
       for (final entry in validated.assets.entries) {
         await File('${staging.path}/${entry.key}').writeAsBytes(entry.value, flush: true);
       }
-      final storedJson = {...validated.json, 'id': localId};
-      await File('${staging.path}/theme.json').writeAsString(jsonEncode(storedJson), flush: true);
-      final live = Directory('${root.path}/$localId');
+      await File('${staging.path}/theme.json').writeAsString(jsonEncode(validated.json), flush: true);
       final old = Directory('${root.path}/.old-$stamp-$localId');
       final replaced = await live.exists();
       if (replaced) await live.rename(old.path);
@@ -248,6 +255,7 @@ class ThemeLibrary {
       }
       if (replaced) await _discard(old);
       ThemeFonts.instance.forget(localId);
+      await _evictFolderImages(live);
       return await _load(root, localId);
     } finally {
       if (await staging.exists()) await _discard(staging);
@@ -403,12 +411,17 @@ class ThemeLibrary {
 
   Future<ThemePack> _load(Directory root, String id) async {
     final dir = '${root.path}/$id';
-    final rawText = await File('$dir/theme.json').readAsString();
+    final jsonFile = File('$dir/theme.json');
+    final rawText = await jsonFile.readAsString();
     final json = jsonDecode(rawText);
     if (json is! Map<String, Object?>) throw const FormatException('theme.json');
     final publicId = publicThemeIdFor(id);
     final normalized = {...json, 'id': publicId};
-    final pack = ThemePack.parse(normalized, folderPath: dir).copyWith(id: id);
+    final revision = (await jsonFile.lastModified()).microsecondsSinceEpoch;
+    final pack = ThemePack.parse(normalized, folderPath: dir).copyWith(
+      id: id,
+      assetRevision: revision,
+    );
     for (final asset in <String>{...pack.referencedImages, ...pack.referencedFonts}) {
       if (!await File('$dir/$asset').exists()) {
         throw const FormatException('theme.json: missing asset');
@@ -457,6 +470,20 @@ Future<void> _discard(Directory dir) async {
     await dir.delete(recursive: true);
   } on FileSystemException {
     // Cleaned up on a subsequent tidy.
+  }
+}
+
+Future<void> _evictFolderImages(Directory dir) async {
+  try {
+    if (!await dir.exists()) return;
+    final cache = PaintingBinding.instance.imageCache;
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is File && entity.path.toLowerCase().endsWith('.png')) {
+        cache.evict(FileImage(entity));
+      }
+    }
+  } on Object {
+    // Pure Dart tests without PaintingBinding initialized.
   }
 }
 
@@ -532,17 +559,16 @@ Future<({String id, String? backup})> _installThemeArchive(
     final pack = validated.pack;
     if (receiptJson != null) {
       final receipt = WorkshopReceipt.fromJson(jsonDecode(receiptJson));
-      if (receipt.kind != 'theme' || receipt.id != pack.publicId) {
+      if (receipt.kind != 'theme' || receipt.id != pack.id) {
         throw const ThemeImportException(ThemeImportProblem.badPack, 'workshop_identity');
       }
     }
-    final id = userThemeIdFor(pack.publicId);
+    final id = userThemeIdFor(pack.id);
     await staging.create(recursive: true);
     for (final entry in validated.assets.entries) {
       await File('${staging.path}/${entry.key}').writeAsBytes(entry.value, flush: true);
     }
-    final kept = {...validated.json, 'id': id};
-    await File('${staging.path}/theme.json').writeAsString(jsonEncode(kept), flush: true);
+    await File('${staging.path}/theme.json').writeAsString(jsonEncode(validated.json), flush: true);
     if (receiptJson != null) {
       await File('${staging.path}/$workshopReceiptName').writeAsString(receiptJson, flush: true);
     }
@@ -619,7 +645,7 @@ Future<void> _exportThemePack((String, String, Map<String, String>) args) async 
     }
     final mergedJson = <String, Object?>{
       ...decoded,
-      'id': attribution['id'] ?? publicThemeIdFor((decoded['id'] as String?) ?? ''),
+      'id': attribution['id'] ?? decoded['id'],
       if (attribution['author'] != null) 'author': attribution['author'],
       if (attribution['license'] != null) 'license': attribution['license'],
       if (attribution['source'] != null) 'source': attribution['source'],

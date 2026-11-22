@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -113,22 +114,65 @@ Uint8List workshopThemePreviewZip((Uint8List, WorkshopPreviewInput) input) {
     workshopInvalid('workshop_bad_metadata');
   }
   final png = preview._png!;
-  final archive = ZipDecoder().decodeBytes(bytes);
-  const name = 'preview.png';
-  final alias = petNameAlias(name);
-  var expanded = png.length;
-  for (final member in archive.files) {
+  final decoded = ZipDecoder().decodeBytes(bytes);
+  const coverName = 'preview.png';
+  final coverAlias = petNameAlias(coverName);
+  final existingAliases = {for (final m in decoded.files) petNameAlias(m.name)};
+  String? renamedFrom;
+  String? renamedTo;
+  for (final member in decoded.files) {
     final existing = petNameAlias(member.name);
-    if (existing == alias || existing.startsWith('$alias/')) {
+    if (existing.startsWith('$coverAlias/')) {
       workshopInvalid('workshop_preview_conflict');
     }
-    expanded += member.size;
+    if (existing == coverAlias) {
+      renamedFrom = member.name;
+      var candidate = 'theme-asset-preview.png';
+      var seq = 1;
+      while (existingAliases.contains(petNameAlias(candidate))) {
+        candidate = 'theme-asset-preview-$seq.png';
+        seq++;
+      }
+      renamedTo = candidate;
+      existingAliases.add(petNameAlias(candidate));
+    }
   }
-  if (archive.files.length >= 256 || expanded > workshopExpandedBytes) {
+  final rebuilt = Archive();
+  var expanded = png.length;
+  for (final member in decoded.files) {
+    if (!member.isFile) continue;
+    final rawBytes = Uint8List.fromList(member.content as List<int>);
+    if (renamedFrom != null && member.name == renamedFrom) {
+      expanded += rawBytes.length;
+      rebuilt.add(ArchiveFile.bytes(renamedTo!, rawBytes));
+    } else if (renamedFrom != null && member.name == 'theme.json') {
+      final parsed = jsonDecode(utf8.decode(rawBytes));
+      if (parsed is Map<String, Object?>) {
+        final surfaces = parsed['surfaces'];
+        if (surfaces is Map && surfaces['backdropImage'] == renamedFrom) {
+          surfaces['backdropImage'] = renamedTo;
+        }
+        final emptyState = parsed['emptyState'];
+        if (emptyState is Map && emptyState['heroImage'] == renamedFrom) {
+          emptyState['heroImage'] = renamedTo;
+        }
+        final updated = Uint8List.fromList(utf8.encode(jsonEncode(parsed)));
+        expanded += updated.length;
+        rebuilt.add(ArchiveFile.bytes('theme.json', updated));
+      } else {
+        expanded += rawBytes.length;
+        rebuilt.add(ArchiveFile.bytes(member.name, rawBytes));
+      }
+    } else {
+      expanded += rawBytes.length;
+      rebuilt.add(ArchiveFile.bytes(member.name, rawBytes));
+    }
+  }
+  if (rebuilt.files.length >= 256 || expanded > workshopExpandedBytes) {
     workshopInvalid('workshop_body_too_large');
   }
-  archive.add(ArchiveFile.bytes(name, png));
-  final encoded = ZipEncoder().encode(archive);
+  rebuilt.add(ArchiveFile.bytes(coverName, png));
+  final encoded = ZipEncoder().encode(rebuilt);
   if (encoded.length > workshopArchiveBytes) {
     workshopInvalid('workshop_body_too_large');
   }

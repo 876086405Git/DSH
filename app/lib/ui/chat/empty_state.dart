@@ -400,6 +400,7 @@ class ChatEmptyState extends StatelessWidget {
                 borderRadius: themeStyle.scaledBorderRadius(AppShape.md),
                 child: Image.file(
                   File('${themeStyle.folderPath}/${emptySpec.heroImage}'),
+                  key: ValueKey('${themeStyle.folderPath}/${emptySpec.heroImage}#${themeStyle.assetRevision}'),
                   height: compact ? 48 : 64,
                   fit: BoxFit.contain,
                   errorBuilder: (_, _, _) => badge(),

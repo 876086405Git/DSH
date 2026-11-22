@@ -41,6 +41,7 @@ class DshThemeStyle extends ThemeExtension<DshThemeStyle> {
 
   String? get packId => pack?.id;
   String? get folderPath => pack?.folderPath;
+  int get assetRevision => pack?.assetRevision ?? 0;
 
   ThemeSurfaceSpec get surfaces => pack?.surfaces ?? const ThemeSurfaceSpec();
   ThemeTypographySpec get typography => pack?.typography ?? const ThemeTypographySpec();

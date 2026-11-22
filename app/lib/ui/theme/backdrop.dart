@@ -73,6 +73,7 @@ class AppBackdrop extends StatelessWidget {
                   opacity: themeStyle.surfaces.backdropOpacity.clamp(0.0, 1.0),
                   child: Image.file(
                     File('$packFolder/$packImage'),
+                    key: ValueKey('$packFolder/$packImage#${themeStyle.assetRevision}'),
                     fit: themeStyle.surfaces.backdropRepeat ? BoxFit.none : BoxFit.cover,
                     repeat: themeStyle.surfaces.backdropRepeat ? ImageRepeat.repeat : ImageRepeat.noRepeat,
                     filterQuality: FilterQuality.medium,
