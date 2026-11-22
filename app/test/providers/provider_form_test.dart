@@ -578,8 +578,21 @@ void main() {
         'baseURL': 'https://gw.example.com/v1',
         'apiKeyEnv': 'CUSTOM_MY_GATEWAY_API_KEY',
         'models': [
-          {'id': 'deepseek-v4-pro', 'name': 'DeepSeek V4 Pro', 'contextWindow': 1048576},
-          {'id': 'qwen3-coder', 'name': 'Qwen3 Coder', 'contextWindow': 262144, 'maxTokens': 65536},
+          {
+            'id': 'deepseek-v4-pro',
+            'name': 'DeepSeek V4 Pro',
+            'contextWindow': 1048576,
+            'input': ['text', 'image'],
+            'reasoningEfforts': {'off': null, 'low': 'low', 'medium': 'medium', 'high': 'high'},
+          },
+          {
+            'id': 'qwen3-coder',
+            'name': 'Qwen3 Coder',
+            'contextWindow': 262144,
+            'maxTokens': 65536,
+            'input': ['text', 'image'],
+            'reasoningEfforts': {'off': null, 'low': 'low', 'medium': 'medium', 'high': 'high'},
+          },
         ],
         'route': 'custom-my-gateway',
       });
@@ -641,7 +654,8 @@ void main() {
       await settle(tester);
       expect(find.text('模型 · 1'), findsOneWidget);
 
-      // Anthropic drops a pasted /v1; the hand-added model is saved as typed.
+      // Anthropic drops a pasted /v1; the hand-added model is saved with the
+      // image / thinking defaults.
       await tester.tap(find.text('Anthropic'));
       await _type(tester, 'Base URL', 'https://relay.example.cn/v1/');
       await _type(tester, 'API Key', 'sk-ant-1');
@@ -652,7 +666,11 @@ void main() {
       expect(created['baseURL'], 'https://relay.example.cn');
       expect(created['displayName'], 'relay.example.cn', reason: 'no name: the host');
       expect(created['models'], [
-        {'id': 'qwen3-coder'},
+        {
+          'id': 'qwen3-coder',
+          'input': ['text', 'image'],
+          'reasoningEfforts': {'off': null, 'low': 'low', 'medium': 'medium', 'high': 'high'},
+        },
       ]);
     });
 
