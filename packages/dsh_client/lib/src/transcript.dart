@@ -289,7 +289,11 @@ class ChatTranscript {
     // Only these appended events change the two projections. Snapshots,
     // history and replacements still invalidate both through appended == null.
     if (appended == null || appended is TodoWriteEvent || appended is TurnStartedEvent) _todos = null;
-    if (appended == null || appended.type == 'goal/change' || appended.type == 'user/message') _goal = null;
+    if (appended == null ||
+        appended.type == 'goal/change' ||
+        (appended.type == 'user/message' && asMap(appended.data['source'])?['kind'] == 'goal')) {
+      _goal = null;
+    }
   }
 
   List<ChatItem> get items {
