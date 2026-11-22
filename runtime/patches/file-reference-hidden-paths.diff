@@ -1,0 +1,12 @@
+--- a/node_modules/@deepseek-ai/dsh-file-reference-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-file-reference-local/lib/index.js
+@@ -87 +87,3 @@
+-		return rankCandidates((await this.indexFor(signal)).filter((candidate) => visibleForGlobalQuery(candidate.path, query)), query, this.config.maxResults);
++		const indexed = await this.indexFor(signal);
++		const visible = query.startsWith(".") ? indexed : indexed.filter(({ path }) => !path.startsWith(".") && !path.includes("/."));
++		return rankCandidates(visible, query, this.config.maxResults);
+@@ -244,4 +245,0 @@
+-function visibleForGlobalQuery(path, query) {
+-	if (query.startsWith(".") || query.includes("/.")) return true;
+-	return !path.split("/").some((segment) => segment.startsWith("."));
+-}
