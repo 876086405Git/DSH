@@ -57,7 +57,7 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
     guard(id, rev, controller.signal, owner, store.stored);
     const start = performance.now();
     const claim = await store.claimStep(id, rev, key, {reserveMs,
-      retryKnownSafe: stepOf(store.read(id), key, rev)?.state === 'waiting'});
+      retryKnownSafe: stepOf(store.stored(id), key, rev)?.state === 'waiting'});
     const clock = new AbortController();
     // The reserve is capped at the deadline, so both can fire together; the deadline is the real reason.
     const timer = setTimeout(() => clock.abort(new ReceiptTaskError(
@@ -75,8 +75,7 @@ export function createReceiptsToSheetRunner({ctx, store, execution}) {
         return job({claim, signal: fused, current: read => { fused.throwIfAborted(); return current(read); }, elapsed: () => elapsed(start)});
       };
       const result = owner ? await owner.runTurn(invoke) : await invoke();
-      const original = stepOf(store.read(id), key, rev);
-      if (original.finishedAtMs === null)
+      if (stepOf(store.stored(id), key, rev).finishedAtMs === null)
         await store.finishStep(claim, {state: 'done', reason: null, result: result ?? null, elapsedMs: elapsed(start)});
       return result;
     } catch (caught) {

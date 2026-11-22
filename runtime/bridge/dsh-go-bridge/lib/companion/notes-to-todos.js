@@ -58,7 +58,7 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
   async function segment(id, rev, key, reserveMs, controller, owner, job) {
     const pause = guard(id, rev, controller.signal, owner).agreement.afterExit === 'pause';
     const claim = await store.claimStep(id, rev, key, {reserveMs,
-      retryKnownSafe: step(store.read(id), key, rev)?.state === 'waiting'});
+      retryKnownSafe: step(store.stored(id), key, rev)?.state === 'waiting'});
     const start = performance.now(), clock = new AbortController();
     // The reserve is capped at the deadline, so both can fire together; the deadline is the real reason.
     const timeout = setTimeout(() => clock.abort(new NotesTaskError(
@@ -75,8 +75,7 @@ export function createNotesToTodosRunner({ctx, store, execution}) {
         return job({claim, signal: AbortSignal.any([signal, turnSignal]),
           guard: read => {turnSignal.throwIfAborted(); return current(read);}, elapsed: () => duration(start)});
       });
-      const latest = store.read(id), original = step(latest, key, rev);
-      if (original.finishedAtMs === null)
+      if (step(store.stored(id), key, rev).finishedAtMs === null)
         await store.finishStep(claim, {state: 'done', reason: null, result: result ?? null, elapsedMs: duration(start)});
       return result;
     } catch (caught) {
