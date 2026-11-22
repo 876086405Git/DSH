@@ -2,6 +2,8 @@ import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
 import 'package:dsh_app/ui/engine/engine_screen.dart';
+import 'package:dsh_app/ui/engine/log_view.dart';
+import 'package:dsh_app/ui/shell/page_frame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -15,8 +17,15 @@ class _Runtime extends RecordingRuntime {
   Future<void> resetKeeping(ResetKeep keep) async => resets.add(keep);
 }
 
+class _Logs extends LocalRuntimeLogsController {
+  @override
+  List<String> build() => const [];
+
+  void show(String line) => state = [line];
+}
+
 void main() {
-  Future<_Runtime> pump(WidgetTester tester, RuntimePhase phase) async {
+  Future<_Runtime> pump(WidgetTester tester, RuntimePhase phase, {_Logs? logs}) async {
     final runtime = _Runtime(LocalRuntimeState(loaded: true, status: RuntimeStatus(phase: phase)));
     usePhoneSurface(tester);
     await tester.pumpWidget(
@@ -25,6 +34,7 @@ void main() {
         brightness: Brightness.light,
         overrides: [
           localRuntimeProvider.overrideWith(() => runtime),
+          if (logs != null) localRuntimeLogsProvider.overrideWith(() => logs),
           runtimeBridgeProvider.overrideWithValue(FakeBridge()),
           settingsProvider.overrideWith(() => FakeSettings(const AppSettings(loaded: true))),
         ],
@@ -33,6 +43,20 @@ void main() {
     await tester.pump();
     return runtime;
   }
+
+  testWidgets('log batches update the terminal without rebuilding the engine page', (tester) async {
+    final logs = _Logs();
+    await pump(tester, RuntimePhase.installed, logs: logs);
+    await tester.scrollUntilVisible(find.byType(TerminalCard), 300, scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    final page = tester.widget<AppPage>(find.byType(AppPage));
+    for (var i = 0; i < 4; i++) {
+      logs.show('line $i');
+      await tester.pump();
+      expect(tester.widget<AppPage>(find.byType(AppPage)), same(page));
+      expect(tester.widget<TerminalCard>(find.byType(TerminalCard)).lines, ['line $i']);
+    }
+  });
 
   testWidgets('stop cancellation leaves engine running, confirmation stops', (tester) async {
     final runtime = await pump(tester, RuntimePhase.running);
