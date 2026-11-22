@@ -222,6 +222,14 @@
         }
       }
     },
+    "file-reference-basename-match.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-file-reference-local/lib/index.js": {
+          "after": "3491e50c9cd4031027331dc21a3de6d84530c87b9d351dcee24d31875750263c",
+          "before": "6b9316d8cc57c228fabff1f2b8bbea612ff1a48a58781cf7ab014546ce741082"
+        }
+      }
+    },
     "file-reference-hidden-paths.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-file-reference-local/lib/index.js": {
@@ -301,6 +309,14 @@
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "da9d664272068326529de7774909387499a0a1bc6d4e8e5219a43977ad1efcf1",
           "before": "6f0fdc6a6e4cd2bc9d969ba582636729ade450e415f0fc20bbef9da3f65823f3"
+        }
+      }
+    },
+    "job-release-producer-cancel.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-jobs-local/lib/index.js": {
+          "after": "57fb0fa47e25fee6e87e6952138d2899c0cc4f12b27e4d16433fba5ae8ea69fd",
+          "before": "223f6569c2be54c26cf537ed8014b3330ea2f69cc0a3e3d5bba46c2fc413cbf8"
         }
       }
     },
@@ -423,8 +439,8 @@
     "ohos-jobs-active.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-jobs-local/lib/index.js": {
-          "after": "5585ee7025496ad1ab9cdb46bcb58307a971bee7db39dab6eebc76ded9e53186",
-          "before": "223f6569c2be54c26cf537ed8014b3330ea2f69cc0a3e3d5bba46c2fc413cbf8"
+          "after": "4b9af1409a81c9324c5109ca5a542d6a6b3e2d5de4d2f351a40fd892896ef86c",
+          "before": "57fb0fa47e25fee6e87e6952138d2899c0cc4f12b27e4d16433fba5ae8ea69fd"
         }
       }
     },
