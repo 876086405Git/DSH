@@ -1383,6 +1383,9 @@ bool _closes(String line, String fence) {
   return t.codeUnits.every((c) => c == ch);
 }
 
+/// A line starting with `{` after what `trimLeft` strips (U+0085 is not in `\s`).
+final _bareObjectLine = RegExp(r'(?:^|\n)(?:[^\S\n]|\u0085)*\{');
+
 /// 模型偶尔不写围栏:把视图 JSON 直接当正文发出来。渲染前把这些裸 JSON
 /// 补成 ```` ```dsh-ui ```` 围栏,
 /// 后面的围栏链路就能照常画成卡片。
@@ -1390,7 +1393,7 @@ bool _closes(String line, String fence) {
 /// 只认「单独成段、能完整解析成视图」的 JSON 对象:行内提到的 JSON、已有围栏
 /// 里的内容、还没写完的流式半截都原样保留。
 String fenceBareDshUiViews(String markdown) {
-  if (!markdown.contains('{') || !markdown.contains('"')) return markdown;
+  if (!markdown.contains('"') || !_bareObjectLine.hasMatch(markdown)) return markdown;
   final lines = markdown.split('\n');
   List<String>? out;
   var i = 0;
