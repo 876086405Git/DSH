@@ -180,13 +180,12 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
   /// fields show what this one has.
   Future<void> _choosePreset(CompanionVoiceSettings s, String id) async {
     final merged = _fromFields(s);
-    _seen = merged;
     final next = merged.copyWith(preset: id);
+    _seen = next;
     _presetKey.text = next.presetKey;
     _presetVoice.text = next.presetVoice;
     setState(() => _preview = null);
     await _store.update(next);
-    _seen = next;
   }
 
   /// Size and, for WAV, length of the kept recording, for its row.

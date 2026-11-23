@@ -159,6 +159,36 @@ void main() {
       addTearDown(tester.view.reset);
       SharedPreferences.setMockInitialValues({});
       final calls = <MethodCall>[];
+      const secureChannel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+      final secureValues = <String, String>{};
+      final release = Completer<void>();
+      var armed = false;
+      var secureEntered = 0;
+      var secureReturned = 0;
+      var heldEntered = 0;
+      var heldReturned = 0;
+      var timerStarted = false;
+      var timerAdvanced = false;
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(secureChannel, (call) async {
+        final args = call.arguments as Map;
+        final storageKey = args['key']! as String;
+        if (call.method == 'read') return secureValues[storageKey];
+        if (call.method != 'write') throw UnsupportedError(call.method);
+        final value = args['value']! as String;
+        secureEntered++;
+        if (armed &&
+            storageKey == 'companion_voice_preset_keys' &&
+            (jsonDecode(value) as Map)['mimo'] == 'mimo-edited') {
+          armed = false;
+          heldEntered++;
+          await release.future;
+          heldReturned++;
+        }
+        secureValues[storageKey] = value;
+        secureReturned++;
+        return null;
+      });
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (call) async {
         calls.add(call);
         return switch (call.method) {
@@ -191,6 +221,18 @@ void main() {
           }),
           200,
         );
+      });
+      addTearDown(() async {
+        // Release while both real controllers and both platform handlers live.
+        armed = false;
+        if (!release.isCompleted) release.complete();
+        await tester.pump();
+        if (timerStarted && !timerAdvanced) {
+          await tester.pump(const Duration(milliseconds: 400));
+        }
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+        messenger.setMockMethodCallHandler(secureChannel, null);
       });
       await tester.pumpWidget(
         ProviderScope(
@@ -231,6 +273,83 @@ void main() {
       expect(sent.single.url.host, 'api.xiaomimimo.com');
       expect(sent.single.headers['api-key'], 'mimo-key');
       expect(((jsonDecode(sent.single.body) as Map)['audio'] as Map)['voice'], '茉莉');
+
+      // The public notifier seeds A/B/C; only the following UI choices are
+      // under the held write. No private Page field or replacement notifier.
+      final container = ProviderScope.containerOf(tester.element(find.byType(CompanionVoicePage)));
+      final notifier = container.read(companionVoiceSettingsProvider.notifier);
+      const seedKeys = {'mimo': 'mimo-key', 'bailian': 'bailian-key', 'openai': 'openai-key'};
+      const voices = {'mimo': '茉莉', 'bailian': 'Cherry', 'openai': 'coral'};
+      final seed = notifier.update(
+        container.read(companionVoiceSettingsProvider)!.copyWith(
+          preset: 'mimo',
+          presetKeys: seedKeys,
+          presetVoices: voices,
+        ),
+      );
+      await tester.pump();
+      await seed;
+      await tester.pump();
+      final prefs = await SharedPreferences.getInstance();
+      expect(container.read(companionVoiceSettingsProvider)!.preset, 'mimo');
+      expect((jsonDecode(prefs.getString('companion_voice_v1')!) as Map)['preset'], 'mimo');
+      expect(jsonDecode(secureValues['companion_voice_preset_keys']!), seedKeys);
+      expect(secureReturned, secureEntered);
+
+      // Arrange visibility before arming; no scroll/focus/rebuild after B
+      // returns may repair the stale snapshot that the timer must expose.
+      await tester.scrollUntilVisible(find.text('OpenAI'), -300, scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(key, 200, scrollable: find.byType(Scrollable).first);
+      await tester.pump();
+      expect(find.text('阿里云百炼').hitTestable(), findsOneWidget);
+      expect(find.text('OpenAI').hitTestable(), findsOneWidget);
+      expect(key.hitTestable(), findsOneWidget);
+      final beforeWrites = secureEntered;
+      final beforePending = messenger.pendingMessageCount;
+      const editedKeys = {'mimo': 'mimo-edited', 'bailian': 'bailian-key', 'openai': 'openai-key'};
+      armed = true;
+      timerStarted = true;
+      await tester.enterText(key, 'mimo-edited');
+      await tester.tap(find.text('阿里云百炼'));
+      await tester.pump();
+      expect(heldEntered, 1);
+      expect(heldReturned, 0);
+      expect(secureEntered, beforeWrites + 1);
+      expect(messenger.pendingMessageCount, beforePending + 1);
+      expect(container.read(companionVoiceSettingsProvider)!.preset, 'bailian');
+      expect((jsonDecode(prefs.getString('companion_voice_v1')!) as Map)['preset'], 'bailian');
+
+      await tester.tap(find.text('OpenAI'));
+      await tester.pump();
+      expect(container.read(companionVoiceSettingsProvider)!.preset, 'openai');
+      expect((jsonDecode(prefs.getString('companion_voice_v1')!) as Map)['preset'], 'openai');
+      expect(tester.widget<TextField>(key).controller!.text, 'openai-key');
+      final coral = find.byWidgetPredicate((w) => w is TextField && w.decoration?.hintText == 'coral');
+      expect(tester.widget<TextField>(coral).controller!.text, 'coral');
+      expect(heldReturned, 0);
+      expect(secureEntered, beforeWrites + 1, reason: 'C keeps the already published key map');
+      expect(messenger.pendingMessageCount, beforePending + 1);
+
+      // C's frame has completed. Only the old B storage reply now resumes;
+      // its completion schedules no Page build of its own.
+      release.complete();
+      await tester.pump();
+      expect(heldReturned, 1);
+      expect(secureReturned, secureEntered);
+      expect(messenger.pendingMessageCount, beforePending);
+      expect(jsonDecode(secureValues['companion_voice_preset_keys']!), editedKeys);
+      await tester.pump(const Duration(milliseconds: 400));
+      timerAdvanced = true;
+      await tester.pump();
+      final saved = container.read(companionVoiceSettingsProvider)!;
+      expect(saved.preset, 'openai');
+      expect(saved.presetKeys, editedKeys);
+      expect(saved.presetVoices, voices);
+      expect(jsonDecode(prefs.getString('companion_voice_v1')!), saved.plain());
+      expect(jsonDecode(secureValues['companion_voice_preset_keys']!), editedKeys);
+      expect(secureEntered, beforeWrites + 1, reason: 'the timer has no stale service fields to save');
+      expect(secureReturned, secureEntered);
+      expect(messenger.pendingMessageCount, beforePending);
       await tester.pumpWidget(const SizedBox());
     });
 
