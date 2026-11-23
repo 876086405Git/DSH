@@ -1180,6 +1180,30 @@ void main() {
     expect(store.cards(), isEmpty);
   });
 
+  test('local exact consolidation reads evidence once and only for potentially equal cards', () {
+    for (final (i, text) in ['绿茶。', '红茶。', '绿茶。', '乌龙。'].indexed) {
+      final turn = begin(say('tea-$i', text));
+      expect(call(turn, 'remember-$i', 'remember', {'text': text}).applied, isTrue);
+      store.closeAgentTurn(turn);
+    }
+    var reads = 0, evidenceRows = 0;
+    int? statement;
+    database.trace = SqliteTraceCallback((event) {
+      if (event is SqliteTraceStatement && (event.sql?.contains('SELECT s.*, m.role, m.scope, m.first_seq') ?? false)) {
+        reads++;
+        statement = event.statementAddress;
+      } else if (event is SqliteTraceRow && event.statementAddress == statement) {
+        evidenceRows++;
+      } else if (event is SqliteTraceProfile && event.statementAddress == statement) {
+        statement = null;
+      }
+      return 0;
+    });
+    expect(store.mergeAgentExactDuplicates(), 0);
+    database.trace = null;
+    expect((reads, evidenceRows), (1, 2));
+  });
+
   test('local exact consolidation preserves shared proof alternatives and merges only one same-collection pair', () {
     final one = say('exact-one', '我住在杭州。');
     final firstTurn = begin(one);
