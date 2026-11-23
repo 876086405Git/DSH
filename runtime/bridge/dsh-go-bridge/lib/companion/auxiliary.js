@@ -30,7 +30,8 @@ function validate(value) {
 function validateScreen(value) {
   const keys = ['v', 'instanceId', 'requestId', 'provider', 'model', 'reasoningEffort', 'kind', 'system', 'input', 'image', 'maxTokens'];
   const image = value?.image;
-  if (!fields(value, keys) || value.v !== 1 || value.kind !== 'screen' ||
+  if (!fields(value, keys.filter(key => key !== 'reasoningEffort'), ['reasoningEffort']) ||
+      value.v !== 1 || value.kind !== 'screen' ||
       !['instanceId', 'requestId', 'provider', 'model'].every(key => contextId(value[key])) ||
       value.reasoningEffort !== undefined && !contextId(value.reasoningEffort) ||
       !text(value.system) || !text(value.input) || Buffer.byteLength(value.system) + Buffer.byteLength(value.input) > MAX_BYTES ||
