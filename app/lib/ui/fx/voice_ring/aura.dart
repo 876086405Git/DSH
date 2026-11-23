@@ -35,10 +35,21 @@ const List<SpectrumStop> auraSpectrum = [
   (1, 255, 150, 90),
 ];
 
+Float64List _unitCircle(int segs) {
+  final points = Float64List(segs * 2);
+  for (var i = 0; i < segs; i++) {
+    final th = i / segs * tau;
+    points[2 * i] = math.cos(th);
+    points[2 * i + 1] = math.sin(th);
+  }
+  return points;
+}
+
 /// Builds the ring's frames into buffers it owns.
 class AuraFrameBuilder {
   AuraFrameBuilder({required this.segs, this.rings = 6})
     : frame = OrbFrame([for (var k = 0; k < rings; k++) RingStroke(segs)], light: FrameLight()),
+      _circle = _unitCircle(segs),
       _dirs = Float64List(rings * segs * 2),
       _f = Float64List(rings * segs),
       _rk = Float64List(rings);
@@ -50,6 +61,7 @@ class AuraFrameBuilder {
   /// The spectrum the light carries (the theme's or the author's).
   List<SpectrumStop> stops = auraSpectrum;
 
+  final Float64List _circle;
   final Float64List _dirs;
   final Float64List _f;
   final Float64List _rk;
@@ -107,9 +119,8 @@ class AuraFrameBuilder {
       _rk[k] = r * (1 + gap * (k - (rings - 1) / 2));
       final a = frame.strokes[k].a;
       for (var i = 0; i < segs; i++) {
-        final th = i / segs * tau;
-        final c = math.cos(th);
-        final s = math.sin(th);
+        final c = _circle[2 * i];
+        final s = _circle[2 * i + 1];
         final x = ux * c + vx * s;
         final y = vy * s;
         final z = uz * c + vz * s;
@@ -209,6 +220,7 @@ const FrameTube monoTube = FrameTube(
 class MonoFrameBuilder {
   MonoFrameBuilder({required this.segs, this.rings = 2})
     : frame = OrbFrame([for (var k = 0; k < rings; k++) RingStroke(segs, depth: true)], tube: monoTube),
+      _circle = _unitCircle(segs),
       _xs = Float64List(segs),
       _ys = Float64List(segs),
       _zs = Float64List(segs);
@@ -216,6 +228,7 @@ class MonoFrameBuilder {
   final int rings;
   final int segs;
   final OrbFrame frame;
+  final Float64List _circle;
   final Float64List _xs;
   final Float64List _ys;
   final Float64List _zs;
@@ -285,8 +298,8 @@ class MonoFrameBuilder {
 
       for (var i = 0; i < segs; i++) {
         final th = i / segs * tau;
-        final c = math.cos(th);
-        final s = math.sin(th);
+        final c = _circle[2 * i];
+        final s = _circle[2 * i + 1];
         final rr =
             rk *
             (1 +
