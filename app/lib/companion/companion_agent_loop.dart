@@ -100,6 +100,28 @@ bool _controlRetiresText(CompanionAgentToolCall call, CompanionAgentToolResult r
   return !const ['ask_later', 'cancel', 'postpone'].contains(call.name);
 }
 
+// A later own control invalidates an earlier raw-erase proposal. Its durable
+// card outcome stays, but the old result must not claim it is still pending.
+Map<String, Object?> _withoutRawEraseFields(Map<String, Object?> result) {
+  if (result['type'] != 'tool_result') return result;
+  final content = result['content'];
+  if (content is! String) return result;
+  Object? decoded;
+  try {
+    decoded = jsonDecode(content);
+  } on FormatException {
+    return result;
+  }
+  if (decoded is! Map) return result;
+  const fields = ['pendingRawEraseId', 'rawEraseState', 'rawEraseMessage'];
+  if (!fields.any(decoded.containsKey)) return result;
+  final remaining = Map<String, Object?>.from(decoded);
+  for (final field in fields) {
+    remaining.remove(field);
+  }
+  return {...result, 'content': jsonEncode(remaining)};
+}
+
 Map<String, Object?> _retiredToolResult(Map<String, Object?> result) => {
   ...result,
   'content': jsonEncode(_safeToolOutcome(result['content']! as String)),
@@ -315,6 +337,20 @@ Future<CompanionAgentMessage?> runCompanionAgentLoop({
       }
       if (!isCurrent()) return null;
       final controlChanged = controlRevision() != before;
+      if (retainToolOutcomes && controlChanged) {
+        // Clear only prior outcomes, including when a new remember keeps text.
+        // The current returned result is added below, with any fresh pending.
+        for (var i = 0; i < exchanges.length; i++) {
+          final exchange = exchanges[i];
+          exchanges[i] = (
+            assistant: exchange.assistant,
+            results: [for (final previous in exchange.results) _withoutRawEraseFields(previous)],
+          );
+        }
+        for (var i = 0; i < results.length; i++) {
+          results[i] = _withoutRawEraseFields(results[i]);
+        }
+      }
       final retireText = controlChanged && (!retainToolOutcomes || _controlRetiresText(call, result));
       if (retireText) {
         if (retainToolOutcomes) {
