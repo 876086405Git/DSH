@@ -145,11 +145,11 @@ void main() {
     });
 
     testWidgets('drawer row', (tester) async {
-      SharedPreferences.setMockInitialValues({'companion_name': '小鲸'});
       tester.view.physicalSize = const Size(320 * 2, 200 * 2);
       tester.view.devicePixelRatio = 2;
       addTearDown(tester.view.reset);
-      for (final dark in [false, true]) {
+      for (final (dark, name) in [(false, '鲸鱼娘'), (true, '鲸鱼娘'), (false, null)]) {
+        SharedPreferences.setMockInitialValues({'companion_name': ?name});
         final shot = GlobalKey();
         final base = dark ? buildDarkTheme() : buildLightTheme();
         await tester.pumpWidget(
@@ -175,7 +175,7 @@ void main() {
           ),
         );
         await _settle(tester, 4);
-        await _dump(tester, shot, 'drawer-${dark ? 'dark' : 'light'}.png');
+        await _dump(tester, shot, 'drawer-${dark ? 'dark' : 'light'}${name == null ? '-unnamed' : ''}.png');
       }
     });
   });

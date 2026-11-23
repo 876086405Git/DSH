@@ -21,6 +21,7 @@ import '../../companion/companion_adapt.dart';
 import '../../companion/companion_agent.dart';
 import '../../companion/companion_agent_task_ui.dart';
 import '../../companion/companion_always_on.dart' show companionAlwaysOnOwnerProvider;
+import '../../companion/companion_float.dart' show companionPackNameProvider;
 import '../../state/companion_agent_state.dart';
 import '../../companion/companion_initiative.dart';
 import '../../companion/companion_initiative_owner.dart';
@@ -1648,6 +1649,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _bondTier = 0;
       _resetConversation();
     }
+    if (_character.name != character.name) ref.invalidate(companionPackNameProvider);
     _character = character;
     _characterSourceKey = sourceKey;
   }
