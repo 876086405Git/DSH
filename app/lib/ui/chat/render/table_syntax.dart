@@ -65,6 +65,7 @@ bool _boldHeaders(List<String> lines, Iterable<int> headers, Set<int> breaks) {
 final _fence = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*(`{3,}|~{3,})');
 final _fenceClose = RegExp(r'^[ \t]*(?:>[ \t]?)*[ \t]*(`{3,}|~{3,})[ \t]*$');
 final _delimiterCell = RegExp(r'^\s*:?-+:?\s*$');
+final _nonDelimiter = RegExp(r'[^\s:|-]');
 final _pipe = RegExp(r'(?<!\\)\|');
 
 String _unquoted(String line) => line.trim().replaceFirst(RegExp(r'^(?:>[ \t]?)*'), '').trim();
@@ -72,8 +73,9 @@ String _unquoted(String line) => line.trim().replaceFirst(RegExp(r'^(?:>[ \t]?)*
 /// A GFM delimiter row with as many cells as the header (`a | b` over `---`
 /// is a heading, not a table).
 bool _isDelimiterRow(String line, String header) {
+  if (!line.contains('-')) return false;
   final t = _unquoted(line);
-  if (!t.contains('-')) return false;
+  if (_nonDelimiter.hasMatch(t)) return false;
   final cells = _cellsOf(t);
   return cells.length == _cellsOf(_unquoted(header)).length && cells.every(_delimiterCell.hasMatch);
 }
