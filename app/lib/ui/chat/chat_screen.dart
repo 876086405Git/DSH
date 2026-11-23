@@ -774,6 +774,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     // A new message: the reply being read aloud is old news.
     ref.read(readAloudProvider.notifier).stop();
     _input.clear();
+    // An already empty field does not notify, and the saved draft still holds the attachments.
+    _saveDraft();
     ref.read(composerQuoteProvider.notifier).clear(sessionId);
 
     // One open question and nothing else waiting: the text is its answer
@@ -1034,6 +1036,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     }
     if (_drafts.isEmpty && prompt.attachments.isNotEmpty) {
       setState(() => _drafts = prompt.attachments);
+      _saveDraft();
       restored = true;
     }
     if (restored) _focus.requestFocus();
