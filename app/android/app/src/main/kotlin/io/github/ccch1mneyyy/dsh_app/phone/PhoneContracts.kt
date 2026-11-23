@@ -117,6 +117,8 @@ data class ActionResult(
     val backgroundOpenConfirmed: Boolean = false,
     /** Same-call native navigation facts; never supplied by a tool argument or serialized. */
     internal val navigationWitness: io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillNavigationWitness? = null,
+    /** Comparable local observations only. A screen change does not prove business success. */
+    internal val screenChanged: Boolean? = null,
 )
 
 /** A definite refusal before collection starts; normal empty and partial results have none. */

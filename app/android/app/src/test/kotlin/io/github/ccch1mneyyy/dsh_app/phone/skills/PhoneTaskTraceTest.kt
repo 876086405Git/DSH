@@ -67,7 +67,7 @@ class PhoneTaskTraceTest {
 
     @Test fun onlyExactPublicActionWordsOnStructuralControlsCanAnchor() {
         for ((label, role, anchor) in listOf(
-            Triple("搜索", "按钮", PhoneTaskTrace.Anchor.SEARCH), Triple("Search", "标签", null),
+            Triple("搜索", "按钮", PhoneTaskTrace.Anchor.SEARCH), Triple("Search", "标签", PhoneTaskTrace.Anchor.SEARCH),
             Triple("搜索", "文本", null), Triple(" 搜索 ", "按钮", null), Triple("搜索张三", "按钮", null),
             Triple("发送", "输入框", null))) {
             val trace = PhoneTaskTrace(); val owner = owner(); trace.start(owner)
@@ -142,14 +142,32 @@ class PhoneTaskTraceTest {
         }
     }
 
-    @Test fun secretTargetsAndUncalibratedVisualPointsMakeTheRouteIncomplete() {
-        for (secret in listOf(true, false)) {
-            val trace = PhoneTaskTrace(); val owner = owner(); trace.start(owner)
-            val ticket = if (secret) trace.beginAction(owner, PhoneAction.Type("s91", 32, "SECRET"),
-                target("验证码", "输入框")) else trace.beginAction(owner, PhoneAction.TapXY("s91", 100, 200), null)
-            assertNull(ticket); assertTrue(trace.snapshot(owner)!!.steps.isEmpty())
-            trace.complete(owner, true); assertFalse(trace.snapshot(owner)!!.canDraft)
-        }
+    @Test fun secretTargetsMakeTheTraceIneligible() {
+        val trace = PhoneTaskTrace(); val owner = owner(); trace.start(owner)
+        val ticket = trace.beginAction(owner, PhoneAction.Type("s91", 32, "SECRET"), target("验证码", "输入框"))
+        assertNull(ticket)
+        assertEquals(PhoneTaskTrace.Gap.SECRET_TARGET, trace.snapshot(owner)!!.gap)
+        trace.complete(owner, true)
+        assertFalse(trace.snapshot(owner)!!.canLearn)
+    }
+
+    @Test fun coordinateGestureAndRecoverableErrorsCanTeachButCannotBecomeAReplayRoute() {
+        val trace = PhoneTaskTrace(); val owner = owner(); trace.start(owner)
+        accepted(trace, owner)
+        val failed = trace.beginAction(owner, PhoneAction.Tap("s91", 32), target("Private"))
+        trace.finish(failed, false, false, false)
+        accepted(trace, owner, PhoneAction.TapXY("s91", 99001, 99002), target("发送"))
+        accepted(trace, owner)
+        trace.complete(owner, true)
+        val snapshot = trace.snapshot(owner)!!
+        assertTrue(snapshot.canLearn)
+        assertFalse(snapshot.canDraft)
+        val point = snapshot.steps[2]
+        assertEquals(PhoneTaskTrace.Action.TAP_XY, point.action)
+        assertNull(point.anchor)
+        assertFalse(point.toString().contains("9900"))
+        assertFalse(snapshot.copy(steps = snapshot.steps.dropLast(1)).canLearn)
+        assertFalse(snapshot.copy(userIntervened = true).canLearn)
     }
 
     @Test fun boundsNeverTurnTruncationIntoACompleteRoute() {

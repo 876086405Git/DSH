@@ -1288,7 +1288,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                 io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillNavigationWitness(it.uid, it.version, it.updated, it.signers)
             } else null
             return ActionResult(ok, message + note + visualNote, toSnapshot(snap, text + ocrText).copy(secure = snap.hidden || screenshotSecure),
-                navigationWitness = witness)
+                navigationWitness = witness, screenChanged = changed.takeIf { comparable })
         } finally { cap.recycle() }
     }
 
