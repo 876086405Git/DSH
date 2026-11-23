@@ -119,14 +119,14 @@ void main() {
     );
   });
 
-  testWidgets('skill events and status share one native listen and keep their own data', (tester) async {
+  test('skill events and status share one native listen and keep their own data', () async {
     final native = FakePhoneNative()..install();
     final channel = PhoneChannel();
     final statuses = <PhoneStatus>[];
     final events = <PhoneSkillEvent>[];
     final statusSubscription = channel.statusChanges.listen(statuses.add);
     final eventSubscription = PhoneChannel().skillEvents.listen(events.add);
-    await tester.pump();
+    await pumpEventQueue(times: 1);
     native.push(phoneStatus(taskActive: true, taskId: 7));
     native.pushSkill({'type': 'skillDraft', 'draft': draft()});
     native.pushSkill({
@@ -137,7 +137,7 @@ void main() {
       'change': 'promoted',
       'from': origin,
     });
-    await tester.pump();
+    await pumpEventQueue(times: 1);
     expect(statuses.single.task.id, 7);
     expect((events.first as PhoneSkillDraftEvent).draft.from.taskId, 7);
     final outcome = events.last as PhoneSkillOutcomeEvent;
@@ -146,7 +146,6 @@ void main() {
     await eventSubscription.cancel();
     expect(native.listening, isTrue);
     await statusSubscription.cancel();
-    await tester.pump();
     expect(native.listening, isFalse);
   });
 }
