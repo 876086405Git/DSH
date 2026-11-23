@@ -1830,9 +1830,16 @@ class CompanionMemoryStore {
 
   void _advanceCursor() {
     var cursor = archive['cursor_seq'] as int;
-    for (final event in _db.select('SELECT seq,state FROM memory_events WHERE seq>? ORDER BY seq', [cursor])) {
-      if (event['state'] == 'pending') break;
-      cursor = event['seq'] as int;
+    final statement = _db.prepare('SELECT seq,state FROM memory_events WHERE seq>? ORDER BY seq');
+    try {
+      final events = statement.selectCursor([cursor]);
+      while (events.moveNext()) {
+        final event = events.current;
+        if (event['state'] == 'pending') break;
+        cursor = event['seq'] as int;
+      }
+    } finally {
+      statement.close();
     }
     _db.execute('UPDATE memory_archive SET cursor_seq=? WHERE singleton=1', [cursor]);
   }
