@@ -134,6 +134,7 @@ class CompanionStage extends StatefulWidget {
     required this.controller,
     required this.events,
     this.bare = false,
+    this.viewKey,
   });
 
   final CompanionPackStore store;
@@ -143,6 +144,11 @@ class CompanionStage extends StatefulWidget {
   /// The model alone on a see-through page, without her room around it (the
   /// tavern's visual novel draws its own scene behind).
   final bool bare;
+
+  /// Her room's own: the size and place the person pinches her to are kept
+  /// under this key (her character) and come back next visit. Null elsewhere
+  /// (a call's backdrop, the tavern, a cover), which frame her their own way.
+  final String? viewKey;
 
   @override
   State<CompanionStage> createState() => _CompanionStageState();
@@ -228,9 +234,7 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
       final device = await IslandPlatform.instance.device();
       final quality = cover ? null : await _rememberedQuality();
       if (stale()) return;
-      // Only her room keeps the size and place she was pinched to; a call's
-      // backdrop, the tavern and a cover frame her their own way.
-      final view = cover || widget.bare ? null : await _rememberedView();
+      final view = cover || widget.viewKey == null ? null : await _rememberedView(widget.viewKey!);
       if (stale()) return;
       final query = companionStageQuery(
         ios: defaultTargetPlatform == TargetPlatform.iOS,
@@ -412,12 +416,12 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
     }
   }
 
-  /// This character's pref key, once [_rememberedView] has read it.
+  /// The pref key this stage keeps her room's view under, once it has read it.
   String? _viewKey;
 
-  Future<({double zoom, double x, double y})?> _rememberedView() async {
+  Future<({double zoom, double x, double y})?> _rememberedView(String character) async {
     try {
-      final key = _viewKey = '$_viewKeyPrefix${await widget.store.characterKey() ?? ''}';
+      final key = _viewKey = '$_viewKeyPrefix$character';
       final saved = (await SharedPreferences.getInstance()).getString(key);
       if (saved == null) return null;
       final json = jsonDecode(saved);

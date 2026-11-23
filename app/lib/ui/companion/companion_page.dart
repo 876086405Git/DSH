@@ -3006,7 +3006,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
             child: ExcludeSemantics(
               child:
                   widget.stageBuilder?.call(_stage, events) ??
-                  CompanionStage(key: ValueKey(_stageRun), store: store, controller: _stage, events: events),
+                  CompanionStage(
+                    key: ValueKey(_stageRun),
+                    store: store,
+                    controller: _stage,
+                    events: events,
+                    viewKey: _characterSourceKey ?? '',
+                  ),
             ),
           ),
         if ((showStage && !_stageReady) || (_phase == _Phase.setup && _arriving))
