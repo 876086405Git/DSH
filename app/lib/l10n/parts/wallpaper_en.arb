@@ -6,9 +6,14 @@
   "wallpaperBlur": "Blur",
   "wallpaperLighten": "Lighten",
   "wallpaperDim": "Dim",
+  "wallpaperGuard": "Keep text readable",
+  "wallpaperGuardHint": "Off: blur and brightness follow the sliders exactly, and at 0 you get the original picture",
+  "wallpaperGuardMotionHint": "While an animation plays, only text colours are adjusted; nothing is laid over the picture",
+  "wallpaperPlay": "Play animation",
+  "wallpaperPlayHint": "Shows the first frame when motion is reduced",
   "wallpaperReplace": "Replace picture",
   "wallpaperPreview": "Preview",
-  "wallpaperFooter": "Shown on home, in chats and in the drawer. Lighten applies in light mode, Dim in dark mode; text always stays clear. PNG, JPEG or WebP, up to 15 MB.",
+  "wallpaperFooter": "Shown on home, in chats and in the drawer. Lighten applies in light mode, Dim in dark mode. PNG, JPEG, WebP or GIF, up to 15 MB.",
   "wallpaperChanged": "Wallpaper changed",
   "wallpaperTooLarge": "The picture is over 15 MB",
   "wallpaperUnsupported": "Use a PNG, JPEG or WebP",
@@ -23,5 +28,5 @@
   "wallpaperSampleAnswer": "Yes. Saturday afternoon is sunny with a light breeze and waves under half a metre, the best day this week.",
   "wallpaperSampleNote": "It cools down fast in the evening, so bring a light jacket.",
   "wallpaperSampleTool": "Checked 3 weather sources",
-  "searchKwWallpaper": "background,background image,chat background,custom background,backdrop,blur,photo"
+  "searchKwWallpaper": "background,background image,chat background,custom background,backdrop,blur,photo,animated,gif,live wallpaper"
 }

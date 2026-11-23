@@ -6,9 +6,14 @@
   "wallpaperBlur": "模糊",
   "wallpaperLighten": "提亮",
   "wallpaperDim": "压暗",
+  "wallpaperGuard": "自动保证文字清晰",
+  "wallpaperGuardHint": "关闭后完全按上面的滑块，调到 0 就是原图",
+  "wallpaperGuardMotionHint": "播放动图时只调文字颜色，画面不加遮罩",
+  "wallpaperPlay": "播放动图",
+  "wallpaperPlayHint": "减少动效时只显示第一帧",
   "wallpaperReplace": "更换图片",
   "wallpaperPreview": "预览",
-  "wallpaperFooter": "用于首页、对话和抽屉。提亮在浅色模式、压暗在深色模式下各自生效，文字始终清晰。PNG、JPEG、WebP，15 MB 以内",
+  "wallpaperFooter": "用于首页、对话和抽屉。提亮在浅色模式、压暗在深色模式下各自生效。PNG、JPEG、WebP、GIF，15 MB 以内",
   "wallpaperChanged": "壁纸已更换",
   "wallpaperTooLarge": "图片超过 15 MB",
   "wallpaperUnsupported": "支持 PNG、JPEG 和 WebP",
@@ -23,5 +28,5 @@
   "wallpaperSampleAnswer": "适合。周六午后晴，风力 2 级，浪高不到半米，是这周最好的一天。",
   "wallpaperSampleNote": "傍晚降温明显，带一件薄外套。",
   "wallpaperSampleTool": "查了 3 个天气来源",
-  "searchKwWallpaper": "背景,背景图,聊天背景,自定义背景,换背景,模糊,壁纸图片"
+  "searchKwWallpaper": "背景,背景图,聊天背景,自定义背景,换背景,模糊,壁纸图片,动图,动态壁纸,GIF"
 }

@@ -73,13 +73,19 @@ void main() {
 
   setUp(() => import = _Import((null, LaunchImportProblem.cancelled)));
 
-  Future<void> pump(WidgetTester tester, {CustomWallpaper? stored, Brightness brightness = Brightness.light}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    CustomWallpaper? stored,
+    Brightness brightness = Brightness.light,
+    bool animations = false,
+  }) async {
     SharedPreferences.setMockInitialValues({if (stored != null) CustomWallpaper.prefsKey: jsonOf(stored)});
     usePhoneSurface(tester);
     await tester.pumpWidget(
       goldenApp(
         home: _page(),
         brightness: brightness,
+        animations: animations,
         overrides: [
           wallpaperImportProvider.overrideWithValue(import),
           launcherIconChannelProvider.overrideWithValue(const _Launcher()),
@@ -218,6 +224,36 @@ void main() {
       final stored = (await CustomWallpaper.load())!;
       expect(stored.lighten, 1);
       expect(stored.dim, 0.2, reason: 'the dark page keeps its own');
+    });
+
+    Future<void> flip(WidgetTester tester, String key) async {
+      await scrollToWallpaper(tester);
+      await tester.ensureVisible(find.byKey(ValueKey(key)));
+      await tester.pump();
+      await tester.tap(find.byKey(ValueKey(key)));
+      await settle(tester);
+    }
+
+    testWidgets('自动保证文字清晰 is stored when switched; a still has no 播放动图', (tester) async {
+      await pump(tester, stored: fixtureWallpaper(brightFixture));
+      await flip(tester, 'wallpaper-guard');
+      expect((await CustomWallpaper.load())!.guard, isFalse);
+      expect(find.byKey(const ValueKey('wallpaper-play')), findsNothing);
+    });
+
+    testWidgets('an animation: 播放动图 is stored when switched; the guard\'s note on it only while guarded', (
+      tester,
+    ) async {
+      const note = '播放动图时只调文字颜色，画面不加遮罩';
+      const gif = CustomWallpaper(path: gifFixture, width: 120, height: 200, animated: true);
+      await pump(tester, stored: gif, animations: true);
+      await scrollToWallpaper(tester);
+      expect(find.text(note), findsOneWidget);
+      await flip(tester, 'wallpaper-guard');
+      expect(find.text(note), findsNothing, reason: 'unguarded, the text colours stay as they are too');
+      await flip(tester, 'wallpaper-play');
+      final stored = (await CustomWallpaper.load())!;
+      expect((stored.play, stored.guard), (false, false));
     });
 
     testWidgets('dark: the tone slider is 压暗', (tester) async {

@@ -33,6 +33,21 @@ abstract interface class ListItemGeometry {
   double get textStart;
 }
 
+/// Marks an assistant reply's Markdown drawn under a theme pack: the builders
+/// below it take the pack's reply styling (bullets, headings, code frames).
+/// Other Markdown (documents, thinking) has no scope and keeps the plain look.
+class MarkdownReplyScope extends InheritedWidget {
+  const MarkdownReplyScope({super.key, this.reply = true, required super.child});
+
+  /// False ends the scope for Markdown nested in a reply (a card's own text).
+  final bool reply;
+
+  static bool of(BuildContext context) => context.getInheritedWidgetOfExactType<MarkdownReplyScope>()?.reply ?? false;
+
+  @override
+  bool updateShouldNotify(MarkdownReplyScope oldWidget) => false;
+}
+
 /// The gpt_markdown list builders. Static, so they keep their identity.
 abstract final class MarkdownLists {
   static Widget unordered(BuildContext context, Widget child, GptMarkdownConfig config) => MarkdownTextScaling.wrap(
@@ -67,6 +82,9 @@ class ListItem extends StatelessWidget {
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
     final label = marker;
     return _ListItemBox(
+      bullet: label == null && MarkdownReplyScope.of(context)
+          ? DshThemeStyle.of(context).components.bulletStyle
+          : ThemeBulletStyle.dot,
       fontSize: fontSize,
       listMarkerLength: label == null ? 0 : _listMarkerLength(context),
       dotRise: _dotRise(DefaultTextStyle.of(context).style, scaler),
@@ -250,6 +268,7 @@ class _RenderTaskBox extends RenderProxyBox {
 
 class _ListItemBox extends SingleChildRenderObjectWidget {
   const _ListItemBox({
+    required this.bullet,
     required this.fontSize,
     required this.listMarkerLength,
     required this.dotRise,
@@ -260,6 +279,7 @@ class _ListItemBox extends SingleChildRenderObjectWidget {
     required super.child,
   });
 
+  final ThemeBulletStyle bullet;
   final double fontSize;
   final int listMarkerLength;
   final double dotRise;
@@ -270,6 +290,7 @@ class _ListItemBox extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) => _RenderListItem(
+    bullet: bullet,
     fontSize: fontSize,
     listMarkerLength: listMarkerLength,
     dotRise: dotRise,
@@ -282,6 +303,7 @@ class _ListItemBox extends SingleChildRenderObjectWidget {
   @override
   void updateRenderObject(BuildContext context, _RenderListItem renderObject) {
     renderObject
+      ..bullet = bullet
       ..fontSize = fontSize
       ..listMarkerLength = listMarkerLength
       ..dotRise = dotRise
@@ -294,6 +316,7 @@ class _ListItemBox extends SingleChildRenderObjectWidget {
 
 class _RenderListItem extends RenderShiftedBox implements ListItemGeometry {
   _RenderListItem({
+    required this._bullet,
     required this._fontSize,
     required this._listMarkerLength,
     required this._dotRise,
@@ -302,6 +325,13 @@ class _RenderListItem extends RenderShiftedBox implements ListItemGeometry {
     required this._dotColor,
     required this._textDirection,
   }) : super(null);
+
+  ThemeBulletStyle _bullet;
+  set bullet(ThemeBulletStyle value) {
+    if (value == _bullet) return;
+    _bullet = value;
+    markNeedsPaint();
+  }
 
   double _fontSize;
   set fontSize(double value) {
@@ -586,7 +616,46 @@ class _RenderListItem extends RenderShiftedBox implements ListItemGeometry {
     final radius = _fontSize * 0.3125 / 2;
     final inset = _fontSize * 0.4375 + radius;
     final cx = ltr ? inset : size.width - inset;
-    context.canvas.drawCircle(offset + Offset(cx, _baseline - _dotRise), radius, Paint()..color = _dotColor);
+    final centre = offset + Offset(cx, _baseline - _dotRise);
+    final paint = Paint()..color = _dotColor;
+    // Drawn, not typed: a glyph could be missing from the pack's font.
+    switch (_bullet) {
+      case ThemeBulletStyle.dot:
+        context.canvas.drawCircle(centre, radius, paint);
+      case ThemeBulletStyle.square:
+        context.canvas.drawRect(Rect.fromCircle(center: centre, radius: radius), paint);
+      case ThemeBulletStyle.diamond:
+        final d = radius * 1.3;
+        context.canvas.drawPath(
+          Path()
+            ..moveTo(centre.dx, centre.dy - d)
+            ..lineTo(centre.dx + d, centre.dy)
+            ..lineTo(centre.dx, centre.dy + d)
+            ..lineTo(centre.dx - d, centre.dy)
+            ..close(),
+          paint,
+        );
+      case ThemeBulletStyle.dash || ThemeBulletStyle.arrow:
+        paint
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = _fontSize * 0.09
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+        if (_bullet == ThemeBulletStyle.dash) {
+          final half = Offset(_fontSize * 0.2, 0);
+          context.canvas.drawLine(centre - half, centre + half, paint);
+        } else {
+          final w = _fontSize * 0.1 * (ltr ? 1 : -1);
+          final h = _fontSize * 0.2;
+          context.canvas.drawPath(
+            Path()
+              ..moveTo(centre.dx - w, centre.dy - h)
+              ..lineTo(centre.dx + w, centre.dy)
+              ..lineTo(centre.dx - w, centre.dy + h),
+            paint,
+          );
+        }
+    }
   }
 
   @override

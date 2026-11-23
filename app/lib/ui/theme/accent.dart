@@ -275,7 +275,8 @@ class AppAccent {
   /// 由 [ThemePack] 构造配色:支持细粒度主色、气泡色、光晕与中性色相覆盖。
   factory AppAccent.fromThemePack(ThemePack pack, {String? label}) {
     final displayLabel = label ?? pack.displayName(AppLocale.isEnglish ? 'en' : 'zh');
-    if (pack.id == 'paper' || pack.publicId == 'paper') {
+    // Keyed on the seeds, not the id: a pack that extends or forks Paper & Ink keeps its hand-tuned tones.
+    if (pack.palette.seed == ThemePack.paper.palette.seed && pack.palette.seedDark == ThemePack.paper.palette.seedDark) {
       return AppAccent(
         id: pack.id,
         label: displayLabel,

@@ -151,6 +151,8 @@ class ModelChip extends ConsumerWidget {
     void open() => showModelSheet(context, current: effective, onSelected: onSelected);
     return GlassSurface(
       tier: GlassTier.chrome,
+      // Built by the screen, not by the header, so it asks for the header's glass itself.
+      style: DshThemeStyle.of(context).headerGlass(theme.colorScheme),
       stadium: true,
       grouped: grouped,
       onTap: open,

@@ -285,6 +285,7 @@ class SuggestionCard extends StatelessWidget {
     required this.onTap,
     this.enabled = true,
     this.showDetail = true,
+    this.detailMaxLines = 1,
   });
 
   final ChatSuggestion suggestion;
@@ -296,6 +297,9 @@ class SuggestionCard extends StatelessWidget {
   /// hear it either way.
   final bool showDetail;
 
+  /// 2 under a theme pack whose type is too wide for one line (see [SuggestionCards]).
+  final int detailMaxLines;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -305,29 +309,26 @@ class SuggestionCard extends StatelessWidget {
     final cardVariant = themeStyle.components.suggestionCardStyle;
     final tint = suggestionTintColor(context, suggestion.tint);
     final detail = suggestion.detail;
-    final shape = themeStyle.pack == null
+    // The pack's card radius, when it names one, replaces each variant's own step.
+    OutlinedBorder themed(Color color, double step, double width) => themeStyle.shapeFor(
+      BorderRadius.all(Radius.circular(themeStyle.shapes.cardRadius ?? themeStyle.scaleRadius(step))),
+      BorderSide(color: color, width: width),
+    );
+    final ShapeBorder shape = themeStyle.pack == null
         ? AppShape.outlined(quietCardRim(theme), radius: AppShape.lg, width: 0.5)
         : switch (cardVariant) {
-            ThemeSuggestionCardStyle.glass => AppShape.outlined(
-              quietCardRim(theme),
-              radius: themeStyle.scaleRadius(AppShape.lg),
-              width: 0.5,
-            ),
-            ThemeSuggestionCardStyle.paper => AppShape.outlined(
+            ThemeSuggestionCardStyle.glass => themed(quietCardRim(theme), AppShape.lg, 0.5),
+            ThemeSuggestionCardStyle.paper => themed(
               scheme.outlineVariant,
-              radius: themeStyle.scaleRadius(AppShape.md),
-              width: themeStyle.borderWidth.clamp(0.5, 2.0),
+              AppShape.md,
+              themeStyle.borderWidth.clamp(0.5, 2.0),
             ),
-            ThemeSuggestionCardStyle.outlined => AppShape.outlined(
+            ThemeSuggestionCardStyle.outlined => themed(
               scheme.outline,
-              radius: themeStyle.scaleRadius(AppShape.md),
-              width: themeStyle.borderWidth.clamp(1.0, 2.0),
+              AppShape.md,
+              themeStyle.borderWidth.clamp(1.0, 2.0),
             ),
-            ThemeSuggestionCardStyle.minimal => AppShape.outlined(
-              Colors.transparent,
-              radius: themeStyle.scaleRadius(AppShape.sm),
-              width: 0,
-            ),
+            ThemeSuggestionCardStyle.minimal => themed(Colors.transparent, AppShape.sm, 0),
           };
     final cardFill = switch (cardVariant) {
       ThemeSuggestionCardStyle.glass => quietChipFill(theme),
@@ -335,13 +336,15 @@ class SuggestionCard extends StatelessWidget {
       ThemeSuggestionCardStyle.outlined => Colors.transparent,
       ThemeSuggestionCardStyle.minimal => Colors.transparent,
     };
+    // Line and bare cards carry one accent: four hues read as noise without a fill to sit on.
     final badgeFill = switch (cardVariant) {
       ThemeSuggestionCardStyle.paper || ThemeSuggestionCardStyle.outlined => Colors.transparent,
-      _ => tint.withValues(alpha: 0.14),
+      ThemeSuggestionCardStyle.minimal => scheme.primary.withValues(alpha: 0.14),
+      ThemeSuggestionCardStyle.glass => tint.withValues(alpha: 0.14),
     };
     final iconColor = switch (cardVariant) {
-      ThemeSuggestionCardStyle.paper => scheme.primary,
-      _ => tint,
+      ThemeSuggestionCardStyle.glass => tint,
+      _ => scheme.primary,
     };
     final tap = enabled ? onTap : null;
     return Semantics(
@@ -392,7 +395,7 @@ class SuggestionCard extends StatelessWidget {
                           const SizedBox(height: 1),
                           Text(
                             detail,
-                            maxLines: 1,
+                            maxLines: detailMaxLines,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(color: dsh.textTertiary),
                           ),
@@ -460,7 +463,11 @@ class SuggestionCards extends StatelessWidget {
           return ok;
         }
 
-        final showDetails = suggestions.every((s) => s.detail == null || fits(s.detail!));
+        final oneLine = suggestions.every((s) => s.detail == null || fits(s.detail!));
+        // A pack's type can be wider than the app's (a mono UI font): on a phone
+        // that would drop every detail, so there they wrap once instead.
+        final wrapDetails = !oneLine && DshThemeStyle.of(context).pack != null;
+        final showDetails = oneLine || wrapDetails;
 
         Widget card(int i) {
           final s = suggestions[i];
@@ -473,6 +480,7 @@ class SuggestionCards extends StatelessWidget {
                 suggestion: s,
                 enabled: enabled,
                 showDetail: showDetails,
+                detailMaxLines: wrapDetails ? 2 : 1,
                 onTap: () => onSuggestion(s),
               ),
             ),

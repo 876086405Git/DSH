@@ -27,13 +27,15 @@ const THEME_FONT_CAP = 16 * 1024 * 1024;
 const THEME_ASSET_TOTAL_CAP = 32 * 1024 * 1024;
 const THEME_BUILT_IN_FONTS = new Set(['system', 'serif', 'mono', 'JetBrainsMono', 'monospace']);
 const THEME_TOP_KEYS = new Set(['schema', 'id', 'name', 'title', 'description', 'tags', 'author', 'license', 'source', 'palette', 'surfaces', 'typography', 'shapes', 'components', 'emptyState']);
-const THEME_COLOR_KEYS = new Set(['backdropTop', 'backdropBottom', 'glowPrimary', 'glowSecondary', 'surface', 'onSurface', 'onSurfaceVariant', 'outline', 'outlineVariant', 'primary', 'onPrimary', 'primaryContainer', 'onPrimaryContainer', 'userBubble', 'onUserBubble', 'assistantBubble', 'onAssistantBubble', 'codeWellBg', 'codeWellHeader', 'codeWellFg', 'codeWellBorder']);
+const THEME_COLOR_KEYS = new Set(['backdropTop', 'backdropBottom', 'glowPrimary', 'glowSecondary', 'surface', 'onSurface', 'onSurfaceVariant', 'outline', 'outlineVariant', 'primary', 'onPrimary', 'primaryContainer', 'onPrimaryContainer', 'userBubble', 'onUserBubble', 'assistantBubble', 'onAssistantBubble', 'codeWellBg', 'codeWellHeader', 'codeWellFg', 'codeWellBorder', 'link', 'heading', 'rule', 'userBubbleBorder', 'assistantBorder', 'composerFill', 'composerBorder', 'sendButton', 'onSendButton', 'inlineCodeBg', 'inlineCodeFg', 'patternInk', 'cardFill', 'chromeFill', 'sheetFill', 'hairline', 'textTertiary', 'success', 'warning', 'danger', 'info', 'syntaxKeyword', 'syntaxString', 'syntaxNumber', 'syntaxComment', 'syntaxFunction', 'syntaxType']);
 const THEME_PALETTE_KEYS = new Set(['seed', 'seedDark', 'tintHue', 'tintChroma', 'glowOpacity', 'light', 'dark']);
-const THEME_SURFACE_KEYS = new Set(['preset', 'chromeBlur', 'sheetBlur', 'cardOpacity', 'pillOpacity', 'hairlineWidth', 'rimOpacity', 'shadowOpacity', 'backdropImage', 'backdropOpacity', 'backdropRepeat']);
-const THEME_TYPO_KEYS = new Set(['uiFont', 'readingFont', 'headingFont', 'codeFont', 'readingScale', 'readingLineHeight', 'headingScale']);
-const THEME_SHAPE_KEYS = new Set(['cornerScale', 'borderWidth', 'turnGap', 'inTurnGap', 'gutter']);
-const THEME_COMP_KEYS = new Set(['headerStyle', 'composerStyle', 'sendButtonStyle', 'userBubbleStyle', 'assistantStyle', 'useReadingFontForReply', 'suggestionCardStyle', 'codeBlockStyle']);
-const THEME_EMPTY_KEYS = new Set(['layout', 'heroStyle', 'heroImage', 'useReadingFontForGreeting', 'showConnectedSubtitle', 'suggestionsDisplay']);
+const THEME_SURFACE_KEYS = new Set(['preset', 'chromeBlur', 'sheetBlur', 'cardOpacity', 'pillOpacity', 'hairlineWidth', 'rimOpacity', 'shadowOpacity', 'backdropImage', 'backdropOpacity', 'backdropRepeat', 'backdropAnimate', 'backdropBlur', 'backdropAlign', 'pattern', 'patternOpacity', 'patternScale', 'glowLayout']);
+const THEME_TYPO_KEYS = new Set(['uiFont', 'readingFont', 'headingFont', 'codeFont', 'readingScale', 'readingLineHeight', 'headingScale', 'readingLetterSpacing', 'headingLetterSpacing', 'headingWeight', 'codeScale']);
+const THEME_SHAPE_KEYS = new Set(['cornerScale', 'borderWidth', 'turnGap', 'inTurnGap', 'gutter', 'cornerStyle', 'bubbleCorners', 'bubbleRadius', 'cardRadius', 'codeRadius', 'composerRadius', 'bubblePadH', 'bubblePadV']);
+const THEME_COMP_KEYS = new Set(['headerStyle', 'composerStyle', 'sendButtonStyle', 'userBubbleStyle', 'assistantStyle', 'useReadingFontForReply', 'suggestionCardStyle', 'codeBlockStyle', 'sendButtonShape', 'codeHeaderStyle', 'turnDivider', 'headingStyle', 'bulletStyle', 'headerTitleFont', 'userLabel', 'assistantLabel', 'assistantAvatar', 'userAvatar', 'composerHint']);
+const THEME_EMPTY_KEYS = new Set(['layout', 'heroStyle', 'heroImage', 'useReadingFontForGreeting', 'showConnectedSubtitle', 'suggestionsDisplay', 'heroGlyph', 'heroScale', 'greeting', 'subtitle']);
+const THEME_TEXT_KEYS = new Set(['zh', 'en']);
+const THEME_IMAGE_EXTS = ['.png', '.webp', '.gif'];
 const THEME_HEX = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 function safeThemeAsset(value: unknown, exts: string[]): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 80 &&
@@ -62,6 +64,56 @@ function checkThemeColors(value: unknown): void {
 }
 function checkThemeEnum(value: unknown, allowed: readonly string[]): void {
   if (value !== undefined) need(typeof value === 'string' && allowed.includes(value), 'theme_schema');
+}
+function checkThemeBool(value: unknown): void {
+  if (value !== undefined) need(typeof value === 'boolean', 'theme_schema');
+}
+function checkThemeText(value: unknown, maxRunes: number): void {
+  if (value !== undefined) need(typeof value === 'string' && value.trim().length > 0 && [...value].length <= maxRunes && !/[\u0000-\u001f\ud800-\udfff]/u.test(value), 'theme_schema');
+}
+function checkThemeLocalized(value: unknown, maxRunes: number): void {
+  if (value === undefined) return;
+  need(record(value) && (value.zh !== undefined || value.en !== undefined), 'theme_schema');
+  checkThemeKeys(value, THEME_TEXT_KEYS);
+  checkThemeText(value.zh, maxRunes);
+  checkThemeText(value.en, maxRunes);
+}
+const themeMagic = (bytes: Uint8Array, magic: string, offset = 0): boolean =>
+  bytes.length >= offset + magic.length && [...magic].every((c, i) => bytes[offset + i] === c.charCodeAt(0));
+// The canvas a WebP or GIF header declares; null when it is too short or not one of the three WebP layouts.
+function themeImageCanvas(b: Uint8Array): [number, number] | null {
+  const le16 = (at: number) => b[at]! | (b[at + 1]! << 8), le24 = (at: number) => le16(at) | (b[at + 2]! << 16);
+  if (themeMagic(b, 'GIF8')) {
+    // The decoder grows the logical screen to hold a first frame that reaches past it.
+    if (b.length < 13) return null;
+    let at = 13 + ((b[10]! & 0x80) === 0 ? 0 : 3 << ((b[10]! & 7) + 1));
+    while (at + 9 < b.length) {
+      if (b[at] === 0x2c) return [Math.max(le16(6), le16(at + 1) + le16(at + 5)), Math.max(le16(8), le16(at + 3) + le16(at + 7))];
+      if (b[at] !== 0x21) return null;
+      at += 2;
+      while (at < b.length && b[at] !== 0) at += b[at]! + 1;
+      at++;
+    }
+    return null;
+  }
+  if (b.length < 30) return null;
+  if (themeMagic(b, 'VP8X', 12)) return [le24(24) + 1, le24(27) + 1];
+  if (themeMagic(b, 'VP8 ', 12)) return [le16(26) & 0x3fff, le16(28) & 0x3fff];
+  if (themeMagic(b, 'VP8L', 12)) { const bits = (le16(21) | (le16(23) << 16)) >>> 0; return [(bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1]; }
+  return null;
+}
+// The header must match the extension. WebP and GIF are not decoded here; the
+// App's engine does that, and a file it cannot decode just leaves the slot empty.
+// Their declared canvas is held to the PNG limits, so a small file cannot ask
+// the App for hundreds of MB.
+function validateThemeImage(name: string, bytes: Uint8Array): void {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.png')) { validatePng(bytes); return; }
+  need(lower.endsWith('.webp') ? themeMagic(bytes, 'RIFF') && themeMagic(bytes, 'WEBP', 8)
+    : themeMagic(bytes, 'GIF87a') || themeMagic(bytes, 'GIF89a'), 'theme_image_header');
+  const canvas = themeImageCanvas(bytes);
+  need(canvas !== null && canvas[0] >= 1 && canvas[1] >= 1 && canvas[0] <= PET_LIMITS.sheetSide && canvas[1] <= PET_LIMITS.sheetSide &&
+    canvas[0] * canvas[1] * 4 <= PET_LIMITS.sheetDecodedBytes, 'theme_image_size');
 }
 export function validateTheme(bytes: Uint8Array, meta: SubmissionMeta): PackSummary {
   const zip = new WorkshopArchive(bytes, 256);
@@ -116,6 +168,12 @@ export function validateTheme(bytes: Uint8Array, meta: SubmissionMeta): PackSumm
     checkThemeColors(pack.palette.dark);
   }
 
+  const addImage = (value: unknown) => {
+    if (value === undefined) return;
+    need(safeThemeAsset(value, THEME_IMAGE_EXTS), 'theme_asset_name');
+    addAsset(value, images);
+  };
+
   if (pack.surfaces !== undefined) {
     need(record(pack.surfaces), 'theme_schema');
     checkThemeKeys(pack.surfaces, THEME_SURFACE_KEYS);
@@ -128,11 +186,15 @@ export function validateTheme(bytes: Uint8Array, meta: SubmissionMeta): PackSumm
     checkThemeNum(pack.surfaces.rimOpacity, 0, 1);
     checkThemeNum(pack.surfaces.shadowOpacity, 0, 1);
     checkThemeNum(pack.surfaces.backdropOpacity, 0, 1);
-    if (pack.surfaces.backdropRepeat !== undefined) need(typeof pack.surfaces.backdropRepeat === 'boolean', 'theme_schema');
-    if (pack.surfaces.backdropImage !== undefined) {
-      need(safeThemeAsset(pack.surfaces.backdropImage, ['.png']), 'theme_asset_name');
-      addAsset(pack.surfaces.backdropImage, images);
-    }
+    checkThemeBool(pack.surfaces.backdropRepeat);
+    checkThemeBool(pack.surfaces.backdropAnimate);
+    checkThemeNum(pack.surfaces.backdropBlur, 0, 40);
+    checkThemeEnum(pack.surfaces.backdropAlign, ['center', 'top', 'bottom']);
+    checkThemeEnum(pack.surfaces.pattern, ['none', 'dots', 'grid', 'lines', 'diagonal', 'grain']);
+    checkThemeNum(pack.surfaces.patternOpacity, 0, 1);
+    checkThemeNum(pack.surfaces.patternScale, 0.5, 3);
+    checkThemeEnum(pack.surfaces.glowLayout, ['corners', 'top', 'bottom', 'center']);
+    addImage(pack.surfaces.backdropImage);
   }
 
   if (pack.typography !== undefined) {
@@ -148,8 +210,13 @@ export function validateTheme(bytes: Uint8Array, meta: SubmissionMeta): PackSumm
     checkThemeNum(pack.typography.readingScale, 0.85, 1.25);
     checkThemeNum(pack.typography.readingLineHeight, 1.2, 2.0);
     checkThemeNum(pack.typography.headingScale, 0.85, 1.35);
+    checkThemeNum(pack.typography.readingLetterSpacing, -0.5, 2);
+    checkThemeNum(pack.typography.headingLetterSpacing, -1, 4);
+    const weight = pack.typography.headingWeight;
+    if (weight !== undefined) need(whole(weight, 300, 900) && weight % 100 === 0, 'theme_schema');
+    checkThemeNum(pack.typography.codeScale, 0.85, 1.2);
   }
-  need(fonts.size <= 2, 'theme_font_count');
+  need(fonts.size <= 4, 'theme_font_count');
 
   if (pack.shapes !== undefined) {
     need(record(pack.shapes), 'theme_schema');
@@ -159,6 +226,11 @@ export function validateTheme(bytes: Uint8Array, meta: SubmissionMeta): PackSumm
     checkThemeNum(pack.shapes.turnGap, 12, 40);
     checkThemeNum(pack.shapes.inTurnGap, 4, 20);
     checkThemeNum(pack.shapes.gutter, 10, 28);
+    checkThemeEnum(pack.shapes.cornerStyle, ['squircle', 'round', 'bevel']);
+    checkThemeEnum(pack.shapes.bubbleCorners, ['uniform', 'tail', 'leaf']);
+    for (const key of ['bubbleRadius', 'cardRadius', 'codeRadius', 'composerRadius']) checkThemeNum(pack.shapes[key], 0, 36);
+    checkThemeNum(pack.shapes.bubblePadH, 10, 24);
+    checkThemeNum(pack.shapes.bubblePadV, 6, 16);
   }
 
   if (pack.components !== undefined) {
@@ -166,29 +238,41 @@ export function validateTheme(bytes: Uint8Array, meta: SubmissionMeta): PackSumm
     checkThemeKeys(pack.components, THEME_COMP_KEYS);
     checkThemeEnum(pack.components.headerStyle, ['glass', 'ghost', 'outlined', 'minimal']);
     checkThemeEnum(pack.components.composerStyle, ['floatingGlass', 'solidPaper', 'outlined']);
-    checkThemeEnum(pack.components.sendButtonStyle, ['primary', 'ink', 'tonal']);
+    checkThemeEnum(pack.components.sendButtonStyle, ['primary', 'ink', 'tonal', 'outlined']);
     checkThemeEnum(pack.components.userBubbleStyle, ['soft', 'outlined', 'accent', 'minimal']);
-    checkThemeEnum(pack.components.assistantStyle, ['plain', 'card', 'leftRule']);
-    if (pack.components.useReadingFontForReply !== undefined) need(typeof pack.components.useReadingFontForReply === 'boolean', 'theme_schema');
+    checkThemeEnum(pack.components.assistantStyle, ['plain', 'card', 'leftRule', 'quote']);
+    checkThemeBool(pack.components.useReadingFontForReply);
     checkThemeEnum(pack.components.suggestionCardStyle, ['glass', 'paper', 'outlined', 'minimal']);
     checkThemeEnum(pack.components.codeBlockStyle, ['well', 'outlined', 'card']);
+    checkThemeEnum(pack.components.sendButtonShape, ['circle', 'squircle', 'square']);
+    checkThemeEnum(pack.components.codeHeaderStyle, ['bar', 'plain']);
+    checkThemeEnum(pack.components.turnDivider, ['none', 'hairline', 'dashed', 'dots']);
+    checkThemeEnum(pack.components.headingStyle, ['plain', 'accent', 'underline', 'marker']);
+    checkThemeEnum(pack.components.bulletStyle, ['dot', 'dash', 'diamond', 'arrow', 'square']);
+    checkThemeEnum(pack.components.headerTitleFont, ['ui', 'heading', 'code']);
+    checkThemeLocalized(pack.components.userLabel, 16);
+    checkThemeLocalized(pack.components.assistantLabel, 16);
+    checkThemeLocalized(pack.components.composerHint, 30);
+    addImage(pack.components.assistantAvatar);
+    addImage(pack.components.userAvatar);
   }
 
   if (pack.emptyState !== undefined) {
     need(record(pack.emptyState), 'theme_schema');
     checkThemeKeys(pack.emptyState, THEME_EMPTY_KEYS);
     checkThemeEnum(pack.emptyState.layout, ['centered', 'editorial', 'compact']);
-    checkThemeEnum(pack.emptyState.heroStyle, ['whale', 'badge', 'customImage', 'hidden']);
-    if (pack.emptyState.useReadingFontForGreeting !== undefined) need(typeof pack.emptyState.useReadingFontForGreeting === 'boolean', 'theme_schema');
-    if (pack.emptyState.showConnectedSubtitle !== undefined) need(typeof pack.emptyState.showConnectedSubtitle === 'boolean', 'theme_schema');
+    const hero = pack.emptyState.heroStyle;
+    checkThemeEnum(hero, ['whale', 'badge', 'customImage', 'hidden', 'glyph', 'seal']);
+    checkThemeBool(pack.emptyState.useReadingFontForGreeting);
+    checkThemeBool(pack.emptyState.showConnectedSubtitle);
     checkThemeEnum(pack.emptyState.suggestionsDisplay, ['expanded', 'collapsible', 'grid']);
-    if (pack.emptyState.heroImage !== undefined) {
-      need(safeThemeAsset(pack.emptyState.heroImage, ['.png']), 'theme_asset_name');
-      addAsset(pack.emptyState.heroImage, images);
-    }
-    if (pack.emptyState.heroStyle === 'customImage') {
-      need(pack.emptyState.heroImage !== undefined, 'theme_schema');
-    }
+    checkThemeText(pack.emptyState.heroGlyph, 4);
+    checkThemeNum(pack.emptyState.heroScale, 0.6, 2);
+    checkThemeLocalized(pack.emptyState.greeting, 40);
+    checkThemeLocalized(pack.emptyState.subtitle, 60);
+    addImage(pack.emptyState.heroImage);
+    if (hero === 'customImage') need(pack.emptyState.heroImage !== undefined, 'theme_schema');
+    if (hero === 'glyph' || hero === 'seal') need(pack.emptyState.heroGlyph !== undefined, 'theme_schema');
   }
 
   const kept = new Set([
@@ -202,7 +286,7 @@ export function validateTheme(bytes: Uint8Array, meta: SubmissionMeta): PackSumm
   for (const name of images) {
     const data = zip.read(prefix + name, Math.min(PET_LIMITS.sheetBytes, THEME_ASSET_TOTAL_CAP - total));
     total += data.length;
-    validatePng(data);
+    validateThemeImage(name, data);
   }
   for (const name of fonts) {
     const data = zip.read(prefix + name, Math.min(THEME_FONT_CAP, THEME_ASSET_TOTAL_CAP - total));

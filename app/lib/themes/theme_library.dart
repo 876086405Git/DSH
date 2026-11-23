@@ -8,7 +8,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart' show FileImage, PaintingBinding;
+import 'package:flutter/painting.dart' show FileImage, PaintingBinding, ResizeImage;
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -473,13 +473,23 @@ Future<void> _discard(Directory dir) async {
   }
 }
 
+/// The width a pack's avatar is decoded at (24dp at up to 4x).
+const themeAvatarDecodeWidth = 96;
+
+/// Forgets what was decoded from [file], so the next picture under its name shows: the full
+/// image and the avatar's smaller decode, which the cache keeps under a key of its own.
+void evictThemeImage(File file) {
+  final image = FileImage(file);
+  PaintingBinding.instance.imageCache.evict(image);
+  ResizeImage(image, width: themeAvatarDecodeWidth).evict();
+}
+
 Future<void> _evictFolderImages(Directory dir) async {
   try {
     if (!await dir.exists()) return;
-    final cache = PaintingBinding.instance.imageCache;
     await for (final entity in dir.list(followLinks: false)) {
-      if (entity is File && entity.path.toLowerCase().endsWith('.png')) {
-        cache.evict(FileImage(entity));
+      if (entity is File && themeImageExtensions.any(entity.path.toLowerCase().endsWith)) {
+        evictThemeImage(entity);
       }
     }
   } on Object {
@@ -531,6 +541,7 @@ ThemeImportException _mapValidationProblem(ThemeValidationException error) {
   if (code == 'archive-path' ||
       code == 'theme-asset-alias' ||
       code.startsWith('theme-png-') ||
+      code.startsWith('theme-image-') ||
       code.startsWith('theme-font-') ||
       code.startsWith('png-')) {
     return ThemeImportException(ThemeImportProblem.badAsset, detail);

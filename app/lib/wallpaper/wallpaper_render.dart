@@ -4,6 +4,10 @@
 //
 // 每帧只画这一张图：没有实时 BackdropFilter，也不再解码。越模糊烘得越小（模糊本来就不需要
 // 细节），轻量档（低端机、过热、用户选了轻量）模糊减半、封顶，按每 dp 一个像素烘。
+//
+// 用户关掉「自动保证文字清晰」（CustomWallpaper.guard）：不量、不叠遮罩，只有模糊和提亮 / 压暗，
+// 两个都是 0 就是原图；按屏幕自己的密度烘，轻量档也不降、模糊也不折减。正在播放的动图
+// （wallpaper_frames.dart）垫在底下的那张首帧同样不叠遮罩，和它的每一帧一个样。
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -13,6 +17,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 import 'custom_wallpaper.dart';
+import 'wallpaper_frames.dart';
 import 'wallpaper_look.dart';
 
 /// One screen in one mode: what a wallpaper is baked for.
@@ -25,6 +30,7 @@ class WallpaperFrame {
     this.top = 0,
     this.bottom = 0,
     this.lightweight = false,
+    this.motion = false,
   });
 
   /// The screen, in dp.
@@ -40,6 +46,17 @@ class WallpaperFrame {
   /// The performance profile's lightweight mode: less blur, fewer pixels.
   final bool lightweight;
 
+  /// An animated picture may play here (motion isn't reduced).
+  final bool motion;
+
+  /// Whether [wallpaper] is an animation this device could play: one whose frames are too
+  /// large to keep decoding isn't ([WallpaperBake.motionSide]).
+  bool playable(CustomWallpaper wallpaper) =>
+      wallpaper.animated && math.max(wallpaper.width, wallpaper.height) <= WallpaperBake.motionSideFor(lightweight);
+
+  /// Whether [wallpaper] plays on this screen rather than showing its first frame.
+  bool plays(CustomWallpaper wallpaper) => motion && wallpaper.play && playable(wallpaper);
+
   WallpaperFrame copyWith({WallpaperLook? look, bool? lightweight}) => WallpaperFrame(
     size: size,
     pixelRatio: pixelRatio,
@@ -47,6 +64,7 @@ class WallpaperFrame {
     top: top,
     bottom: bottom,
     lightweight: lightweight ?? this.lightweight,
+    motion: motion,
   );
 
   @override
@@ -57,10 +75,11 @@ class WallpaperFrame {
       other.look == look &&
       other.top == top &&
       other.bottom == bottom &&
-      other.lightweight == lightweight;
+      other.lightweight == lightweight &&
+      other.motion == motion;
 
   @override
-  int get hashCode => Object.hash(size, pixelRatio, look, top, bottom, lightweight);
+  int get hashCode => Object.hash(size, pixelRatio, look, top, bottom, lightweight, motion);
 }
 
 /// The numbers of a bake.
@@ -89,19 +108,40 @@ abstract final class WallpaperBake {
   static const decodeSide = 4096;
   static const lightDecodeSide = 2048;
 
+  /// A playing animation decodes every frame, and the engine decodes an animation's frames at
+  /// their own size whatever it is asked for. So one longer than this on a side doesn't play
+  /// ([lightMotionSide] when lightweight): its first frame is baked like any still.
+  static const motionSide = 2048;
+  static const lightMotionSide = 1280;
+
+  static int motionSideFor(bool lightweight) => lightweight ? lightMotionSide : motionSide;
+
   /// σ in dp for a blur setting.
   static double sigmaFor(double blur, {bool lightweight = false}) {
     final sigma = blur.clamp(0.0, 1.0) * maxSigma;
     return lightweight ? math.min(sigma * 0.5, lightSigma) : sigma;
   }
 
-  /// Pixels per dp for [frame] at blur [sigma]: past σ 6 the picture loses nothing at a lower
-  /// resolution, so it bakes smaller (never under 0.75 px per dp for that reason).
-  static double densityFor(WallpaperFrame frame, double sigma) {
-    final k = math.min(frame.pixelRatio, frame.lightweight ? lightDensity : maxDensity);
-    if (sigma <= 6) return k;
-    return math.min(k, math.max(0.75, k * 6 / sigma));
+  /// σ in dp for [w] on [frame]. Unguarded it is the slider's own, whatever the profile: the
+  /// picture is promised to be exactly what the sliders say.
+  static double sigmaOf(CustomWallpaper w, WallpaperFrame frame) =>
+      sigmaFor(w.blur, lightweight: frame.lightweight && w.guard);
+
+  /// Pixels per dp for [frame] at blur [sigma] ([densityAt]). [exact]: from the screen's own
+  /// density, whatever the profile.
+  static double densityFor(WallpaperFrame frame, double sigma, {bool exact = false}) {
+    final k = exact ? frame.pixelRatio : math.min(frame.pixelRatio, frame.lightweight ? lightDensity : maxDensity);
+    return densityAt(k, sigma);
   }
+
+  /// [k] pixels per dp, or fewer under a blur: past σ 6 a picture loses nothing at a lower
+  /// resolution, so it bakes smaller (never under 0.75 px per dp for that reason).
+  static double densityAt(double k, double sigma) => sigma <= 6 ? k : math.min(k, math.max(0.75, k * 6 / sigma));
+
+  /// What a playing [w] decodes its frames from: the file as it is ([WallpaperFrame.plays]
+  /// has seen to its size).
+  static FrameSource motionSource(CustomWallpaper w) =>
+      FrameSource(path: w.path, coverWidth: w.width, coverHeight: w.height, maxSide: motionSide);
 }
 
 /// Bakes wallpapers, one at a time, keeping the last decoded picture for the next bake.
@@ -116,13 +156,14 @@ class WallpaperRenderer {
   int bakes = 0;
 
   /// [wallpaper] baked for [frame] ([density] pixels per dp, else [WallpaperBake.densityFor]);
-  /// null when the picture can't be read. The caller owns the image.
-  Future<ui.Image?> bake(CustomWallpaper wallpaper, WallpaperFrame frame, {double? density}) {
+  /// null when the picture can't be read. The caller owns the image. [moving]: the still under
+  /// a playing animation, which gets no veil since its frames get none.
+  Future<ui.Image?> bake(CustomWallpaper wallpaper, WallpaperFrame frame, {double? density, bool moving = false}) {
     bakes++;
     final done = Completer<ui.Image?>();
     _queue = _queue.then((_) async {
       try {
-        done.complete(await _bake(wallpaper, frame, density));
+        done.complete(await _bake(wallpaper, frame, density, moving));
       } catch (error) {
         debugPrint('wallpaper: bake failed: $error');
         done.complete(null);
@@ -137,19 +178,24 @@ class WallpaperRenderer {
     _source = null;
   }
 
-  Future<ui.Image?> _bake(CustomWallpaper w, WallpaperFrame frame, double? density) async {
+  Future<ui.Image?> _bake(CustomWallpaper w, WallpaperFrame frame, double? density, bool moving) async {
     if (frame.size.isEmpty) return null;
-    final sigma = WallpaperBake.sigmaFor(w.blur, lightweight: frame.lightweight);
-    final k = density ?? WallpaperBake.densityFor(frame, sigma);
+    final sigma = WallpaperBake.sigmaOf(w, frame);
+    // Unguarded, nothing may soften the picture but its own blur: the lightweight profile's
+    // fewer pixels would.
+    final exact = !w.guard && !moving;
+    final k = density ?? WallpaperBake.densityFor(frame, sigma, exact: exact);
     final outW = math.max(1, (frame.size.width * k).round());
     final outH = math.max(1, (frame.size.height * k).round());
-    final source = await _decode(w, frame, outW);
+    final source = await _decode(w, frame, outW, exact);
     if (source == null) return null;
+    final look = frame.look;
+    final tone = w.toneFor(look.brightness).clamp(0.0, 1.0) * WallpaperBake.maxTone;
+    if (!w.guard || moving) return _soften(source, w, frame, outW, outH, sigma * k, tone: tone);
     final soft = await _soften(source, w, frame, outW, outH, sigma * k);
     try {
       final data = await soft.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (data == null) return null;
-      final look = frame.look;
       final request = VeilRequest(
         rgba: data.buffer.asUint8List(),
         width: outW,
@@ -163,7 +209,7 @@ class WallpaperRenderer {
         veilTop: _rgb(look.veilTop),
         veilBottom: _rgb(look.veilBottom),
         lift: look.lift,
-        user: w.toneFor(look.brightness).clamp(0.0, 1.0) * WallpaperBake.maxTone,
+        user: tone,
       );
       // Large bakes measure off the UI thread.
       final alpha = outW * outH > 1 << 17 ? await compute(veilAlpha, request) : veilAlpha(request);
@@ -179,8 +225,8 @@ class WallpaperRenderer {
   }
 
   /// The picture's first frame, decoded only as large as [outW] across the screen needs.
-  Future<ui.Image?> _decode(CustomWallpaper w, WallpaperFrame frame, int outW) async {
-    final cap = frame.lightweight ? WallpaperBake.lightDecodeSide : WallpaperBake.decodeSide;
+  Future<ui.Image?> _decode(CustomWallpaper w, WallpaperFrame frame, int outW, bool exact) async {
+    final cap = frame.lightweight && !exact ? WallpaperBake.lightDecodeSide : WallpaperBake.decodeSide;
     int target(int iw, int ih) {
       final window = w.windowIn(Size(iw.toDouble(), ih.toDouble()), frame.size);
       final scale = math.min(1.0, math.min(outW / window.width, cap / math.max(iw, ih)));
@@ -219,15 +265,16 @@ class WallpaperRenderer {
   }
 
   /// The screen's part of [source], blurred to [sigmaPx], on the page's own gradient (a
-  /// see-through picture shows the page, not black).
+  /// see-through picture shows the page, not black), then [tone] of that gradient evenly over it.
   static Future<ui.Image> _soften(
     ui.Image source,
     CustomWallpaper w,
     WallpaperFrame frame,
     int outW,
     int outH,
-    double sigmaPx,
-  ) async {
+    double sigmaPx, {
+    double tone = 0,
+  }) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     final out = Rect.fromLTWH(0, 0, outW.toDouble(), outH.toDouble());
@@ -248,6 +295,14 @@ class WallpaperRenderer {
     // stretches the picture's own last pixels where it ends.
     if (sigmaPx > 0) paint.imageFilter = ui.ImageFilter.blur(sigmaX: sigmaPx, sigmaY: sigmaPx);
     canvas.drawImageRect(source, src, dst, paint);
+    if (tone > 0) {
+      canvas.drawRect(
+        out,
+        Paint()
+          ..shader = _veilShader(frame.look, out)
+          ..color = Color.fromRGBO(0, 0, 0, tone),
+      );
+    }
     final recording = recorder.endRecording();
     try {
       return await recording.toImage(outW, outH);

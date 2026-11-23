@@ -201,6 +201,12 @@ Uint8List workshopThemePreviewZip((Uint8List, WorkshopPreviewInput) input) {
         if (emptyState is Map && emptyState['heroImage'] == renamedFrom) {
           emptyState['heroImage'] = renamedTo;
         }
+        final components = parsed['components'];
+        if (components is Map) {
+          for (final key in const ['assistantAvatar', 'userAvatar']) {
+            if (components[key] == renamedFrom) components[key] = renamedTo;
+          }
+        }
         final updated = Uint8List.fromList(utf8.encode(jsonEncode(parsed)));
         expanded += updated.length;
         rebuilt.add(ArchiveFile.bytes('theme.json', updated));

@@ -27836,13 +27836,28 @@ class L10nZh extends L10n {
   String get wallpaperDim => '压暗';
 
   @override
+  String get wallpaperGuard => '自动保证文字清晰';
+
+  @override
+  String get wallpaperGuardHint => '关闭后完全按上面的滑块，调到 0 就是原图';
+
+  @override
+  String get wallpaperGuardMotionHint => '播放动图时只调文字颜色，画面不加遮罩';
+
+  @override
+  String get wallpaperPlay => '播放动图';
+
+  @override
+  String get wallpaperPlayHint => '减少动效时只显示第一帧';
+
+  @override
   String get wallpaperReplace => '更换图片';
 
   @override
   String get wallpaperPreview => '预览';
 
   @override
-  String get wallpaperFooter => '用于首页、对话和抽屉。提亮在浅色模式、压暗在深色模式下各自生效，文字始终清晰。PNG、JPEG、WebP，15 MB 以内';
+  String get wallpaperFooter => '用于首页、对话和抽屉。提亮在浅色模式、压暗在深色模式下各自生效。PNG、JPEG、WebP、GIF，15 MB 以内';
 
   @override
   String get wallpaperChanged => '壁纸已更换';
@@ -27887,7 +27902,7 @@ class L10nZh extends L10n {
   String get wallpaperSampleTool => '查了 3 个天气来源';
 
   @override
-  String get searchKwWallpaper => '背景,背景图,聊天背景,自定义背景,换背景,模糊,壁纸图片';
+  String get searchKwWallpaper => '背景,背景图,聊天背景,自定义背景,换背景,模糊,壁纸图片,动图,动态壁纸,GIF';
 
   @override
   String get webTitle => 'DSH 网页版';

@@ -50814,6 +50814,36 @@ abstract class L10n {
   /// **'压暗'**
   String get wallpaperDim;
 
+  /// No description provided for @wallpaperGuard.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动保证文字清晰'**
+  String get wallpaperGuard;
+
+  /// No description provided for @wallpaperGuardHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭后完全按上面的滑块，调到 0 就是原图'**
+  String get wallpaperGuardHint;
+
+  /// No description provided for @wallpaperGuardMotionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放动图时只调文字颜色，画面不加遮罩'**
+  String get wallpaperGuardMotionHint;
+
+  /// No description provided for @wallpaperPlay.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放动图'**
+  String get wallpaperPlay;
+
+  /// No description provided for @wallpaperPlayHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'减少动效时只显示第一帧'**
+  String get wallpaperPlayHint;
+
   /// No description provided for @wallpaperReplace.
   ///
   /// In zh, this message translates to:
@@ -50829,7 +50859,7 @@ abstract class L10n {
   /// No description provided for @wallpaperFooter.
   ///
   /// In zh, this message translates to:
-  /// **'用于首页、对话和抽屉。提亮在浅色模式、压暗在深色模式下各自生效，文字始终清晰。PNG、JPEG、WebP，15 MB 以内'**
+  /// **'用于首页、对话和抽屉。提亮在浅色模式、压暗在深色模式下各自生效。PNG、JPEG、WebP、GIF，15 MB 以内'**
   String get wallpaperFooter;
 
   /// No description provided for @wallpaperChanged.
@@ -50919,7 +50949,7 @@ abstract class L10n {
   /// No description provided for @searchKwWallpaper.
   ///
   /// In zh, this message translates to:
-  /// **'背景,背景图,聊天背景,自定义背景,换背景,模糊,壁纸图片'**
+  /// **'背景,背景图,聊天背景,自定义背景,换背景,模糊,壁纸图片,动图,动态壁纸,GIF'**
   String get searchKwWallpaper;
 
   /// No description provided for @webTitle.

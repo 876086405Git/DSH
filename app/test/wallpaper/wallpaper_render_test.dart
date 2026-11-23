@@ -4,6 +4,7 @@
 // once, its first frame only; lighter on a lightweight device; a picture that can't be read
 // bakes to nothing (the default backdrop).
 
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:dsh_app/ui/theme/accent.dart';
@@ -116,6 +117,46 @@ void main() {
     final image = await bake(tester, fixtureWallpaper(darkFixture, blur: 0), frame);
     expect((image.width, image.height), (390, 844));
     image.dispose();
+  });
+
+  testWidgets('unguarded: no veil, and at 0 / 0 the picture itself at the screen\'s own pixels', (tester) async {
+    // A bright picture on a dark page, on a lightweight device: everything the guard would calm.
+    final frame = phoneFrame(Brightness.dark, lightweight: true);
+    final w = fixtureWallpaper(brightFixture, blur: 0, tone: 0);
+    final guarded = await bake(tester, w, frame);
+    final plain = await bake(tester, w.copyWith(guard: false), frame);
+    expect((guarded.width, guarded.height), (390, 844));
+    expect((plain.width, plain.height), (780, 1688), reason: 'not the lightweight profile\'s fewer pixels');
+    final source = (await tester.runAsync(() async {
+      final codec = await ui.instantiateImageCodec(File(brightFixture).readAsBytesSync());
+      return (await codec.getNextFrame()).image;
+    }))!;
+    final veiled = (await tester.runAsync(() => Pixels.of(guarded)))!;
+    final baked = (await tester.runAsync(() => Pixels.of(plain)))!;
+    final file = (await tester.runAsync(() => Pixels.of(source)))!;
+    for (final image in [guarded, plain, source]) {
+      image.dispose();
+    }
+    final look = frame.look;
+    final (_, top) = veiled.luminanceRange(Rect.fromLTWH(0, 0, 390, frame.top), lift: look.lift);
+    expect(top, lessThanOrEqualTo(look.edgeBound + 0.003));
+    // The screen's window of the file, and nothing over it.
+    final window = w.window(frame.size);
+    final ours = baked.mean(Rect.fromLTWH(0, 0, 780, 1688));
+    final theirs = file.mean(window);
+    for (final (a, b) in [(ours.r, theirs.r), (ours.g, theirs.g), (ours.b, theirs.b)]) {
+      expect(a, moreOrLessEquals(b, epsilon: 2 / 255));
+    }
+    // Only the slider: 压暗 at 50% lays 40% of the page's veil over it.
+    final toned = await bake(tester, w.copyWith(guard: false, dim: 0.5), frame, density: 0.5);
+    final dim = (await tester.runAsync(() => Pixels.of(toned)))!.mean(const Rect.fromLTWH(0, 0, 195, 20));
+    toned.dispose();
+    final sky = baked.mean(const Rect.fromLTWH(0, 0, 780, 80));
+    final expected = Color.lerp(sky, look.veilTop, 0.5 * WallpaperBake.maxTone)!;
+    expect(dim.computeLuminance(), moreOrLessEquals(expected.computeLuminance(), epsilon: 0.02));
+    // And the blur slider's own σ, where a guarded picture gets the lightweight profile's.
+    expect(WallpaperBake.sigmaOf(w.copyWith(blur: 1), frame), WallpaperBake.lightSigma);
+    expect(WallpaperBake.sigmaOf(w.copyWith(blur: 1, guard: false), frame), WallpaperBake.maxSigma);
   });
 
   testWidgets('decoded once: both modes and the small phones reuse it; zooming in decodes larger', (tester) async {

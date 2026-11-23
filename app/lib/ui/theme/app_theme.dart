@@ -205,7 +205,9 @@ ThemeData _build(
       elevation: 0,
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      shape: AppShape.outlined(hairline, radius: rMd, width: borderW),
+      shape: themePack == null
+          ? AppShape.outlined(hairline, radius: rMd, width: borderW)
+          : themeStyle.cardShape(hairline, borderW),
     ),
 
     // 输入框:长在页面上的玻璃片。描边用 outline(≥ 3:1,WCAG 1.4.11),

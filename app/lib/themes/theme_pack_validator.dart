@@ -40,12 +40,64 @@ bool isValidThemeFontBytes(Uint8List bytes) {
   return tag == 'OTTO' || tag == 'true';
 }
 
+bool _hasMagic(Uint8List bytes, String magic, [int offset = 0]) {
+  if (bytes.length < offset + magic.length) return false;
+  for (var i = 0; i < magic.length; i++) {
+    if (bytes[offset + i] != magic.codeUnitAt(i)) return false;
+  }
+  return true;
+}
+
+bool _withinImageCaps(int w, int h) =>
+    w >= 1 && h >= 1 && w <= themeImageSideCap && h <= themeImageSideCap && w * h * 4 <= themeImageDecodedCap;
+
+/// The canvas a WebP or GIF decodes to (width, height), read from its header and, for a GIF,
+/// its first frame; null when that is cut short, a GIF has no frame, or a WebP is not one of
+/// the three layouts.
+(int, int)? themeImageCanvas(Uint8List bytes) {
+  int le16(int at) => bytes[at] | (bytes[at + 1] << 8);
+  int le24(int at) => le16(at) | (bytes[at + 2] << 16);
+  if (_hasMagic(bytes, 'GIF8')) {
+    // The decoder grows the logical screen to hold a first frame that reaches past it.
+    if (bytes.length < 13) return null;
+    var at = 13 + (bytes[10] & 0x80 == 0 ? 0 : 3 << ((bytes[10] & 7) + 1));
+    while (at + 9 < bytes.length) {
+      if (bytes[at] == 0x2C) {
+        final right = le16(at + 1) + le16(at + 5), bottom = le16(at + 3) + le16(at + 7);
+        return (right > le16(6) ? right : le16(6), bottom > le16(8) ? bottom : le16(8));
+      }
+      if (bytes[at] != 0x21) return null;
+      // An extension: its label, then sub-blocks up to an empty one.
+      at += 2;
+      while (at < bytes.length && bytes[at] != 0) {
+        at += bytes[at] + 1;
+      }
+      at++;
+    }
+    return null;
+  }
+  if (!_hasMagic(bytes, 'RIFF') || !_hasMagic(bytes, 'WEBP', 8) || bytes.length < 30) return null;
+  if (_hasMagic(bytes, 'VP8X', 12)) return (le24(24) + 1, le24(27) + 1);
+  if (_hasMagic(bytes, 'VP8 ', 12)) return (le16(26) & 0x3FFF, le16(28) & 0x3FFF);
+  if (_hasMagic(bytes, 'VP8L', 12)) {
+    final bits = le16(21) | (le16(23) << 16);
+    return ((bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1);
+  }
+  return null;
+}
+
+/// Whether [bytes] open with the signature of the format that [name]'s
+/// extension claims, so a renamed file cannot pass as another image type.
+bool themeImageHeaderMatches(String name, Uint8List bytes) {
+  final lower = name.toLowerCase();
+  if (lower.endsWith('.png')) return _hasMagic(bytes, '\x89PNG\r\n\x1a\n');
+  if (lower.endsWith('.webp')) return _hasMagic(bytes, 'RIFF') && _hasMagic(bytes, 'WEBP', 8);
+  if (lower.endsWith('.gif')) return _hasMagic(bytes, 'GIF87a') || _hasMagic(bytes, 'GIF89a');
+  return false;
+}
+
 class ValidatedThemePack {
-  const ValidatedThemePack({
-    required this.json,
-    required this.pack,
-    required this.assets,
-  });
+  const ValidatedThemePack({required this.json, required this.pack, required this.assets});
 
   final Map<String, Object?> json;
   final ThemePack pack;
@@ -55,10 +107,7 @@ class ValidatedThemePack {
 class ThemePackValidator {
   ThemePackValidator._();
 
-  static ValidatedThemePack validateArchive(
-    Uint8List bytes, {
-    bool market = false,
-  }) {
+  static ValidatedThemePack validateArchive(Uint8List bytes, {bool market = false}) {
     final PetArchive archive;
     try {
       archive = PetArchive.read(bytes);
@@ -68,10 +117,7 @@ class ThemePackValidator {
     return validateThemeArchive(archive, market: market);
   }
 
-  static ValidatedThemePack validateThemeArchive(
-    PetArchive archive, {
-    bool market = false,
-  }) {
+  static ValidatedThemePack validateThemeArchive(PetArchive archive, {bool market = false}) {
     final candidates = archive.manifestPaths('theme.json');
     _need(candidates.length == 1, 'archive-theme-count');
     final manifestPath = candidates.single;
@@ -138,10 +184,7 @@ class ThemePackValidator {
 
     if (market) {
       _need(
-        pack.author != null &&
-            pack.license != null &&
-            workshopLicenses.contains(pack.license) &&
-            pack.source != null,
+        pack.author != null && pack.license != null && workshopLicenses.contains(pack.license) && pack.source != null,
         'theme-metadata',
       );
     }
@@ -162,18 +205,19 @@ class ThemePackValidator {
       _need(bytes!.isNotEmpty && bytes.length <= themeImageByteCap, 'theme-asset-too-large', name);
       total += bytes.length;
       _need(total <= themeTotalAssetByteCap, 'theme-asset-total-size');
+      // WebP and GIF are left to the engine's decoder; only PNG is read in full. Their canvas is
+      // still held to the PNG limits: a small file can declare one that takes hundreds of MB to decode.
+      if (!name.toLowerCase().endsWith('.png')) {
+        _need(themeImageHeaderMatches(name, bytes), 'theme-image-header', name);
+        final canvas = themeImageCanvas(bytes);
+        _need(canvas != null && _withinImageCaps(canvas.$1, canvas.$2), 'theme-image-dimensions', name);
+        kept[name] = bytes;
+        continue;
+      }
       final size = pngSize(bytes);
       _need(size != null, 'theme-png-header', name);
       final (w, h) = size!;
-      _need(
-        w >= 1 &&
-            h >= 1 &&
-            w <= themeImageSideCap &&
-            h <= themeImageSideCap &&
-            w * h * 4 <= themeImageDecodedCap,
-        'theme-png-dimensions',
-        name,
-      );
+      _need(_withinImageCaps(w, h), 'theme-png-dimensions', name);
       _need(pngIntact(bytes), 'theme-png-corrupt', name);
       kept[name] = bytes;
     }
@@ -190,10 +234,6 @@ class ThemePackValidator {
 
     final normalized = pack.toJson();
     _need(utf8.encode(jsonEncode(normalized)).length <= themeJsonCap, 'theme-size');
-    return ValidatedThemePack(
-      json: normalized,
-      pack: pack,
-      assets: Map.unmodifiable(kept),
-    );
+    return ValidatedThemePack(json: normalized, pack: pack, assets: Map.unmodifiable(kept));
   }
 }

@@ -15,6 +15,7 @@ import '../secret_mask.dart';
 import 'message_actions.dart';
 import 'message_selection.dart';
 import 'quote_chip.dart';
+import 'theme_role_tag.dart';
 
 /// 用户消息:**右对齐的软气泡**,比页面深一档,像"按进去"的。
 ///
@@ -142,7 +143,7 @@ class UserBubble extends StatelessWidget {
             ThemeUserBubbleStyle.outlined => ShapeDecoration(
               color: surfaces.userBubble.withValues(alpha: 0.72),
               shape: themeStyle.bubbleShape(
-                scheme.outlineVariant,
+                themeStyle.userBubbleBorder ?? scheme.outlineVariant,
                 themeStyle.borderWidth.clamp(0.8, 2.0),
               ),
             ),
@@ -152,7 +153,7 @@ class UserBubble extends StatelessWidget {
             ),
             ThemeUserBubbleStyle.minimal => BoxDecoration(
               border: Border(
-                right: BorderSide(color: scheme.primary, width: 2.5),
+                right: BorderSide(color: themeStyle.rule ?? scheme.primary, width: 2.5),
               ),
             ),
           };
@@ -163,11 +164,15 @@ class UserBubble extends StatelessWidget {
       child: DecoratedBox(
         decoration: bubbleDecoration,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: themeStyle.pack == null
+              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
+              : EdgeInsets.symmetric(horizontal: themeStyle.shapes.bubblePadH, vertical: themeStyle.shapes.bubblePadV),
           child: MessageSelection(text: _shown, onQuote: onQuote, onMore: () => _menu(context), child: content),
         ),
       ),
     );
+
+    final roleTag = themeStyle.pack == null ? null : themeRoleTag(context, themeStyle, user: true);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -179,6 +184,7 @@ class UserBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              ?roleTag,
               if (attachments case final a?)
                 ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: maxWidth),

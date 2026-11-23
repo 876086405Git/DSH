@@ -121,12 +121,27 @@ class MarkdownBody extends StatefulWidget {
   ///
   /// 缓存按语言 + 表格底色的组合分开:同一页里"跟随主题"和"无底色"是两份
   /// 主题,换设置后不必把旧的丢掉再重建。
-  static GptMarkdownThemeData _themeFor(ThemeData theme, bool secondary, L10n l10n, TableTint tint) {
+  ///
+  /// [reply]: an assistant reply under a theme pack, which restyles it (see
+  /// [_buildTheme]); everything it reads comes from [theme].
+  static GptMarkdownThemeData _themeFor(
+    ThemeData theme,
+    bool secondary,
+    L10n l10n,
+    TableTint tint, {
+    bool reply = false,
+  }) {
     final cache = (secondary ? _secondaryThemes : _themes).putIfAbsent(
-      '${l10n.localeName}|${tint.name}',
+      '${l10n.localeName}|${tint.name}${reply ? '|reply' : ''}',
       () => Expando<GptMarkdownThemeData>('markdownTheme'),
     );
-    return cache[theme] ??= _buildTheme(theme, l10n, secondary: secondary, tint: tint);
+    return cache[theme] ??= _buildTheme(
+      theme,
+      l10n,
+      secondary: secondary,
+      tint: tint,
+      reply: reply ? theme.extension<DshThemeStyle>() : null,
+    );
   }
 
   static GptMarkdownThemeData _buildTheme(
@@ -134,6 +149,7 @@ class MarkdownBody extends StatefulWidget {
     L10n l10n, {
     bool secondary = false,
     TableTint tint = TableTint.follow,
+    DshThemeStyle? reply,
   }) {
     final colors = theme.colorScheme;
     final dsh = theme.extension<DshColors>()!;
@@ -145,13 +161,21 @@ class MarkdownBody extends StatefulWidget {
       stripeColor: colors.onSurface.withValues(alpha: theme.brightness == Brightness.dark ? 0.06 : 0.05),
     );
     final shrink = secondary ? 0.9 : 1.0;
-    TextStyle heading(double size, {double height = 1.45}) => TextStyle(
-      fontSize: size * shrink,
-      fontWeight: FontWeight.w600,
-      height: height,
-      color: secondary ? colors.onSurfaceVariant : colors.onSurface,
-      leadingDistribution: TextLeadingDistribution.even,
-    );
+    final headingColor =
+        reply?.heading ?? (reply?.components.headingStyle == ThemeHeadingStyle.accent ? colors.primary : null);
+    final linkColor = reply?.link ?? colors.primary;
+    TextStyle heading(double size, {double height = 1.45}) {
+      final style = TextStyle(
+        fontSize: size * shrink,
+        fontWeight: FontWeight.w600,
+        height: height,
+        color: headingColor ?? (secondary ? colors.onSurfaceVariant : colors.onSurface),
+        leadingDistribution: TextLeadingDistribution.even,
+      );
+      // A heading does not inherit the body's font, so the pack's is set here.
+      return reply == null ? style : reply.headingTextStyle(reply.applyFontRole(style, reply.typography.uiFont));
+    }
+
     return GptMarkdownThemeData(
       brightness: theme.brightness,
       h1: heading(20, height: 1.4),
@@ -163,15 +187,15 @@ class MarkdownBody extends StatefulWidget {
       hrLineThickness: 0.5,
       hrLineColor: colors.outlineVariant,
       hrLinePadding: const EdgeInsets.symmetric(vertical: 12),
-      linkColor: colors.primary,
-      linkHoverColor: colors.primary,
+      linkColor: linkColor,
+      linkHoverColor: linkColor,
       autoAddDividerLineAfterH1: false,
       inlineCode: InlineCodeStyle(
         fontFamily: AppType.monoFamily,
         fontFamilyFallback: AppType.monoFallback,
         fontSizeFactor: 0.875,
-        color: dsh.codeWellFg,
-        backgroundColor: dsh.codeWellBg,
+        color: reply?.inlineCodeFg ?? dsh.codeWellFg,
+        backgroundColor: reply?.inlineCodeBg ?? dsh.codeWellBg,
         borderColor: dsh.codeWellBorder,
         borderWidth: 0.5,
         borderRadius: const Radius.circular(AppShape.xs),
@@ -206,8 +230,8 @@ class MarkdownBody extends StatefulWidget {
         // `<mark>`:荧光笔一样的暖黄底。
         highlight: HighlightStyle(backgroundColor: dsh.warningContainer, color: dsh.onWarningContainer),
         link: LinkStyle(
-          color: colors.primary,
-          hoverColor: colors.primary,
+          color: linkColor,
+          hoverColor: linkColor,
           decoration: TextDecoration.underline,
           decorationThickness: 0.6,
         ),
@@ -516,7 +540,11 @@ class MarkdownBody extends StatefulWidget {
     final size = (heading ?? const TextStyle()).merge(style.textStyle).fontSize ?? MarkdownImageFont.of(context);
     return MarkdownImageFont(
       size: size,
-      child: Semantics(header: true, container: true, child: content),
+      child: Semantics(
+        header: true,
+        container: true,
+        child: MarkdownReplyScope.of(context) ? _ReplyHeading(level: level, child: content) : content,
+      ),
     );
   }
 
@@ -760,6 +788,7 @@ class _MarkdownBodyState extends State<MarkdownBody> {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final themeStyle = DshThemeStyle.of(context);
+    final reply = widget.replyTypography && themeStyle.pack != null;
     final baseBody = widget.secondary
         ? AppType.chatBody(context, scale: 0.9, color: theme.colorScheme.onSurfaceVariant)
         : AppType.chatBody(context, color: themeStyle.onAssistantBubble ?? theme.colorScheme.onSurface);
@@ -790,8 +819,10 @@ class _MarkdownBodyState extends State<MarkdownBody> {
             },
           );
 
-    Widget withTint(TableTint tint) =>
-        GptMarkdownTheme(gptThemeData: MarkdownBody._themeFor(theme, widget.secondary, l10n, tint), child: text);
+    Widget withTint(TableTint tint) => GptMarkdownTheme(
+      gptThemeData: MarkdownBody._themeFor(theme, widget.secondary, l10n, tint, reply: reply),
+      child: text,
+    );
 
     // Golden 和几何测试不套 ProviderScope:那时按默认那一档画。
     Widget markdown = _scoped
@@ -799,12 +830,50 @@ class _MarkdownBodyState extends State<MarkdownBody> {
         : withTint(TableTint.follow);
     // 表格、成块公式横向放不下时,两端淡出提示还能横滑。
     markdown = ScrollConfiguration(behavior: const EdgeFadeScrollBehavior(), child: markdown);
+    if (reply) {
+      markdown = MarkdownReplyScope(child: markdown);
+    } else if (MarkdownReplyScope.of(context)) {
+      markdown = MarkdownReplyScope(reply: false, child: markdown);
+    }
     if (widget.reveal) markdown = _RevealStreaming(streaming: widget.streaming, blocks: _blocks, child: markdown);
     if (widget.selectable) markdown = SelectionArea(child: markdown);
     return MarkdownImageFont(
       size: body.fontSize!,
       child: MarkdownGalleryScope(child: markdown),
     );
+  }
+}
+
+/// A reply heading in the pack's heading style. A widget of its own, so it
+/// follows the theme without the Markdown above it being rebuilt.
+class _ReplyHeading extends StatelessWidget {
+  const _ReplyHeading({required this.level, required this.child});
+
+  final int level;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final themeStyle = DshThemeStyle.of(context);
+    final colors = Theme.of(context).colorScheme;
+    return switch (themeStyle.components.headingStyle) {
+      ThemeHeadingStyle.underline when level <= 2 => DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+        ),
+        child: SizedBox(
+          width: double.infinity,
+          child: Padding(padding: const EdgeInsets.only(bottom: 4), child: child),
+        ),
+      ),
+      ThemeHeadingStyle.marker => DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: themeStyle.rule ?? colors.primary, width: 3)),
+        ),
+        child: Padding(padding: const EdgeInsets.only(left: 11), child: child),
+      ),
+      _ => child,
+    };
   }
 }
 

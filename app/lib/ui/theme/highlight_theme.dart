@@ -29,10 +29,78 @@ import 'palette.dart';
 ///
 /// 角色色相是语义,不随配色变;正文、注释、标点这几格中性色跟 [accent]
 /// 的中性色走(同明度,对代码井的对比度不变)。
-Map<String, TextStyle> dshHighlightTheme(Brightness brightness, [AppAccent accent = AppAccent.mist]) {
+///
+/// A theme pack's [syntax] colours replace the role colours they name; each
+/// scope keeps its own italics, weight and underline.
+Map<String, TextStyle> dshHighlightTheme(
+  Brightness brightness, [
+  AppAccent accent = AppAccent.mist,
+  ThemeSyntaxColors? syntax,
+]) {
   final dark = brightness == Brightness.dark;
-  final base = dark ? _dark : _light;
   final n = NeutralTones.forAccent(accent);
+  final neutral = _neutralTheme(dark, n);
+  if (syntax == null) return neutral;
+  return _themed.putIfAbsent((dark, n, syntax), () {
+    if (_themed.length > 16) _themed.clear();
+    final themed = {...neutral};
+    void paint(Color? color, List<String> scopes) {
+      if (color == null) return;
+      for (final scope in scopes) {
+        // Some of these the default map leaves plain (`title.function`,
+        // `title.class`): a pack that names the role colours them too.
+        themed[scope] = themed[scope]?.copyWith(color: color) ?? TextStyle(color: color);
+      }
+    }
+
+    paint(syntax.keyword, const ['keyword', 'literal', 'doctag', 'template-tag', 'selector-tag', 'name']);
+    paint(syntax.string, const ['string', 'regexp', 'char.escape']);
+    paint(syntax.number, const ['number', 'symbol', 'bullet']);
+    paint(syntax.comment, const ['comment', 'quote']);
+    paint(syntax.function, const ['title', 'title.function', 'title.function.invoke', 'function', 'section', 'link']);
+    paint(syntax.type, const [
+      'title.class',
+      'title.class.inherited',
+      'type',
+      'built_in',
+      'selector-class',
+      'selector-id',
+    ]);
+    return themed;
+  });
+}
+
+final _themed = <(bool, NeutralTones, ThemeSyntaxColors), Map<String, TextStyle>>{};
+
+/// A theme pack's colours for the syntax roles, for one brightness; a null
+/// role keeps its default. Compared by value: the highlight caches key on it.
+@immutable
+class ThemeSyntaxColors {
+  const ThemeSyntaxColors({this.keyword, this.string, this.number, this.comment, this.function, this.type});
+
+  final Color? keyword;
+  final Color? string;
+  final Color? number;
+  final Color? comment;
+  final Color? function;
+  final Color? type;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ThemeSyntaxColors &&
+      other.keyword == keyword &&
+      other.string == string &&
+      other.number == number &&
+      other.comment == comment &&
+      other.function == function &&
+      other.type == type;
+
+  @override
+  int get hashCode => Object.hash(keyword, string, number, comment, function, type);
+}
+
+Map<String, TextStyle> _neutralTheme(bool dark, NeutralTones n) {
+  final base = dark ? _dark : _light;
   if (identical(n, NeutralTones.defaults)) return base;
   return _tinted.putIfAbsent((dark, n), () {
     if (_tinted.length > 16) _tinted.clear();

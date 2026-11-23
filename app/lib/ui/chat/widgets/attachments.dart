@@ -34,6 +34,9 @@ class AttachButton extends StatelessWidget {
     final l10n = context.l10n;
     final scheme = Theme.of(context).colorScheme;
     final enabled = onPressed != null;
+    // The same key shape as the send key beside it.
+    final keyShape = DshThemeStyle.of(context).keyShape;
+    final fill = scheme.onSurface.withValues(alpha: 0.06);
     return Semantics(
       button: true,
       enabled: enabled,
@@ -51,7 +54,9 @@ class AttachButton extends StatelessWidget {
           child: Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(color: scheme.onSurface.withValues(alpha: 0.06), shape: BoxShape.circle),
+            decoration: keyShape == null
+                ? BoxDecoration(color: fill, shape: BoxShape.circle)
+                : ShapeDecoration(color: fill, shape: keyShape),
             child: Icon(
               AppIcons.add,
               size: 22,
