@@ -1,6 +1,6 @@
 # 鸿蒙发版打包
 
-dsh-Go 的 Release 发布后，`ohos-release-dispatch.yml` 把发布事件对应的完整 commit SHA 交给私有构建仓。私有仓先调用 `OHOS compile` 在 GitHub 的 macOS runner 编译同一提交的 Dart AOT，再在标有 `harmony` 和 `dsh-go-ohos-build` 的 Linux 自托管 runner 组装该提交的 DSH 运行时和 HAP。
+dsh-Go 的 Release 发布后，`ohos-release-dispatch.yml` 把发布事件对应的完整 commit SHA 交给私有构建仓。私有仓在 GitHub 托管机器上确认提交已进入 dsh-Go 的 `main`，再调用 `OHOS compile` 编译同一提交的 Dart AOT，最后在标有 `harmony` 和 `dsh-go-ohos-build` 的 Linux 自托管 runner 组装运行时和 HAP。
 
 产物 `dsh-go-ohos-<sha>-unsigned-hap` 在私有仓的 Actions 运行记录中。它是 OpenHarmony 构建的旁加载验收包，使用 `check-arkts.sh --full --hms-stubs` 并通过其 HAP 审计。签名和真机安装在维护者的可信主机上完成。应用市场包需要原有的 HarmonyOS Command Line Tools 构建入口。
 
@@ -8,7 +8,7 @@ dsh-Go 的 Release 发布后，`ohos-release-dispatch.yml` 把发布事件对应
 
 1. 把本目录的 `harmony-hap.yml` 放进 `ccch1mneyyy/dsh-go-ohos-build` 私有仓 `main` 的 `.github/workflows/harmony-hap.yml`。它调用 dsh-Go 公共仓 `main` 上的 AOT 工作流。
 2. 创建仅限私有构建仓、仅授予 `Actions: Read and write` 的 fine-grained PAT。把它存到公共仓的 Actions secret `OHOS_BUILD_DISPATCH_TOKEN`。它只传给 GitHub 托管机器上的派单步骤。Runner 的注册令牌另行生成。
-3. 用维护者账号发布 Release 会自动触发。若发布动作由仓库工作流的内置 `GITHUB_TOKEN` 完成，GitHub 不会转发 `release` 事件，可从 Actions 手动运行 `Queue HarmonyOS release build`，选择相应的分支或 tag。
+3. 用维护者账号为已进入 `main` 的提交发布 Release 会自动触发。若发布动作由仓库工作流的内置 `GITHUB_TOKEN` 完成，GitHub 不会转发 `release` 事件，可从 Actions 手动运行 `Queue HarmonyOS release build`，选择 `main` 或基于 `main` 的发版 tag。
 
 ## Linux runner
 

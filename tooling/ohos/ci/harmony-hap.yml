@@ -13,7 +13,26 @@ permissions:
   contents: read
 
 jobs:
+  verify-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Accept only a commit already on dsh-Go main
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'source_sha must be a full lowercase commit SHA' >&2
+            exit 1
+          fi
+          comparison="$(curl -fsSL "https://api.github.com/repos/ccch1mneyyy/dsh-Go/compare/$SOURCE_SHA...main?per_page=1")"
+          if ! jq -e --arg sha "$SOURCE_SHA" '.base_commit.sha == $sha and .merge_base_commit.sha == $sha' <<< "$comparison" >/dev/null; then
+            echo 'source_sha must already be on ccch1mneyyy/dsh-Go main' >&2
+            exit 1
+          fi
+
   compile:
+    needs: verify-source
     uses: ccch1mneyyy/dsh-Go/.github/workflows/ohos-compile.yml@main
     with:
       source_sha: ${{ inputs.source_sha }}
