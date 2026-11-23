@@ -56,11 +56,11 @@
     },
     {
       "path": "app/test/companion/companion_page_test.dart",
-      "sha256": "6c81c7fd687cff8ca2e28edb6700cd0892f8f414044c487debc7bc153b2bbfd3"
+      "sha256": "aab5414ac74fcab688d71d198e48c3a099eef4883bbdd9ce5a2578bf864da552"
     },
     {
       "path": "app/test/companion/companion_recall_room_test.dart",
-      "sha256": "c70f73dba5dbfa02b5397af45f746051791f9a92a605c1501e9e3cdba1f64701"
+      "sha256": "e1f088f27f8d116224e933b8573e50836880831a0453dcfeea8de4560e1c943a"
     },
     {
       "path": "app/test/companion/companion_signal_initiative_test.dart",
@@ -72,7 +72,7 @@
     },
     {
       "path": "app/test/companion/companion_stream_state_test.dart",
-      "sha256": "e4177abfb5debd76be29886366ca2903a60292e11deb403c5c472b28d00b6027"
+      "sha256": "fc854c546023dbf9dde3b5551b5de1c1966b0ad76fe5848fdcc64b7e27bd3e44"
     },
     {
       "path": "app/test/companion/companion_test_settle.dart",

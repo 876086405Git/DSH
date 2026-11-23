@@ -42,13 +42,26 @@ import 'package:sqlite3/sqlite3.dart';
 import 'companion_test_settle.dart';
 import 'initiative_memory.dart';
 import 'phone_keeper_fake.dart';
-import '../support/companion_notes_peer.dart' show NotesPeer, notesPath, notesAgreement, notesSnapshot, notesCapability;
+import '../support/companion_notes_peer.dart'
+    show
+        HostModelRoute,
+        NotesPeer,
+        hostAgentPath,
+        hostModelConnection,
+        notesPath,
+        notesAgreement,
+        notesSnapshot,
+        notesCapability;
 
 const _session = 'c438-synthetic-session';
 const _now = 1793937600000;
 
 class _Bridge extends DshConnection {
   _Bridge() : super(Uri.parse('http://127.0.0.1:9'));
+
+  /// The full room's model route (ADD67): the room asks this Host, which
+  /// relays to the room's scripted model.
+  DshConnection? host;
   DshHttpResponse json(Object body, [int status = 200]) =>
       DshHttpResponse(status, 'application/json', Uint8List.fromList(utf8.encode(jsonEncode(body))));
   int revision = 0;
@@ -76,6 +89,16 @@ class _Bridge extends DshConnection {
     bool followRedirects = true,
     int? maxResponseBytes,
   }) async {
+    if (path == hostAgentPath && host != null) {
+      return host!.get(
+        path,
+        query: query,
+        headers: headers,
+        timeout: timeout,
+        followRedirects: followRedirects,
+        maxResponseBytes: maxResponseBytes,
+      );
+    }
     if (path == '$dshGoCompanionPath/memories') {
       return json({
         'v': 1,
@@ -103,6 +126,27 @@ class _Bridge extends DshConnection {
   }) async => json({
     'error': {'code': 'companion/not-found'},
   }, 404);
+
+  @override
+  Future<DshHttpStreamResponse> postJsonStream(
+    String path,
+    Object? body, {
+    required DshHttpAbort abort,
+    Duration? headerTimeout,
+    Duration? idleTimeout = const Duration(seconds: 20),
+  }) {
+    final relay = host;
+    if (path == hostAgentPath && relay != null) {
+      return relay.postJsonStream(
+        path,
+        body,
+        abort: abort,
+        headerTimeout: headerTimeout,
+        idleTimeout: idleTimeout,
+      );
+    }
+    return super.postJsonStream(path, body, abort: abort, headerTimeout: headerTimeout, idleTimeout: idleTimeout);
+  }
 
   @override
   Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
@@ -209,6 +253,31 @@ class _Client extends DshClient {
   }
 }
 
+/// The real saved bindings. A full turn resolves its Session for every model
+/// round (ADD67), and after a memory control forgets the old one it opens a
+/// new one: this Host opens it without its session RPCs.
+class _HostSessions extends CompanionSessions {
+  var opened = 0;
+
+  @override
+  Future<CompanionBinding> ensure({String? memoryArchiveId, int? memoryControlRevision}) async {
+    final existing = of(HostRef.local);
+    if (existing != null &&
+        existing.full &&
+        (memoryArchiveId == null ||
+            (existing.memoryArchiveId == memoryArchiveId && existing.memoryControlRevision == memoryControlRevision))) {
+      return existing;
+    }
+    final binding = CompanionBinding(
+      '$_session-${++opened}',
+      memoryArchiveId: memoryArchiveId,
+      memoryControlRevision: memoryControlRevision,
+    );
+    state = {...state, '${HostRef.local.kind.name}:${HostRef.local.id}': binding};
+    return binding;
+  }
+}
+
 const _notesAgent = 'notes-task-agent';
 
 class _NotesApprovalBridge extends _ApprovalBridge {
@@ -302,6 +371,9 @@ class _NotesForegroundBridge extends _NotesApprovalBridge {
     Duration? headerTimeout,
     Duration? idleTimeout = const Duration(seconds: 20),
   }) async {
+    if (path == hostAgentPath) {
+      return super.postJsonStream(path, body, abort: abort, headerTimeout: headerTimeout, idleTimeout: idleTimeout);
+    }
     ownedAbort = abort;
     observedIdle = idleTimeout;
     final response = await physical.postJsonStream(
@@ -325,118 +397,6 @@ class _Host extends ActiveHostController {
 
 const _followupLine = '对了，周四的面试后来怎么样啦？';
 const _followupSource = '我周四打算去面试。周五你可以问我面试的进展。';
-
-// Only the final HTTP boundary is fixed here. Page, session binding, worker,
-// SDK decoder, usage journal, initiative reservation and stage all remain real.
-class _FollowupBridge extends _Bridge {
-  final posts = <Map<String, Object?>>[];
-  final release = Completer<void>();
-  final responseClosed = Completer<void>();
-  int discovery = 0;
-
-  @override
-  Future<DshHttpResponse> get(
-    String path, {
-    Map<String, String>? query,
-    Map<String, String>? headers,
-    Duration? timeout,
-    bool followRedirects = true,
-    int? maxResponseBytes,
-  }) async {
-    if (path == '/dsh-go/v1/companion/auxiliary') {
-      discovery++;
-      expect(query, {'sessionId': _session});
-      return this.json({
-        'v': 1,
-        'instanceId': 'full-followup-host',
-        'provider': 'selected-followup-provider',
-        'model': 'selected-followup-model',
-        'supported': true,
-        'capability': {
-          'noTools': true,
-          'physicalDispatch': 'unknown',
-          'rawUsage': 'unavailable',
-          'maxPhysicalRequests': null,
-        },
-      });
-    }
-    return super.get(
-      path,
-      query: query,
-      headers: headers,
-      timeout: timeout,
-      followRedirects: followRedirects,
-      maxResponseBytes: maxResponseBytes,
-    );
-  }
-
-  @override
-  Future<DshHttpStreamResponse> postJsonStream(
-    String path,
-    Object? body, {
-    required DshHttpAbort abort,
-    Duration? headerTimeout,
-    Duration? idleTimeout = const Duration(seconds: 20),
-  }) async {
-    expect(path, '/dsh-go/v1/companion/auxiliary');
-    final sent = Map<String, Object?>.from(body! as Map<String, Object?>);
-    posts.add(sent);
-    await release.future; // Deliberately late even if the Page cancels meanwhile.
-    final frames = [
-      {
-        'type': 'accepted',
-        'requestId': sent['requestId'],
-        'instanceId': 'full-followup-host',
-        'provider': 'selected-followup-provider',
-        'model': 'selected-followup-model',
-      },
-      {
-        'type': 'text',
-        'requestId': sent['requestId'],
-        'text': jsonEncode({'action': 'line', 'text': _followupLine}),
-      },
-      {
-        'type': 'finish',
-        'requestId': sent['requestId'],
-        'dispatched': null,
-        'dispatchAtMs': null,
-        'terminal': 'complete',
-        'complete': true,
-        'httpStatus': 200,
-        'stopReason': null,
-        'usage': {
-          'provider': 'selected-followup-provider',
-          'model': 'selected-followup-model',
-          'start_usage': null,
-          'final_usage': null,
-          'start_event': null,
-          'final_event': null,
-          'usage_semantics': 'unknown',
-          'input_uncached': null,
-          'input_cache_read': null,
-          'input_cache_write': null,
-          'output_tokens': null,
-          'terminal': 'complete',
-          'complete': true,
-          'http_status': 200,
-          'stop_reason': null,
-          'runtime_normalized_usage': [
-            {'inputTokens': 40, 'outputTokens': 15},
-          ],
-          'runtime_normalized_usage_semantics': 'runtime-normalized-events',
-        },
-      },
-    ];
-    return DshHttpStreamResponse(
-      200,
-      'application/x-ndjson',
-      Stream.value(Uint8List.fromList(utf8.encode('${frames.map(jsonEncode).join('\n')}\n'))),
-      () async {
-        if (!responseClosed.isCompleted) responseClosed.complete();
-      },
-    );
-  }
-}
 
 class _Settings extends SettingsController {
   @override
@@ -560,9 +520,12 @@ class _Room {
       if (c.$1 == 'action') c.$2['name']! as String,
   ];
 
-  // ── The phone model loop (A1): the room's chat in full mode too ──────────
+  // ── The room's model: asked through the Host in full mode (ADD67) ───────
 
-  /// Every request the phone sent to the model, in order.
+  /// The Host this full room asks; it relays each request to [newClient].
+  final host = HostModelRoute();
+
+  /// Every request the room's model was asked, in order.
   final asked = <Map<String, Object?>>[];
 
   /// Chat requests' live Messages streams; the test writes each event.
@@ -665,6 +628,8 @@ class _Room {
 
   Future<void> open(WidgetTester tester, {void Function(CompanionMemoryOwner)? seed}) async {
     this.tester = tester;
+    host.model = newClient;
+    (client.connection as _Bridge).host = hostModelConnection(host);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     Directory('${root.path}/pack/runtime').createSync(recursive: true);
     Directory('${root.path}/pack/character').createSync(recursive: true);
@@ -681,6 +646,7 @@ class _Room {
             }),
           activeHostProvider.overrideWith(_Host.new),
           activeConnectionProvider.overrideWithValue(AsyncData(HostConnection(client: client, isLocal: true))),
+          companionSessionsProvider.overrideWith(_HostSessions.new),
           settingsProvider.overrideWith(_Settings.new),
           companionLightClientProvider.overrideWithValue(newClient),
           // A2 reads her vitals through the phone keeper in both room modes;
@@ -963,8 +929,8 @@ void main() {
   });
   tearDown(() => temporary.deleteSync(recursive: true));
 
-  // A1: a full room drafts its followup wording through the same phone
-  // memory route as light mode; the Host auxiliary route is never asked.
+  // A full room drafts its followup wording with the same request as light
+  // mode, now asked through its Host (ADD67) rather than the phone key.
   // (The old approval variant: an approval no longer opens in the room, it
   // lives on the tasks page, so the room is covered by that route instead.)
   for (final covered in [false, true]) {
@@ -984,8 +950,7 @@ void main() {
             tester.binding.clock.now().difference(start).inMilliseconds,
         monoMs: tester.binding.clock.now().difference(start).inMilliseconds,
       );
-      final bridge = _FollowupBridge();
-      final room = _Room(temporary, client: _Client(bridge), clock: clock);
+      final room = _Room(temporary, clock: clock);
       final release = Completer<void>();
       room.auxiliary = (body) async {
         if (body['system'] == companionMemoryFollowupPrompt) await release.future;
@@ -1051,8 +1016,8 @@ void main() {
           expect(room.memory.store.nextFollowup(nowMs: clock().wallMs), isNull);
         }
         expect(followups(), hasLength(1));
-        expect(bridge.discovery, 0, reason: 'the Host auxiliary route is not asked');
-        expect(bridge.posts, isEmpty);
+        // ADD67: the full room's wording request goes through its Host.
+        expect([for (final body in room.host.requests) body['kind']], contains('followup'));
         expect(
           room.memory.store.messages().where((row) => row['role'] == 'assistant'),
           isEmpty,
@@ -1302,8 +1267,7 @@ void main() {
     }
 
     final observer = _FollowupObserver(clock);
-    final bridge = _FollowupBridge();
-    final room = _Room(temporary, client: _Client(bridge), clock: clock, initiative: observer);
+    final room = _Room(temporary, clock: clock, initiative: observer);
     await room.open(tester, seed: _seedFullFollowup);
     try {
       await _captureFollowup(tester, observer);
@@ -1321,15 +1285,13 @@ void main() {
       // only phone request; no followup wording is ever drafted.
       expect(room.asked.map(_maintenanceKind), ['organize']);
       expect([for (final body in room.asked) body['system']], isNot(contains(companionMemoryFollowupPrompt)));
-      expect(bridge.discovery, 0);
-      expect(bridge.posts, isEmpty);
+      expect([for (final body in room.host.requests) body['kind']], isNot(contains('followup')));
       expect(room.memory.store.followups().single['state'], 'pending');
       expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
       expect(room.memory.store.initiativeRecord()!['inviteAtMs'], isEmpty);
       // The usage journal holds only that maintenance reservation.
       expect([for (final row in room.memory.store.requests()) row['category']], ['organize']);
     } finally {
-      if (!bridge.release.isCompleted) bridge.release.complete();
       await room.close(tester);
     }
   });
