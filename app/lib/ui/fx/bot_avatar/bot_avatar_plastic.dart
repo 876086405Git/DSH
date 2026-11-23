@@ -261,8 +261,13 @@ bool drawPlasticCap(
     st._blendT = math.min(1, st._blendT + 1 / st._blendFrames);
     final e = st._blendT >= 1 ? 1.0 : st._blendT * st._blendT * (3 - 2 * st._blendT);
     final a = st._mcPrev, b = st._mc, o = st._mcMix;
-    for (var i = 0; i < o.length; i++) {
-      o[i] = a[i] + (b[i] - a[i]) * e;
+    if (!fabric && e == 1) {
+      // Plastic targets are zero or >= 2, so the Float32 endpoint is b.
+      o.setAll(0, b);
+    } else {
+      for (var i = 0; i < o.length; i++) {
+        o[i] = a[i] + (b[i] - a[i]) * e;
+      }
     }
     st._mixVersion++;
   }
