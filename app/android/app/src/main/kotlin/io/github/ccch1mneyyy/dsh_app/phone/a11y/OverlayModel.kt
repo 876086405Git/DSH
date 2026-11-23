@@ -375,6 +375,16 @@ internal object CapsulePlacement {
     fun cardRoomBelow(area: SafeArea, centreY: Int, headerH: Int, gap: Int, obstacleTop: Int? = null): Int =
         minOf(area.screenH - area.bottom, obstacleTop ?: Int.MAX_VALUE) - gap - (centreY - headerH / 2)
 
+    /**
+     * A downward card's capsule centre moved up so its [cardH] (header included) fits over
+     * [obstacleTop] (the keyboard while 插话 is typed), never above [gap] under the status bar.
+     */
+    fun liftForCard(area: SafeArea, centreY: Int, headerH: Int, gap: Int, obstacleTop: Int?, cardH: Int): Int {
+        if (obstacleTop == null || cardH <= 0) return centreY
+        val floor = area.top + gap + headerH / 2
+        return maxOf(floor, minOf(centreY, obstacleTop - gap - cardH + headerH / 2))
+    }
+
     /** The window's Gravity.TOP offset for a capsule centred at [centreY], its root padding the surface by [padTop] above. */
     fun windowTopY(centreY: Int, headerH: Int, padTop: Int) = centreY - headerH / 2 - padTop
 

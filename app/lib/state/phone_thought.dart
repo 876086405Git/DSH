@@ -104,11 +104,14 @@ class PhoneThoughtsController extends Notifier<void> {
     }
     for (final session in want) {
       if (_subs.containsKey(session)) continue;
-      _subs[session] = ref.listen(
+      // Subscribed first, then the thought already there offered: a listener fired at once would
+      // reach _flush before the subscription is kept, and drop it.
+      final sub = ref.listen(
         chatProvider(session).select((chat) => phoneThoughtOf(chat.items)),
         (_, thought) => _offer(session, thought),
-        fireImmediately: true,
       );
+      _subs[session] = sub;
+      _offer(session, sub.read());
     }
   }
 

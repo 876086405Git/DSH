@@ -55,7 +55,7 @@ class PhoneOverlayPrefsController extends Notifier<PhoneOverlayPrefs> {
 }
 
 /// Whether this phone has its own island for the task (the 用系统灵动岛显示 row
-/// shows only then). Asked once per visit of the page.
+/// shows only then). Asked when the page opens and again when the app comes back.
 final phoneSystemIslandProvider = FutureProvider.autoDispose<({bool vendor, bool shows})>(
   (ref) => ref.read(phoneChannelProvider).systemIsland(),
 );

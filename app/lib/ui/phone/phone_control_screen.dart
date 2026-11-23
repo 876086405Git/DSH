@@ -126,6 +126,8 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
 
   Future<void> _onResume() async {
     unawaited(ref.read(phoneLinkProvider.notifier).refresh());
+    // Notifications, 实时活动 or the vendor's permission may have changed in the system settings.
+    ref.invalidate(phoneSystemIslandProvider);
     final read = ++_resumeRead;
     setState(() => _skillPromptsReady = false);
     final ready = await _phone.refreshStatus();
@@ -524,6 +526,7 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
                 Spots.phoneA11yRestore,
                 Spots.phoneAutoCollapse,
                 Spots.phoneEdgeGlow,
+                Spots.phoneSystemIsland,
                 Spots.phoneReturn,
                 Spots.phoneBackgroundGuide,
               ].any((spot) => spot.id == targetSpot),

@@ -233,10 +233,11 @@ object LiveActivity {
 
     private fun nm(ctx: Context) = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    /** Notifications are allowed and the live channel isn't turned off: what is posted shows at all. */
+    /** Notifications are allowed and the live channel is above 最低 (a minimum-importance channel is never promoted to the island). */
     private fun posts(ctx: Context): Boolean = runCatching {
         val nm = nm(ctx)
-        nm.areNotificationsEnabled() && nm.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
+        nm.areNotificationsEnabled() &&
+            (nm.getNotificationChannel(CHANNEL)?.importance ?: NotificationManager.IMPORTANCE_DEFAULT) > NotificationManager.IMPORTANCE_MIN
     }.getOrDefault(false)
 
     private fun apply() {

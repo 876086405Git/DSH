@@ -328,6 +328,18 @@ class BallGeometryTest {
         assertEquals(keyboard - gap - capsuleTop, CapsulePlacement.cardRoomBelow(area, top, headerH, gap, keyboard))
     }
 
+    @Test fun aDownwardCardLiftsOverTheKeyboardForItsBodyNotJustTheHeader() {
+        val keyboard = 1500
+        val low = 1300
+        val cardH = 600
+        // Room for the whole card over the keyboard: its bottom a gap above it.
+        val lifted = CapsulePlacement.liftForCard(area, low, headerH, gap, keyboard, cardH)
+        assertEquals(cardH, CapsulePlacement.cardRoomBelow(area, lifted, headerH, gap, keyboard))
+        // Never above the gap under the status bar; with no keyboard it stays put.
+        assertEquals(area.top + gap + headerH / 2, CapsulePlacement.liftForCard(area, low, headerH, gap, keyboard, 5000))
+        assertEquals(low, CapsulePlacement.liftForCard(area, low, headerH, gap, null, cardH))
+    }
+
     @Test fun anIslandAtTheTopFoldsIntoABallInItsMiddle() {
         val top = CapsulePlacement.centreY(area, headerH, gap, fraction = CapsulePlacement.TOP)
         val wx = CapsulePlacement.windowX(CapsulePlacement.capsuleLeft(CapsuleAnchor.CENTRE, area, capsuleW, edge), padX, 0)

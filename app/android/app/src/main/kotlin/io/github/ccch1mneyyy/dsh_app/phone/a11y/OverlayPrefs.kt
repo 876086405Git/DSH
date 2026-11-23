@@ -83,7 +83,7 @@ data class OverlayPrefs(
         /** Where the person left the capsule last; the default spot until they move it. */
         internal fun spot(p: SharedPreferences): CapsuleSpot = CapsuleSpot(
             CapsuleAnchor.entries.firstOrNull { it.name == p.getString(K_CAPSULE_ANCHOR, null) } ?: CapsuleAnchor.CENTRE,
-            p.getFloat(K_CAPSULE_Y, CapsulePlacement.CENTRE),
+            p.getFloat(K_CAPSULE_Y, CapsulePlacement.TOP),
         )
 
         internal fun saveSpot(p: SharedPreferences, spot: CapsuleSpot) {

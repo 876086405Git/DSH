@@ -93,6 +93,9 @@ import java.util.concurrent.TimeUnit
 internal class ControlOverlay(private val service: AccessibilityService) : UserGate, PhonePromptPresenter {
     private val main = Handler(Looper.getMainLooper())
     private val wm = service.getSystemService(WindowManager::class.java)
+
+    /** Keeps the screen on while the phone's own island shows instead of the capsule ([syncAwake]). */
+    private var awake: View? = null
     private val a11y = service.getSystemService(AccessibilityManager::class.java)
     private val ime = service.getSystemService(InputMethodManager::class.java)
 
@@ -558,6 +561,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
             dismissConfirm()
             dismissHandoff()
             removePill(animated = false)
+            syncAwake()
         }
     }
 
@@ -840,6 +844,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         }
         val b = ball
         pill = null
+        syncAwake()
         // A capsule taken away under the finger: endDrag finds no capsule, so the drag ends here.
         dragFrom = null
         dragAt = null
@@ -936,7 +941,9 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     private fun capsuleY(p: OverlayCapsule, a: SafeArea): Int {
         val headerH = dp(CapsuleMetrics.HEIGHT_DP)
         if (p.down) {
-            val centre = capsuleCentre(a, obstacleTop())
+            val obstacle = obstacleTop()
+            val cardH = if (fold.expanded) p.naturalCardHeight() else 0
+            val centre = CapsulePlacement.liftForCard(a, capsuleCentre(a, obstacle), headerH, dp(CapsulePlacement.GAP_DP), obstacle, cardH)
             p.maxCardHeight = CapsulePlacement.cardRoomBelow(a, centre, headerH, dp(CapsulePlacement.GAP_DP), obstacleTop())
             return CapsulePlacement.windowTopY(centre, headerH, p.padTop)
         }
@@ -1771,6 +1778,35 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
         val shown = if (captureHidden) View.INVISIBLE else View.VISIBLE
         p.root.visibility = if (away || ballShown) View.GONE else shown
         ball?.root?.visibility = if (away || !ballShown) View.GONE else shown
+        syncAwake()
+    }
+
+    /**
+     * While the phone's own island stands in for the capsule and the ball (GONE windows keep
+     * nothing awake), a 1 px window that takes no touches keeps the screen on: the screen going
+     * off stops the task (PhoneA11yService).
+     */
+    private fun syncAwake() {
+        val want = !destroying && pill != null && islandMode()
+        if (want == (awake != null)) return
+        if (!want) {
+            awake?.let { remove(it) }
+            awake = null
+            return
+        }
+        val v = View(service)
+        val lp = WindowManager.LayoutParams(
+            1,
+            1,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            title = s(R.string.overlay_window_title)
+        }
+        if (add(v, lp)) awake = v
     }
 
     private fun showWindow(root: View) {
