@@ -155,6 +155,11 @@ void main() {
     final held = Completer<void>();
     final releaseFinish = Completer<void>();
     final heard = Completer<void>();
+    var p0Mode = '';
+    var boundedPosts = 0;
+    final postBytes = <int>[];
+    final staleAccepted = Completer<void>();
+    final releaseStale = Completer<void>();
     server.listen((request) async {
       final raw = await utf8.decoder.bind(request).join();
       final response = request.response;
@@ -179,6 +184,17 @@ void main() {
       } else {
         final body = jsonDecode(raw) as Map<String, Object?>;
         posts.add(body);
+        postBytes.add(utf8.encode(raw).length);
+        if (p0Mode == 'http-limit' || p0Mode == 'unknown-limit') {
+          response.statusCode = 413;
+          response.headers.contentType = ContentType.json;
+          response.write(jsonEncode({
+            'error': {'code': 'companion/too-large'},
+            if (p0Mode == 'http-limit') 'dispatched': false,
+          }));
+          await response.close();
+          return;
+        }
         if (posts.length == 3 || posts.length == 6) {
           response.statusCode = 429;
           response.headers.contentType = ContentType.text;
@@ -186,7 +202,7 @@ void main() {
           await response.close();
           return;
         }
-        final first = posts.length == 1;
+        final first = posts.length == 1 || (p0Mode == 'trim' && ++boundedPosts == 1);
         final terminal = first ? 'tool-calls' : 'complete';
         // A buffered dart:io response holds the flushed frames until close.
         response.bufferOutput = false;
@@ -194,6 +210,43 @@ void main() {
         void emit(Map<String, Object?> frame) =>
             response.write('${jsonEncode({...frame, 'requestId': body['requestId']})}\n');
         emit({'type': 'accepted', 'instanceId': 'host-generation', 'provider': provider, 'model': model});
+        if (const {'not-sent', 'sent', 'stale'}.contains(p0Mode)) {
+          if (p0Mode == 'stale') {
+            await response.flush();
+            staleAccepted.complete();
+            await releaseStale.future;
+          }
+          final dispatched = p0Mode == 'sent';
+          emit({
+            'type': 'finish',
+            'dispatched': dispatched,
+            'dispatchAtMs': dispatched ? 1795309200000 : null,
+            'terminal': 'provider_error',
+            'complete': false,
+            'stopReason': null,
+            'httpStatus': null,
+            'error': {'code': 'MISSING_CREDENTIAL'},
+            'usage': {
+              'provider': provider,
+              'model': model,
+              'start_usage': null,
+              'final_usage': null,
+              'start_event': null,
+              'final_event': null,
+              'usage_semantics': 'unknown',
+              'input_uncached': null,
+              'input_cache_read': null,
+              'input_cache_write': null,
+              'output_tokens': null,
+              'stop_reason': null,
+              'terminal': 'provider_error',
+              'complete': false,
+              'http_status': null,
+            },
+          });
+          await response.close();
+          return;
+        }
         if (posts.length == 4 || posts.length == 5) {
           final status = posts.length == 4 ? 429 : null;
           final failureTerminal = status == 429 ? 'http_error' : 'provider_error';
@@ -243,7 +296,7 @@ void main() {
             'source': {'kind': 'model', 'provider': provider, 'model': model},
           },
         });
-        if (first) {
+        if (posts.length == 1) {
           await response.flush();
           held.complete();
           await releaseFinish.future;
@@ -546,6 +599,275 @@ void main() {
     } finally {
       hostMemory.leave(room);
     }
+
+    // ADD76: the same real HTTP route trims only old raw history, then keeps
+    // the complete current input, selected memory and phone-owned exchanges.
+    final originalHostCosts = hostMemory.store.requests();
+    final p0Memory = _memory();
+    addTearDown(p0Memory.dispose);
+    const memoryId = '1743837a-e591-42b1-883c-878173fa63b5';
+    const memoryWords = '我喝咖啡时只要无糖。';
+    p0Memory.store.saveManual(
+      const CompanionMemory(id: memoryId, text: memoryWords, keywords: ['咖啡'], pinned: true),
+      expectedRowRev: null,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    final oldest = p0Memory.store.submitMessage(
+      id: 'p0-oldest', sessionId: 'full-session',
+      text: 'oldest-only ${List.filled(9000, '旧🙂"\\').join()}',
+      saidAtUtc: 1795309200000, offsetMinutes: 480,
+    );
+    final recent = p0Memory.store.submitMessage(
+      id: 'p0-recent', sessionId: 'full-session', text: 'recent-history-survives',
+      saidAtUtc: 1795309200000, offsetMinutes: 480,
+    );
+    final current = p0Memory.store.submitMessage(
+      id: 'p0-current', sessionId: 'full-session', text: 'current-owner-input：咖啡这两件事继续。',
+      saidAtUtc: 1795309200000, offsetMinutes: 480,
+    );
+    final sourceSnapshots = {for (final row in p0Memory.store.messages()) row['id']: row};
+    final phoneRequests = <Map<String, Object?>>[];
+    final p0Calls = <int>[];
+    final selections = <MemorySelection>[];
+    var key = 'synthetic';
+    var routeCurrent = true;
+    var attemptStartIds = <String>{};
+    final p0Route = CompanionHostMemoryTransport(
+      client: hostClient, capability: capability, isCurrent: () => routeCurrent,
+    );
+    final p0Agent = CompanionAgent(
+      apiKey: () => key,
+      memoryTransport: () => p0Route,
+      client: () => MockClient.streaming((request, body) async {
+        // This runs only after the old Host attempt has drained and released.
+        final newRows = p0Memory.store.requests().where((row) => !attemptStartIds.contains(row['id']));
+        final rejectedHosts = newRows.where((row) => row['provider'] == provider).toList();
+        expect(rejectedHosts, isNotEmpty);
+        expect(rejectedHosts.every((row) => row['state'] == 'released' && row['terminal'] == 'not_sent'), isTrue);
+        expect(rejectedHosts.every((row) => row['sent_at_ms'] == null), isTrue);
+        phoneRequests.add(jsonDecode(await body.bytesToString()) as Map<String, Object?>);
+        final tools = p0Mode == 'not-sent' && phoneRequests.length == 1;
+        final events = <Map<String, Object?>>[
+          if (tools) ..._call(0, 'fallback-call', ['{"n":3}']) else _words('手机这轮完成。'),
+          {
+            'type': 'message_delta',
+            'delta': {'stop_reason': tools ? 'tool_use' : 'end_turn'},
+            'usage': {
+              'input_tokens': 13, 'cache_read_input_tokens': 0,
+              'cache_creation_input_tokens': 0, 'output_tokens': 4,
+            },
+          },
+          {'type': 'message_stop'},
+        ];
+        return http.StreamedResponse(Stream.value(utf8.encode(_sse(events))), 200);
+      }),
+    );
+    Future<void>? staleTurn;
+    addTearDown(() async {
+      if (!releaseStale.isCompleted) releaseStale.complete();
+      p0Agent.dispose();
+      await staleTurn;
+    });
+    final p0Tools = [
+      (
+        definition: _tool,
+        execute: (CompanionAgentToolCall call) async {
+          p0Calls.add(call.input['n']! as int);
+          return const CompanionAgentToolResult(content: '{"ok":true,"receipt":"phone-tool"}');
+        },
+      ),
+    ];
+    p0Mode = 'trim';
+    await p0Agent.say(
+      memory: p0Memory, source: current, system: 'protected-system-context',
+      assistantPage: 'protected-current-page', tools: p0Tools,
+      isCurrent: () => true, onSelected: selections.add,
+    );
+    final bounded = posts.skip(6).toList();
+    expect(bounded, hasLength(2));
+    expect(phoneRequests, isEmpty);
+    expect(p0Calls, [1, 2]);
+    expect(p0Agent.error, isNull);
+    expect(selections.every((selection) => selection.ids.contains(memoryId)), isTrue);
+    expect(postBytes.skip(6).every((size) => size <= companionAgentRequestMaxBytes), isTrue);
+    for (final post in bounded) {
+      expect(companionAgentRequestBytes(
+        capability, requestId: post['requestId']! as String, system: post['system']! as String,
+        messages: (post['messages']! as List).cast<Map<String, Object?>>(),
+        tools: (post['tools']! as List).cast<Map<String, Object?>>(), maxTokens: post['maxTokens']! as int,
+      ), postBytes[posts.indexOf(post)]);
+      expect(post['system'], contains('protected-system-context'));
+      final submitted = jsonEncode(post['messages']);
+      expect(submitted, isNot(contains('oldest-only')));
+      expect(submitted, contains('recent-history-survives'));
+      expect(submitted, contains('current-owner-input'));
+      expect(submitted, contains(memoryWords));
+      expect(submitted, contains('protected-current-page'));
+    }
+    final boundedContinuation = bounded.last['messages']! as List;
+    expect(((boundedContinuation[boundedContinuation.length - 2] as Map)['content'] as List)
+        .cast<Map>().where((block) => block['type'] == 'tool_use').map((block) => block['id']),
+        ['host-call-one', 'host-call-two']);
+    expect(((boundedContinuation.last as Map)['content'] as List).cast<Map>()
+        .map((result) => result['tool_use_id']), ['host-call-one', 'host-call-two']);
+    expect(p0Memory.store.messages().singleWhere((row) => row['id'] == oldest['id']), sourceSnapshots[oldest['id']]);
+    expect(p0Memory.store.messages().singleWhere((row) => row['id'] == recent['id']), sourceSnapshots[recent['id']]);
+    expect(p0Memory.store.messages().singleWhere((row) => row['id'] == current['id']), sourceSnapshots[current['id']]);
+
+    // A valid current finish(false) allows one new phone attempt per round.
+    // The phone tool result continues in the same loop; Host and phone IDs
+    // and provider-specific fees remain separate, including on the next round.
+    p0Mode = 'not-sent';
+    attemptStartIds = p0Memory.store.requests().map((row) => row['id']! as String).toSet();
+    final beforeFallbackPosts = posts.length;
+    await p0Agent.say(
+      memory: p0Memory,
+      source: p0Memory.store.submitMessage(
+        id: 'p0-rejected', sessionId: 'full-session', text: '缺凭据时继续这项手机工具。',
+        saidAtUtc: 1795309200000, offsetMinutes: 480,
+      ),
+      system: 'protected-system-context', tools: p0Tools, isCurrent: () => true,
+    );
+    expect(posts.length - beforeFallbackPosts, 2);
+    expect(phoneRequests, hasLength(2));
+    expect(p0Calls, [1, 2, 3]);
+    expect(p0Agent.error, isNull);
+    expect(p0Agent.text, '手机这轮完成。');
+    expect(jsonEncode(phoneRequests.first['messages']), contains('oldest-only'),
+        reason: 'Host-only trimming never truncates the phone request view');
+    final phoneContinuation = phoneRequests.last['messages']! as List;
+    expect(((phoneContinuation[phoneContinuation.length - 2] as Map)['content'] as List)
+        .cast<Map>().singleWhere((block) => block['type'] == 'tool_use')['id'], 'fallback-call');
+    expect(((phoneContinuation.last as Map)['content'] as List).cast<Map>().single['tool_use_id'], 'fallback-call');
+    final fallbackRows = p0Memory.store.requests().where((row) => !attemptStartIds.contains(row['id'])).toList();
+    expect(fallbackRows, hasLength(4));
+    expect(fallbackRows.map((row) => row['id']).toSet(), hasLength(4));
+    expect(fallbackRows.where((row) => row['provider'] == provider).map((row) => row['id']).toSet(),
+        posts.skip(beforeFallbackPosts).map((post) => post['requestId']).toSet());
+    for (final row in fallbackRows.where((row) => row['provider'] == 'deepseek')) {
+      expect(row['model'], companionLightModel);
+      expect(row['sent_at_ms'], isNotNull);
+      expect(row['state'], 'finished');
+      expect(row['estimated_cny'], isNotNull);
+      expect(row['output_tokens'], 4);
+    }
+    for (final row in fallbackRows.where((row) => row['provider'] == provider)) {
+      expect(row['model'], model);
+      expect(row['terminal'], 'not_sent');
+      expect(row['sent_at_ms'], isNull);
+      expect(row['estimated_cny'], isNull);
+      expect((row['raw_usage'] as Map)['terminal'], 'provider_error');
+    }
+
+    // Even after all old history is removed, this current source alone is too
+    // large. The SDK preflight sends no HTTP; its own reservation is released.
+    final largeSource = p0Memory.store.submitMessage(
+      id: 'p0-current-too-large', sessionId: 'full-session',
+      text: 'current-must-not-be-truncated ${List.filled(22000, '🙂').join()}',
+      saidAtUtc: 1795309200000, offsetMinutes: 480,
+    );
+    final largeSaved = p0Memory.store.messages().singleWhere((row) => row['id'] == largeSource['id']);
+    attemptStartIds = p0Memory.store.requests().map((row) => row['id']! as String).toSet();
+    final beforeLimitPosts = posts.length;
+    await p0Agent.say(
+      memory: p0Memory, source: largeSource, system: 'protected-system-context',
+      tools: const [], isCurrent: () => true,
+    );
+    expect(posts.length, beforeLimitPosts);
+    expect(phoneRequests, hasLength(3));
+    expect(p0Agent.error, isNull);
+    expect(jsonEncode(phoneRequests.last['messages']), contains(largeSource['text']! as String));
+    expect(p0Memory.store.messages().singleWhere((row) => row['id'] == largeSource['id']), largeSaved);
+    final limitHost = p0Memory.store.requests().singleWhere(
+      (row) => !attemptStartIds.contains(row['id']) && row['provider'] == provider,
+    );
+    expect(limitHost['state'], 'released');
+    expect(limitHost['terminal'], 'not_sent');
+    expect(limitHost['uncertain_at_ms'], isNull);
+    expect(limitHost['raw_usage'], isNull);
+
+    // No phone key retains the actual Host reason, not a phone no-key error.
+    key = '';
+    await p0Agent.say(
+      memory: p0Memory,
+      source: p0Memory.store.submitMessage(
+        id: 'p0-no-key', sessionId: 'full-session', text: '没有手机key时保留Host原因。',
+        saidAtUtc: 1795309200000, offsetMinutes: 480,
+      ),
+      system: 'protected-system-context', tools: const [], isCurrent: () => true,
+    );
+    expect(p0Agent.error, isA<CompanionHostError>().having((error) => error.detail, 'detail', 'MISSING_CREDENTIAL'));
+    expect(phoneRequests, hasLength(3));
+
+    // The same status/code without false is unknown, and an actual sent
+    // observation cannot be retried even when a phone key exists.
+    key = 'synthetic';
+    p0Mode = 'unknown-limit';
+    final beforeUnknownPosts = posts.length;
+    await p0Agent.say(
+      memory: p0Memory,
+      source: p0Memory.store.submitMessage(
+        id: 'p0-unknown', sessionId: 'full-session', text: '413没有未派发证明。',
+        saidAtUtc: 1795309200000, offsetMinutes: 480,
+      ),
+      system: 'protected-system-context', tools: const [], isCurrent: () => true,
+    );
+    expect(posts.length, beforeUnknownPosts + 1);
+    expect(phoneRequests, hasLength(3));
+    expect(p0Agent.error, isA<CompanionHostError>());
+    expect(p0Memory.store.requests().singleWhere((row) => row['id'] == posts.last['requestId'])['terminal'], 'dispatch_unknown');
+    p0Mode = 'sent';
+    await p0Agent.say(
+      memory: p0Memory,
+      source: p0Memory.store.submitMessage(
+        id: 'p0-sent', sessionId: 'full-session', text: '已经派发不能再发。',
+        saidAtUtc: 1795309200000, offsetMinutes: 480,
+      ),
+      system: 'protected-system-context', tools: const [], isCurrent: () => true,
+    );
+    expect(phoneRequests, hasLength(3));
+    final sentRow = p0Memory.store.requests().singleWhere((row) => row['id'] == posts.last['requestId']);
+    expect(sentRow['sent_at_ms'], isNotNull);
+    expect(sentRow['terminal'], 'provider_error');
+    expect(sentRow['estimated_cny'], isNull);
+
+    // The exact HTTP 413/code/false contract is a different, proven rejection.
+    p0Mode = 'http-limit';
+    attemptStartIds = p0Memory.store.requests().map((row) => row['id']! as String).toSet();
+    await p0Agent.say(
+      memory: p0Memory,
+      source: p0Memory.store.submitMessage(
+        id: 'p0-http-limit', sessionId: 'full-session', text: '明确413未派发可以手机接续。',
+        saidAtUtc: 1795309200000, offsetMinutes: 480,
+      ),
+      system: 'protected-system-context', tools: const [], isCurrent: () => true,
+    );
+    expect(phoneRequests, hasLength(4));
+    expect(p0Agent.error, isNull);
+    expect(p0Memory.store.requests().singleWhere((row) => row['id'] == posts.last['requestId'])['terminal'], 'not_sent');
+
+    // A late proof still settles its original receipt, but cannot resurrect
+    // a retired Host selection by replacing its current fence with phone=true.
+    p0Mode = 'stale';
+    staleTurn = p0Agent.say(
+      memory: p0Memory,
+      source: p0Memory.store.submitMessage(
+        id: 'p0-stale', sessionId: 'full-session', text: '等待时切走原模型选择。',
+        saidAtUtc: 1795309200000, offsetMinutes: 480,
+      ),
+      system: 'protected-system-context', tools: const [], isCurrent: () => true,
+    );
+    await staleAccepted.future;
+    routeCurrent = false;
+    releaseStale.complete();
+    await staleTurn;
+    expect(phoneRequests, hasLength(4));
+    expect(p0Agent.running, isFalse);
+    expect(p0Agent.text, isEmpty);
+    expect(p0Memory.store.requests().singleWhere((row) => row['id'] == posts.last['requestId'])['terminal'], 'not_sent');
+    expect(hostMemory.store.requests(), originalHostCosts);
+
   });
 
   test('keeps the memory owner open until the first stream cancellation drains', () async {
