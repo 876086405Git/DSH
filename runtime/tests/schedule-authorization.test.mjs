@@ -455,10 +455,10 @@ test('empty schedule import defers record rules until the first parse', async t 
     if (url !== file.href) return loaded;
     loadedCount++;
     let source = Buffer.from(loaded.source).toString();
-    const starts = source.match(/const scheduleTaskSchema = [^\n]*z\$1\.object\(\{/g);
-    assert.equal(starts?.length, 1, 'locate the final record object constructor');
-    source = source.replace(starts[0], starts[0].replace('z$1.object(', '__countScheduleRecordObject('));
-    source += `\nfunction __countScheduleRecordObject(...args) { globalThis.${counter}++; return z$1.object(...args); }\n`;
+    const starts = source.match(/const recordSchema = z\$1\.unknown\(\)/g);
+    assert.equal(starts?.length, 1, 'locate the first record rule constructor');
+    source = source.replace(starts[0], 'const recordSchema = __countScheduleRecordRule()');
+    source += `\nfunction __countScheduleRecordRule() { globalThis.${counter}++; return z$1.unknown(); }\n`;
     return { ...loaded, source };
   }});
   t.after(() => { hooks.deregister(); delete globalThis[counter]; });

@@ -178,6 +178,7 @@ config-editor-empty-layer-copy.diff
 piai-overflow-output-limit.diff
 schedule-authorization-availability.diff
 schedule-task-schema-on-demand.diff
+schedule-private-scope.diff
 deepseek-refusal.diff
 deepseek-unnamed-stream-error.diff
 web-empty-reply-notice.diff

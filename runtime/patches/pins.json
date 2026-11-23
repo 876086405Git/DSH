@@ -1020,6 +1020,14 @@
         }
       }
     },
+    "schedule-private-scope.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-schedule/lib/index.js": {
+          "after": "b4869ba610457368a3b6875795c91e4e65c85729f37812a2bca79c8fcd118337",
+          "before": "a89c6b8a6aa0e087cbee8df5dcf792629d1452f6838cd16ff7ac813db114e099"
+        }
+      }
+    },
     "schedule-task-schema-on-demand.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-schedule/lib/index.js": {
@@ -3013,6 +3021,7 @@
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
       "schedule-task-schema-on-demand.diff",
+      "schedule-private-scope.diff",
       "deepseek-refusal.diff",
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
@@ -3227,6 +3236,7 @@
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
       "schedule-task-schema-on-demand.diff",
+      "schedule-private-scope.diff",
       "deepseek-refusal.diff",
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
