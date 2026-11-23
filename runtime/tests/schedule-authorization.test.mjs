@@ -2,6 +2,7 @@
 // DSH_PREFIX=<isolated patched prefix> node --test runtime/tests/schedule-authorization.test.mjs
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { registerHooks } from 'node:module';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
@@ -440,4 +441,35 @@ test('real no-answerer and explicit refusal stay distinct at the schedule tool b
   try { assert.ok((await create()).id); }
   finally { stop(); }
   assert.equal(f.writes.length, 1, 'a later explicitly authorized attempt still works');
+});
+
+test('empty schedule import defers record rules until the first parse', async t => {
+  // The other tests already imported this file; use a fresh module instance.
+  const file = new URL(pathToFileURL(modulePath));
+  file.search = 'dsh-go-schedule-schema-on-demand';
+  const counter = '__dshScheduleRecordBuildCount';
+  globalThis[counter] = 0;
+  let loadedCount = 0;
+  const hooks = registerHooks({ load(url, context, next) {
+    const loaded = next(url, context);
+    if (url !== file.href) return loaded;
+    loadedCount++;
+    let source = Buffer.from(loaded.source).toString();
+    const starts = source.match(/const scheduleTaskSchema = [^\n]*z\$1\.object\(\{/g);
+    assert.equal(starts?.length, 1, 'locate the final record object constructor');
+    source = source.replace(starts[0], starts[0].replace('z$1.object(', '__countScheduleRecordObject('));
+    source += `\nfunction __countScheduleRecordObject(...args) { globalThis.${counter}++; return z$1.object(...args); }\n`;
+    return { ...loaded, source };
+  }});
+  t.after(() => { hooks.deregister(); delete globalThis[counter]; });
+  const { scheduleDomain, createAfterScheduleRecord } = await import(file.href);
+  assert.equal(loadedCount, 1, 'instrument the fresh module, not a cached export');
+  const schema = scheduleDomain.tables.tasks.valueSchema;
+  assert.equal(globalThis[counter], 0, 'module import has no record consumer');
+  const record = createAfterScheduleRecord('schema-count', 'Fixture reminder', 86400, Date.now(), 'Fixture title');
+  const first = schema.parse({ record });
+  assert.equal(globalThis[counter], 1, 'first parse constructs the rules once');
+  assert.deepEqual(schema.parse({ record }), first);
+  assert.equal(schema.safeParse({ record, unexpected: true }).success, false);
+  assert.equal(globalThis[counter], 1, 'later valid and invalid parses reuse the rules');
 });
