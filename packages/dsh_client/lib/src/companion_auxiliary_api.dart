@@ -427,19 +427,23 @@ extension CompanionAuxiliaryApi on DshClient {
     // Caller-owned nested input maps must not change during the HTTP await.
     final Map<String, Object?> body;
     try {
-      body = _map(jsonDecode(jsonEncode({
-        'v': 1,
-        'instanceId': host.instanceId,
-        'requestId': requestId,
-        'sessionId': host.sessionId,
-        'provider': host.provider,
-        'model': host.model,
-        'kind': 'agent',
-        'system': system,
-        'messages': messages,
-        'tools': tools,
-        'maxTokens': maxTokens,
-      })))!;
+      body = _map(
+        jsonDecode(
+          jsonEncode({
+            'v': 1,
+            'instanceId': host.instanceId,
+            'requestId': requestId,
+            'sessionId': host.sessionId,
+            'provider': host.provider,
+            'model': host.model,
+            'kind': 'agent',
+            'system': system,
+            'messages': messages,
+            'tools': tools,
+            'maxTokens': maxTokens,
+          }),
+        ),
+      )!;
     } on JsonUnsupportedObjectError {
       throw const CompanionAuxiliaryFailure(code: 'invalid-request', terminal: 'preflight_error', notSent: true);
     }
@@ -769,15 +773,7 @@ class _Receipt {
 }
 
 class _AgentReceipt extends _Receipt {
-  _AgentReceipt(
-    super.instanceId,
-    super.provider,
-    super.model,
-    super.requestId,
-    super.onSent,
-    this.abort,
-    this.onText,
-  );
+  _AgentReceipt(super.instanceId, super.provider, super.model, super.requestId, super.onSent, this.abort, this.onText);
 
   final DshHttpAbort abort;
   final void Function(String) onText;
@@ -872,11 +868,13 @@ bool _agentMessages(List<Map<String, Object?>> messages) =>
 
 bool _agentTools(List<Map<String, Object?>> tools) {
   final names = <String>{};
-  return tools.every((tool) =>
-      _id(tool['name']) &&
-      names.add(tool['name'] as String) &&
-      _map(tool['input_schema']) != null &&
-      (!tool.containsKey('description') || tool['description'] is String));
+  return tools.every(
+    (tool) =>
+        _id(tool['name']) &&
+        names.add(tool['name'] as String) &&
+        _map(tool['input_schema']) != null &&
+        (!tool.containsKey('description') || tool['description'] is String),
+  );
 }
 
 Map<String, Object?>? _agentMessage(Object? value, String provider, String model) {
