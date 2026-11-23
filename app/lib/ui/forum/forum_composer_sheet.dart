@@ -67,7 +67,14 @@ class ForumDraftsController extends Notifier<Map<String, ForumDraft>> {
   void save(String key, ForumDraft draft) =>
       state = {...state, key: draft}..removeWhere((_, d) => d.isEmpty && d.categoryId == null);
 
-  void clear(String key) => state = {...state}..remove(key);
+  /// Drops [key]'s draft once [sent] (the entry stored at send time) is posted,
+  /// unless a different draft took its place.
+  void clearSent(String key, ForumDraft? sent) {
+    final d = state[key];
+    if (d?.title == sent?.title && d?.body == sent?.body && d?.categoryId == sent?.categoryId) {
+      state = {...state}..remove(key);
+    }
+  }
 }
 
 final forumDraftsProvider = NotifierProvider<ForumDraftsController, Map<String, ForumDraft>>(ForumDraftsController.new);
@@ -211,6 +218,10 @@ class _ForumComposerSheetState extends ConsumerState<ForumComposerSheet> {
       _notice = null;
     });
     final api = ref.read(forumApiProvider);
+    // Read before awaiting: the sheet may be closed by the time the post lands.
+    final drafts = ref.read(forumDraftsProvider.notifier);
+    final draftKey = widget.target.draftKey;
+    final sent = ref.read(forumDraftsProvider)[draftKey];
     try {
       final result = switch (widget.target) {
         ForumReplyTarget(:final topicId, :final replyTo) => await api.reply(
@@ -220,7 +231,7 @@ class _ForumComposerSheetState extends ConsumerState<ForumComposerSheet> {
         ),
         ForumNewTopicTarget() => await api.createTopic(title: title, raw: body, categoryId: _categoryId),
       };
-      ref.read(forumDraftsProvider.notifier).clear(widget.target.draftKey);
+      drafts.clearSent(draftKey, sent);
       if (mounted) Navigator.of(context).pop(result);
     } on ForumException catch (e) {
       if (!mounted) return;

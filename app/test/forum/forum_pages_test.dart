@@ -258,6 +258,35 @@ void main() {
       await settle(tester);
       expect(body(tester), '嗯');
     });
+
+    testWidgets('closed while sending: a landed post clears its draft, not a newer one', (tester) async {
+      final api = _HeldReplyApi();
+      await openReply(tester, api);
+      Future<void> sendAndClose(String text) async {
+        await tester.enterText(find.byType(TextField), text);
+        await tester.tap(find.text('发送'));
+        await tester.pump();
+        await tester.tap(find.byTooltip('关闭'));
+        await settle(tester);
+      }
+
+      await sendAndClose('第一条');
+      await tester.tap(find.text('open'));
+      await settle(tester);
+      await sendAndClose('第二条');
+      api.held[0].complete();
+      await settle(tester);
+      await tester.tap(find.text('open'));
+      await settle(tester);
+      expect(body(tester), '第二条');
+      await tester.tap(find.byTooltip('关闭'));
+      await settle(tester);
+      api.held[1].complete();
+      await settle(tester);
+      await tester.tap(find.text('open'));
+      await settle(tester);
+      expect(body(tester), isEmpty);
+    });
   });
 
   group('links', () {
@@ -289,6 +318,19 @@ void main() {
       expect(find.byType(ForumTopicPage), findsOneWidget);
     });
   });
+}
+
+/// Holds each reply until its entry in [held] completes.
+class _HeldReplyApi extends FakeForumApi {
+  _HeldReplyApi() : super(signedIn: true);
+
+  final held = <Completer<void>>[];
+
+  @override
+  Future<ForumPostResult> reply({required int topicId, required String raw, int? replyToPostNumber}) async {
+    await (held..add(Completer())).last.future;
+    return super.reply(topicId: topicId, raw: raw, replyToPostNumber: replyToPostNumber);
+  }
 }
 
 class _RecordingAuth extends FakeForumAuth {
