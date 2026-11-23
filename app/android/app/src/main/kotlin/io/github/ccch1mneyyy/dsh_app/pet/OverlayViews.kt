@@ -282,10 +282,11 @@ internal class BubbleView(context: Context, onTap: () -> Unit) : LinearLayout(co
         invalidate()
     }
 
-    /** The card's size, the tail left out, within [maxBubbleWidth]. */
+    /** The card's size, the tail left out, within [maxBubbleWidth] whichever side the tail is on. */
     fun measureCard(): Pair<Int, Int> {
+        val side = bg.tail == Tail.LEFT || bg.tail == Tail.RIGHT
         measure(
-            MeasureSpec.makeMeasureSpec(maxBubbleWidth, MeasureSpec.AT_MOST),
+            MeasureSpec.makeMeasureSpec(maxBubbleWidth + if (side) tailPx else 0, MeasureSpec.AT_MOST),
             MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
         )
         return when (bg.tail) {

@@ -159,7 +159,8 @@ internal object PetOverlay {
     private var companionName = "Companion"
     private var companionBubble: PetBubble? = null
     private var companionDisplayedId: String? = null
-    private var companionLineSerial = 0L
+    /** The reply the body has already reacted to: once per reply, when the stage could take it. */
+    private var companionReactedId: String? = null
     private var companionEndpoint: CompanionFloatEndpoint? = null
     private var companionView: CompanionFloatView? = null
     private var companionEpoch = 0L
@@ -333,16 +334,25 @@ internal object PetOverlay {
             petView?.isAttachedToWindow != true || !systemShown || machine.bubbles.current(now())?.ask != null ||
             answerState.bubbleId != null) return false
         val words = PetPush.clean(text, 600) ?: return false
-        val key = "companion:${id.orEmpty()}:${++companionLineSerial}"
+        // One bubble per reply: a streaming reply's later words go into the bubble already out.
+        val key = "companion:${id.orEmpty()}"
         companionBubble = PetBubble(key, "companion", words, companionName, null, null, now() + 15_000)
         evaluate()
         val shown = bubbleId == key && bubbleView?.isAttachedToWindow == true
         if (shown) {
             companionDisplayedId = id
-            companionView?.companionLine(emotion ?: "neutral", words.length, speaking)
+            if (companionReactedId != id && companionView?.companionLine(emotion ?: "neutral", words.length, speaking) == true) {
+                companionReactedId = id
+            }
         }
-        main.postDelayed({ if (companionBubble?.id == key) { companionBubble = null; evaluate() } }, 15_000)
+        main.removeCallbacks(companionExpiry)
+        main.postDelayed(companionExpiry, 15_000)
         return shown
+    }
+
+    private val companionExpiry = Runnable {
+        companionBubble = null
+        evaluate()
     }
 
     fun companionSpeech(id: String?, chars: Int, speaking: Boolean) {
@@ -1366,7 +1376,17 @@ internal object PetOverlay {
             return
         }
         val ctx = hostContext ?: return
-        if (bubbleId == b.id && alive(bubbleView?.let { windowTickets[it] })) return
+        val current = bubbleView
+        if (bubbleId == b.id && current != null && alive(windowTickets[current])) {
+            // The same reply, further along: new words in place, no new window or entrance.
+            if (b.kind == "companion" && b.text != bubbleText) {
+                bubbleText = b.text
+                current.bind(b)
+                val card = current.measureCard()
+                if (card != bubbleCard) refitBubble(current, card)
+            }
+            return
+        }
         removeBubble()
         val ticket = windows.claim(OverlayWindowOwner.Role.BUBBLE) ?: return
         val view = BubbleView(ctx) {
@@ -1396,6 +1416,7 @@ internal object PetOverlay {
         }
         bubbleView = view
         bubbleId = b.id
+        bubbleText = b.text
         bubbleParams = params
         bubbleCard = card
         bubbleFor = shown
@@ -1430,6 +1451,7 @@ internal object PetOverlay {
     }
 
     private var bubbleParams: WindowManager.LayoutParams? = null
+    private var bubbleText: String? = null
     private var bubbleCard: Pair<Int, Int>? = null
     /** The animation the bubble was placed over. */
     private var bubbleFor: String? = null
@@ -1480,6 +1502,7 @@ internal object PetOverlay {
         bubbleView?.let { remove(it) }
         bubbleView = null
         bubbleId = null
+        bubbleText = null
         bubbleParams = null
         bubbleCard = null
         bubbleFor = null
@@ -1536,9 +1559,9 @@ internal object PetOverlay {
     }
 
     /** The bubble's content changed size: measured and placed again where it is. */
-    private fun refitBubble(view: BubbleView) {
+    private fun refitBubble(view: BubbleView, card: Pair<Int, Int> = view.measureCard()) {
         val p = bubbleParams ?: return
-        val card = view.measureCard()
+        bubbleMove?.cancel()
         bubbleCard = card
         val place = bubblePlace(card, view.tailPx) ?: return
         view.setTail(place.tailAt, place.tail)

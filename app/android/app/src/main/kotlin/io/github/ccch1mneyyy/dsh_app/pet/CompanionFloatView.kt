@@ -128,12 +128,13 @@ internal class CompanionFloatView(
         command(JSONObject().put("type", "petState").put("state", state).put("reduceMotion", reduced))
     }
 
-    /** Same stage commands used by the room; no script text is interpolated. */
-    fun companionLine(emotion: String, chars: Int, speaking: Boolean) {
-        if (!ready || closed) return
+    /** Same stage commands used by the room; no script text is interpolated. False: the stage took nothing yet. */
+    fun companionLine(emotion: String, chars: Int, speaking: Boolean): Boolean {
+        if (!ready || closed) return false
         command(JSONObject().put("type", "emotion").put("name", emotion).put("hold", 2600))
         command(JSONObject().put("type", "mood").put("mood", if (speaking) "speaking" else "idle"))
         if (speaking) command(JSONObject().put("type", "say").put("chars", chars))
+        return true
     }
 
     fun speech(chars: Int, speaking: Boolean) {
