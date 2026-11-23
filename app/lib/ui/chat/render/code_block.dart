@@ -489,6 +489,8 @@ class _CodeBlockState extends State<CodeBlock> {
           ],
         );
       } else {
+        // The growing single chunk supersedes its old globally cached prefix.
+        if (grows) _chunkSpans.removeWhere((_, span) => identical(span, _span));
         _span = _shown = highlightCode(code, widget.language, brightness, style: style, accent: accent, syntax: syntax);
         _cachedCode = code;
         _cachedLanguage = widget.language;
