@@ -862,6 +862,8 @@ void main() {
       await tester.tap(find.text('记忆'));
       await _until2(tester, () => find.byType(CompanionMemoryPage).evaluate().isNotEmpty);
       expect(find.text('还没有记下什么'), findsOneWidget);
+      await tester.tap(find.text('交代'));
+      await _until2(tester, () => find.byType(CompanionTasksPage).evaluate().isNotEmpty);
 
       await tester.tap(find.text('她').last);
       await _until2(tester, () => find.text('她多主动').evaluate().isNotEmpty);
@@ -872,6 +874,25 @@ void main() {
       expect(find.byType(CompanionPage, skipOffstage: false), findsOneWidget);
       expect(find.text('已附当前页面文字'), findsOneWidget);
       expect(find.text('和鲸鱼娘说点什么'), findsOneWidget);
+
+      // The keyboard moves her room; the pages kept behind it aren't made again.
+      final behind = [
+        find.byType(CompanionMemoryPage, skipOffstage: false),
+        find.byType(CompanionTasksPage, skipOffstage: false),
+      ];
+      var pages = [for (final page in behind) tester.widget(page)];
+      final remade = [0, 0];
+      addTearDown(tester.view.resetViewInsets);
+      for (final inset in [120.0, 240.0]) {
+        tester.view.viewInsets = FakeViewPadding(bottom: inset);
+        await tester.pump();
+        final next = [for (final page in behind) tester.widget(page)];
+        for (var i = 0; i < 2; i++) {
+          if (!identical(pages[i], next[i])) remade[i]++;
+        }
+        pages = next;
+      }
+      expect(remade, [0, 0]);
 
       await tester.pumpWidget(_app(const SizedBox()));
       await tester.pump(const Duration(seconds: 10));
