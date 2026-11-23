@@ -445,6 +445,12 @@ class _RequestScope {
   final int petToken = ++_next;
 }
 
+// Alert display and lineage do not need the raw row or its inbox projections.
+typedef _AlertSession = ({String? title, bool isSubagent, String? parentSessionId});
+
+_AlertSession _alertSession(SessionSummary session) =>
+    (title: session.title, isSubagent: session.isSubagent, parentSessionId: session.parentSessionId);
+
 class HostAlertTracker {
   HostAlertTracker({
     required this.host,
@@ -504,7 +510,7 @@ class HostAlertTracker {
   Timer? _reconcile;
   bool _disposed = false;
 
-  final Map<String, SessionSummary> _sessions = {};
+  final Map<String, _AlertSession> _sessions = {};
   final Map<String, bool> _running = {};
   final Map<String, MuxGeneration> _companionRunning = {};
   MuxEventProvenance? _readyProvenance;
@@ -644,7 +650,7 @@ class HostAlertTracker {
           unawaited(_onIdle(sessionId, provenance: provenance, freshness: wasLive ? 'live' : 'reconciled'));
         }
       case SessionAddedEvent(:final summary):
-        _sessions[summary.sessionId] = summary;
+        _sessions[summary.sessionId] = _alertSession(summary);
       case SessionRemovedEvent(:final sessionId):
         _sessions.remove(sessionId);
         _running.remove(sessionId);
@@ -834,7 +840,7 @@ class HostAlertTracker {
     for (final s in list) {
       // Live events received while listing are newer than this snapshot.
       if ((_statusRevision[s.sessionId] ?? 0) > revision) continue;
-      _sessions[s.sessionId] = s;
+      _sessions[s.sessionId] = _alertSession(s);
       if (!seedOnly && !s.running && (_running[s.sessionId] == true || _pendingIdle.contains(s.sessionId))) {
         missed.add(s.sessionId);
       }
@@ -849,13 +855,13 @@ class HostAlertTracker {
   }
 
   /// The summary of [sessionId], listing the sessions once when unknown.
-  Future<SessionSummary?> _info(String sessionId) async {
+  Future<_AlertSession?> _info(String sessionId) async {
     final known = _sessions[sessionId];
     if (known != null) return known;
     _listing ??= () async {
       try {
         for (final s in await source.listSessions()) {
-          _sessions[s.sessionId] = s;
+          _sessions[s.sessionId] = _alertSession(s);
           _running.putIfAbsent(s.sessionId, () => s.running);
         }
       } catch (_) {
