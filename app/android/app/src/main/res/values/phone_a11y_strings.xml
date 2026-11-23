@@ -21,6 +21,8 @@
     <string name="overlay_step">Step %1$d</string>
     <string name="overlay_dsh_working">DSH at work</string>
     <string name="overlay_screen_view">Background screen, view only. Tap to resize</string>
+    <string name="overlay_screen_minimize">Minimize the background screen</string>
+    <string name="overlay_screen_restore">Background screen minimized. Tap to expand</string>
     <string name="overlay_paused_short">Paused</string>
     <string name="overlay_waiting">Waiting for you below</string>
     <string name="overlay_waived">No approval needed</string>

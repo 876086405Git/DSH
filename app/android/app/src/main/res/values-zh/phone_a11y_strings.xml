@@ -21,6 +21,8 @@
     <string name="overlay_step">第 %1$d 步</string>
     <string name="overlay_dsh_working">DSH 正在操作</string>
     <string name="overlay_screen_view">后台屏画面，仅供查看。点按切换大小</string>
+    <string name="overlay_screen_minimize">最小化后台屏画面</string>
+    <string name="overlay_screen_restore">后台屏画面已最小化。点按展开</string>
     <string name="overlay_move_left">移到左侧</string>
     <string name="overlay_move_centre">移到中间</string>
     <string name="overlay_move_right">移到右侧</string>
