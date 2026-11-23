@@ -284,7 +284,8 @@ internal class PhoneSkillStore(
         val s = row["status"] as Map<*, *>
         val status = PhoneSkillStatus(s["state"] as String, s["uses"] as Long,
             (s["recent"] as List<*>).map { it as String }, s["proven"] as Boolean,
-            (s["scored"] as List<*>).map { it as String }, s["lastAccepted"] as String?)
+            (s["scored"] as List<*>).map { it as String }, s["lastAccepted"] as String?,
+            s["suspensionReason"] as String?)
         val versions = (row["versions"] as List<*>).map {
             val item = it as Map<*, *>
             Version(item["at"] as Long, item["body"] as String)

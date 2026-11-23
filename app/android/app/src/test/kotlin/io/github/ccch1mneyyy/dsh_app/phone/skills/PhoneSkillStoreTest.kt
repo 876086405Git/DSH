@@ -1,5 +1,6 @@
 package io.github.ccch1mneyyy.dsh_app.phone.skills
 
+import io.github.ccch1mneyyy.dsh_app.phone.Json
 import java.io.File
 import java.nio.file.Files
 import org.junit.Assert.*
@@ -143,6 +144,26 @@ class PhoneSkillStoreTest {
         assertNull(s.record(name, "miss").change)
         assertEquals("suspended", s.record(name, "miss").change)
         assertFalse(guest().parentFile.resolve(".state.json").readText().contains("session-fixture"))
+    }
+
+    @Test fun suspensionReasonSurvivesRestartAndClearsOnReenable() {
+        val s = store()
+        val name = install(s).document.name
+        s.setEnabled(name, false)
+        assertEquals("manual", store().get(name).toMap()["suspensionReason"])
+
+        val file = File(privateDir, "records/$name.json")
+        val row = Json.parseStrict(file.readText()) as Map<*, *>
+        val legacyStatus = (row["status"] as Map<*, *>).filterKeys { it != "suspensionReason" }
+        file.writeText(Json.write(row + ("status" to legacyStatus)))
+        assertNull(store().get(name).status.suspensionReason)
+
+        s.setEnabled(name, true)
+        s.record(name, "miss")
+        s.record(name, "miss")
+        assertEquals("misses", store().list().skills.single().toMap(false)["suspensionReason"])
+        s.setEnabled(name, true)
+        assertNull(store().get(name).status.suspensionReason)
     }
 
     @Test fun independentlyEditedMirrorCannotVetoManualOrAutomaticSuspension() {

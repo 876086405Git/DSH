@@ -3,6 +3,7 @@ package io.github.ccch1mneyyy.dsh_app.phone.skills
 internal data class PhoneSkillStatus(
     val state: String = "trial", val uses: Long = 0, val recent: List<String> = emptyList(),
     val proven: Boolean = false, val scored: List<String> = emptyList(), val lastAccepted: String? = null,
+    val suspensionReason: String? = null,
 ) {
     fun record(outcome: String): PhoneSkillStatus {
         if (outcome !in listOf("ok", "miss", "void")) invalidSkill("Invalid outcome.")
@@ -15,17 +16,18 @@ internal data class PhoneSkillStatus(
             else -> state
         }
         return copy(state = next, uses = uses + 1, recent = history, proven = proven || outcome == "ok",
-            scored = window)
+            scored = window, suspensionReason = if (next == "suspended") "misses" else null)
     }
 
     fun enable(on: Boolean): PhoneSkillStatus = when {
-        on && state == "suspended" -> copy(state = if (proven) "active" else "trial", scored = emptyList())
-        !on && state != "suspended" -> copy(state = "suspended")
+        on && state == "suspended" -> copy(state = if (proven) "active" else "trial", scored = emptyList(),
+            suspensionReason = null)
+        !on && state != "suspended" -> copy(state = "suspended", suspensionReason = "manual")
         else -> this
     }
 
     fun toMap() = mapOf("state" to state, "uses" to uses, "recent" to recent, "proven" to proven,
-        "scored" to scored, "lastAccepted" to lastAccepted)
+        "scored" to scored, "lastAccepted" to lastAccepted, "suspensionReason" to suspensionReason)
 }
 
 internal data class PhoneSkillSaved(
@@ -40,6 +42,7 @@ internal data class PhoneSkillSaved(
         put("name", document.name); put("display", document.display); put("description", document.description)
         put("whenToUse", document.whenToUse); put("apps", document.apps); put("source", source)
         put("state", status.state); put("uses", status.uses); put("recent", status.recent); put("updatedAt", updatedAt)
+        put("suspensionReason", status.suspensionReason)
         if (from != null) put("learnedFrom", from.toMap())
         if (detail) { put("body", body); put("sections", document.sections); put("history", history) }
     }

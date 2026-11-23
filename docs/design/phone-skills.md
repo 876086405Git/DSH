@@ -84,7 +84,7 @@ learned-from: "session-example/7"
 - **待确认草稿**最多留 20 份，保留 30 天，引擎重启后继续可审。放弃草稿不会移除一份已经收下的技能。
 - **试用技能**进入可用索引，标明需重新核对结果。试用技能第一次有归属的成功转为常用。关闭「从做过的事里学」会停止从手机任务自动起草。已收下的技能保持原状态。
 - **累计使用次数**包括有归属的办成（`ok`）、不灵（`miss`）、不算（`void`）。详情显示最近 5 次。判定自动停用的窗口只取最近 3 次可评价的 `ok/miss`，其中累计 2 次 `miss` 即停用。模型报错、网络或额度中断等不推进失败窗口。
-- 人工恢复会清空失败窗口。曾办成的恢复为常用，其余恢复为试用。模型没有更改状态、接受草稿或删除技能的管理工具。
+- 停用原因随状态保存，用户手动停用记为 `manual`，失败窗口触发停用记为 `misses`。原因未知的旧记录保持为空。人工恢复会清空原因和失败窗口。曾办成的恢复为常用，其余恢复为试用。模型没有更改状态、接受草稿或删除技能的管理工具。
 
 ## 4. 起草
 
@@ -117,7 +117,7 @@ learned-from: "session-example/7"
 
 分段：**我的技能 · 待确认 N**。
 
-- **我的技能**：每行是应用图标（圆角方块）+ 显示名 + 描述一行 + 状态小字（「常用 · 用了 12 次」「试用中 · 还没用它办成过事」「已停用 · 最近不灵」），右侧开关是停用 / 恢复。点开进详情。
+- **我的技能**：每行是应用图标（圆角方块）+ 显示名 + 描述一行 + 状态小字（「常用 · 用了 12 次」「试用中 · 还没用它办成过事」「已停用」「已停用 · 最近不灵」），仅 `misses` 显示「最近不灵」。右侧开关是停用 / 恢复。点开进详情。
 - **待确认**：每份一张卡：显示名、描述、来自哪次任务（点了跳到那个对话）、「收下试用 / 改一改 / 不要」。更新草稿显示「要改『微信发语音』：」加 + / − 行对比，按钮是「收下这次修改 / 改一改 / 不要」。
 - **早期存下的**（只有旧 `phone-task-*` 时出现）：可以删。
 
@@ -129,7 +129,7 @@ learned-from: "session-example/7"
 
 ### 6.4 任务结束时的卡
 
-在这次任务所在的对话里，DSH 最后一条回复下面：
+草稿卡按来源会话 ID 显示在对应对话的输入框上方。
 
 > ✦ **DSH 学会了一个新做法：微信发语音**
 > 在微信里给某人发语音消息（打开对话、按住说话、松开发送）
@@ -157,7 +157,7 @@ learned-from: "session-example/7"
 
 ```
 Skill  = {name, display, description, whenToUse, apps: [pkg], source, state: trial|active|suspended,
-          uses: int, recent: [ok|miss|void], updatedAt, learnedFrom?: {sessionId, taskId}}
+          suspensionReason: manual|misses|null, uses: int, recent: [ok|miss|void], updatedAt, learnedFrom?: {sessionId, taskId}}
 Draft  = {id, name, kind: new|update, target?: name, display, description, whenToUse, apps: [pkg],
           sections, body, baseFingerprint?, diff?: [{op:'+'|'-'|' ', text}], createdAt, from: {sessionId, taskId}}
 Sections = {entry, steps, pitfalls, success, handoff}

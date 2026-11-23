@@ -15,6 +15,8 @@ T _enum<T extends Enum>(SkillWireMap map, String key, List<T> values) =>
 
 enum PhoneSkillState { trial, active, suspended }
 
+enum PhoneSkillSuspensionReason { manual, misses }
+
 enum PhoneSkillSource { learned, written }
 
 enum PhoneSkillDraftKind { newSkill, update }
@@ -70,6 +72,9 @@ class PhoneSkill {
       apps = _items(map, 'apps', (v) => v as String),
       source = _enum(map, 'source', PhoneSkillSource.values),
       state = _enum(map, 'state', PhoneSkillState.values),
+      suspensionReason = map['suspensionReason'] == null
+          ? null
+          : _enum(map, 'suspensionReason', PhoneSkillSuspensionReason.values),
       uses = _field(map, 'uses'),
       updatedAt = _field(map, 'updatedAt'),
       recent = _items(
@@ -91,6 +96,7 @@ class PhoneSkill {
   final List<String> apps;
   final PhoneSkillSource source;
   final PhoneSkillState state;
+  final PhoneSkillSuspensionReason? suspensionReason;
   final int uses, updatedAt;
   final List<PhoneSkillOutcome> recent;
   final PhoneSkillOrigin? learnedFrom;
