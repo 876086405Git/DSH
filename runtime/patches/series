@@ -53,6 +53,7 @@ otel-log-transformer-imports.diff
 zzzzzzz-retainer-decode-copy.diff
 zzzzzzz-settings-local-redaction.diff
 zzzzzzz-skill-watcher-recheck.diff
+skill-catalog-frontmatter-retention.diff
 zzzzzzz-spill-write-cleanup.diff
 zzzzzzz-terminal-byte-length.diff
 zzzzzzz-time-zone-dedup.diff
