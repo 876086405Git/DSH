@@ -41,7 +41,6 @@ import 'ios_phone_link_section.dart';
 import 'phone_disclosure_sheet.dart';
 import 'phone_background_guide.dart';
 import 'phone_unlock_page.dart';
-import 'phone_skill_section.dart';
 import 'phone_self_check_panel.dart';
 import 'phone_widgets.dart';
 import 'restricted_settings_guide.dart';
@@ -95,8 +94,6 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
   bool _ocrSaving = false;
   bool _interruptionBusy = false;
   bool _backgroundGuideShown = false;
-  bool _skillPromptsReady = false;
-  int _skillPromptBaseline = 0;
   int _resumeRead = 0;
 
   PhoneController get _phone => ref.read(phoneProvider.notifier);
@@ -108,13 +105,7 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
     // A fresh read each time the page opens (the provider may be older).
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      final read = ++_resumeRead;
-      final ready = await _phone.refresh();
-      if (!mounted || read != _resumeRead) return;
-      setState(() {
-        _skillPromptsReady = ready;
-        _skillPromptBaseline++;
-      });
+      await _phone.refresh();
     });
   }
 
@@ -129,13 +120,8 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
     // Notifications, 实时活动 or the vendor's permission may have changed in the system settings.
     ref.invalidate(phoneSystemIslandProvider);
     final read = ++_resumeRead;
-    setState(() => _skillPromptsReady = false);
-    final ready = await _phone.refreshStatus();
+    await _phone.refreshStatus();
     if (!mounted || read != _resumeRead) return;
-    setState(() {
-      _skillPromptsReady = ready;
-      _skillPromptBaseline++;
-    });
     if (!_awaitingA11y) return;
     final on = ref.read(phoneProvider).status.a11y.enabled;
     setState(() {
@@ -354,12 +340,7 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
     }
     const gap = SizedBox(height: 24);
 
-    return PhoneSkillAutoPrompt(
-      status: status.skills,
-      enabled: ready && status.skills.available,
-      autoPromptReady: _skillPromptsReady,
-      promptBaseline: _skillPromptBaseline,
-      child: AppPage.list(
+    return AppPage.list(
         title: l10n.phoneControlTitle,
         subtitle: Text(l10n.phoneControlSubtitle),
         actions: const [AskAiButton(AskAiTopic.phoneControl)],
@@ -570,7 +551,6 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
                 ),
                 gap,
                 _localOcr(state),
-                if (status.skills.available) ...[gap, PhoneSkillSection(status: status.skills)],
                 gap,
                 ListPageCard(
                   children: [
@@ -590,7 +570,6 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
             if (state.policies?.unlocks.isEmpty ?? true) PageFootnote(l10n.phoneSensitiveActionsNote),
           ],
         ],
-      ),
     );
   }
 
