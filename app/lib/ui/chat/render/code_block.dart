@@ -286,6 +286,12 @@ TextSpan _highlightChunk(
 /// 满 400 行还没找到就硬切。
 @visibleForTesting
 List<String> codeChunks(String code) {
+  var startOfLine = 0;
+  for (var line = 0; line < 200; line++) {
+    final end = code.indexOf('\n', startOfLine);
+    if (end < 0 || end + 1 == code.length) return [code];
+    startOfLine = end + 1;
+  }
   final lines = <String>[];
   for (var at = 0; at < code.length;) {
     final end = code.indexOf('\n', at);
@@ -293,7 +299,6 @@ List<String> codeChunks(String code) {
     lines.add(code.substring(at, next));
     at = next;
   }
-  if (lines.length <= 200) return [code];
   final topLevel = RegExp(r'^[A-Za-z0-9_]');
   final chunks = <String>[];
   var start = 0;
