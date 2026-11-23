@@ -398,7 +398,7 @@ final starPromptSceneProvider = Provider<StarPromptScene>((ref) {
     phoneActive: phone.active,
     phoneLastActive: phone.lastActive,
     voice: ref.watch(voiceInputActiveProvider),
-    composing: draft != null && (draft.text.trim().isNotEmpty || draft.attachments.isNotEmpty),
+    composing: draft != null && (draft.text.trimLeft().isNotEmpty || draft.attachments.isNotEmpty),
   );
 });
 

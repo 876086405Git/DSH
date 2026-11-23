@@ -489,7 +489,14 @@ class _CodeBlockState extends State<CodeBlock> {
           ],
         );
       } else {
+        final old = grows ? _span : null;
         _span = _shown = highlightCode(code, widget.language, brightness, style: style, accent: accent, syntax: syntax);
+        // Code that grew replaced its cached prefix: the old span itself (one chunk) or its
+        // last chunk (several). Drop that from the global cache unless the new span reuses it.
+        for (final stale in [?old, ?old?.children?.lastOrNull]) {
+          if (identical(stale, _span) || (_span!.children?.any((c) => identical(c, stale)) ?? false)) continue;
+          _chunkSpans.removeWhere((_, span) => identical(span, stale));
+        }
         _cachedCode = code;
         _cachedLanguage = widget.language;
         _cachedBrightness = brightness;
