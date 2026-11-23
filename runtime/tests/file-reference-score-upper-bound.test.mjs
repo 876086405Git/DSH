@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -33,4 +33,12 @@ test('文件补全仅在当前页仍有机会时检查路径子序列', {
   assert.deepEqual(all.map(item => item.path), names);
   assert.deepEqual(page, [all[0]]);
   assert.equal(page[0], all[0]);
+
+  // Directories get +25: r--t-a and r--t-b leave a cutoff of 423, and r-t (424) must still win.
+  const dirs = await mkdtemp(join(tmpdir(), 'file-reference-score-dirs-'));
+  t.after(() => rm(dirs, { recursive: true, force: true }));
+  await Promise.all(['r--t-a', 'r--t-b', 'r-t'].map(name => mkdir(join(dirs, name))));
+  const dirSearch = new WorkspaceFileSearch(dirs, { maxResults: 1, maxEntries: 10, excludedDirectories: [] });
+  t.after(() => dirSearch.dispose());
+  assert.deepEqual((await dirSearch.list('rt', signal)).map(item => item.path), ['r-t']);
 });
