@@ -4,11 +4,17 @@
 /// Byte, base64url and JSON helpers shared by the protocol layers.
 library;
 
+import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
 
 typedef JsonMap = Map<String, Object?>;
+
+/// Decode complete large plaintext messages off the caller's isolate.
+FutureOr<T> decodeRemoteBytes<T>(Uint8List bytes, T Function(Uint8List) decode) =>
+    bytes.length > 256 * 1024 ? Isolate.run(() => decode(bytes)) : decode(bytes);
 
 /// Unpadded base64url (RFC 4648 §5), the encoding of every key, handshake
 /// and ciphertext on the ds-harness-remote wire.

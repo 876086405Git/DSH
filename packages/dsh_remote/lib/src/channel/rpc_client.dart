@@ -55,7 +55,7 @@ class _Pending {
 /// Every request gets exactly one outcome; late responses are dropped.
 class RemoteRpcClient {
   RemoteRpcClient(this._channel, {this.defaultTimeout = const Duration(seconds: 35)}) {
-    _channel.listen(onMessage: _onMessage, onClosed: _onClosed);
+    _channel.listen(onMessage: _onMessage, onClosed: _onChannelClosed);
   }
 
   final SecureChannel _channel;
@@ -63,6 +63,7 @@ class RemoteRpcClient {
   final Map<String, _Pending> _pending = {};
   final StreamController<RemoteEvent> _events = StreamController.broadcast(sync: true);
   final Completer<SecureChannelClosed> _done = Completer();
+  Future<void>? _receiveTail;
   int _eventDispatchDepth = 0;
   final Stopwatch _sinceInbound = Stopwatch()..start();
 
@@ -131,16 +132,40 @@ class RemoteRpcClient {
 
   void _onMessage(Uint8List bytes) {
     _sinceInbound.reset();
-    final RemoteMessage message;
+    // Once a large message is decoding off-isolate, later ones queue behind
+    // it so dispatch keeps wire order; an idle client stays synchronous.
+    final tail = _receiveTail;
+    final work = tail == null ? _read(bytes) : tail.then((_) => _read(bytes));
+    if (work == null) return;
+    _receiveTail = work;
+    work.then((_) {
+      if (identical(_receiveTail, work)) _receiveTail = null;
+    });
+  }
+
+  Future<void>? _read(Uint8List bytes) {
+    if (isClosed) return null;
+    final FutureOr<RemoteMessage> decoded;
     try {
-      message = RemoteMessage.decode(bytes);
+      decoded = decodeRemoteBytes(bytes, RemoteMessage.decode);
     } on Object catch (error) {
-      // Fail closed on malformed plaintext.
-      final reason = SecureChannelClosed('SECURE_CHANNEL_FAILED', 'Invalid Remote message: $error');
-      unawaited(_channel.close(reason: reason));
-      _onClosed(reason);
-      return;
+      _invalidMessage(error);
+      return null;
     }
+    if (decoded is Future<RemoteMessage>) return decoded.then(_dispatch, onError: _invalidMessage);
+    _dispatch(decoded);
+    return null;
+  }
+
+  void _invalidMessage(Object error) {
+    if (isClosed) return;
+    final reason = SecureChannelClosed('SECURE_CHANNEL_FAILED', 'Invalid Remote message: $error');
+    unawaited(_channel.close(reason: reason));
+    _onClosed(reason);
+  }
+
+  void _dispatch(RemoteMessage message) {
+    if (isClosed) return;
     switch (message.type) {
       case 'rpc.response':
         final payload = asMap(message.payload);
@@ -184,6 +209,17 @@ class RemoteRpcClient {
   void _reject(String requestId, RemoteRpcException error) {
     final pending = _take(requestId);
     if (pending != null && !pending.completer.isCompleted) pending.completer.completeError(error);
+  }
+
+  void _onChannelClosed(SecureChannelClosed reason) {
+    // Peer EOF follows every complete plaintext already received. An explicit
+    // local close still cancels outstanding work immediately.
+    final tail = _receiveTail;
+    if (tail == null || reason.code == 'CLIENT_CLOSED') {
+      _onClosed(reason);
+    } else {
+      tail.then((_) => _onClosed(reason));
+    }
   }
 
   void _onClosed(SecureChannelClosed reason) {

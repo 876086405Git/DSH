@@ -83,6 +83,28 @@ void main() {
     await f.rpc.close();
     expect(f.observations, hasLength(1));
   });
+  test('large event and following reply drain in wire order before peer close', () async {
+    final result = f.rpc.call('held', {});
+    final request = await f.request.future;
+    final payload = '界' * 90000;
+    final received = <Object?>[];
+    f.rpc.events.listen((event) => received.add(event.data));
+    final codec = SecureMessageCodec();
+    for (final message in [
+      RemoteMessage('event', {'event': 'large', 'data': payload}),
+      RemoteMessage('event', {'event': 'small', 'data': 2}),
+      RemoteMessage('rpc.response', {'requestId': request.id, 'result': 'ok'}),
+    ]) {
+      for (final fragment in codec.encode(message.encode())) {
+        f.sendBytes(fragment);
+      }
+    }
+    await f.socket.close();
+    expect(await result, 'ok');
+    await f.streamDone.future;
+    expect(f.events, ['large', 'small']);
+    expect(received, [payload, 2]);
+  });
   test('listener can cancel itself and request close twice', () async {
     final closes = Completer<List<Object?>>();
     late StreamSubscription<RemoteEvent> subscription;
