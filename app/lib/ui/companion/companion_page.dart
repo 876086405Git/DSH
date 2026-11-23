@@ -3042,6 +3042,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     // builds for each of her streamed words and the room for each frame of the
     // keyboard, so they are made again only for another tab, memory or
     // character. The task page in front still is: its times move.
+    if (widget.sections) _visited.add(_tab);
     if (_sectionPagesKey != _sectionPagesFor) _sectionPages.clear();
     for (final tab in _visited) {
       if (tab == _CompanionTab.memory || tab == _CompanionTab.tasks && _tab != tab) {
@@ -3339,7 +3340,6 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (!widget.sections) {
       return Scaffold(backgroundColor: const Color(0xFF0D2F55), resizeToAvoidBottomInset: false, body: room);
     }
-    _visited.add(_tab);
     return Scaffold(
       backgroundColor: const Color(0xFF0D2F55),
       resizeToAvoidBottomInset: false,
