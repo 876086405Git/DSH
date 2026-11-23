@@ -130,6 +130,8 @@ void main() {
   testWidgets('a staged ZIP renders only its picked pack and emits a single PNG', (tester) async {
     await mount(tester, store: staged);
     await _until(tester, () => web.controllers.isNotEmpty && web.controllers.single.loads.isNotEmpty);
+    // A load is issued as soon as the controller is set; its widget mounts on the next frame.
+    await tester.pump();
     final page = web.controllers.single;
     final url = page.loads.single;
     expect(openedLive, 0);

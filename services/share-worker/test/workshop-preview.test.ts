@@ -92,7 +92,7 @@ it('selects idle primary animation and its nonzero first cell in a wrapped multi
   expect(cropPng(preview.bytes, { x: 0, y: 0, width: 2, height: 1 })).toEqual(expectedCrop(rgba, 4, 2, 1, 2, 1));
   expect(preview.descriptor.sha256).toBe('0790eeef1af5dc3320901cd078bb1066e4949c29d54265a9884a54c788bdae7a');
 });
-it.each([[513, 1, 512, 1], [3, 700, 2, 512], [768, 512, 512, 341]])(
+it.each([[513, 1, 512, 1], [4096, 1, 512, 1], [3, 700, 2, 512], [768, 512, 512, 341]])(
   'fits a %ix%i idle frame to %ix%i without changing the no-preview path', async (frameW, frameH, width, height) => {
     const pack = petManifest(), box = { x: 0, y: 0, w: frameW, h: frameH };
     const manifest = { ...pack, canvas: { w: frameW, h: frameH }, contentBox: box,
