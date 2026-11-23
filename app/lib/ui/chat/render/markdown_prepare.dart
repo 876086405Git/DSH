@@ -65,7 +65,7 @@ class StreamingMarkdownPreparation {
         // Every parser's closer contains this run. Other placements, such
         // as quoted or Unicode-padded closers, can close only some parsers.
         if (line.contains(fence)) {
-          if (line.codeUnits.every((c) => c == fence.codeUnitAt(0))) {
+          if (_ordinaryFence.matchAsPrefix(line)?.end == line.length) {
             _fence = null;
           } else {
             _pinned = true;
@@ -81,7 +81,8 @@ class StreamingMarkdownPreparation {
         if (marker != null) {
           // Without the preceding blank, an inline span can consume the
           // next line's opening fence before the maths scanner sees it.
-          if (_afterBlank && line.startsWith(marker) && line.indexOf('`', marker.length) < 0) {
+          final ordinary = _ordinaryFence.matchAsPrefix(line);
+          if (_afterBlank && ordinary != null && line.indexOf('`', ordinary.end) < 0) {
             _fence = marker;
           } else {
             _pinned = true;
@@ -97,6 +98,9 @@ class StreamingMarkdownPreparation {
       if (_pinned) return;
     }
   }
+
+  // The bare-view, maths and table parsers all accept up to three leading spaces.
+  static final _ordinaryFence = RegExp(r'^ {0,3}(`{3,}|~{3,})');
 
   // A superset of all three parsers' openers; Dart trim also accepts NEL.
   static final _possibleFence = RegExp(r'^[\s\u0085>]*(`{3,}|~{3,})');

@@ -250,6 +250,13 @@ void main() {
     check('$sealed```sh\necho "\$HOME"\n| A | B |\n|---|---|\n');
     expect(lengths, isEmpty, reason: 'an open code body passes through preparation unchanged');
 
+    // A list step's fence indented up to three spaces is trusted like a flush one.
+    const step = '1. Run:\n\n   ```sh\n   echo "\$HOME"\n   ```\n\n';
+    check(sealed + step);
+    lengths.clear();
+    check('$sealed${step}red');
+    expect(lengths, [3]);
+
     for (final (start, more) in [
       ('prefix ```inline\n```dart\nx\n```\n\n', r'tail $x$'),
       ('cost \$a\\\n~~~\$\nx\n~~~\n\n', r'tail $x$'),
