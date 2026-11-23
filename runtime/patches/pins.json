@@ -699,7 +699,7 @@
     "ohos-skill-root-events.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-skill-filesystem/lib/index.js": {
-          "after": "d8a3894aab75c2ca0d1d062545c6a028c85bc774c4e0b5f7d1324fcf0c1415cc",
+          "after": "52d1c912ba87133162e23170c1f4a74f219dae8e4f1c62c7acfc6d556b961646",
           "before": "54d0833039aa6b5875338a259f8f7baa90d9365cd2458a6ce710364ae6ffd4ef"
         }
       }
