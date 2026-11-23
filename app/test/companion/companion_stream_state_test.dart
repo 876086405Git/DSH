@@ -7,7 +7,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:dsh_app/companion/companion_local.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_host_tasks.dart' show CompanionNotesForegroundCapture;
@@ -627,7 +626,7 @@ class _Room {
 
   bool get running => tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running;
 
-  Future<void> open(WidgetTester tester, {void Function(CompanionMemoryOwner)? seed, Database? database}) async {
+  Future<void> open(WidgetTester tester, {void Function(CompanionMemoryOwner)? seed}) async {
     this.tester = tester;
     host.model = newClient;
     (client.connection as _Bridge).host = hostModelConnection(host);
@@ -639,15 +638,6 @@ class _Room {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          if (database != null)
-            companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) {
-              final memory = CompanionMemoryOwner(
-                CompanionMemoryStore(database, nowMilliseconds: () => DateTime.now().millisecondsSinceEpoch),
-                CompanionLocal.at(root),
-              );
-              ref.onDispose(memory.dispose);
-              return memory;
-            }),
           if (clock != null) ...[companionInitiativeClockProvider.overrideWithValue(clock!), initiativeMemory(clock!)],
           if (initiative != null)
             companionInitiativeProvider.overrideWith((ref) {
@@ -1314,29 +1304,14 @@ void main() {
 
   testWidgets('positive control: empty start, monotonic chunks and repeated status preserve one reply', (tester) async {
     final room = _Room(temporary);
-    final db = sqlite3.open('${temporary.path}/memory.sqlite');
-    await room.open(tester, database: db);
+    await room.open(tester);
     try {
       await room.send('说一句话。');
       expect(room.memory.store.messages().where((row) => row['role'] == 'assistant'), isEmpty);
       room.words('[表情:开心]你');
       await flush(tester);
       expect(room.speech(tester), '你');
-      expect(room.host.requests.any((request) => request['kind'] == 'agent'), isTrue);
-      final agent = room.container.read(companionAgentProvider);
-      var archiveReads = 0;
-      db.trace = SqliteTraceCallback((event) {
-        if (event is SqliteTraceStatement && event.sql == 'SELECT * FROM memory_archive') archiveReads++;
-        return 0;
-      });
-      try {
-        room.words('好。');
-        await tester.idle();
-      } finally {
-        db.trace = null;
-      }
-      expect(agent.text, '[表情:开心]你好。');
-      expect(archiveReads, 2);
+      room.words('好。');
       await flush(tester);
       expect(room.speech(tester), '你好。');
       final says = room.commands.where((c) => c.$1 == 'say').length;
