@@ -172,6 +172,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   /// The reply [_onReply] last read, for the frames that show it.
   ({String text, bool streaming, CompanionReply reply})? _lastReply;
+  ({String? user, CompanionMoves moves, CompanionReplyStream reader})? _replyStream;
 
   // The log can still display the phone's pre-Agent history. New messages in
   // both modes use the original SQLite phone conversation.
@@ -1609,6 +1610,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _running = false;
     _needsAttention = false;
     _baselineSet = false;
+    _replyStream = null;
     _marksHandled = 0;
     _wordsSpoken = 0;
     _replyWords = '';
@@ -1675,12 +1677,20 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _spokenTo = 0;
     }
 
-    final reply = parseCompanionReply(
-      text,
-      streaming: running,
-      emotions: _moves.emotionLabels,
-      actions: _moves.actionLabels,
-    );
+    var stream = _replyStream;
+    // A run only appends (including tool-round separators), or discards its
+    // text on stop. A retry gets a new replyId, even for the same user line.
+    if (stream == null ||
+        stream.user != user ||
+        !identical(stream.moves, _moves) ||
+        text.length < (_lastReply?.text.length ?? 0)) {
+      stream = _replyStream = (
+        user: user,
+        moves: _moves,
+        reader: CompanionReplyStream(emotions: _moves.emotionLabels, actions: _moves.actionLabels),
+      );
+    }
+    final reply = stream.reader.read(text, streaming: running);
     _lastReply = (text: text, streaming: running, reply: reply);
     for (final mark in reply.marks.skip(_marksHandled)) {
       _retireGreeting();

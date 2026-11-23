@@ -70,6 +70,57 @@ void main() {
       expect(parseCompanionReply('看 [这', streaming: true).words, '看 [这');
     });
 
+    test('streamed words, moves and source ranges agree at every saved frame', () {
+      final actions = {'拍拍': 'TapBody'};
+      final stream = CompanionReplyStream(actions: actions);
+      final snapshots = <({String raw, bool streaming, CompanionReply reply})>[];
+      var raw = '';
+      void capture(bool streaming) {
+        snapshots.add((raw: raw, streaming: streaming, reply: stream.read(raw, streaming: streaming)));
+      }
+
+      for (final piece in [
+        '甲',
+        ' [动作:点头]',
+        '乙',
+        '[表',
+        '[动作:拍拍]',
+        '情:',
+        '未',
+        '】',
+        '【EmOtIoN',
+        ' ' * 80,
+        '：',
+        'Happy',
+        '\t' * 80,
+        ']',
+        '  ',
+        '丙\t',
+        '丁\n',
+        '[动作:',
+        '\n',
+        '拍拍】',
+        String.fromCharCode(0xd83d),
+        String.fromCharCode(0xde42),
+        '【动',
+      ]) {
+        raw += piece;
+        capture(true);
+      }
+      capture(false);
+      capture(true);
+
+      // Frame acknowledgements can outlive the notification that created them.
+      for (final snapshot in snapshots) {
+        final expected = parseCompanionReply(snapshot.raw, streaming: snapshot.streaming, actions: actions);
+        expect(snapshot.reply.words, expected.words);
+        expect(snapshot.reply.marks, expected.marks);
+        for (var i = 0; i < snapshot.raw.length; i++) {
+          expect(snapshot.reply.wordRangesFrom(i, i + 1), expected.wordRangesFrom(i, i + 1));
+        }
+      }
+    });
+
     test('the same text gives the same marks on every streaming update', () {
       const text = '[表情:开心]你好呀[动作:挥手]，今天';
       final seen = <CompanionMark>[];

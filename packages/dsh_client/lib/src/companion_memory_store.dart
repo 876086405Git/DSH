@@ -3113,15 +3113,25 @@ class CompanionMemoryStore {
   void _refreshFollowups(int at) {
     _refreshAgentFollowups(at);
     final meta = archive;
+    // Runs on every idle observation: only the cards that carry a follow-up
+    // are worth their evidence queries, and without one no message is needed.
+    final followups = [
+      for (final row in _db.select('''
+        SELECT c.*, t.mode AS topic_mode FROM memory_cards c JOIN memory_topics t ON t.id = c.topic_id
+        WHERE c.status != 'withdrawn' AND c.followup IS NOT NULL ORDER BY c.id
+      '''))
+        _card(row),
+    ];
     final sources = <String, MemoryRow>{
-      for (final row in _db.select(
-        "SELECT * FROM memory_messages WHERE role='user' AND scope='real' AND first_seq>? ORDER BY first_seq",
-        [math.max(meta['history_after_seq'] as int, meta['followup_after_seq'] as int)],
-      ))
-        row['id'] as String: Map<String, Object?>.from(row),
+      if (followups.isNotEmpty)
+        for (final row in _db.select(
+          "SELECT * FROM memory_messages WHERE role='user' AND scope='real' AND first_seq>? ORDER BY first_seq",
+          [math.max(meta['history_after_seq'] as int, meta['followup_after_seq'] as int)],
+        ))
+          row['id'] as String: Map<String, Object?>.from(row),
     };
     final candidates = <String, List<MemoryRow>>{};
-    for (final card in cards()) {
+    for (final card in followups) {
       if (!_currentCard(card, at) || card['topic_mode'] != 'normal' || card['followup'] == null) continue;
       final wording = (card['followup'] as MemoryRow)['wording'] as String;
       final origins = <String>{
