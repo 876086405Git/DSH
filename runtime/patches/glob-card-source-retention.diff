@@ -1,0 +1,20 @@
+--- a/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
+@@ -442,8 +442,9 @@
+-function globSearchMeta(retained, maxMetaBytes) {
+-	return capMetaBytes({
+-		shape: "paths",
+-		paths: retained.items,
+-		truncated: retained.truncated,
+-		total: retained.seen
+-	}, maxMetaBytes);
+-}
++function globSearchMeta(retained, maxMetaBytes) {
++	const meta = capMetaBytes({
++		shape: "paths",
++		paths: retained.items,
++		truncated: retained.truncated,
++		total: retained.seen
++	}, maxMetaBytes);
++	return meta.paths.length < meta.total ? structuredClone(meta) : meta;
++}
