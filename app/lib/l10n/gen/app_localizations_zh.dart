@@ -14682,6 +14682,9 @@ class L10nZh extends L10n {
   String get phoneSkillStateSuspended => '已停用';
 
   @override
+  String get phoneSkillStateSuspendedMisses => '已停用 · 最近不灵';
+
+  @override
   String get phoneSkillSourceWritten => '你让 DSH 写的';
 
   @override

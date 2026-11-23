@@ -27150,6 +27150,12 @@ abstract class L10n {
   /// **'已停用'**
   String get phoneSkillStateSuspended;
 
+  /// No description provided for @phoneSkillStateSuspendedMisses.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停用 · 最近不灵'**
+  String get phoneSkillStateSuspendedMisses;
+
   /// No description provided for @phoneSkillSourceWritten.
   ///
   /// In zh, this message translates to:

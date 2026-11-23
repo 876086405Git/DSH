@@ -47,6 +47,7 @@
   },
   "phoneSkillStateTrial": "试用中 · 还没用它办成过事",
   "phoneSkillStateSuspended": "已停用",
+  "phoneSkillStateSuspendedMisses": "已停用 · 最近不灵",
   "phoneSkillSourceWritten": "你让 DSH 写的",
   "phoneSkillUse": "使用这项技能",
   "phoneSkillLearnedTitle": "DSH 学会了一个新做法",

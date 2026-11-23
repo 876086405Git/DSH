@@ -4506,6 +4506,7 @@
   "phoneSkillStateActive": "{uses, plural, =1{In use · used once} other{In use · used {uses} times}}",
   "phoneSkillStateTrial": "On trial · not proven yet",
   "phoneSkillStateSuspended": "Turned off",
+  "phoneSkillStateSuspendedMisses": "Turned off · not working lately",
   "phoneSkillSourceWritten": "Written at your request",
   "phoneSkillUse": "Use this skill",
   "phoneSkillLearnedTitle": "DSH learned a new way to do this",

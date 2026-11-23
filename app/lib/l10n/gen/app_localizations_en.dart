@@ -15512,6 +15512,9 @@ class L10nEn extends L10n {
   String get phoneSkillStateSuspended => 'Turned off';
 
   @override
+  String get phoneSkillStateSuspendedMisses => 'Turned off · not working lately';
+
+  @override
   String get phoneSkillSourceWritten => 'Written at your request';
 
   @override

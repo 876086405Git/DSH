@@ -191,7 +191,10 @@ String skillStatusLine(BuildContext context, PhoneSkill skill) {
   final state = switch (skill.state) {
     PhoneSkillState.active => l10n.phoneSkillStateActive(skill.uses),
     PhoneSkillState.trial => l10n.phoneSkillStateTrial,
-    PhoneSkillState.suspended => l10n.phoneSkillStateSuspended,
+    PhoneSkillState.suspended =>
+      skill.suspensionReason == PhoneSkillSuspensionReason.misses
+          ? l10n.phoneSkillStateSuspendedMisses
+          : l10n.phoneSkillStateSuspended,
   };
   return skill.source == PhoneSkillSource.written ? '$state · ${l10n.phoneSkillSourceWritten}' : state;
 }
