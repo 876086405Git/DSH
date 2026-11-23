@@ -116,7 +116,7 @@ class QuoteChip extends StatelessWidget {
 ///
 /// While one of the two stays, the other unfolds and folds on its own (the
 /// composer unfolds the tray as a whole).
-class ComposerTrayStack extends StatefulWidget {
+class ComposerTrayStack extends StatelessWidget {
   const ComposerTrayStack({super.key, this.quote, this.attachments});
 
   final Widget? quote;
@@ -134,44 +134,45 @@ class ComposerTrayStack extends StatefulWidget {
       quote == null && attachments == null ? null : ComposerTrayStack(quote: quote, attachments: attachments);
 
   @override
-  State<ComposerTrayStack> createState() => _ComposerTrayStackState();
-}
-
-class _ComposerTrayStackState extends State<ComposerTrayStack> {
-  // The last of each shown: it stays while it folds away.
-  late Widget? _quote = widget.quote;
-  late Widget? _attachments = widget.attachments;
-
-  @override
-  void didUpdateWidget(ComposerTrayStack oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _quote = widget.quote ?? _quote;
-    _attachments = widget.attachments ?? _attachments;
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final both = widget.quote != null && widget.attachments != null;
+    final both = quote != null && attachments != null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ExpandReveal(
-          open: widget.quote != null,
+          open: quote != null,
           child: Padding(
             padding: const EdgeInsets.only(top: ComposerTrayStack.quoteTop),
-            child: Align(alignment: Alignment.centerLeft, child: _quote),
+            child: Align(alignment: Alignment.centerLeft, child: ClosingTrayChild(quote)),
           ),
         ),
         AnimatedPadding(
           duration: AppMotion.of(context, AppMotion.collapse),
           curve: AppMotion.collapseCurve,
           padding: EdgeInsets.only(top: both ? ComposerTrayStack.quoteGap : 0),
-          child: ExpandReveal(open: widget.attachments != null, child: _attachments ?? const SizedBox.shrink()),
+          child: ExpandReveal(open: attachments != null, child: ClosingTrayChild(attachments)),
         ),
       ],
     );
   }
+}
+
+/// Keeps the outgoing tray inside [ExpandReveal] until it unmounts the child.
+class ClosingTrayChild extends StatefulWidget {
+  const ClosingTrayChild(this.child, {super.key});
+
+  final Widget? child;
+
+  @override
+  State<ClosingTrayChild> createState() => _ClosingTrayChildState();
+}
+
+class _ClosingTrayChildState extends State<ClosingTrayChild> {
+  Widget _last = const SizedBox.shrink();
+
+  @override
+  Widget build(BuildContext context) => _last = widget.child ?? _last;
 }
 
 /// The quote a sent message opens with, at the top of its bubble: a thin

@@ -12,6 +12,7 @@ import 'package:dsh_app/state/composer_quote.dart';
 import 'package:dsh_app/ui/chat/composer.dart';
 import 'package:dsh_app/ui/chat/widgets/attachments.dart';
 import 'package:dsh_app/ui/chat/widgets/quote_chip.dart';
+import 'package:dsh_app/ui/common/expand_reveal.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/theme/theme.dart';
 import 'package:flutter/material.dart';
@@ -37,6 +38,7 @@ Future<void> _pump(
   double textScale = 1,
   Brightness brightness = Brightness.light,
   VoidCallback? onRemove,
+  bool settle = true,
 }) async {
   usePhoneView(tester);
   await tester.pumpWidget(
@@ -72,7 +74,7 @@ Future<void> _pump(
     ),
   );
   // A tray part added to one already shown unfolds: measure where it lands.
-  await tester.pumpAndSettle();
+  if (settle) await tester.pumpAndSettle();
 }
 
 Rect _glass(WidgetTester tester) => tester.getRect(find.byType(Composer));
@@ -200,6 +202,29 @@ void main() {
         moreOrLessEquals(trayGap, epsilon: 0.5),
       );
     });
+  });
+
+  testWidgets('a closing tray holds the old attachment only through its exit', (tester) async {
+    final closed = find.byWidgetPredicate((w) => w is ExpandReveal && !w.open);
+    await _pump(tester, attachments: _files);
+    final files = tester.widget<ComposerTray>(find.byType(ComposerTray));
+
+    await _pump(tester, settle: false);
+    expect(tester.widget<ComposerTray>(find.byType(ComposerTray)), same(files));
+    await tester.pumpAndSettle();
+    // The quote keeps the inner attachment reveal mounted, even when empty.
+    expect(tester.widget<ExpandReveal>(closed).child, isNot(same(files)));
+
+    await _pump(tester, quote: null, attachments: [_files.last]);
+    await _pump(tester, quote: null, settle: false);
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(tester.widget<ComposerTray>(find.byType(ComposerTray)).items.single, same(_files.last));
+    await _pump(tester, quote: null, attachments: [_files.first]);
+    expect(tester.widget<ComposerTray>(find.byType(ComposerTray)).items.single, same(_files.first));
+    final stack = tester.widget<ComposerTrayStack>(find.byType(ComposerTrayStack));
+    await _pump(tester, quote: null);
+    // With the whole tray closed, its surviving configuration used to hold this stack.
+    expect((tester.widget<ExpandReveal>(closed).child as Padding).child, isNot(same(stack)));
   });
 
   testWidgets('✕ removes the quote; the chip reads as one quote', (tester) async {
