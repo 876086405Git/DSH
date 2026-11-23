@@ -877,6 +877,12 @@ def base_drop(path):
     return False
 
 
+# Packages whose runtime entry points all resolve outside these directories; the .ts
+# sources only feed their own builds (docs/maintenance/engine-typescript-source-pruning-contract.md).
+TS_SOURCE_DIRS = ("node_modules/openai/src/", "node_modules/@anthropic-ai/sdk/src/",
+                  "node_modules/@js-temporal/polyfill/lib/")
+
+
 def dsh_drop_reason(rel, abi, prune_dev):
     parts = rel.split("/")
     if "prebuilds" in parts:
@@ -902,6 +908,8 @@ def dsh_drop_reason(rel, abi, prune_dev):
             return "dev-metadata"
         if low.endswith((".js.map", ".mjs.map", ".cjs.map", ".ts.map", ".css.map")):
             return "dev-metadata"
+        if rel.startswith(TS_SOURCE_DIRS) and low.endswith(".ts"):
+            return "package-typescript-source"
         if rel == "node_modules/@mixmark-io/domino/.yarn/plugins/@yarnpkg/plugin-version.cjs":
             return "package-build-tool"
     return None
