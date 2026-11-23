@@ -41,6 +41,10 @@ class CompanionMemoryEmbeddings extends ChangeNotifier {
   double _progress = 0;
 
   bool get supported => _supported;
+
+  /// Whether [rank] already knows it will answer null for any candidates,
+  /// without loading the model: unsupported, downloading, or checked missing.
+  bool get knownUnavailable => !_supported || _downloading || (_checked && _modelKey == null);
   double get progress => _progress;
   bool get canCancelDownload => _downloading && !_downloadCancelled && (_installer?.canCancel ?? true);
   CompanionMemoryModelStatus get status => !_supported
