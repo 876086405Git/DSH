@@ -275,7 +275,11 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
       }
       if (id != null) {
         final guarded = await IslandPlatform.instance.attach(id, dark: false, textZoom: 100);
-        if (stale()) return;
+        if (stale()) {
+          // Left while attaching: never shown, so it goes now (a cover's id was released already).
+          if (!cover) unawaited(IslandPlatform.instance.destroy(id));
+          return;
+        }
         if (!guarded) {
           _fail('guard');
           return;
