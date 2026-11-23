@@ -109,6 +109,102 @@ void main() {
     expect(row['current_basis_seq'], isNull);
     expect(row['evidence'], isEmpty);
     expect(store.migrationCleanup(), hasLength(1));
+
+    // Create all three facts before quieting them. The private control has the
+    // same literal word as one imported fact, but imports belong to shared/null.
+    final character = store.ensureCompanionCharacter(sourceKey: 'local:legacy-controls')['id']! as String;
+    final source = store.submitMessage(
+      id: 'legacy-controls',
+      sessionId: 'light:legacy-controls',
+      text: '我们周五复诊，我喝咖啡不加糖，也在烧陶杯。',
+      saidAtUtc: now,
+      offsetMinutes: 0,
+      characterId: character,
+    );
+    final turn = store.beginAgentTurn(
+      messageId: source['id']! as String,
+      expectedSourceRev: source['source_rev']! as int,
+      shownCardRevisions: const {},
+    )['id']! as String;
+    final private = store.applyAgentMemoryTool(turnId: turn, callId: 'private', toolName: 'remember', input: {
+      'collection': 'our_story',
+      'text': '我们周五复诊。',
+      'keywords': ['复诊'],
+    });
+    final coffee = store.applyAgentMemoryTool(turnId: turn, callId: 'coffee', toolName: 'remember', input: {
+      'text': '我喝咖啡不加糖。',
+      'keywords': ['咖啡'],
+    });
+    final pottery = store.applyAgentMemoryTool(turnId: turn, callId: 'pottery', toolName: 'remember', input: {
+      'text': '我在烧陶杯。',
+      'keywords': ['陶杯'],
+    });
+    expect(private.applied, isTrue);
+    expect(coffee.applied, isTrue);
+    expect(pottery.applied, isTrue);
+    expect(store.applyAgentMemoryTool(turnId: turn, callId: 'quiet-private', toolName: 'quiet', input: {
+      'card': private.targetId,
+      'mode': 'never',
+    }).applied, isTrue);
+    expect(store.applyAgentMemoryTool(turnId: turn, callId: 'quiet-coffee', toolName: 'quiet', input: {
+      'card': coffee.targetId,
+      'mode': 'never',
+    }).applied, isTrue);
+    expect(store.applyAgentMemoryTool(turnId: turn, callId: 'quiet-pottery', toolName: 'quiet', input: {
+      'card': pottery.targetId,
+      'mode': 'less',
+    }).applied, isTrue);
+    store.closeAgentTurn(turn);
+    final beforeCards = {for (final card in store.cards(includeInactive: true)) card['id']: card};
+    final beforeControls = store.topicControls();
+    final privateTopic = beforeCards[private.targetId]!['topic_id'];
+    final coffeeTopic = beforeCards[coffee.targetId]!['topic_id'];
+    final potteryTopic = beforeCards[pottery.targetId]!['topic_id'];
+    final stampId = createId(), coffeeId = createId(), potteryId = createId(), clinicId = createId();
+    final inheritedRead = CompanionMigrationSnapshot.fromJson(legacy(revision: 3, rows: [
+      legacyCard(),
+      legacyCard(id: stampId, text: '我收集邮票。'),
+      legacyCard(id: coffeeId, text: '我早上喝咖啡。'),
+      legacyCard(id: potteryId, text: '我周末烧陶杯。'),
+      legacyCard(id: clinicId, text: '我下周复诊。'),
+    ]));
+    final realityIds = {stampId, coffeeId, potteryId, clinicId};
+    final inheritedIds = store.importLegacy(inheritedRead, realityKnownIds: realityIds);
+    expect(inheritedIds, unorderedEquals([oldCard, stampId, coffeeId, potteryId, clinicId]));
+    expect(store.verifyLegacyImport(inheritedRead, inheritedIds), isTrue);
+    final mappings = {for (final mapping in store.migrationCleanup()) mapping['legacy_card_id']: mapping};
+    final importedCards = {for (final card in store.cards(includeInactive: true)) card['id']: card};
+    final stamp = importedCards[mappings[stampId]!['local_card_id']]!;
+    final importedCoffee = importedCards[mappings[coffeeId]!['local_card_id']]!;
+    final importedPottery = importedCards[mappings[potteryId]!['local_card_id']]!;
+    final clinic = importedCards[mappings[clinicId]!['local_card_id']]!;
+    expect(stamp['topic_mode'], 'normal');
+    expect(importedCoffee['topic_id'], coffeeTopic);
+    expect(importedCoffee['topic_mode'], 'never');
+    expect(importedPottery['topic_id'], potteryTopic);
+    expect(importedPottery['topic_mode'], 'less');
+    expect(clinic['topic_mode'], 'normal');
+    expect(clinic['topic_id'], isNot(privateTopic));
+    expect(clinic['topic_id'], isNot(stamp['topic_id']));
+    final imported = [stamp, importedCoffee, importedPottery, clinic];
+    expect(imported.map((card) => card['collection']), everyElement('about_you'));
+    expect(imported.map((card) => card['character_id']), everyElement(isNull));
+    expect(imported.map((card) => card['eligible']), everyElement(isTrue));
+    expect(imported.map((card) => card['manual']), everyElement(isTrue));
+    expect(imported.map((card) => card['pinned']), everyElement(isTrue));
+    expect(imported.map((card) => card['event_time']), everyElement(isNull));
+    expect(imported.map((card) => card['followup']), everyElement(isNull));
+    expect(imported.map((card) => card['current_basis_seq']), everyElement(isNull));
+    expect(imported.map((card) => card['evidence']), everyElement(isEmpty));
+    expect(store.topicControls(), beforeControls);
+    expect({for (final id in beforeCards.keys) id: importedCards[id]}, beforeCards);
+    final afterImport = store.cards(includeInactive: true);
+    final afterMappings = store.migrationCleanup();
+    final afterArchive = store.archive;
+    expect(store.importLegacy(inheritedRead, realityKnownIds: realityIds), inheritedIds);
+    expect(store.cards(includeInactive: true), afterImport);
+    expect(store.migrationCleanup(), afterMappings);
+    expect(store.archive, afterArchive);
   });
 
   test('legacy UUID casing does not create a second identity', () {
@@ -138,6 +234,116 @@ void main() {
     expect(store.migrationCleanup(), isEmpty);
     expect(database.select('SELECT * FROM memory_topics'), isEmpty);
     expect(store.archive['memory_revision'], 0);
+
+    // The original trigger remains, but these real controls reject the later
+    // batch through the public migration error, not through its synthetic text.
+    final source = store.submitMessage(
+      id: 'legacy-conflict-controls',
+      sessionId: 'light:legacy-controls',
+      text: '修琴周六完成，陶杯周日烧好。',
+      saidAtUtc: now,
+      offsetMinutes: 0,
+    );
+    final turn = store.beginAgentTurn(
+      messageId: source['id']! as String,
+      expectedSourceRev: source['source_rev']! as int,
+      shownCardRevisions: const {},
+    )['id']! as String;
+    final music = store.applyAgentMemoryTool(turnId: turn, callId: 'music', toolName: 'remember', input: {
+      'text': '修琴周六完成。',
+      'keywords': ['修琴'],
+    });
+    final pottery = store.applyAgentMemoryTool(turnId: turn, callId: 'pottery', toolName: 'remember', input: {
+      'text': '陶杯周日烧好。',
+      'keywords': ['陶杯'],
+    });
+    expect(music.applied, isTrue);
+    expect(pottery.applied, isTrue);
+    expect(store.applyAgentMemoryTool(turnId: turn, callId: 'quiet-music', toolName: 'quiet', input: {
+      'card': music.targetId,
+      'mode': 'never',
+    }).applied, isTrue);
+    expect(store.applyAgentMemoryTool(turnId: turn, callId: 'quiet-pottery', toolName: 'quiet', input: {
+      'card': pottery.targetId,
+      'mode': 'less',
+    }).applied, isTrue);
+    store.closeAgentTurn(turn);
+    final mappedRead = CompanionMigrationSnapshot.fromJson(legacy(rows: [legacyCard(text: '旧书架旁有台灯。')]));
+    final mappedIds = store.importLegacy(mappedRead, realityKnownIds: {oldCard});
+    final mapping = store.migrationCleanup().single;
+    final mappedCard = store.cards().singleWhere((card) => card['id'] == mapping['local_card_id']);
+    final newId = createId(), conflictId = createId();
+    final conflictedRead = CompanionMigrationSnapshot.fromJson(legacy(revision: 3, rows: [
+      legacyCard(text: '旧书架旁有台灯。'),
+      legacyCard(id: newId, text: '我收集邮票。'),
+      legacyCard(id: conflictId, text: '修琴和陶杯都安排在周末。'),
+    ]));
+    final realityIds = {oldCard, newId, conflictId};
+    final beforeCards = store.cards(includeInactive: true);
+    final beforeControls = store.topicControls();
+    final beforeArchive = store.archive;
+    final beforeCleanup = store.migrationCleanup();
+    expect(() => store.importLegacy(conflictedRead, realityKnownIds: realityIds), throwsA(
+      isA<DshRemoteException>()
+          .having((error) => error.code, 'code', 'companion/invalid-request')
+          .having((error) => error.details['status'], 'status', 400)
+          .having((error) => error.details['reason'], 'reason', 'ambiguous_controlled_topic'),
+    ));
+    expect(store.cards(includeInactive: true), beforeCards);
+    expect(store.topicControls(), beforeControls);
+    expect(store.archive, beforeArchive);
+    expect(store.migrationCleanup(), beforeCleanup);
+    expect(store.migrationCleanup().single['cleanup_read_revision'], mappedRead.revision);
+
+    // Restore one real control through a new source and current card grant.
+    // Retrying the exact same snapshot must keep the original legacy identity.
+    final allowed = store.submitMessage(
+      id: 'legacy-pottery-allowed',
+      sessionId: 'light:legacy-controls',
+      text: '以后可以聊陶杯了。',
+      saidAtUtc: now,
+      offsetMinutes: 0,
+    );
+    final currentPottery = store.cards().singleWhere((card) => card['id'] == pottery.targetId);
+    final restoring = store.beginAgentTurn(
+      messageId: allowed['id']! as String,
+      expectedSourceRev: allowed['source_rev']! as int,
+      shownCardRevisions: {pottery.targetId!: currentPottery['row_rev']! as int},
+    )['id']! as String;
+    final restored = store.applyAgentMemoryTool(turnId: restoring, callId: 'normal-pottery', toolName: 'quiet', input: {
+      'card': pottery.targetId,
+      'mode': 'normal',
+    });
+    expect(restored.applied, isTrue);
+    expect(restored.targetId, currentPottery['topic_id']);
+    expect(restored.changedCardIds, [pottery.targetId]);
+    store.closeAgentTurn(restoring);
+    final remainingControls = store.topicControls();
+    final retriedIds = store.importLegacy(conflictedRead, realityKnownIds: realityIds);
+    expect(retriedIds, unorderedEquals([oldCard, newId, conflictId]));
+    expect(store.verifyLegacyImport(conflictedRead, retriedIds), isTrue);
+    final retriedMappings = {for (final row in store.migrationCleanup()) row['legacy_card_id']: row};
+    expect(retriedMappings[oldCard]!['local_card_id'], mapping['local_card_id']);
+    expect(retriedMappings[oldCard]!['source_fingerprint'], mapping['source_fingerprint']);
+    expect(retriedMappings[oldCard]!['read_revision'], mappedRead.revision);
+    expect(retriedMappings.values.map((row) => row['cleanup_read_revision']), everyElement(conflictedRead.revision));
+    final retriedCards = {for (final card in store.cards(includeInactive: true)) card['id']: card};
+    expect(retriedCards[mapping['local_card_id']], mappedCard);
+    expect(retriedCards[retriedMappings[newId]!['local_card_id']]!['topic_mode'], 'normal');
+    expect(retriedCards[retriedMappings[conflictId]!['local_card_id']]!['topic_id'], retriedCards[music.targetId]!['topic_id']);
+    expect(retriedCards[retriedMappings[conflictId]!['local_card_id']]!['topic_mode'], 'never');
+    expect(store.topicControls(), remainingControls);
+    final afterRetryCards = store.cards(includeInactive: true);
+    final afterRetryCleanup = store.migrationCleanup();
+    final afterRetryArchive = store.archive;
+    expect(store.importLegacy(conflictedRead, realityKnownIds: realityIds), retriedIds);
+    expect(store.cards(includeInactive: true), afterRetryCards);
+    expect(store.migrationCleanup(), afterRetryCleanup);
+    expect(store.archive, afterRetryArchive);
+    store.finishLegacyCleanup(oldStore, mappedIds, expectedReadRevision: mappedRead.revision);
+    expect(store.migrationCleanup(), afterRetryCleanup);
+    store.finishLegacyCleanup(oldStore, retriedIds, expectedReadRevision: conflictedRead.revision);
+    expect(store.migrationCleanup(), isEmpty);
   });
 
   test('only proved reality is eligible and same-ID reconnection cannot overwrite a local edit', () {

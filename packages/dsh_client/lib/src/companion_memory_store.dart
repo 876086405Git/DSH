@@ -464,10 +464,18 @@ class CompanionMemoryStore {
             }
             continue;
           }
+          final controlled = _bodyControlledTopics(memory.text, characterId: null);
+          if (controlled.length > 1) {
+            throw const DshRemoteException(
+              'companion/invalid-request',
+              'Legacy memory matches multiple controlled topics',
+              {'status': 400, 'reason': 'ambiguous_controlled_topic'},
+            );
+          }
           final id = _createId();
-          final topic = _createId();
+          final topic = controlled.isEmpty ? _createId() : controlled.single;
           final real = realIds.contains(oldId);
-          _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
+          if (controlled.isEmpty) _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
           _db.execute(
             '''
         INSERT INTO memory_cards(id, row_rev, kind, text, keywords, pinned, eligible,
