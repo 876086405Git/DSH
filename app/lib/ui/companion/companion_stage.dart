@@ -33,6 +33,9 @@ const _lowMemoryBytes = 3 * 1024 * 1024 * 1024;
 /// Where her stage's resolution last settled on this phone (stage.js `quality`).
 const _qualityKey = 'companion_stage_quality';
 
+/// Where the person pinched her to in the room, per character: `<prefix><character key>`.
+const _viewKeyPrefix = 'companion_room_view:';
+
 /// The page's start-up options for this phone (stage.js and scene.js read them).
 ///
 /// Memory sets what the page can't take back once WebKit or the GPU has run out
@@ -225,6 +228,10 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
       final device = await IslandPlatform.instance.device();
       final quality = cover ? null : await _rememberedQuality();
       if (stale()) return;
+      // Only her room keeps the size and place she was pinched to; a call's
+      // backdrop, the tavern and a cover frame her their own way.
+      final view = cover || widget.bare ? null : await _rememberedView();
+      if (stale()) return;
       final query = companionStageQuery(
         ios: defaultTargetPlatform == TargetPlatform.iOS,
         totalMem: device.totalMem,
@@ -232,6 +239,11 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
         reduceMotion: reduceMotion || cover,
         bare: widget.bare || cover,
       );
+      if (view != null) {
+        query['viewZoom'] = '${view.zoom}';
+        query['viewX'] = '${view.x}';
+        query['viewY'] = '${view.y}';
+      }
       if (cover) {
         query['mode'] = 'cover';
         query['coverSide'] = '$workshopPreviewSide';
@@ -346,7 +358,8 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
           try {
             final png = base64Decode(data);
             if (png.length > workshopPreviewBytes ||
-                pngSize(png) != (workshopPreviewSide, workshopPreviewSide) || !pngIntact(png)) {
+                pngSize(png) != (workshopPreviewSide, workshopPreviewSide) ||
+                !pngIntact(png)) {
               _fail('cover png');
               return;
             }
@@ -391,6 +404,40 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
       case 'quality':
         final value = message['value'];
         if (value is num && value >= 0.5 && value <= 1) unawaited(_rememberQuality(value.toDouble()));
+      case 'view':
+        final (zoom, x, y) = (message['zoom'], message['x'], message['y']);
+        if (_viewKey case final key? when zoom is num && x is num && y is num && zoom > 0) {
+          unawaited(_rememberView(key, (zoom: zoom.toDouble(), x: x.toDouble(), y: y.toDouble())));
+        }
+    }
+  }
+
+  /// This character's pref key, once [_rememberedView] has read it.
+  String? _viewKey;
+
+  Future<({double zoom, double x, double y})?> _rememberedView() async {
+    try {
+      final key = _viewKey = '$_viewKeyPrefix${await widget.store.characterKey() ?? ''}';
+      final saved = (await SharedPreferences.getInstance()).getString(key);
+      if (saved == null) return null;
+      final json = jsonDecode(saved);
+      if (json case {'zoom': final num zoom, 'x': final num x, 'y': final num y} when zoom > 0) {
+        return (zoom: zoom.toDouble(), x: x.toDouble(), y: y.toDouble());
+      }
+    } on Object {
+      // Her default framing.
+    }
+    return null;
+  }
+
+  static Future<void> _rememberView(String key, ({double zoom, double x, double y}) view) async {
+    try {
+      await (await SharedPreferences.getInstance()).setString(
+        key,
+        jsonEncode({'zoom': view.zoom, 'x': view.x, 'y': view.y}),
+      );
+    } on Object {
+      // Kept for next time when it can be; this visit already has it.
     }
   }
 
