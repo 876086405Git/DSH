@@ -75,7 +75,7 @@
     "importer": "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js",
     "specifier": "@vscode/ripgrep",
     "occurrences": 1,
-    "importerSha256": "ffdac06d530134e35a4ea2182f09ace344fcf48e2fa0e312419f69e3e73db255",
+    "importerSha256": "3c1ae6b6eb3765e21e2fe1197c9bd3bf779d38627473257c6aae0b3a2834d0f6",
     "reason": "getRgPath returns the virtual rg token immediately on openharmony, before the native binary import; the actual strict grep round covers this path."
   },
   {
