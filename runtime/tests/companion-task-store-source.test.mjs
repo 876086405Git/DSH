@@ -56,6 +56,19 @@ async function readyToPublish(store,id='t-1') {
 const artifact = {relativePath:'今日待办.md',mediaType:'text/markdown',size:9,sha256:'a'.repeat(64),
   identity:'1:3',verifiedAtMs:2,sourceCount:1};
 
+test('an empty task store builds the record validator only on the first task write', async t => {
+  // Count the factory in the pinned Zod lazy schema through the routed store.
+  const definition = recordSchema.def;
+  const factory = definition.getter;
+  let builds = 0;
+  t.mock.method(definition, 'getter', () => { builds++; return factory(); });
+  const {store} = await opened(t);
+  assert.equal(builds, 0);
+  await store.cancel('first-task', cancel(store));
+  await store.cancel('second-task', cancel(store));
+  assert.equal(builds, 1);
+});
+
 test('actual routed backend persists host identity; close/reopen keeps it',async t=>{
   const {store,root}=await opened(t);const id=store.hostStoreId;
   assert.equal(JSON.parse(await readFile(join(root,'companion_tasks.json'),'utf8')).global.hostStoreId,id);

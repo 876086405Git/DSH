@@ -74,7 +74,7 @@ export const folderRecordSchema = z.object({folderRef: taskId, directory, create
 export const inputRecordSchema = z.object({sourceRef: taskId, directory,
   entry: z.object({name: z.union([inputName, receiptName]), version: text, size: integer.max(4194304)}).strict(), createdAtMs: integer}).strict();
 export const globalSchema = z.object({v: z.literal(1), hostStoreId: taskId.nullable(), createdAtMs: integer}).strict();
-export const recordSchema = z.object({
+export const recordSchema = z.lazy(() => z.object({
   v: z.literal(1), taskId, hostExecutionId: taskId, kind: kinds,
   taskRev: revision, runnerReceiptSeq: integer, originalCreate: createSchema.nullable(),
   originalFingerprint: text.nullable(), origin: origin.nullable(), hostSessionId: taskId.nullable(),
@@ -98,7 +98,7 @@ export const recordSchema = z.object({
       record.agreement && !schema.safeParse(record.agreement).success ||
       record.revisions.some(value => value.agreement && !schema.safeParse(value.agreement).success))
     context.addIssue({code: 'custom', message: 'Task kind and agreement must match'});
-});
+}));
 
 export function taskError(status, code, message, snapshot) {
   const error = new CompanionError(status, `task-${code}`, message);

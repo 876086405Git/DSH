@@ -196,11 +196,27 @@
         }
       }
     },
+    "cordis-effect-setup-retention.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/cordis/lib/index.js": {
+          "after": "88d38fb02b95162246aeb13d6e421be9d16680b0bcbcde59a6de09d7229ea140",
+          "before": "b8b87360ebc67df2d0aabea214b8ed30d4bde3767e354ebb1b85fc6c15b45a05"
+        }
+      }
+    },
     "cordis-inspect-catalog-on-query.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-tool-cordis/lib/types/providers.js": {
           "after": "d03cb1f3c28eca98d500d51467ed2491510a0d18cf5c0caf8fe576a8ecb7a428",
           "before": "24269ddf75dbf6fdbbe2fb4b4a8ee6bf27af649be6ad0a1399a420aa383cbdb8"
+        }
+      }
+    },
+    "cordis-reflect-empty-notify.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/cordis/lib/index.js": {
+          "after": "845d74f2353a3089c7e174cb8bdd860bf32f51be4b78a9e8ff93f2653e4dbcf6",
+          "before": "88d38fb02b95162246aeb13d6e421be9d16680b0bcbcde59a6de09d7229ea140"
         }
       }
     },
@@ -2771,7 +2787,9 @@
   "targetSets": {
     "android": [
       "cordis-effect-dispose-completion.diff",
+      "cordis-effect-setup-retention.diff",
       "cordis-inspect-catalog-on-query.diff",
+      "cordis-reflect-empty-notify.diff",
       "credentials-decimal-refs.diff",
       "fs-create-exclusive.diff",
       "install-log-redaction.diff",
@@ -2977,7 +2995,9 @@
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
+      "cordis-effect-setup-retention.diff",
       "cordis-inspect-catalog-on-query.diff",
+      "cordis-reflect-empty-notify.diff",
       "credentials-decimal-refs.diff",
       "fs-create-exclusive.diff",
       "install-log-redaction.diff",

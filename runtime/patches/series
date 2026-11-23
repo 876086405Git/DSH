@@ -1,6 +1,8 @@
 # One patch per line, in application order. Keep every .diff exactly once.
 cordis-effect-dispose-completion.diff
+cordis-effect-setup-retention.diff
 cordis-inspect-catalog-on-query.diff
+cordis-reflect-empty-notify.diff
 credentials-decimal-refs.diff
 fs-create-exclusive.diff
 install-log-redaction.diff
