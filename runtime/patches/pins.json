@@ -196,6 +196,14 @@
         }
       }
     },
+    "cordis-effect-setup-retention.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/cordis/lib/index.js": {
+          "after": "88d38fb02b95162246aeb13d6e421be9d16680b0bcbcde59a6de09d7229ea140",
+          "before": "b8b87360ebc67df2d0aabea214b8ed30d4bde3767e354ebb1b85fc6c15b45a05"
+        }
+      }
+    },
     "cordis-inspect-catalog-on-query.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-tool-cordis/lib/types/providers.js": {
