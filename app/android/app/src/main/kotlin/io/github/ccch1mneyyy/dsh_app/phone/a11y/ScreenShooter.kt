@@ -81,7 +81,9 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
      */
     fun shoot(window: UiWindow?, screen: Box, marks: List<ScreenElement>, secrets: List<Box>, timeoutMs: Long, image: Boolean = true,
         readLocalText: Boolean = false, localTextPrivacyAllowed: Boolean = false,
-        localTextCancelled: () -> Boolean = { false }, frameWanted: ((ByteArray) -> Boolean)? = null): Shot {
+        localTextCancelled: () -> Boolean = { false }, frameWanted: ((ByteArray) -> Boolean)? = null,
+        maxImageSide: Int = 1300): Shot {
+        require(maxImageSide in 1..1300)
         val deadline = SystemClock.uptimeMillis() + timeoutMs
         // l10n:keep agent screenshot result
         if (Build.VERSION.SDK_INT < 30) return Shot(null, null, null, false, "本机系统低于 Android 11，不支持无障碍截图")
@@ -118,7 +120,7 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
             val frame = VisualFrame.capture(bitmap.width, bitmap.height) { y, row ->
                 bitmap.getPixels(row, 0, bitmap.width, 0, y, bitmap.width, 1)
             }
-            val factor = minOf(1f, 1300f / max(bitmap.width, bitmap.height))
+            val factor = minOf(1f, maxImageSide.toFloat() / max(bitmap.width, bitmap.height))
             val w = (bitmap.width * factor).roundToInt().coerceAtLeast(1)
             val h = (bitmap.height * factor).roundToInt().coerceAtLeast(1)
             val sx = w.toFloat() / origin.width.coerceAtLeast(1)

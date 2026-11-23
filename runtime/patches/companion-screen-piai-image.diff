@@ -1,0 +1,210 @@
+diff --git a/node_modules/@deepseek-ai/dsh-llm/lib/index.js b/node_modules/@deepseek-ai/dsh-llm/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-llm/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm/lib/index.js
+@@ -2538,7 +2538,15 @@
+ 		async companionScreenCapability(provider, model, signal) {
+ 			const registration = this.registration(provider);
+ 			const capability = this.companionAuxiliaryCapability(provider);
+-			if (registration.adapter.dshGoCompanionScreenImage !== true || capability?.physicalDispatch !== "fetch-invoked") return;
++			if (registration.adapter.dshGoCompanionScreenImage !== true) return;
++			if (capability?.physicalDispatch !== "fetch-invoked") {
++				const call = await registration.adapter.prepareCall(provider, model, signal);
++				signal?.throwIfAborted();
++				if (this.adapters.get(provider) !== registration) throw new LlmError("Screen image provider changed", "COMPANION_AUXILIARY_STALE");
++				const info = this.normalizeModelInfo(registration, model, call.model);
++				if (info.inputModalities?.includes("image") !== true || typeof call.companionScreen?.stream !== "function") return;
++				return call.companionScreen.capability;
++			}
+ 			const info = await this.resolveModelInfoFor(registration, model, signal);
+ 			signal?.throwIfAborted();
+ 			if (this.adapters.get(provider) !== registration) throw new LlmError("Screen image provider changed", "COMPANION_AUXILIARY_STALE");
+@@ -2574,7 +2582,8 @@
+ 				stream: ({ system, input, screenImage }) => {
+ 					if (used) throw new LlmError("An auxiliary handle can only be dispatched once", "INVALID_PREPARED_CALL");
+ 					if (typeof system !== "string" || typeof input !== "string") throw new LlmError("Auxiliary requests require plain text", "INVALID_PREPARED_CALL");
+-					if (screenImage !== void 0 && (!observed || registration.adapter.dshGoCompanionScreenImage !== true ||
++					if (screenImage !== void 0 && (registration.adapter.dshGoCompanionScreenImage !== true ||
++						!observed && typeof adapterCall.companionScreen?.stream !== "function" ||
+ 						info.inputModalities?.includes("image") !== true)) throw new LlmError("Selected auxiliary model cannot receive screen images", "UNSUPPORTED_CONTENT");
+ 					const transientImage = screenImage === void 0 ? void 0 : deepFreeze(structuredClone(screenImage));
+ 					used = true;
+@@ -2582,6 +2591,9 @@
+ 					// Construct only model input; never serialize credentials, signal,
+ 					// callbacks or the adapter connection into an input estimate.
+ 					const request = deepFreeze({ system, messages: [{ role: "user", content: [{ type: "text", text: input }] }] });
++					if (screenImage !== void 0 && !observed) return adapterCall.companionScreen.stream(
++						Object.freeze({ ...resolved, ...request, ...signal === void 0 ? {} : { signal } }),
++						transientImage, { guard, observe: observer.observe, checkRequest: observer.checkRequest });
+ 					if (!observed && observer.checkRequest?.(JSON.stringify(request), "adapter-input") === false) throw new LlmError("Lookup answer input exceeds its request budget", "COMPANION_LOOKUP_INPUT_LIMIT");
+ 					guard();
+ 					// A generic adapter call is NOT evidence of a physical POST.
+diff --git a/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js b/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js
+@@ -1922,7 +1922,76 @@
+ * profiles, so a configuration change reaches the next request without a
+ * restart; model descriptors come from the collection those profiles built.
+ */
++const COMPANION_SCREEN_HTTP_APIS = new Set(["openai-completions", "openai-responses", "anthropic-messages"]);
++const COMPANION_SCREEN_CAPABILITY = Object.freeze({
++	physicalDispatch: "fetch-invoked", rawUsage: "unavailable", maxPhysicalRequests: 1,
++	noTools: true, transientImage: "jpeg-512-inline"
++});
++/** One request-owned JPEG; never a durable attachment or conversation message. */
++function companionScreenContext(options, profile, image) {
++	const invalid = () => { throw new LlmError("Invalid transient screen image", "UNSUPPORTED_CONTENT"); };
++	if (image === null || typeof image !== "object" || Array.isArray(image) ||
++		Object.keys(image).some((key) => !["mediaType", "width", "height", "data"].includes(key)) ||
++		image.mediaType !== "image/jpeg" || !Number.isSafeInteger(image.width) || !Number.isSafeInteger(image.height) ||
++		image.width < 1 || image.width > 512 || image.height < 1 || image.height > 512 ||
++		typeof image.data !== "string" || image.data.length > 1398104 ||
++		!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(image.data)) invalid();
++	const data = Buffer.from(image.data, "base64");
++	if (data.length < 4 || data.length > 1048576 || data.toString("base64") !== image.data ||
++		data[0] !== 255 || data[1] !== 216) invalid();
++	let dimensions;
++	for (let offset = 2; offset < data.length;) {
++		if (data[offset++] !== 255) invalid();
++		while (data[offset] === 255) offset++;
++		const marker = data[offset++];
++		if (marker === 218 || marker === 217 || offset + 2 > data.length) break;
++		const length = data.readUInt16BE(offset);
++		if (length < 2 || offset + length > data.length) invalid();
++		if (marker === 192 || marker === 194) {
++			if (length < 8) invalid();
++			dimensions = { height: data.readUInt16BE(offset + 3), width: data.readUInt16BE(offset + 5) };
++			break;
++		}
++		offset += length;
++	}
++	if (dimensions?.width !== image.width || dimensions?.height !== image.height ||
++		image.width * image.height > profile.requestImagePixelBudget ||
++		data.length > profile.requestImageMaxBytes || image.data.length > profile.maxRequestImageBytes ||
++		(options.tools?.length ?? 0) !== 0 || options.messages.length !== 1 ||
++		options.messages[0].role !== "user" || options.messages[0].content.some((block) => block.type !== "text")) invalid();
++	const context = textOnlyContext(options, false);
++	const text = context.messages[0].content;
++	context.messages[0].content = [
++		...text.length === 0 ? [] : [{ type: "text", text }],
++		{ type: "image", data: image.data, mimeType: image.mediaType }
++	];
++	return context;
++}
++/** Observe the actual SDK fetch call; neither payload preparation nor an adapter handoff proves it. */
++async function companionScreenFetch(auxiliary, input, init) {
++	const body = typeof init?.body === "string" ? init.body
++		: init?.body === void 0 && input instanceof Request ? await input.clone().text() : void 0;
++	if (typeof body !== "string") throw new LlmError("Screen transport requires a serialized request body", "INVALID_PREPARED_CALL");
++	if (auxiliary.observer.checkRequest?.(body, "provider-request") === false) throw new LlmError("Screen input exceeds its request budget", "COMPANION_LOOKUP_INPUT_LIMIT");
++	auxiliary.guard();
++	const signal = init?.signal ?? (input instanceof Request ? input.signal : void 0);
++	signal?.throwIfAborted();
++	if (auxiliary.dispatched) throw new LlmError("Screen transport cannot make a second physical request", "COMPANION_AUXILIARY_RETRY_DENIED");
++	auxiliary.dispatched = true;
++	const atMs = Date.now();
++	let response;
++	try {
++		response = fetch(input, { ...init, redirect: "error" });
++	} finally {
++		// A synchronous throw is still an invocation with unknown remote delivery.
++		auxiliary.observer.observe({ type: "dispatch", atMs, boundary: "fetch-invoked" });
++	}
++	response = await response;
++	auxiliary.observer.observe({ type: "http", status: response.status });
++	return response;
++}
+ var PiAiAdapter = class extends LlmAdapter {
++	dshGoCompanionScreenImage = true;
+ 	config;
+ 	snapshot;
+ 	constructor(config) {
+@@ -2019,23 +2088,43 @@
+ 			...conversationUpdates(resolvedModel)
+ 		};
+ 	}
+-	prepareCall(provider, model, _signal) {
++	prepareCall(provider, model, signal) {
+ 		const snapshot = this.current();
++		const resolved = this.modelOf(snapshot, provider, model);
++		let screenUsed = false;
++		const companionScreen = resolved.input.includes("image") && COMPANION_SCREEN_HTTP_APIS.has(resolved.api)
++			? Object.freeze({
++				capability: COMPANION_SCREEN_CAPABILITY,
++				stream: (options, image, observer) => {
++					if (screenUsed) throw new LlmError("A screen handle can only be dispatched once", "INVALID_PREPARED_CALL");
++					screenUsed = true;
++					if (options.provider !== provider || options.model !== model) throw new LlmError("Screen model selection changed", "COMPANION_AUXILIARY_STALE");
++					const guard = () => {
++						signal?.throwIfAborted();
++						options.signal?.throwIfAborted();
++						observer.guard();
++						if (this.config.profiles() !== snapshot.profiles) throw new LlmError("Screen model profiles changed", "COMPANION_AUXILIARY_STALE");
++					};
++					return this.streamWithSnapshot(options, snapshot, { image, observer, guard, dispatched: false });
++				}
++			}) : void 0;
+ 		return Promise.resolve({
+ 			model: this.modelInfo(snapshot, provider, model),
+-			stream: (options) => this.streamWithSnapshot(options, snapshot)
++			stream: (options) => this.streamWithSnapshot(options, snapshot),
++			...companionScreen === void 0 ? {} : { companionScreen }
+ 		});
+ 	}
+ 	stream(options) {
+ 		return this.streamWithSnapshot(options, this.current());
+ 	}
+-	async *streamWithSnapshot(options, snapshot) {
++	async *streamWithSnapshot(options, snapshot, auxiliary) {
+ 		const env_1 = {
+ 			stack: [],
+ 			error: void 0,
+ 			hasError: false
+ 		};
+ 		try {
++			auxiliary?.guard();
+ 			if (options.stop !== void 0) throw new LlmError("llm-pi-ai does not support GenerateOptions.stop", "UNSUPPORTED_OPTION");
+ 			const profile = this.profileOf(snapshot, options.provider);
+ 			const model = this.modelOf(snapshot, options.provider, options.model);
+@@ -2046,6 +2135,7 @@
+ 				tools: [ANTHROPIC_TOOL_UPDATE_PLACEHOLDER, ...tools]
+ 			} : options;
+ 			const reasoning = resolveReasoningLevel(model, options.reasoningEffort ?? profile.reasoning);
++			const screenContext = auxiliary === void 0 ? void 0 : companionScreenContext(options, profile, auxiliary.image);
+ 			const apiKey = await this.config.resolveApiKey(options.provider, profile);
+ 			const consumer = new AbortController();
+ 			const upstream = options.signal === void 0 ? consumer.signal : AbortSignal.any([options.signal, consumer.signal]);
+@@ -2063,7 +2153,7 @@
+ 						reason
+ 					});
+ 				};
+-				const context = attachments === void 0 ? toPiContext(request, void 0, onReplayDegrade, updates.systemPromptUpdate === "in-history") : await toPiContext({
++				const context = screenContext ?? (attachments === void 0 ? toPiContext(request, void 0, onReplayDegrade, updates.systemPromptUpdate === "in-history") : await toPiContext({
+ 					...request,
+ 					signal: watchdog.signal
+ 				}, {
+@@ -2076,7 +2166,7 @@
+ 						maxPixels: profile.requestImagePixelBudget,
+ 						maxBytes: profile.requestImageMaxBytes
+ 					}
+-				}, onReplayDegrade, updates.systemPromptUpdate === "in-history");
++				}, onReplayDegrade, updates.systemPromptUpdate === "in-history"));
+ 				if (model.api === "openai-completions") for (const message of context.messages) {
+ 					if (message.role === "assistant") {
+ 						for (const block of message.content) if (block.type === "toolCall" && block.name === "") block.name = "unknown";
+@@ -2085,6 +2175,7 @@
+ 				const usageEvidence = {};
+ 				const iterator = toStreamChunks(snapshot.models.streamSimple(model, context, {
+ 					onProviderStreamEvent: event => observedPiUsage(event, usageEvidence),
++					...auxiliary === void 0 ? {} : { fetch: (input, init) => companionScreenFetch(auxiliary, input, init) },
+ 					...profileOptions(profile, reasoning, apiKey),
+ 					...options.temperature === void 0 ? {} : { temperature: options.temperature },
+ 					...options.maxTokens === void 0 ? {} : { maxTokens: options.maxTokens },
+@@ -2097,6 +2188,8 @@
+ 					while (true) {
+ 						const result = await watchdog.next(iterator);
+ 						if (result.done) {
++							// Preserve usage chunks, then recheck acceptance of this prepared screen request.
++							auxiliary?.guard();
+ 							exhausted = true;
+ 							return;
+ 						}

@@ -136,7 +136,7 @@ void main() {
         sessionsProvider.overrideWith(() => FakeSessions(sampleSessions())),
       ]);
       expect(find.text('全部对话'), findsNothing);
-      expect(tester.getSize(find.byType(WorkspaceSwitcher)).height, 0);
+      expect(find.byType(WorkspaceSwitcher), findsNothing);
     });
   });
 

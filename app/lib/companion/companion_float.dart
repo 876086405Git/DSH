@@ -246,6 +246,20 @@ final companionFloatStoreProvider = Provider<Future<CompanionPackStore> Function
       () async => CompanionPackStore(Directory('${(await getApplicationSupportDirectory()).path}/companion')),
 );
 
+/// Her pack's own name, for places outside her room (the drawer); null with
+/// no pack. The room refreshes it whenever her pack changes.
+final companionPackNameProvider = FutureProvider.autoDispose<String?>((ref) async {
+  try {
+    final store = await ref.watch(companionFloatStoreProvider)();
+    // A pack installed or removed anywhere (the room, the workshop) renames her.
+    final changes = store.revisions.listen((_) => ref.invalidateSelf());
+    ref.onDispose(changes.cancel);
+    return (await store.character()).name;
+  } on Object {
+    return null;
+  }
+});
+
 /// Subscribe before checking; a late check from a replaced/removed pack is
 /// never offered as an enabled choice. Opening settings does not download.
 final companionFloatAvailabilityProvider = StreamProvider.autoDispose<String?>((ref) async* {

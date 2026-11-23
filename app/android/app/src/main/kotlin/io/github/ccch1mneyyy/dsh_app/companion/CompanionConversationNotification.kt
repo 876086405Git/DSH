@@ -121,10 +121,11 @@ internal object CompanionConversationNotification {
             .setOngoing(true).build()
     }
 
-    fun build(context: Context): Notification = locked(context) {
+
+    fun startForeground(context: Context, start: (Notification) -> Unit) = locked(context) {
         val epoch = CompanionAlwaysOnState.read(context).epoch
         readDisplay(context, epoch)
-        render(context, epoch = epoch)
+        start(render(context, epoch = epoch))
     }
 
     @Suppress("DEPRECATION")

@@ -169,7 +169,7 @@ class HostSheet extends ConsumerWidget {
                     onTap: () {
                       final navigator = Navigator.of(context);
                       navigator.pop();
-                      unawaited(navigator.push(MaterialPageRoute<void>(builder: (_) => const CompanionPage())));
+                      unawaited(navigator.push(MaterialPageRoute<void>(builder: (_) => const CompanionPage(sections: true))));
                     },
                   ),
                   SettingsTile(

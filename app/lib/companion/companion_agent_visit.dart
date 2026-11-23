@@ -38,6 +38,7 @@ class CompanionAgentAttachment {
   bool get isAttached => _window.current(_visit);
   bool get preparing => _visit.preparing;
   bool get running => _visit.run?.running ?? false;
+  String? get preparingSignalId => isAttached ? _visit.preparingSignalIdFor(_window.ui) : null;
   String get text => _visit.run?.text ?? '';
   String? get pendingText {
     final request = _visit.run?.request;
@@ -57,10 +58,7 @@ class CompanionAgentAttachment {
 
   CompanionMemoryOwner? get memory => _visit.memory;
   String? get characterId => _visit.characterId;
-  MemoryRow? get affinity {
-    final role = _visit.characterId;
-    return !_visit.active || role == null ? null : _visit.memory?.store.companionAffinity(characterId: role);
-  }
+  ({int tier, Object? settledDay})? get affinity => _visit.displayAffinity;
 
   CompanionSnapshot? get vitals => _visit.snapshot;
   bool get light => _visit.light;
@@ -73,7 +71,13 @@ class CompanionAgentAttachment {
       isAttached ? _visit.openMemory() : Future.error(const DshClosedException('Companion window closed'));
   Future<void> submit(String raw) async {
     if (isAttached) {
-      await _visit.submit(raw, origin: _window.ui, handoff: _window.mapHandoff, originCurrent: () => isAttached);
+      await _visit.submit(
+        raw,
+        inputWindow: 'room',
+        origin: _window.ui,
+        handoff: _window.mapHandoff,
+        originCurrent: () => isAttached,
+      );
     }
   }
 
@@ -105,6 +109,23 @@ class CompanionAgentAttachment {
     if (isAttached) _visit.acted();
   }
 
+  void offerTaskSignal(
+    CompanionSignalSpeech speech, {
+    required String language,
+    required bool Function() isCurrent,
+    required bool Function(CompanionInitiativeDisplay, String) present,
+  }) {
+    if (!isAttached) return;
+    _visit._offerTaskSignal(
+      speech,
+      target: _window.ui,
+      language: language,
+      recipientCurrent: () => isAttached,
+      signalCurrent: isCurrent,
+      present: present,
+    );
+  }
+
   Map<String, ({int start, int end})> get pendingReplyRanges {
     if (!isAttached) return const {};
     return Map<String, ({int start, int end})>.unmodifiable(_visit.run?.unpresentedReplies ?? const {});
@@ -130,6 +151,10 @@ class CompanionAgentResident {
   String? get characterId => active ? _visit.characterId : null;
   bool get ownsCurrentRun => active && identical(_visit.runOrigin, _ui) && identical(_visit.run, _visit.agent._run);
 
+  /// Only this signal's actual model request may survive its own busy view.
+  String? get preparingSignalId =>
+      active && identical(_visit.initiativeUi, _ui) ? _visit.preparingSignalIdFor(_ui) : null;
+
   /// The floating composer reads the same role/cutoff-filtered transcript.
   /// It keeps no second message list or cold replay queue.
   List<MemoryRow> get recentMessages {
@@ -140,10 +165,11 @@ class CompanionAgentResident {
 
   Future<CompanionMemoryOwner> openMemory() =>
       active ? _visit.openMemory() : Future.error(const DshClosedException('Companion resident closed'));
-  Future<void> submit(String raw, {void Function(MemoryRow)? onCommitted}) async {
+  Future<void> submit(String raw, {bool fromFloat = false, void Function(MemoryRow)? onCommitted}) async {
     if (active) {
       await _visit.submit(
         raw,
+        inputWindow: fromFloat ? 'floating' : 'notification',
         origin: _ui,
         handoff: _visit.residentMapHandoff!,
         originCurrent: () => active,
@@ -213,6 +239,20 @@ class _CompanionAgentVisit {
   String? characterId;
   _CompanionPresence? presence;
   int? affinitySettledDay;
+  ({CompanionMemoryOwner owner, String role, ({int tier, Object? settledDay}) display})? _affinityDisplay;
+
+  ({int tier, Object? settledDay})? get displayAffinity {
+    final owner = memory;
+    final role = characterId;
+    if (!active || owner == null || role == null) return null;
+    final cached = _affinityDisplay;
+    if (cached != null && identical(cached.owner, owner) && cached.role == role) return cached.display;
+    final row = owner.store.companionAffinity(characterId: role);
+    final display = (tier: row?['tier'] as int? ?? 0, settledDay: row?['settled_through_day']);
+    _affinityDisplay = (owner: owner, role: role, display: display);
+    return display;
+  }
+
   HostRef boundHost;
   DshClient? boundClient;
   late bool boundLight;
@@ -229,6 +269,8 @@ class _CompanionAgentVisit {
   CompanionAgentMemoryTools? retryTools;
   CompanionAgentPhoneTools? activePhoneTools;
   CompanionResidentSignals? residentSignals;
+  ({String signalId, CompanionAgentModelRequest request, int generation, CompanionAgentRoomUi recipient})?
+  signalPreparation;
   _CompanionAgentRun? run;
   Timer? quietTimer;
   Timer? idleTimer;
@@ -255,6 +297,21 @@ class _CompanionAgentVisit {
       !agent._disposed &&
       identical(agent._visit, this) &&
       (residentUi != null || (window?.attached == true && window!.ui.mounted));
+
+  // Identity only: a Page reads this while constructing its initiative view.
+  // Reading initiativeUi here would recurse back through that same Page view.
+  String? preparingSignalIdFor(CompanionAgentRoomUi recipient) {
+    final preparation = signalPreparation;
+    if (preparation == null ||
+        !identical(agent._asideRequest, preparation.request) ||
+        agent._asideGeneration != preparation.generation ||
+        !identical(preparation.recipient, recipient) ||
+        agent._run?.running == true) {
+      return null;
+    }
+    return preparation.signalId;
+  }
+
   DateTime? lastUserInteractionAt;
 
   // Only resident-owned periodic work slows down. User input, the current
@@ -404,7 +461,10 @@ class _CompanionAgentVisit {
   Future<CompanionMemoryOwner> readMemory() async {
     final directory = await root;
     if (!active) throw const DshClosedException('Companion visit closed');
-    final owner = await ref.read(companionMemoryOwnerProvider(directory.absolute.path).future);
+    final provider = companionMemoryOwnerProvider(directory.absolute.path);
+    // A failed open is not kept: the next attempt (a retry) opens again.
+    if (ref.read(provider).hasError) ref.invalidate(provider);
+    final owner = await ref.read(provider.future);
     if (!active) return owner;
     memory = owner;
     bindCharacter();
@@ -430,6 +490,7 @@ class _CompanionAgentVisit {
   }
 
   void memoryChanged() {
+    _affinityDisplay = null;
     final owner = memory;
     if (!active || owner == null) return;
     final revision = owner.store.archive['control_revision']! as int;
@@ -501,6 +562,7 @@ class _CompanionAgentVisit {
 
   Future<void> submit(
     String raw, {
+    required String inputWindow,
     required CompanionAgentRoomUi origin,
     required CompanionMapHandoff handoff,
     required bool Function() originCurrent,
@@ -613,6 +675,7 @@ class _CompanionAgentVisit {
       final turnContext = CompanionTurnContext(
         Map.unmodifiable({
           ...sampledContext.data,
+          'window': inputWindow,
           if (sourceClock != null) 'zoneId': sourceClock.zoneId,
           // A retry's current clock is not when its unchanged words were said.
           if (reuse)
@@ -1206,10 +1269,34 @@ class _CompanionAgentVisit {
 
   void offerResidentSignal(CompanionSignalSpeech speech, bool Function() signalCurrent) {
     final target = residentUi;
+    if (target == null) return;
+    final notify = switch (target) {
+      final CompanionAgentNotificationUi notify => notify,
+      _ => null,
+    };
+    if (notify == null) return;
+    _offerTaskSignal(
+      speech,
+      target: target,
+      language: 'zh',
+      recipientCurrent: () => identical(residentUi, target),
+      signalCurrent: signalCurrent,
+      present: (display, text) => false,
+      deliver: (text) => notify.deliverFollowup(id: 'task:${speech.slot.signal.id}', text: text),
+    );
+  }
+
+  void _offerTaskSignal(
+    CompanionSignalSpeech speech, {
+    required CompanionAgentRoomUi target,
+    required String language,
+    required bool Function() recipientCurrent,
+    required bool Function() signalCurrent,
+    required bool Function(CompanionInitiativeDisplay, String) present,
+    Future<bool> Function(String)? deliver,
+  }) {
     final owner = memory;
-    if (target == null || owner == null || !active || !identical(initiativeUi, target)) return;
-    if (target is! CompanionAgentNotificationUi) return;
-    final notify = target as CompanionAgentNotificationUi;
+    if (owner == null || !active || !recipientCurrent() || !identical(initiativeUi, target)) return;
     final view = target.initiativeView;
     final candidate = CompanionInitiativeSignal(
       id: speech.id,
@@ -1218,20 +1305,48 @@ class _CompanionAgentVisit {
       nightKey: speech.nightKey,
     );
     final visitCurrent = captureCurrent();
+    var retired = false;
+    CompanionAgentModelRequest? preparation;
+    String? line;
     bool current() =>
-        visitCurrent() && identical(residentUi, target) && identical(initiativeUi, target) && signalCurrent();
+        !retired && visitCurrent() && recipientCurrent() && identical(initiativeUi, target) && signalCurrent();
     initiative.requestSignal(
       target.initiativeRoom,
       view,
       candidate,
       isCurrent: current,
-      present: (_) => false,
+      prepare: () async {
+        line = await agent._prepareTaskSignal(
+          phase: speech.slot.signal.payload['phase']! as String,
+          signalId: candidate.id,
+          recipient: target,
+          language: language,
+          isCurrentSignal: current,
+          onRequest: (request) => preparation = request,
+        );
+        return line != null;
+      },
+      cancelPrepare: () {
+        retired = true;
+        final request = preparation;
+        if (request == null) return;
+        if (identical(signalPreparation?.request, request)) signalPreparation = null;
+        if (request.settled.isCompleted) return;
+        try {
+          request.client?.close();
+        } finally {
+          unawaited(request.drain().catchError((Object _) {}));
+        }
+      },
+      present: (display) => current() && line != null && present(display, line!),
       hide: (_) {},
       nightCareEnabled: speech.nightCare,
-      deliver: (_) async {
-        if (!current()) return false;
-        return notify.deliverFollowup(id: 'task:${speech.slot.signal.id}', text: speech.text);
-      },
+      deliver: deliver == null
+          ? null
+          : (_) async {
+              if (!current() || line == null) return false;
+              return deliver(line!);
+            },
       retainDelivery: owner.retainReceipt,
     );
   }

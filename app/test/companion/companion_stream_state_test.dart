@@ -761,6 +761,7 @@ class _FollowupObserver extends CompanionInitiative {
     bool nightCareEnabled = false,
     String? followupId,
     Future<bool> Function()? prepare,
+    void Function()? cancelPrepare,
     Future<bool> Function(CompanionInitiativeDisplay)? deliver,
     void Function(Future<void>)? retainDelivery,
   }) {
@@ -777,6 +778,7 @@ class _FollowupObserver extends CompanionInitiative {
       nightCareEnabled: nightCareEnabled,
       followupId: followupId,
       prepare: prepare,
+      cancelPrepare: cancelPrepare,
       deliver: deliver,
       retainDelivery: retainDelivery,
     );

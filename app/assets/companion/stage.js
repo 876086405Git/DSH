@@ -19,6 +19,15 @@
   const query = new URLSearchParams(location.search);
   const FLOAT = query.get('mode') === 'float';
   const COVER = query.get('mode') === 'cover';
+  // Where the person last pinched her to in the room (size and place), kept by
+  // the app per character; null until they ever do.
+  let roomView = (() => {
+    const zoom = Number(query.get('viewZoom'));
+    if (!(zoom > 0)) return null;
+    const x = Number(query.get('viewX'));
+    const y = Number(query.get('viewY'));
+    return { zoom, x: Number.isFinite(x) ? x : 0, y: Number.isFinite(y) ? y : 0 };
+  })();
   const floatAbort = FLOAT ? new AbortController() : null;
   let floatDisposed = false;
   let loadingModel = null;
@@ -820,6 +829,10 @@
       const y = Number(query.get('floatY'));
       camera.zoom = zoom > 0 && zoom <= 4 ? zoom : 0.9;
       camera.y = Number.isFinite(y) ? clamp(y, -1, 1) : 0;
+    } else if (!COVER && roomView) {
+      camera.zoom = clamp(roomView.zoom, 0.55, 3.2);
+      camera.x = clamp(roomView.x, -2, 2);
+      camera.y = clamp(roomView.y, -2, 2);
     }
   }
 
@@ -1507,7 +1520,7 @@
   // ── Touch ───────────────────────────────────────────────────────────────
 
   const pointers = new Map();
-  const gesture = { pinch: 0, zoom: 0, midX: 0, midY: 0, camX: 0, camY: 0 };
+  const gesture = { pinching: false, pinch: 0, zoom: 0, midX: 0, midY: 0, camX: 0, camY: 0 };
   let press = null;
   const taps = [];
 
@@ -1530,7 +1543,7 @@
     touched();
     if (pointers.size === 2) {
       const info = pinchInfo();
-      Object.assign(gesture, { pinch: info.distance, zoom: camera.zoom, midX: info.midX, midY: info.midY, camX: camera.x, camY: camera.y });
+      Object.assign(gesture, { pinching: true, pinch: info.distance, zoom: camera.zoom, midX: info.midX, midY: info.midY, camX: camera.x, camY: camera.y });
       // A second finger means zooming: no hug, and a carried snack goes back.
       if (press) clearTimeout(press.hugTimer);
       if (press?.dragging) {
@@ -1667,6 +1680,12 @@
 
   function endPointer(e) {
     if (!pointers.delete(e.pointerId)) return;
+    // A pinch let go: this is where she stays, next visit too.
+    if (gesture.pinching && pointers.size < 2) {
+      gesture.pinching = false;
+      roomView = { zoom: camera.zoom, x: camera.x, y: camera.y };
+      post({ type: 'view', ...roomView });
+    }
     if (!press || press.id !== e.pointerId) return;
     const quick = e.type === 'pointerup' && e.timeStamp - press.at < 420 && press.travel < 14;
     clearTimeout(press.hugTimer);

@@ -24,7 +24,7 @@ import '../theme/theme.dart';
 
 /// The page of a mode other than 工作.
 Widget appModePage(AppMode mode) => switch (mode) {
-  AppMode.companion => const CompanionPage(),
+  AppMode.companion => const CompanionPage(sections: true),
   AppMode.tavern => const TavernHomePage(),
   AppMode.work => throw ArgumentError.value(mode, 'mode', '工作 is the home, not a page'),
 };

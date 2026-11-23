@@ -15,6 +15,8 @@ import 'package:http/http.dart' as http;
 import '../notify/chat_alerts.dart' show companionHostKey;
 import '../state/connection_state.dart';
 import '../state/hosts_state.dart';
+import '../state/models_state.dart';
+import '../state/read_list_identity.dart';
 import '../state/run_pulse.dart' show estimateTokens;
 import 'companion_agent_loop.dart';
 import 'companion_agent_phone_tools.dart';
@@ -114,6 +116,7 @@ class CompanionAgent extends ChangeNotifier {
   int? get lastUserInteractionAtMs => lastUserInteractionAt?.millisecondsSinceEpoch;
   void Function(String)? onScreenUserText;
   void Function(String requestId, int atMs, double? estimatedCny)? onScreenCost;
+  void Function()? onScreenRouteChanged;
 
   final http.Client Function() _client;
   final String Function() _apiKey;
@@ -121,6 +124,7 @@ class CompanionAgent extends ChangeNotifier {
   final void Function(Map<String, Object?>, {required bool partial})? _onUsageSettled;
   _CompanionAgentRun? _run;
   CompanionAgentModelRequest? _asideRequest;
+  DshHttpAbort? _asideAbort;
   int _asideGeneration = 0;
   int _replies = 0;
   bool _disposed = false;
@@ -452,11 +456,17 @@ class CompanionAgent extends ChangeNotifier {
   /// the original owner; neither a new turn nor a new window inherits it.
   void cancelScreenObservation() {
     _asideGeneration++;
+    _asideAbort?.abort();
     final aside = _asideRequest;
     if (aside != null) {
       aside.client?.close();
       unawaited(aside.drain().catchError((Object _) {}));
     }
+  }
+
+  void screenRouteChanged() {
+    cancelScreenObservation();
+    onScreenRouteChanged?.call();
   }
 
   void stop({bool discard = false}) {

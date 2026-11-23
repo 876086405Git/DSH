@@ -779,6 +779,45 @@ void main() {
       await tester.pump(const Duration(seconds: 10));
     });
 
+    testWidgets('the section: her room, what she remembers and her own page share one bar', (tester) async {
+      SharedPreferences.setMockInitialValues({'companion_touch_hint_done': true, 'companion_home_hint_done': true});
+      CompanionStageEvents? stageEvents;
+      await tester.pumpWidget(
+        _app(
+          CompanionPage(
+            storeOverride: installedStore(),
+            sections: true,
+            stageBuilder: (controller, events) {
+              stageEvents = events;
+              return const SizedBox.expand();
+            },
+          ),
+        ),
+      );
+      await _stageUp(tester, () => stageEvents);
+      stageEvents!.onReady();
+      // The bar comes with her room, once she's there.
+      await _until2(tester, () => find.text('和鲸鱼娘说点什么').evaluate().isNotEmpty);
+      await _settle(tester);
+      // The bar has her page, so the room keeps no ⋯ of its own.
+      expect(find.byIcon(AppIcons.more), findsNothing);
+
+      await tester.tap(find.text('记忆'));
+      await _until2(tester, () => find.byType(CompanionMemoryPage).evaluate().isNotEmpty);
+      expect(find.text('还没有记下什么'), findsOneWidget);
+
+      await tester.tap(find.text('她').last);
+      await _until2(tester, () => find.text('她多主动').evaluate().isNotEmpty);
+      expect(find.text('她的声音'), findsOneWidget);
+
+      await tester.tap(find.text('小屋'));
+      await _settle(tester);
+      expect(find.text('和鲸鱼娘说点什么'), findsOneWidget);
+
+      await tester.pumpWidget(_app(const SizedBox()));
+      await tester.pump(const Duration(seconds: 10));
+    });
+
     testWidgets('a key builds the composer, not her stage; the gate still hears the room is busy', (tester) async {
       SharedPreferences.setMockInitialValues({'companion_touch_hint_done': true, 'companion_home_hint_done': true});
       final clock = _Clock();
@@ -1135,34 +1174,58 @@ void main() {
 
     testWidgets('her things answer without a host: activity, a line, the status', (tester) async {
       SharedPreferences.setMockInitialValues({'companion_touch_hint_done': true});
+      final pack = installedStore();
+      final clock = _Clock();
+      final db = sqlite3.open('${root.path}/memory.sqlite');
+      final memory = _RoomMemory2(CompanionMemoryStore(db, nowMilliseconds: () => clock.wall), CompanionLocal.at(root));
+      addTearDown(memory.dispose);
+      final key = await settleMixed(tester, pack.characterKey());
+      await settleMixed(tester, memory.migrateLocal());
+      final role = memory.store.ensureCompanionCharacter(sourceKey: key!)['id']! as String;
+      final phone = FakePhoneKeeper();
+      List<String> interactions() => db
+          .select(
+            "SELECT kind FROM memory_affinity_events WHERE character_id=? AND kind IN ('snack','play') ORDER BY kind",
+            [role],
+          )
+          .map((row) => row['kind']! as String)
+          .toList();
       final commands = <(String, Map<String, Object?>)>[];
       CompanionStageEvents? stageEvents;
       await tester.pumpWidget(
         _app(
           CompanionPage(
-            storeOverride: installedStore(),
+            storeOverride: pack,
             stageBuilder: (controller, events) {
               stageEvents = events;
               return const SizedBox.expand();
             },
             stageController: CompanionStageController(sink: (type, args) => commands.add((type, args))),
           ),
+          phone: phone,
+          extra: [
+            companionInitiativeClockProvider.overrideWithValue(clock.call),
+            companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+          ],
         ),
       );
       await _stageUp(tester, () => stageEvents);
       stageEvents!.onReady();
+      await _until2(tester, () => memory.room != null);
       await _settle(tester);
       // The greeting first; then the hint for her things.
       await tester.pump(const Duration(seconds: 8));
       await _settle(tester);
       expect(find.text('点点贝壳、泡泡和软垫，点心还能拖到她嘴边'), findsOneWidget);
 
+      expect(interactions(), isEmpty);
       commands.clear();
       stageEvents!.onObject('snack');
       await tester.pump(const Duration(milliseconds: 100));
       final activity = commands.where((c) => c.$1 == 'activity').single.$2;
       expect(activity['name'], 'snack');
       expect(activity['remainingMs'], 45000);
+      expect(interactions(), ['snack']);
       expect(find.text('点点贝壳、泡泡和软垫，点心还能拖到她嘴边'), findsNothing);
       // Her line waits for the snack to reach her.
       expect(commands.where((c) => c.$1 == 'say'), isEmpty);
@@ -1178,8 +1241,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.text('在吃点心'), findsNothing);
 
-      await tester.pumpWidget(_app(const SizedBox()));
+      // These are real Page actions with memory ready but no activity snapshot.
+      stageEvents!.onObject('play');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(interactions(), ['play', 'snack']);
+      stageEvents!.onObject('rest');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(interactions(), ['play', 'snack']);
+      expect(phone.events, isEmpty, reason: 'no activity write is fabricated without a snapshot');
+
+      await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 10));
+      await _drained(tester, memory);
     });
 
     group('light mode', () {
@@ -6343,7 +6416,7 @@ void main() {
         expect(saved, isNot(contains('companion_context')));
 
         // The next line goes with what came before. Every explicit turn now
-        // carries its own current clock (A2), and only that: the earlier
+        // carries its own current clock and input window (A2), and only that: the earlier
         // turn's context is not replayed in the history.
         await tester.pump(const Duration(seconds: 12));
         await say(tester, '今天好累');
@@ -6356,7 +6429,7 @@ void main() {
         final clock = RegExp(r'^<companion_context>(.*)</companion_context>$')
             .firstMatch(latest.last['text']! as String)!
             .group(1)!;
-        expect((jsonDecode(clock) as Map).keys, ['localTime']);
+        expect(jsonDecode(clock), {'localTime': isA<String>(), 'window': 'room'});
         expect((next.first as Map)['content'], '你好');
 
         await tester.pumpWidget(const SizedBox());
