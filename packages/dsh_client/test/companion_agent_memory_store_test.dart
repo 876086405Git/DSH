@@ -7,6 +7,13 @@ import 'package:test/test.dart';
 
 import 'support/old_memory_schema.dart';
 
+/// A stored message on the fields a test captured from it: the store may also
+/// carry its own extraction bookkeeping on the row.
+Map<String, Object?> _captured(CompanionMemoryStore store, Map<String, Object?> like) {
+  final row = store.messages().singleWhere((source) => source['id'] == like['id']);
+  return {for (final key in like.keys) key: row[key]};
+}
+
 void main() {
   late Directory directory;
   late Database database;
@@ -1064,7 +1071,7 @@ void main() {
     expect(removed.rawEraseState, 'maintenance');
     expect(removed.pendingRawEraseId, isNull);
     expect(store.pendingRawErase(characterId: null), isNull);
-    expect(store.messages().singleWhere((row) => row['id'] == rawX['id']), rawX);
+    expect(_captured(store, rawX), rawX);
     final keptY = store.messages().singleWhere((row) => row['id'] == rawY['id']);
     expect(keptY['text'], rawY['text']);
     expect(keptY['source_rev'], rawY['source_rev']);
@@ -1113,7 +1120,7 @@ void main() {
     expect(isolatedView.rawMessageCount, 1);
     expect(isolatedView.expiresAtUtcMs, isNull);
     expect(store.confirmRawErase(isolatedId, characterId: null).state, 'deferred');
-    expect(store.messages().singleWhere((row) => row['id'] == sharedRaw['id']), sharedRaw);
+    expect(_captured(store, sharedRaw), sharedRaw);
     expect(call(duplicateTurn, 'ignored-while-pending', 'unknown_memory_tool', const {}).code, 'unknown_memory_tool');
     expect(store.pendingRawErase(characterId: null)!.id, isolatedId);
     expect(store.confirmRawErase('another-id', characterId: null).state, 'not_found');
@@ -1163,21 +1170,33 @@ void main() {
     final beforeLateExtraction = store.archive;
     final lateSource = say('later-proof', '我收藏青石灯，也种兰花。');
     final lateBatch = store.nextBatch(forceTail: true, estimateTokens: (text) => text.length)!;
-    final lateProposal = parseExtractionProposal(jsonEncode({
-      'schema_version': 2, 'batch_id': lateBatch.id,
-      'covered_message_ids': [lateSource['id']], 'completion': 'complete',
-      'operations': [{
-        'op': 'create', 'kind': 'fact', 'text': '我收藏青石灯，也种兰花。', 'keywords': ['青石灯'],
-        'evidence': [{'message_id': lateSource['id'], 'quote': lateSource['text']}],
-      }],
-    }), lateBatch);
+    final lateProposal = parseExtractionProposal(
+      jsonEncode({
+        'schema_version': 2,
+        'batch_id': lateBatch.id,
+        'covered_message_ids': [lateSource['id']],
+        'completion': 'complete',
+        'operations': [
+          {
+            'op': 'create',
+            'kind': 'fact',
+            'text': '我收藏青石灯，也种兰花。',
+            'keywords': ['青石灯'],
+            'evidence': [
+              {'message_id': lateSource['id'], 'quote': lateSource['text']},
+            ],
+          },
+        ],
+      }),
+      lateBatch,
+    );
     expect(store.commitExtraction(lateBatch, lateProposal), isTrue);
     expect(store.archive['control_revision'], beforeLateExtraction['control_revision']);
     expect(store.archive['memory_revision'], greaterThan(beforeLateExtraction['memory_revision']! as int));
     final afterLateExtraction = store.cards();
     expect(store.confirmRawErase(laterId, characterId: null).state, 'invalidated');
     expect(store.cards(), afterLateExtraction);
-    expect(store.messages().singleWhere((row) => row['id'] == laterRaw['id']), laterRaw);
+    expect(_captured(store, laterRaw), laterRaw);
     expect(store.pendingRawErase(characterId: null), isNull);
   });
 
@@ -1386,7 +1405,7 @@ void main() {
     final afterExternalControl = store.archive;
     expect(store.confirmRawErase(rawEraseId, characterId: null).state, 'invalidated');
     expect(store.archive, afterExternalControl);
-    expect(store.messages().singleWhere((row) => row['id'] == raw['id']), raw);
+    expect(_captured(store, raw), raw);
 
     final expiringRaw = say('expiring-raw', '我喜欢海盐饼干。');
     final expiringMaking = begin(expiringRaw);
@@ -1401,7 +1420,7 @@ void main() {
     expect(store.confirmRawErase(expiringId, characterId: null).state, 'expired');
     expect(store.markRawEraseOffered(expiringId, characterId: null).state, 'expired');
     expect(store.archive, beforeExpiry);
-    expect(store.messages().singleWhere((row) => row['id'] == expiringRaw['id']), expiringRaw);
+    expect(_captured(store, expiringRaw), expiringRaw);
     expect(store.pendingRawErase(characterId: null), isNull);
     store.closeAgentTurn(expiringTurn);
   });
@@ -1520,7 +1539,7 @@ void main() {
     expect(store.archive, beforeDecline);
     expect(store.messages(), beforeDeclineMessages);
     expect(store.cards(), beforeDeclineCards);
-    expect(store.messages().singleWhere((row) => row['id'] == keptRaw['id']), keptRaw);
+    expect(_captured(store, keptRaw), keptRaw);
     store.closeAgentTurn(declining);
 
     final coldRaw = say('cold-raw', '我保存蓝色贝壳。');
@@ -1547,7 +1566,7 @@ void main() {
     expect(coldReplay.replayed, isTrue);
     expect(coldReplay.rawEraseState, 'unavailable');
     expect(coldReplay.pendingRawEraseId, isNull);
-    expect(store.messages().singleWhere((row) => row['id'] == coldRaw['id']), coldRaw);
+    expect(_captured(store, coldRaw), coldRaw);
     expect(call(coldDeleting, 'cold-new-delete', 'forget', coldInput).code, 'turn_closed');
   });
 
@@ -1762,7 +1781,7 @@ void main() {
     expect(rawRemoved.changedCardIds, [rawRoot]);
     expect(rawRemoved.rawEraseState, 'pending');
     final rawEraseId = rawRemoved.pendingRawEraseId!;
-    expect(store.messages().singleWhere((row) => row['id'] == rawX['id']), rawX);
+    expect(_captured(store, rawX), rawX);
     expect(actualCard(alternative), orBefore);
     expect(actualCard(manualId), manualBefore);
     expect(store.requests(), paid);
@@ -2021,7 +2040,7 @@ void main() {
     expect(refreshRemoved.rawEraseState, 'pending');
     expect(actualCard(refreshCard), refreshBefore);
     expect(actualCard(refreshChild)['row_rev'], (refreshChildBefore['row_rev']! as int) + 1);
-    expect(store.messages().singleWhere((source) => source['id'] == refreshR20['id']), refreshR20);
+    expect(_captured(store, refreshR20), refreshR20);
     store.closeAgentTurn(refreshDeleting);
     final refreshId = refreshRemoved.pendingRawEraseId!;
     expect(store.markRawEraseOffered(refreshId, characterId: null).state, 'awaiting');
