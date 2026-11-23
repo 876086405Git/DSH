@@ -34,15 +34,11 @@
  }
  /** Collect the first resolvable package directory for each dependency name. */
  function dependencyClosure(anchors, reserved, declarers, versions) {
-@@ -1754,6 +1758,8 @@
- * `existsSync` follows the symlinks pnpm's isolated layout uses.
- */
- function packageDirFromAnchor(anchor, packageName) {
+@@ -1758,1 +1758,3 @@
+-function packageDirFromAnchor(anchor, packageName, parent = {}) {
++function packageDirFromAnchor(anchor, packageName, parent = {}) {
 +	const managed = ohosPluginResolution()?.packageDirectory(anchor, packageName);
 +	if (managed !== void 0) return managed;
- 	/* v8 ignore next */
- 	for (const searchPath of createRequire(anchor).resolve.paths(packageName) ?? []) {
- 		const candidate = join(searchPath, packageName);
 @@ -1953,7 +1959,7 @@
  	return {
  		manifest,
