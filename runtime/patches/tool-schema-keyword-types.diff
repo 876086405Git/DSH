@@ -1,0 +1,47 @@
+--- a/node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js
++++ b/node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js
+@@ -156,1 +156,21 @@
+-/** Keywords that are invalid beside `oneOf`. */
++const KEYWORD_TYPES = Object.entries({
++	properties: ["object"],
++	required: ["object"],
++	additionalProperties: ["object"],
++	items: ["array"],
++	enum: [
++		"string",
++		"number",
++		"integer",
++		"boolean",
++		"null"
++	],
++	const: [
++		"string",
++		"number",
++		"integer",
++		"boolean",
++		"null"
++	]
++});
++/** Keywords that are invalid beside `oneOf`. */
+@@ -255,20 +275,1 @@
+-		for (const [key, types] of Object.entries({
+-			properties: ["object"],
+-			required: ["object"],
+-			additionalProperties: ["object"],
+-			items: ["array"],
+-			enum: [
+-				"string",
+-				"number",
+-				"integer",
+-				"boolean",
+-				"null"
+-			],
+-			const: [
+-				"string",
+-				"number",
+-				"integer",
+-				"boolean",
+-				"null"
+-			]
+-		})) if (Object.hasOwn(node, key) && !types.includes(schemaType)) violations.push(`${path}.${key} is not supported on type "${schemaType}"`);
++		for (const [key, types] of KEYWORD_TYPES) if (Object.hasOwn(node, key) && !types.includes(schemaType)) violations.push(`${path}.${key} is not supported on type "${schemaType}"`);
