@@ -1,0 +1,9 @@
+--- a/node_modules/@deepseek-ai/libreoffice-kit/lib/worker.js
++++ b/node_modules/@deepseek-ai/libreoffice-kit/lib/worker.js
+@@ -649,2 +649,4 @@
+-	const raw = readFileSync(engine.data);
+-	const data = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
++	const data = (() => {
++		const raw = readFileSync(engine.data);
++		return raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
++	})();

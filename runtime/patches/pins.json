@@ -496,6 +496,22 @@
         }
       }
     },
+    "office-data-buffer-scope.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/libreoffice-kit/lib/worker.js": {
+          "after": "93f4d4399bde1a37bf864b76bf4aa3b00e5186afd7dfd3f31e8188abf87eb18b",
+          "before": "03920e4616cc44adcf30d5f81ed07261889ed6f9956f7c5bde92747184c33137"
+        }
+      }
+    },
+    "office-parent-font-import.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/libreoffice-kit/lib/index.js": {
+          "after": "4ef0deba82ee8d293cc5b8424d06078d779708780629af2a90bb828297c9b041",
+          "before": "5583ce1754084cb63be913e67821282f484a14b43744f777fd10731af67e3c60"
+        }
+      }
+    },
     "ohos-api-gateway-idle.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js": {
@@ -3137,10 +3153,12 @@
       "companion-screen-image.diff",
       "companion-screen-piai-image.diff",
       "companion-agent-model-call.diff",
+      "office-parent-font-import.diff",
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
       "ohos-web-converter-lazy.diff",
       "office-converter-lazy.diff",
+      "office-data-buffer-scope.diff",
       "input-recovery.diff",
       "ohos-client-hmr-idle.diff",
       "ohos-skill-root-events.diff"
@@ -3361,10 +3379,12 @@
       "companion-screen-image.diff",
       "companion-screen-piai-image.diff",
       "companion-agent-model-call.diff",
+      "office-parent-font-import.diff",
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
       "ohos-web-converter-lazy.diff",
       "office-converter-lazy.diff",
+      "office-data-buffer-scope.diff",
       "input-recovery.diff",
       "ohos-client-hmr-idle.diff",
       "ohos-skill-root-events.diff",
