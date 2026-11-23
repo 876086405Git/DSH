@@ -1,0 +1,5 @@
+--- a/node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js
++++ b/node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js
+@@ -78 +78 @@
+-		return constructor.name === name && constructor.prototype === prototype && Function.prototype.toString.call(constructor) === `function ${name}() { [native code] }`;
++		return constructor.name === name && constructor.prototype === prototype && Function.prototype.toString.call(constructor) === (name === "Object" ? "function Object() { [native code] }" : "function Array() { [native code] }");
