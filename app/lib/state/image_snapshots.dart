@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -172,7 +174,7 @@ class ImageSnapshots {
     if (cached != null) return cached;
     try {
       final bytes = await load();
-      final content = bytes.length > maxBytes || bytes.length > _maxBytes ? null : sha256.convert(bytes).toString();
+      final content = bytes.length > maxBytes || bytes.length > _maxBytes ? null : await _contentHash(bytes);
       return await _exclusive(held, () async {
         if (!token.valid) throw const ImageSnapshotMissing();
         // Another store may have fixed the same key while this load was out of
@@ -347,6 +349,10 @@ class ImageSnapshots {
     }
   }
 }
+
+/// A photo-sized hash costs several milliseconds; keep it off the UI isolate.
+FutureOr<String> _contentHash(Uint8List bytes) =>
+    bytes.length > 256 * 1024 ? Isolate.run(() => sha256.convert(bytes).toString()) : sha256.convert(bytes).toString();
 
 class _SnapshotLoad {
   _SnapshotLoad(this.cancelPending);
