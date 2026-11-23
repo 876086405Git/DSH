@@ -741,10 +741,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       setState(() => _showHomeHint = false);
       unawaited(SharedPreferences.getInstance().then((p) => p.setBool(_homeHintDoneKey, true)));
     }
-    if (_vitals != null) {
-      _event(id);
-    } else {
-      // No host to keep it: the page's own guess, so her corner still answers.
+    // The interaction belongs to her memory even while activity state is unavailable.
+    _event(id);
+    if (_vitals == null) {
+      // Keep the same visible activity fallback when no snapshot is available.
       _stage.command('activity', {'name': id, 'remainingMs': _localActivity[id]!.inMilliseconds});
     }
     _remember(id == 'snack' ? 'feed' : 'pet', switch (id) {

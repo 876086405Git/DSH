@@ -1135,34 +1135,61 @@ void main() {
 
     testWidgets('her things answer without a host: activity, a line, the status', (tester) async {
       SharedPreferences.setMockInitialValues({'companion_touch_hint_done': true});
+      final pack = installedStore();
+      final clock = _Clock();
+      final db = sqlite3.open('${root.path}/memory.sqlite');
+      final memory = _RoomMemory2(
+        CompanionMemoryStore(db, nowMilliseconds: () => clock.wall),
+        CompanionLocal.at(root),
+      );
+      addTearDown(memory.dispose);
+      final key = await settleMixed(tester, pack.characterKey());
+      await settleMixed(tester, memory.migrateLocal());
+      final role = memory.store.ensureCompanionCharacter(sourceKey: key!)['id']! as String;
+      final phone = FakePhoneKeeper();
+      List<String> interactions() => db
+          .select(
+            "SELECT kind FROM memory_affinity_events WHERE character_id=? AND kind IN ('snack','play') ORDER BY kind",
+            [role],
+          )
+          .map((row) => row['kind']! as String)
+          .toList();
       final commands = <(String, Map<String, Object?>)>[];
       CompanionStageEvents? stageEvents;
       await tester.pumpWidget(
         _app(
           CompanionPage(
-            storeOverride: installedStore(),
+            storeOverride: pack,
             stageBuilder: (controller, events) {
               stageEvents = events;
               return const SizedBox.expand();
             },
             stageController: CompanionStageController(sink: (type, args) => commands.add((type, args))),
           ),
+          phone: phone,
+          extra: [
+            companionInitiativeClockProvider.overrideWithValue(clock.call),
+            companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
+          ],
         ),
       );
       await _stageUp(tester, () => stageEvents);
       stageEvents!.onReady();
+      await _until2(tester, () => memory.room != null);
       await _settle(tester);
       // The greeting first; then the hint for her things.
       await tester.pump(const Duration(seconds: 8));
       await _settle(tester);
       expect(find.text('点点贝壳、泡泡和软垫，点心还能拖到她嘴边'), findsOneWidget);
 
+      expect(interactions(), isEmpty);
       commands.clear();
       stageEvents!.onObject('snack');
       await tester.pump(const Duration(milliseconds: 100));
       final activity = commands.where((c) => c.$1 == 'activity').single.$2;
       expect(activity['name'], 'snack');
       expect(activity['remainingMs'], 45000);
+      expect(interactions(), ['snack']);
       expect(find.text('点点贝壳、泡泡和软垫，点心还能拖到她嘴边'), findsNothing);
       // Her line waits for the snack to reach her.
       expect(commands.where((c) => c.$1 == 'say'), isEmpty);
@@ -1178,8 +1205,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.text('在吃点心'), findsNothing);
 
+      // These are real Page actions with memory ready but no activity snapshot.
+      stageEvents!.onObject('play');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(interactions(), ['play', 'snack']);
+      stageEvents!.onObject('rest');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(interactions(), ['play', 'snack']);
+      expect(phone.events, isEmpty, reason: 'no activity write is fabricated without a snapshot');
+
       await tester.pumpWidget(_app(const SizedBox()));
       await tester.pump(const Duration(seconds: 10));
+      await _drained(tester, memory);
     });
 
     group('light mode', () {
