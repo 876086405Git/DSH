@@ -113,7 +113,9 @@ extension CompanionAgentAmbient on CompanionAgent {
       return null;
     }
     if (route is! CompanionAgentModelTransport || !route.agentConfigured) return null;
-    bool current() => baseCurrent() && route.current;
+    // Closures below keep this promoted type; the try-assigned local does not.
+    final agentRoute = route;
+    bool current() => baseCurrent() && agentRoute.current;
     if (!current()) return null;
     final id = owner.store.reserveRequest(
       category: 'chat',
@@ -317,7 +319,9 @@ extension CompanionAgentAmbient on CompanionAgent {
       return false;
     }
     if (route is! CompanionAgentModelTransport || !route.agentConfigured) return false;
-    bool current() => baseCurrent() && route.current;
+    // Closures below keep this promoted type; the try-assigned local does not.
+    final agentRoute = route;
+    bool current() => baseCurrent() && agentRoute.current;
     if (!current()) return false;
     final id = owner.store.reserveRequest(
       category: 'chat',
@@ -341,7 +345,7 @@ extension CompanionAgentAmbient on CompanionAgent {
         request: () async {
           if (requested || !current()) return null;
           requested = true;
-          final message = await route.readAgent(
+          final message = await agentRoute.readAgent(
             request: request,
             system: system,
             messages: messages,
