@@ -1060,7 +1060,11 @@ void main() {
     });
     expect(removed.applied, isTrue);
     expect(removed.changedCardIds, unorderedEquals([rootX, composite]));
-    expect(store.messages().any((row) => row['id'] == rawX['id']), isFalse);
+    // A maintenance turn still forgets the cards, but cannot request an erase.
+    expect(removed.rawEraseState, 'maintenance');
+    expect(removed.pendingRawEraseId, isNull);
+    expect(store.pendingRawErase(characterId: null), isNull);
+    expect(store.messages().singleWhere((row) => row['id'] == rawX['id']), rawX);
     final keptY = store.messages().singleWhere((row) => row['id'] == rawY['id']);
     expect(keptY['text'], rawY['text']);
     expect(keptY['source_rev'], rawY['source_rev']);
@@ -1101,6 +1105,32 @@ void main() {
     expect(isolated.applied, isTrue);
     expect(isolated.targetId, primary);
     expect(isolated.changedCardIds, unorderedEquals([primary, fromX, fromZ]));
+    expect(isolated.rawEraseState, 'pending');
+    final isolatedId = isolated.pendingRawEraseId!;
+    final isolatedView = store.pendingRawErase(characterId: null)!;
+    expect(isolatedView.id, isolatedId);
+    expect(isolatedView.previewText, sharedRaw['text']);
+    expect(isolatedView.rawMessageCount, 1);
+    expect(isolatedView.expiresAtUtcMs, isNull);
+    expect(store.confirmRawErase(isolatedId, characterId: null).state, 'deferred');
+    expect(store.messages().singleWhere((row) => row['id'] == sharedRaw['id']), sharedRaw);
+    expect(call(duplicateTurn, 'ignored-while-pending', 'unknown_memory_tool', const {}).code, 'unknown_memory_tool');
+    expect(store.pendingRawErase(characterId: null)!.id, isolatedId);
+    expect(store.confirmRawErase('another-id', characterId: null).state, 'not_found');
+    expect(store.pendingRawErase(characterId: null)!.id, isolatedId);
+    final beforeIndependentPin = store.archive;
+    store.setPinned(id: independentY, expectedRowRev: actualCard(independentY)['row_rev']! as int, pinned: true);
+    expect(store.archive['memory_revision'], (beforeIndependentPin['memory_revision']! as int) + 1);
+    expect(store.archive['control_revision'], beforeIndependentPin['control_revision']);
+    expect(store.pendingRawErase(characterId: null)!.id, isolatedId);
+    store.closeAgentTurn(duplicateTurn);
+    expect(store.markRawEraseOffered(isolatedId, characterId: null).state, 'awaiting');
+    final cutoff = store.archive['history_after_seq'];
+    say('while-choosing', '这段等待期间的新聊天仍应保留。');
+    final isolatedConfirmed = store.confirmRawErase(isolatedId, characterId: null);
+    expect(isolatedConfirmed.state, 'confirmed');
+    expect(isolatedConfirmed.changedCardIds, isEmpty);
+    expect(store.archive['history_after_seq'], cutoff);
     expect(store.messages().any((row) => row['id'] == sharedRaw['id']), isFalse);
     expect(store.cards().where((row) => row['id'] == primary || row['id'] == fromX), isEmpty);
     final independentRaw = store.messages().singleWhere((row) => row['id'] == rawZ['id']);
@@ -1112,7 +1142,43 @@ void main() {
     expect(retainedAfter['current_basis_seq'], retainedBefore['current_basis_seq']);
     expect(retainedAfter['source_at_ms'], retainedBefore['source_at_ms']);
     expect((retainedAfter['evidence'] as List).single, containsPair('message_id', rawZ['id']));
+    final afterConfirmed = store.archive;
+    expect(store.confirmRawErase(isolatedId, characterId: null).changedCardIds, isEmpty);
+    expect(store.declineRawErase(isolatedId, characterId: null).state, 'confirmed');
+    expect(store.invalidateRawErase(), isFalse);
+    expect(store.archive, afterConfirmed);
     store.closeAgentTurn(duplicateTurn);
+
+    // A legacy extraction can add a literal dependency without bumping control.
+    // Its real new source shares no proof ID with the frozen original.
+    final laterRaw = say('later-raw', '我收藏青石灯。');
+    final laterCreating = begin(laterRaw);
+    final laterCard = call(laterCreating, 'later-card', 'remember', {'text': '我收藏青石灯。'}).targetId!;
+    store.closeAgentTurn(laterCreating);
+    final laterDeleting = begin(say('later-request', '忘掉青石灯，原话也不留。'), [actualCard(laterCard)]);
+    final laterPending = call(laterDeleting, 'later-delete', 'forget', {'card': laterCard, 'deleteChat': true});
+    final laterId = laterPending.pendingRawEraseId!;
+    store.closeAgentTurn(laterDeleting);
+    expect(store.markRawEraseOffered(laterId, characterId: null).state, 'awaiting');
+    final beforeLateExtraction = store.archive;
+    final lateSource = say('later-proof', '我收藏青石灯，也种兰花。');
+    final lateBatch = store.nextBatch(forceTail: true, estimateTokens: (text) => text.length)!;
+    final lateProposal = parseExtractionProposal(jsonEncode({
+      'schema_version': 2, 'batch_id': lateBatch.id,
+      'covered_message_ids': [lateSource['id']], 'completion': 'complete',
+      'operations': [{
+        'op': 'create', 'kind': 'fact', 'text': '我收藏青石灯，也种兰花。', 'keywords': ['青石灯'],
+        'evidence': [{'message_id': lateSource['id'], 'quote': lateSource['text']}],
+      }],
+    }), lateBatch);
+    expect(store.commitExtraction(lateBatch, lateProposal), isTrue);
+    expect(store.archive['control_revision'], beforeLateExtraction['control_revision']);
+    expect(store.archive['memory_revision'], greaterThan(beforeLateExtraction['memory_revision']! as int));
+    final afterLateExtraction = store.cards();
+    expect(store.confirmRawErase(laterId, characterId: null).state, 'invalidated');
+    expect(store.cards(), afterLateExtraction);
+    expect(store.messages().singleWhere((row) => row['id'] == laterRaw['id']), laterRaw);
+    expect(store.pendingRawErase(characterId: null), isNull);
   });
 
   test(
@@ -1300,6 +1366,44 @@ void main() {
     );
     expect(call(turn, 'late', 'revise', {'card': card['id'], 'text': '旧请求的绿色'}).code, 'control_changed');
     expect(store.cards().singleWhere((row) => row['id'] == card['id'])['text'], '我喜欢橙色');
+
+    final raw = say('controlled-raw', '我收藏石版画。');
+    final making = begin(raw);
+    final rawCard = call(making, 'controlled-card', 'remember', {'text': '我收藏石版画。'}).targetId!;
+    store.closeAgentTurn(making);
+    final removing = begin(say('controlled-request', '忘记石版画，连原话也删。'), [actualCard(rawCard)]);
+    final requested = call(removing, 'controlled-delete', 'forget', {'card': rawCard, 'deleteChat': true});
+    final rawEraseId = requested.pendingRawEraseId!;
+    store.closeAgentTurn(removing);
+    expect(store.markRawEraseOffered(rawEraseId, characterId: null).state, 'awaiting');
+    final changedCard = actualCard(card['id']! as String);
+    store.saveManual(
+      CompanionMemory(id: card['id']! as String, text: '我喜欢黑色'),
+      expectedRowRev: changedCard['row_rev']! as int,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    final afterExternalControl = store.archive;
+    expect(store.confirmRawErase(rawEraseId, characterId: null).state, 'invalidated');
+    expect(store.archive, afterExternalControl);
+    expect(store.messages().singleWhere((row) => row['id'] == raw['id']), raw);
+
+    final expiringRaw = say('expiring-raw', '我喜欢海盐饼干。');
+    final expiringMaking = begin(expiringRaw);
+    final expiringCard = call(expiringMaking, 'expiring-card', 'remember', {'text': '我喜欢海盐饼干。'}).targetId!;
+    store.closeAgentTurn(expiringMaking);
+    final expiringTurn = begin(say('expiring-request', '海盐饼干的记忆连原话也删。'), [actualCard(expiringCard)]);
+    final expiring = call(expiringTurn, 'expiring-delete', 'forget', {'card': expiringCard, 'deleteChat': true});
+    final expiringId = expiring.pendingRawEraseId!;
+    expect(store.markRawEraseOffered(expiringId, characterId: null).state, 'awaiting');
+    final beforeExpiry = store.archive;
+    now += const Duration(minutes: 5).inMilliseconds;
+    expect(store.confirmRawErase(expiringId, characterId: null).state, 'expired');
+    expect(store.markRawEraseOffered(expiringId, characterId: null).state, 'expired');
+    expect(store.archive, beforeExpiry);
+    expect(store.messages().singleWhere((row) => row['id'] == expiringRaw['id']), expiringRaw);
+    expect(store.pendingRawErase(characterId: null), isNull);
+    store.closeAgentTurn(expiringTurn);
   });
 
   test('structured ask-later reaches real reserve and once-only presentation without a raw invitation regex', () {
@@ -1402,6 +1506,49 @@ void main() {
     expect(call(turn, 'new-model-call', 'remember', {'text': '不可重规划'}).code, 'turn_closed');
     expect(store.cards(), hasLength(1));
     expect(store.taskForCommand('source', pending.itemNo), isNull);
+
+    final keptRaw = say('declined-raw', '我喜欢叶片标本。');
+    final keptTurn = begin(keptRaw);
+    final keptCard = call(keptTurn, 'kept-card', 'remember', {'text': '我喜欢叶片标本。'}).targetId!;
+    store.closeAgentTurn(keptTurn);
+    final declining = begin(say('decline-request', '这条标本记忆连原话也删。'), [actualCard(keptCard)]);
+    final offered = call(declining, 'decline-delete', 'forget', {'card': keptCard, 'deleteChat': true});
+    final declinedId = offered.pendingRawEraseId!;
+    final beforeDecline = store.archive, beforeDeclineMessages = store.messages(), beforeDeclineCards = store.cards();
+    expect(store.declineRawErase(declinedId, characterId: null).state, 'declined');
+    expect(store.confirmRawErase(declinedId, characterId: null).state, 'declined');
+    expect(store.archive, beforeDecline);
+    expect(store.messages(), beforeDeclineMessages);
+    expect(store.cards(), beforeDeclineCards);
+    expect(store.messages().singleWhere((row) => row['id'] == keptRaw['id']), keptRaw);
+    store.closeAgentTurn(declining);
+
+    final coldRaw = say('cold-raw', '我保存蓝色贝壳。');
+    final coldMaking = begin(coldRaw);
+    final coldCard = call(coldMaking, 'cold-card', 'remember', {'text': '我保存蓝色贝壳。'}).targetId!;
+    store.closeAgentTurn(coldMaking);
+    final coldDeleting = begin(say('cold-request', '忘掉蓝色贝壳，原话也不要。'), [actualCard(coldCard)]);
+    final coldInput = <String, Object?>{'card': coldCard, 'deleteChat': true};
+    final coldPending = call(coldDeleting, 'cold-delete', 'forget', coldInput);
+    final coldId = coldPending.pendingRawEraseId!;
+    expect(store.confirmRawErase(declinedId, characterId: null).state, 'not_found');
+    expect(store.pendingRawErase(characterId: null)!.id, coldId);
+    expect(store.markRawEraseOffered(coldId, characterId: null).state, 'awaiting');
+    final deadline = store.pendingRawErase(characterId: null)!.expiresAtUtcMs!;
+    expect(deadline, now + const Duration(minutes: 5).inMilliseconds);
+    now += 60000;
+    expect(store.markRawEraseOffered(coldId, characterId: null).state, 'awaiting');
+    expect(store.pendingRawErase(characterId: null)!.expiresAtUtcMs, deadline);
+    store.closeAgentTurn(coldDeleting);
+    reopen();
+    expect(store.pendingRawErase(characterId: null), isNull);
+    expect(store.confirmRawErase(coldId, characterId: null).state, 'not_found');
+    final coldReplay = call(coldDeleting, 'cold-delete', 'forget', coldInput);
+    expect(coldReplay.replayed, isTrue);
+    expect(coldReplay.rawEraseState, 'unavailable');
+    expect(coldReplay.pendingRawEraseId, isNull);
+    expect(store.messages().singleWhere((row) => row['id'] == coldRaw['id']), coldRaw);
+    expect(call(coldDeleting, 'cold-new-delete', 'forget', coldInput).code, 'turn_closed');
   });
 
   test('durable ordinals share original task fingerprints and late accepted receipts can drain', () {
@@ -1612,7 +1759,18 @@ void main() {
     expect(rawRelated.map((row) => row['id']), containsAll([rawRoot, alternative, manualId]));
     final rawRemoved = call(deleting, 'raw-forget', 'forget', {'card': rawRoot, 'deleteChat': true});
     expect(rawRemoved.applied, isTrue);
-    expect(rawRemoved.changedCardIds, unorderedEquals([rawRoot, alternative, manualId]));
+    expect(rawRemoved.changedCardIds, [rawRoot]);
+    expect(rawRemoved.rawEraseState, 'pending');
+    final rawEraseId = rawRemoved.pendingRawEraseId!;
+    expect(store.messages().singleWhere((row) => row['id'] == rawX['id']), rawX);
+    expect(actualCard(alternative), orBefore);
+    expect(actualCard(manualId), manualBefore);
+    expect(store.requests(), paid);
+    store.closeAgentTurn(deleting);
+    expect(store.markRawEraseOffered(rawEraseId, characterId: null).state, 'awaiting');
+    final rawConfirmed = store.confirmRawErase(rawEraseId, characterId: null);
+    expect(rawConfirmed.state, 'confirmed');
+    expect(rawConfirmed.changedCardIds, unorderedEquals([alternative, manualId]));
     expect(store.messages().any((row) => row['id'] == rawX['id']), isFalse);
     final keptZ = store.messages().singleWhere((row) => row['id'] == rawZ['id']);
     expect(keptZ['text'], rawZ['text']);
@@ -1859,14 +2017,24 @@ void main() {
       ],
     });
     expect(refreshRemoved.applied, isTrue);
-    expect(refreshRemoved.changedCardIds, unorderedEquals([refreshRoot, refreshCard, refreshChild]));
+    expect(refreshRemoved.changedCardIds, unorderedEquals([refreshRoot, refreshChild]));
+    expect(refreshRemoved.rawEraseState, 'pending');
+    expect(actualCard(refreshCard), refreshBefore);
+    expect(actualCard(refreshChild)['row_rev'], (refreshChildBefore['row_rev']! as int) + 1);
+    expect(store.messages().singleWhere((source) => source['id'] == refreshR20['id']), refreshR20);
+    store.closeAgentTurn(refreshDeleting);
+    final refreshId = refreshRemoved.pendingRawEraseId!;
+    expect(store.markRawEraseOffered(refreshId, characterId: null).state, 'awaiting');
+    final refreshConfirmed = store.confirmRawErase(refreshId, characterId: null);
+    expect(refreshConfirmed.state, 'confirmed');
+    expect(refreshConfirmed.changedCardIds, unorderedEquals([refreshCard, refreshChild]));
     final refreshed = actualCard(refreshCard);
     expect(refreshed['row_rev'], (refreshBefore['row_rev']! as int) + 1);
     expect(refreshed['current_basis_seq'], refreshR30['first_seq']);
     expect(refreshed['source_at_ms'], refreshR30['said_at_utc']);
     expect((refreshed['evidence'] as List).single, containsPair('message_id', refreshR10['id']));
     final refreshedChild = actualCard(refreshChild);
-    expect(refreshedChild['row_rev'], (refreshChildBefore['row_rev']! as int) + 1);
+    expect(refreshedChild['row_rev'], (refreshChildBefore['row_rev']! as int) + 2);
     expect(refreshedChild['current_basis_seq'], refreshR30['first_seq']);
     expect(refreshedChild['source_at_ms'], refreshR30['said_at_utc']);
     expect(

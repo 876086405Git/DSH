@@ -1129,7 +1129,16 @@ void main() {
       ),
       _message(words: '已经处理好了。'),
     ];
-    final visit = await _Visit.open(replies);
+    var rawClock = _now;
+    final visit = await _Visit.open(
+      replies,
+      clock: () => CompanionInitiativeClock(wallMs: rawClock, monoMs: rawClock - _now, offsetMinutes: 480),
+    );
+    var ownerChanges = 0;
+    void ownerChanged() => ownerChanges++;
+    visit.memory.addListener(ownerChanged);
+    CompanionAgentResident? rawResident;
+    CompanionAgentAttachment? rawRoom;
     try {
       visit.memory.store.saveManual(
         const CompanionMemory(id: id, text: oldText, keywords: ['凭证']),
@@ -1251,7 +1260,7 @@ void main() {
             ('raw-forget', 'forget', {'card': rawCard['id'], 'deleteChat': true}),
           ],
         ),
-        _message(words: '这条住址和原话都已删除。'),
+        _message(words: '这条住址已忘记，原话还需要你单独确认。'),
       ]);
       await visit.attachment.submit('忘掉海棠路这条住址，连原话也删。');
       expect(visit.attachment.error, isNull);
@@ -1300,6 +1309,63 @@ void main() {
       ];
       expect(rawResults.single['tool_use_id'], 'raw-forget');
       expect(jsonDecode(rawResults.single['content']! as String), containsPair('applied', true));
+      final pendingReceipt = jsonDecode(rawResults.single['content']! as String) as Map;
+      expect(pendingReceipt['rawEraseState'], 'pending');
+      final beforePendingRead = ownerChanges;
+      final rawPending = visit.attachment.pendingRawErase!;
+      expect(rawPending.id, pendingReceipt['pendingRawEraseId']);
+      expect(rawPending.previewText, contains(rawText));
+      expect(rawPending.rawMessageCount, 1);
+      expect(rawPending.expiresAtUtcMs, isNull);
+      expect(visit.attachment.pendingRawErase!.id, rawPending.id);
+      expect(ownerChanges, beforePendingRead);
+      expect(store.messages().singleWhere((row) => row['id'] == rawSource['id'])['text'], rawText);
+      expect(store.messages().singleWhere((row) => row['id'] == rawSource['id'])['source_rev'], rawSource['source_rev']);
+      expect(store.cards().any((card) => card['id'] == rawCard['id']), isFalse);
+      final toolNames = (visit.requests[6]['tools']! as List).cast<Map>().map((tool) => tool['name']);
+      expect(toolNames, isNot(contains('confirmRawErase')));
+      expect(toolNames, isNot(contains('declineRawErase')));
+      expect(toolNames, isNot(contains('markRawEraseOffered')));
+      // The original submit has completed its finally/closed model turn.
+      // A model proposal or a getter alone cannot authorize physical erasure.
+      expect(visit.agent.running, isFalse);
+      expect(visit.attachment.confirmRawErase(rawPending.id).state, 'deferred');
+      expect(visit.attachment.pendingRawErase!.expiresAtUtcMs, isNull);
+      expect(store.messages().any((row) => row['id'] == rawSource['id']), isTrue);
+      rawResident = visit.agent.retainAlwaysOn(
+        root: Future.value(visit.root),
+        character: const CompanionCharacter(name: '伙伴'),
+        moves: const CompanionMoves(),
+        sourceKey: null,
+        ui: _RoomUi(),
+        mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+      );
+      expect(rawResident.pendingRawErase!.id, rawPending.id);
+      final beforeOffer = ownerChanges;
+      expect(visit.attachment.markRawEraseOffered(rawPending.id).state, 'awaiting');
+      expect(ownerChanges, greaterThan(beforeOffer));
+      final originalDeadline = visit.attachment.pendingRawErase!.expiresAtUtcMs;
+      expect(originalDeadline, rawClock + 5 * 60000);
+      rawClock += 1000;
+      visit.clockAt = rawClock;
+      expect(rawResident.markRawEraseOffered(rawPending.id).state, 'awaiting');
+      expect(rawResident.pendingRawErase!.expiresAtUtcMs, originalDeadline);
+      expect(visit.attachment.pendingRawErase!.expiresAtUtcMs, originalDeadline);
+      expect(rawPending.expiresAtUtcMs, isNull);
+      final paidBeforeConfirmation = {for (final row in store.requests()) row['id']! as String: row};
+      final beforeConfirm = ownerChanges;
+      expect(visit.attachment.confirmRawErase(rawPending.id).state, 'confirmed');
+      expect(ownerChanges, greaterThan(beforeConfirm));
+      expect(visit.ui.controlChanges.last, isFalse);
+      expect(visit.attachment.pendingRawErase, isNull);
+      final repeatedConfirmation = visit.attachment.confirmRawErase(rawPending.id);
+      expect(repeatedConfirmation.state, 'confirmed');
+      expect(repeatedConfirmation.changedCardIds, isEmpty);
+      expect(rawResident.pendingRawErase, isNull);
+      rawResident.close();
+      rawResident = null;
+      expect(visit.requests, hasLength(8));
+      expect({for (final row in store.requests()) row['id']! as String: row}, paidBeforeConfirmation);
       expect(store.messages().any((row) => row['id'] == rawSource['id']), isFalse);
       expect(store.cards().any((card) => card['id'] == rawCard['id']), isFalse);
       final retainedSource = store.messages().singleWhere((row) => row['id'] == keptSource['id']);
@@ -1452,7 +1518,268 @@ void main() {
         expect(row['output_tokens'], 8);
         expect(row['raw_usage'], containsPair('http_status', 200));
       }
+
+
+      // Keep the original twelve paid HTTP observations above. Each following
+      // proposal still comes from this same public attachment/resident loop;
+      // only the separate owner actions may erase its frozen original source.
+      const declineText = '我住青松路。';
+      replies.addAll([
+        _message(calls: [('raw-decline-remember', 'remember', {'text': declineText, 'keywords': ['青松路']})]),
+        _message(words: '这条住址已记下。'),
+      ]);
+      await visit.attachment.submit(declineText);
+      final declineSource = store.messages().singleWhere((row) => row['id'] == visit.agent.sourceId);
+      final declineCard = store.cards().singleWhere((card) => card['text'] == declineText);
+      replies.addAll([
+        _message(calls: [('raw-decline-forget', 'forget', {'card': declineCard['id'], 'deleteChat': true})]),
+        _message(words: '卡片已忘记，原话还在。'),
+      ]);
+      await visit.attachment.submit('忘掉青松路住址，原话先留着。');
+      expect(visit.attachment.error, isNull);
+      expect(visit.requests, hasLength(16));
+      final declined = visit.attachment.pendingRawErase!;
+      final beforeDecline = ownerChanges;
+      expect(visit.attachment.declineRawErase(declined.id).state, 'declined');
+      expect(ownerChanges, greaterThan(beforeDecline));
+      expect(visit.attachment.confirmRawErase(declined.id).state, 'declined');
+      expect(visit.attachment.pendingRawErase, isNull);
+      expect(store.messages().singleWhere((row) => row['id'] == declineSource['id'])['text'], declineText);
+      expect(store.messages().singleWhere((row) => row['id'] == declineSource['id'])['source_rev'], declineSource['source_rev']);
+      expect(store.cards().any((card) => card['id'] == declineCard['id']), isFalse);
+      expect(visit.requests, hasLength(16));
+
+      const expiryText = '我住银杉路。';
+      replies.addAll([
+        _message(calls: [('raw-expiry-remember', 'remember', {'text': expiryText, 'keywords': ['银杉路']})]),
+        _message(words: '这条住址已记下。'),
+      ]);
+      await visit.attachment.submit(expiryText);
+      final expirySource = store.messages().singleWhere((row) => row['id'] == visit.agent.sourceId);
+      final expiryCard = store.cards().singleWhere((card) => card['text'] == expiryText);
+      replies.addAll([
+        _message(calls: [('raw-expiry-forget', 'forget', {'card': expiryCard['id'], 'deleteChat': true})]),
+        _message(words: '原话等待你的确认。'),
+      ]);
+      await visit.attachment.submit('忘掉银杉路住址，连原话也删。');
+      expect(visit.attachment.error, isNull);
+      expect(visit.requests, hasLength(20));
+      final expiring = visit.attachment.pendingRawErase!;
+      expect(visit.attachment.markRawEraseOffered(expiring.id).state, 'awaiting');
+      rawClock = visit.attachment.pendingRawErase!.expiresAtUtcMs!;
+      visit.clockAt = rawClock;
+      final beforeExpiredRead = ownerChanges;
+      expect(visit.attachment.pendingRawErase, isNull);
+      expect(ownerChanges, beforeExpiredRead);
+      expect(visit.attachment.confirmRawErase(expiring.id).state, 'expired');
+      expect(store.messages().singleWhere((row) => row['id'] == expirySource['id'])['text'], expiryText);
+      expect(store.messages().singleWhere((row) => row['id'] == expirySource['id'])['source_rev'], expirySource['source_rev']);
+      expect(visit.requests, hasLength(20));
+
+      const controlText = '我住云杉路。';
+      replies.addAll([
+        _message(calls: [('raw-control-remember', 'remember', {'text': controlText, 'keywords': ['云杉路']})]),
+        _message(words: '这条住址已记下。'),
+      ]);
+      await visit.attachment.submit(controlText);
+      final controlSource = store.messages().singleWhere((row) => row['id'] == visit.agent.sourceId);
+      final controlCard = store.cards().singleWhere((card) => card['text'] == controlText);
+      replies.addAll([
+        _message(calls: [('raw-control-forget', 'forget', {'card': controlCard['id'], 'deleteChat': true})]),
+        _message(words: '原话等待你的确认。'),
+      ]);
+      await visit.attachment.submit('忘掉云杉路住址，连原话也删。');
+      expect(visit.attachment.error, isNull);
+      expect(visit.requests, hasLength(24));
+      final invalidated = visit.attachment.pendingRawErase!;
+      expect(visit.attachment.markRawEraseOffered(invalidated.id).state, 'awaiting');
+      store.saveManual(
+        const CompanionMemory(id: '33333333-3333-4333-8333-333333333333', text: '这是独立的手动卡。', keywords: ['核对']),
+        expectedRowRev: null,
+        currentValueChange: true,
+        realityKnown: true,
+      );
+      visit.memory.changed();
+      expect(visit.ui.controlChanges.last, isFalse);
+      expect(visit.attachment.pendingRawErase, isNull);
+      expect(visit.attachment.confirmRawErase(invalidated.id).state, 'invalidated');
+      expect(store.messages().singleWhere((row) => row['id'] == controlSource['id'])['text'], controlText);
+      expect(store.messages().singleWhere((row) => row['id'] == controlSource['id'])['source_rev'], controlSource['source_rev']);
+      expect(visit.requests, hasLength(24));
+
+      // A never-offered external record survives the old Visit, in this same
+      // phone Owner. The next actual room must not require another model call.
+      const rawCharacter = CompanionCharacter(name: '伙伴');
+      const rawSourceKey = 'builtin:companion/whale-girl';
+      rawResident = visit.agent.retainAlwaysOn(
+        root: Future.value(visit.root),
+        character: rawCharacter,
+        moves: const CompanionMoves(),
+        sourceKey: rawSourceKey,
+        ui: _RoomUi(),
+        mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+      );
+      expect(await rawResident.openMemory(), same(visit.memory));
+      visit.attachment.detach();
+      expect(visit.attachment.isAttached, isFalse);
+      expect(rawResident.active, isTrue);
+      const deferredText = '我住榆树路。';
+      replies.addAll([
+        _message(calls: [('raw-deferred-remember', 'remember', {'text': deferredText, 'keywords': ['榆树路']})]),
+        _message(words: '这条住址已记下。'),
+      ]);
+      await rawResident.submit(deferredText, fromFloat: true);
+      final deferredSource = store.messages().singleWhere((row) => row['id'] == visit.agent.sourceId);
+      final deferredCard = store.cards().singleWhere((card) => card['text'] == deferredText);
+      replies.addAll([
+        _message(calls: [('raw-deferred-forget', 'forget', {'card': deferredCard['id'], 'deleteChat': true})]),
+        _message(words: '原话还在，等你方便时确认。'),
+      ]);
+      await rawResident.submit('忘掉榆树路住址，连原话也删。', fromFloat: true);
+      expect(visit.requests, hasLength(28));
+      final deferred = rawResident.pendingRawErase!;
+      expect(deferred.expiresAtUtcMs, isNull);
+      expect(deferred.rawMessageCount, 1);
+      final oldResident = rawResident;
+      oldResident.close();
+      rawResident = null;
+      expect(oldResident.active, isFalse);
+      expect(oldResident.pendingRawErase, isNull);
+      expect(store.messages().singleWhere((row) => row['id'] == deferredSource['id'])['text'], deferredText);
+      rawRoom = visit.agent.attach(
+        root: Future.value(visit.root),
+        character: rawCharacter,
+        moves: const CompanionMoves(),
+        ui: _RoomUi(),
+        mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+      );
+      rawRoom.updateCharacter(rawCharacter, const CompanionMoves(), sourceKey: rawSourceKey);
+      expect(await rawRoom.openMemory(), same(visit.memory));
+      expect(rawRoom.characterId, invitationRole);
+      final carried = rawRoom.pendingRawErase!;
+      expect(carried.id, deferred.id);
+      expect(carried.previewText, deferred.previewText);
+      expect(carried.rawMessageCount, deferred.rawMessageCount);
+      expect(carried.expiresAtUtcMs, isNull);
+      expect(() => oldResident.markRawEraseOffered(carried.id), throwsA(isA<DshClosedException>()));
+      expect(() => oldResident.confirmRawErase(carried.id), throwsA(isA<DshClosedException>()));
+      expect(() => oldResident.declineRawErase(carried.id), throwsA(isA<DshClosedException>()));
+      expect(() => visit.attachment.declineRawErase(carried.id), throwsA(isA<DshClosedException>()));
+      expect(rawRoom.pendingRawErase!.id, carried.id);
+      expect(rawRoom.markRawEraseOffered(carried.id).state, 'awaiting');
+      expect(rawRoom.confirmRawErase(carried.id).state, 'confirmed');
+      expect(store.messages().any((row) => row['id'] == deferredSource['id']), isFalse);
+      expect(visit.requests, hasLength(28));
+
+      // Once actually offered, closing every external window revokes it.
+      rawResident = visit.agent.retainAlwaysOn(
+        root: Future.value(visit.root),
+        character: rawCharacter,
+        moves: const CompanionMoves(),
+        sourceKey: rawSourceKey,
+        ui: _RoomUi(),
+        mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+      );
+      expect(await rawResident.openMemory(), same(visit.memory));
+      rawRoom.detach();
+      rawRoom = null;
+      const awaitingText = '我住白杨路。';
+      replies.addAll([
+        _message(calls: [('raw-awaiting-remember', 'remember', {'text': awaitingText, 'keywords': ['白杨路']})]),
+        _message(words: '这条住址已记下。'),
+      ]);
+      await rawResident.submit(awaitingText);
+      final awaitingSource = store.messages().singleWhere((row) => row['id'] == visit.agent.sourceId);
+      final awaitingCard = store.cards().singleWhere((card) => card['text'] == awaitingText);
+      replies.addAll([
+        _message(calls: [('raw-awaiting-forget', 'forget', {'card': awaitingCard['id'], 'deleteChat': true})]),
+        _message(words: '原话等待你的确认。'),
+      ]);
+      await rawResident.submit('忘掉白杨路住址，连原话也删。');
+      expect(visit.requests, hasLength(32));
+      final awaiting = rawResident.pendingRawErase!;
+      expect(rawResident.markRawEraseOffered(awaiting.id).state, 'awaiting');
+      expect(rawResident.pendingRawErase!.expiresAtUtcMs, isNotNull);
+      rawResident.close();
+      rawResident = null;
+      rawRoom = visit.agent.attach(
+        root: Future.value(visit.root),
+        character: rawCharacter,
+        moves: const CompanionMoves(),
+        ui: _RoomUi(),
+        mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+      );
+      rawRoom.updateCharacter(rawCharacter, const CompanionMoves(), sourceKey: rawSourceKey);
+      expect(await rawRoom.openMemory(), same(visit.memory));
+      expect(rawRoom.pendingRawErase, isNull);
+      expect(rawRoom.confirmRawErase(awaiting.id).state, 'invalidated');
+      expect(store.messages().singleWhere((row) => row['id'] == awaitingSource['id'])['text'], awaitingText);
+      expect(store.messages().singleWhere((row) => row['id'] == awaitingSource['id'])['source_rev'], awaitingSource['source_rev']);
+      expect(visit.requests, hasLength(32));
+
+      // Actual room departure also revokes a never-offered record even while
+      // the resident lease keeps this Visit and its normal conversation alive.
+      const leavingText = '我住水杉路。';
+      replies.addAll([
+        _message(calls: [('raw-leaving-remember', 'remember', {'text': leavingText, 'keywords': ['水杉路']})]),
+        _message(words: '这条住址已记下。'),
+      ]);
+      await rawRoom.submit(leavingText);
+      final leavingSource = store.messages().singleWhere((row) => row['id'] == visit.agent.sourceId);
+      final leavingCard = store.cards().singleWhere((card) => card['text'] == leavingText);
+      replies.addAll([
+        _message(calls: [('raw-leaving-forget', 'forget', {'card': leavingCard['id'], 'deleteChat': true})]),
+        _message(words: '原话还在，等待单独确认。'),
+      ]);
+      await rawRoom.submit('忘掉水杉路住址，连原话也删。');
+      expect(visit.requests, hasLength(36));
+      final leaving = rawRoom.pendingRawErase!;
+      expect(leaving.expiresAtUtcMs, isNull);
+      rawResident = visit.agent.retainAlwaysOn(
+        root: Future.value(visit.root),
+        character: rawCharacter,
+        moves: const CompanionMoves(),
+        sourceKey: rawSourceKey,
+        ui: _RoomUi(),
+        mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+      );
+      expect(rawResident.pendingRawErase!.id, leaving.id);
+      final oldRoom = rawRoom;
+      oldRoom.detach();
+      rawRoom = null;
+      expect(rawResident.active, isTrue);
+      expect(oldRoom.isAttached, isFalse);
+      expect(oldRoom.pendingRawErase, isNull);
+      expect(() => oldRoom.confirmRawErase(leaving.id), throwsA(isA<DshClosedException>()));
+      expect(rawResident.pendingRawErase, isNull);
+      expect(rawResident.confirmRawErase(leaving.id).state, 'invalidated');
+      expect(store.messages().singleWhere((row) => row['id'] == leavingSource['id'])['text'], leavingText);
+      expect(store.messages().singleWhere((row) => row['id'] == leavingSource['id'])['source_rev'], leavingSource['source_rev']);
+      expect(visit.requests, hasLength(36));
+      final allPaid = {for (final row in store.requests()) row['id']! as String: row};
+      expect(allPaid, hasLength(36));
+      for (final entry in afterInvitations.entries) {
+        expect(allPaid[entry.key], entry.value);
+      }
+      final additionalPaid = allPaid.entries.where((entry) => !afterInvitations.containsKey(entry.key)).map((entry) => entry.value).toList();
+      expect(additionalPaid, hasLength(24));
+      for (final row in additionalPaid) {
+        expect(row['origin'], 'local');
+        expect(row['category'], 'chat');
+        expect(row['sent_at_ms'], isNotNull);
+        expect(row['state'], 'finished');
+        expect(row['terminal'], 'complete');
+        expect(row['input_uncached'], 12);
+        expect(row['input_cache_read'], 0);
+        expect(row['input_cache_write'], 0);
+        expect(row['output_tokens'], 8);
+        expect(row['raw_usage'], containsPair('http_status', 200));
+        expect(row['raw_usage'], containsPair('complete', true));
+      }
     } finally {
+      rawRoom?.detach();
+      rawResident?.close();
+      visit.memory.removeListener(ownerChanged);
       await visit.close();
     }
   });

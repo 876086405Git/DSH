@@ -242,9 +242,17 @@ class _RoomMemory2 extends _ReceiptMemory {
     Object room, {
     required FutureOr<CompanionMemoryTransport?> Function() transport,
     required int Function(String) estimateTokens,
+    String? characterId,
+    bool ready = true,
   }) {
     this.room = room;
-    super.enter(room, transport: transport, estimateTokens: estimateTokens);
+    super.enter(
+      room,
+      transport: transport,
+      estimateTokens: estimateTokens,
+      characterId: characterId,
+      ready: ready,
+    );
   }
 }
 
