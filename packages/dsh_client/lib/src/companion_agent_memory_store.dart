@@ -305,7 +305,6 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         SELECT t.id,t.mode,t.control_anchors,t.character_id FROM memory_topics t
         WHERE t.mode IN ('less','never') AND (t.character_id IS NULL OR t.character_id IS ?)
           AND (? IS NULL OR t.id=?)
-          AND NOT EXISTS(SELECT 1 FROM memory_cards c WHERE c.topic_id=t.id)
       ''',
         [turn['character_id'], target, target],
       ))
@@ -1422,8 +1421,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       final rows = _db.select('SELECT mode,character_id FROM memory_topics WHERE id=?', [topic]);
       if (rows.isEmpty ||
           !const ['less', 'never'].contains(rows.single['mode']) ||
-          (rows.single['character_id'] != null && rows.single['character_id'] != turn['character_id']) ||
-          _db.select('SELECT 1 FROM memory_cards WHERE topic_id=? LIMIT 1', [topic]).isNotEmpty) {
+          (rows.single['character_id'] != null && rows.single['character_id'] != turn['character_id'])) {
         throw const _AgentMemoryRejected('topic_changed');
       }
       _db.execute("UPDATE memory_topics SET mode='normal',control_anchors='[]' WHERE id=?", [topic]);

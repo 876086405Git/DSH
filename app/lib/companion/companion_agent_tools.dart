@@ -155,12 +155,12 @@ class CompanionAgentMemoryTools {
     'impression': 'Update this character\'s concise impression, supplying its existing card and only this domain\'s sources or references.',
     'relationship': 'Classify real questions, confiding or answers using supplied original source/display IDs. Never invent events or scores.',
     'quiet':
-        'Set a supplied card topic to less or never proactive, or restore normal when the user allows it again. All affected cards must be supplied and fit the shared budget. Alternatively, restore one empty control just returned by recall using topic and mode normal, without card. After each restoration, use a new recall call to read the next control. Restoring does not reopen old followups.',
+        'Set a supplied card topic to less or never proactive, or restore normal when the user allows it again. The card path requires all affected cards to be supplied and fit the shared budget. Alternatively, restore one quiet control just returned by recall using topic and mode normal, without card. This topic path leaves its cards unchanged and grants no card IDs. After each restoration, use a new recall call to read the next control. Restoring does not reopen old followups.',
     'cancel': 'Cancel a supplied memory plan and retire its followup; not a reminder or computer task.',
     'postpone':
         'Postpone a memory plan without a new time and retire its followup. Use ask_later when the time is known.',
     'ask_later': 'Schedule a real invitation\'s followup on a supplied card at whenMs (UTC milliseconds), within presentation limits.',
-    'recall': 'Read bounded current eligible memories and at most one matching empty quiet control. Only returned card IDs are granted. A returned control may be restored with quiet(topic, normal); use a new recall call after restoring it to read another.',
+    'recall': 'Read bounded current eligible memories and at most one matching quiet control. Only returned card IDs are granted. A returned control may be restored with quiet(topic, normal); use a new recall call after restoring it to read another.',
   };
 
   List<({CompanionAgentTool definition, Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute})>
@@ -461,12 +461,12 @@ class CompanionAgentMemoryTools {
     ),
     CompanionAgentTool(
       name: 'quiet',
-      description: 'Mention the topic of this supplied card less, or never proactively; restore normal when the user allows it again, clearing its saved quiet anchors. All affected topic cards must be supplied and fit the turn budget. Alternatively, restore one empty control just returned by recall using topic and mode normal, without card. After each restoration use a new recall call to read the next control. Restoring does not reopen old followups.',
+      description: 'Mention the topic of this supplied card less, or never proactively; restore normal when the user allows it again, clearing its saved quiet anchors. The card path requires all affected topic cards to be supplied and fit the turn budget. Alternatively, restore one quiet control just returned by recall using topic and mode normal, without card. This topic path leaves its cards unchanged and grants no card IDs. After each restoration use a new recall call to read the next control. Restoring does not reopen old followups.',
       inputSchema: {
         'type': 'object',
         'properties': {
           'card': _card,
-          'topic': {'type': 'string', 'description': 'An empty quiet control topic_id just returned by recall.'},
+          'topic': {'type': 'string', 'description': 'A quiet control topic_id just returned by recall.'},
           'mode': {
             'type': 'string',
             'enum': ['less', 'never', 'normal'],
@@ -525,7 +525,7 @@ class CompanionAgentMemoryTools {
     ),
     CompanionAgentTool(
       name: 'recall',
-      description: 'Search the current eligible memory cards using the existing bounded selector. Only returned card IDs become available to this turn. Also read at most one matching empty quiet control, returned separately as control. Restore it with quiet(topic, normal), then use a new recall call to read another; replaying an old call does not grant the next control.',
+      description: 'Search the current eligible memory cards using the existing bounded selector. Only returned card IDs become available to this turn. Also read at most one matching quiet control, returned separately as control. Restore it with quiet(topic, normal), then use a new recall call to read another; replaying an old call does not grant the next control.',
       inputSchema: {
         'type': 'object',
         'properties': {'query': _text},

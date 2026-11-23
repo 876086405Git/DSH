@@ -304,15 +304,16 @@ void main() {
       [afterRestore.targetId],
     );
 
-    // The original nonempty private control is not an empty-control grant,
-    // even when recall legitimately supplies its cards through the old path.
+    // A live private topic now yields its real control receipt. Topic-only
+    // writes still accept normal, not less; keep this private never control
+    // for the shared manual-card isolation checks below.
     store.closeAgentTurn(continued);
     final liveSource = sayAs('live-topic-only', '以后可以聊复诊了。', a);
     final liveTurn = begin(liveSource);
     final liveRead = call(liveTurn, 'read-live-topic', 'recall', {'query': '复诊'});
     expect(liveRead.applied, isTrue);
-    expect(liveRead.recalledControl, isNull);
-    expect(call(liveTurn, 'not-an-empty-topic', 'quiet', {'topic': privateTopic, 'mode': 'normal'}).code, 'topic_not_in_turn');
+    expect(liveRead.recalledControl, {'topic_id': privateTopic, 'mode': 'never', 'anchors': ['复诊'], 'character_id': a});
+    expect(call(liveTurn, 'topic-less-is-not-normal', 'quiet', {'topic': privateTopic, 'mode': 'less'}).code, 'invalid_mode');
     expect(actualCard(saved.targetId!)['topic_mode'], 'never');
     expect(
       store.beginAgentTurn(messageId: liveSource['id']! as String, expectedSourceRev: 1, shownCardRevisions: const {})['changed_cards'],
@@ -649,6 +650,98 @@ void main() {
     ]);
     expect(stored, isNot(contains('记忆 0')));
     expect(stored, isNot(contains('第四张')));
+
+    // Four independent source turns legally inherit one persistent control.
+    // No individual turn writes more than its existing three-card allowance.
+    store.closeAgentTurn(turn);
+    final rideOneTurn = begin(say('ride-one', '我骑车常走河边路。'));
+    final rideOne = call(rideOneTurn, 'remember-ride-one', 'remember', {
+      'text': '我骑车常走河边路。',
+      'keywords': ['骑车'],
+    }).targetId!;
+    expect(call(rideOneTurn, 'quiet-riding', 'quiet', {'card': rideOne, 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(rideOneTurn);
+    final rideTwoTurn = begin(say('ride-two', '我骑车戴蓝色头盔。'));
+    final rideTwo = call(rideTwoTurn, 'remember-ride-two', 'remember', {
+      'text': '我骑车戴蓝色头盔。',
+      'keywords': ['骑车'],
+    }).targetId!;
+    store.closeAgentTurn(rideTwoTurn);
+    final rideThreeTurn = begin(say('ride-three', '我骑车用银色车灯。'));
+    final rideThree = call(rideThreeTurn, 'remember-ride-three', 'remember', {
+      'text': '我骑车用银色车灯。',
+      'keywords': ['骑车'],
+    }).targetId!;
+    store.closeAgentTurn(rideThreeTurn);
+    final rideFourTurn = begin(say('ride-four', '我骑车穿黄色雨衣。'));
+    final rideFour = call(rideFourTurn, 'remember-ride-four', 'remember', {
+      'text': '我骑车穿黄色雨衣。',
+      'keywords': ['骑车'],
+    }).targetId!;
+    store.closeAgentTurn(rideFourTurn);
+    final rideIds = [rideOne, rideTwo, rideThree, rideFour];
+    final rideTopic = actualCard(rideOne)['topic_id']! as String;
+    expect(rideIds.map((id) => actualCard(id)['topic_id']), everyElement(rideTopic));
+    expect(rideIds.map((id) => actualCard(id)['topic_mode']), everyElement('never'));
+
+    // The old card path is unchanged, even when every actual card is granted.
+    final cardProbe = begin(say('ride-card-probe', '以后可以聊骑车了，保留这四件不同的事。'), rideIds.map(actualCard));
+    final beforeCardProbe = store.cards(includeInactive: true);
+    final rejectedCard = call(cardProbe, 'normal-four-cards', 'quiet', {'card': rideOne, 'mode': 'normal'});
+    expect(rejectedCard.code, 'card_limit');
+    expect(rejectedCard.changedCardIds, isEmpty);
+    expect(store.cards(includeInactive: true), beforeCardProbe);
+    store.closeAgentTurn(cardProbe);
+
+    final spendingSource = say(
+      'ride-topic-normal',
+      '我现在愿意恢复刚才的话题。我的书签是竹制的。我的杯垫是陶瓷的。我的笔记本是方格的。我的印章是木制的。',
+    );
+    final spendingTurn = begin(spendingSource);
+    final spentOne = call(spendingTurn, 'spent-one', 'remember', {'text': '我的书签是竹制的。', 'keywords': <String>[]});
+    final spentTwo = call(spendingTurn, 'spent-two', 'remember', {'text': '我的杯垫是陶瓷的。', 'keywords': <String>[]});
+    final spentThree = call(spendingTurn, 'spent-three', 'remember', {'text': '我的笔记本是方格的。', 'keywords': <String>[]});
+    expect([spentOne, spentTwo, spentThree].every((receipt) => receipt.applied), isTrue);
+    final spentIds = [spentOne.targetId!, spentTwo.targetId!, spentThree.targetId!];
+    expect(call(spendingTurn, 'unread-riding-topic', 'quiet', {'topic': rideTopic, 'mode': 'normal'}).code, 'topic_not_in_turn');
+    final topicRead = call(spendingTurn, 'read-riding-topic', 'recall', {'query': '骑车'});
+    expect(topicRead.applied, isTrue);
+    expect(topicRead.recallSelection!.ids, isEmpty);
+    expect(topicRead.recalledControl, {'topic_id': rideTopic, 'mode': 'never', 'anchors': ['骑车'], 'character_id': null});
+    final beforeTopicNormal = store.cards(includeInactive: true);
+    final sourceRowsBeforeNormal = store.messages();
+    final restored = call(spendingTurn, 'restore-riding-topic', 'quiet', {'topic': rideTopic, 'mode': 'normal'});
+    expect(restored.applied, isTrue);
+    expect(restored.targetId, rideTopic);
+    expect(restored.changedCardIds, isEmpty);
+    // cards() joins the topic mode. All card fields and nested proof values
+    // remain unchanged; the mode observed through that join must change.
+    expect(store.cards(includeInactive: true), [
+      for (final row in beforeTopicNormal)
+        {...row, if (row['topic_id'] == rideTopic) 'topic_mode': 'normal'},
+    ]);
+    expect(store.messages(), sourceRowsBeforeNormal);
+    expect(store.topicControls(), isEmpty);
+    expect(
+      store.beginAgentTurn(
+        messageId: spendingSource['id']! as String,
+        expectedSourceRev: spendingSource['source_rev']! as int,
+        shownCardRevisions: const {},
+      )['changed_cards'],
+      unorderedEquals(spentIds),
+    );
+    final oldTopicRead = call(spendingTurn, 'read-riding-topic', 'recall', {'query': '骑车'});
+    expect(oldTopicRead.replayed, isTrue);
+    expect(oldTopicRead.targetId, rideTopic);
+    expect(oldTopicRead.recalledControl, isNull);
+    final cardsAfterRestore = store.cards(includeInactive: true);
+    final archiveAfterRestore = store.archive;
+    final stillFourth = call(spendingTurn, 'still-fourth', 'remember', {'text': '我的印章是木制的。', 'keywords': <String>[]});
+    expect(stillFourth.code, 'card_limit');
+    expect(stillFourth.changedCardIds, isEmpty);
+    expect(store.cards(includeInactive: true), cardsAfterRestore);
+    expect(store.archive, archiveAfterRestore);
+    expect(store.requests(), isEmpty, reason: 'public SDK tool transactions do not manufacture HTTP receipts');
   });
 
   test('forget budgets the complete R33 body closure while independent shared-proof facts survive', () {
