@@ -2691,6 +2691,10 @@ void main() {
       expect(receipt['input_uncached'], isNull);
       expect(receipt['output_tokens'], isNull);
       expect(receipt['estimated_cny'], isNull);
+      expect(store.localRequestCost(request), {
+        for (final key in ['sent_at_ms', 'reserved_at_ms', 'estimated_cny', 'reserved_cny']) key: receipt[key],
+      });
+      expect(store.localRequestCost('missing'), isNull);
     });
 
     test('frozen final SSE usage survives storage unchanged, even without stop, and a replay is idempotent', () {

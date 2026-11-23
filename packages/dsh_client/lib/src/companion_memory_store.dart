@@ -2697,6 +2697,15 @@ class CompanionMemoryStore {
     },
   };
 
+  /// The local physical request's existing cost fields, without projecting history.
+  MemoryRow? localRequestCost(String id) {
+    final rows = _db.select(
+      'SELECT sent_at_ms,reserved_at_ms,estimated_cny,reserved_cny FROM memory_requests WHERE id=?',
+      [id],
+    );
+    return rows.isEmpty ? null : rows.single;
+  }
+
   List<MemoryRow> requests() {
     final rows = <MemoryRow>[
       for (final row in _db.select('SELECT * FROM memory_requests'))
