@@ -7389,7 +7389,7 @@ class L10nZh extends L10n {
   String get companionRawKept => '好，原话留着。';
 
   @override
-  String get companionRawEraseGone => '这次来不及了，原话还留着。想删的话再跟我说一次。';
+  String get companionRawEraseGone => '这次来不及了，原话还留着。';
 
   @override
   String get automaticDiagnosticsRecover => '恢复本地记录';

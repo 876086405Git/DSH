@@ -1164,5 +1164,5 @@
   "companionRawEraseNo": "Keep",
   "companionRawErased": "Done, the original words are gone too.",
   "companionRawKept": "Okay, the original words stay.",
-  "companionRawEraseGone": "Too late this time; the original words are still here. Ask me again if you want them gone."
+  "companionRawEraseGone": "Too late this time; the original words are still here."
 }

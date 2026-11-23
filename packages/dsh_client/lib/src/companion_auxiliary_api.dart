@@ -15,9 +15,58 @@ import 'session_api.dart';
 
 const _path = '/dsh-go/v1/companion/auxiliary';
 const _maxInputBytes = 65536;
+
+/// Maximum UTF-8 bytes of the complete encoded Agent request body.
+const companionAgentRequestMaxBytes = _maxInputBytes;
 const _maxLineBytes = 192 * 1024;
 const _maxStreamBytes = 8 * 1024 * 1024;
 const _maxSafe = 9007199254740991;
+
+/// Exact size of the same captured envelope used by callCompanionAgent.
+/// This does not reserve a request, dispatch HTTP, or report usage.
+int companionAgentRequestBytes(
+  CompanionAuxiliaryCapability host, {
+  required String requestId,
+  required String system,
+  required List<Map<String, Object?>> messages,
+  required List<Map<String, Object?>> tools,
+  required int maxTokens,
+}) => utf8.encode(jsonEncode(_companionAgentRequestBody(
+  host,
+  requestId: requestId,
+  system: system,
+  messages: messages,
+  tools: tools,
+  maxTokens: maxTokens,
+))).length;
+
+Map<String, Object?> _companionAgentRequestBody(
+  CompanionAuxiliaryCapability host, {
+  required String requestId,
+  required String system,
+  required List<Map<String, Object?>> messages,
+  required List<Map<String, Object?>> tools,
+  required int maxTokens,
+}) {
+  // Caller-owned nested maps must not change during the HTTP await.
+  try {
+    return _map(jsonDecode(jsonEncode({
+      'v': 1,
+      'instanceId': host.instanceId,
+      'requestId': requestId,
+      'sessionId': host.sessionId,
+      'provider': host.provider,
+      'model': host.model,
+      'kind': 'agent',
+      'system': system,
+      'messages': messages,
+      'tools': tools,
+      'maxTokens': maxTokens,
+    })))!;
+  } on JsonUnsupportedObjectError {
+    throw const CompanionAuxiliaryFailure(code: 'invalid-request', terminal: 'preflight_error', notSent: true);
+  }
+}
 
 /// The actual selection and bridge generation read for one full Session.
 /// Unknown physical dispatch/raw usage does not make a callable route unsupported.
@@ -423,30 +472,14 @@ extension CompanionAuxiliaryApi on DshClient {
         idleTimeout <= Duration.zero) {
       throw const CompanionAuxiliaryFailure(code: 'invalid-request', terminal: 'preflight_error', notSent: true);
     }
-    // Capture exactly the JSON body that is bounded and handed off below.
-    // Caller-owned nested input maps must not change during the HTTP await.
-    final Map<String, Object?> body;
-    try {
-      body = _map(
-        jsonDecode(
-          jsonEncode({
-            'v': 1,
-            'instanceId': host.instanceId,
-            'requestId': requestId,
-            'sessionId': host.sessionId,
-            'provider': host.provider,
-            'model': host.model,
-            'kind': 'agent',
-            'system': system,
-            'messages': messages,
-            'tools': tools,
-            'maxTokens': maxTokens,
-          }),
-        ),
-      )!;
-    } on JsonUnsupportedObjectError {
-      throw const CompanionAuxiliaryFailure(code: 'invalid-request', terminal: 'preflight_error', notSent: true);
-    }
+    final body = _companionAgentRequestBody(
+      host,
+      requestId: requestId,
+      system: system,
+      messages: messages,
+      tools: tools,
+      maxTokens: maxTokens,
+    );
     final receipt = _AgentReceipt(host.instanceId, host.provider, host.model, requestId, onSent, abort, onText);
     final result = await _postAuxiliary(
       transport,
@@ -585,7 +618,8 @@ Future<CompanionAuxiliaryResult> _postAuxiliary(
         final notSent =
             response.statusCode >= 400 &&
             code is String &&
-            code.startsWith('companion/auxiliary-') &&
+            (code.startsWith('companion/auxiliary-') ||
+                (response.statusCode == 413 && code == 'companion/too-large')) &&
             map?['dispatched'] == false &&
             !uncertainId;
         throw CompanionAuxiliaryFailure(

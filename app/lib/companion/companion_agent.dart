@@ -417,125 +417,166 @@ class CompanionAgent extends ChangeNotifier {
           characterId: run.source['character_id'] as String?,
           limit: CompanionLightHistory.window + run.savedRows,
         );
-        final lines = companionLightContext([
+        final oldLines = [
           for (final row in history)
             if ((row['first_seq'] as int) < (run.source['first_seq'] as int))
               row['role'] == 'user'
                   ? CompanionLine.user(row['text'] as String)
                   : CompanionLine.her(row['text'] as String),
-          CompanionLine.user(run.source['text'] as String),
-        ]);
-        final messages = companionRequestMessages(
-          [for (final line in lines) (role: line.role, text: line.text)],
-          context: run.context,
-          memory: selection,
-          assistantPage: run.assistantPage,
-        );
-        for (final exchange in run.exchanges) {
-          messages.add(exchange.assistant.toRequest());
-          messages.add({'role': 'user', 'content': exchange.results});
+        ];
+        List<Map<String, Object?>> messagesFrom(int skip) {
+          final lines = companionLightContext([
+            ...oldLines.skip(skip),
+            CompanionLine.user(run.source['text'] as String),
+          ]);
+          final messages = companionRequestMessages(
+            [for (final line in lines) (role: line.role, text: line.text)],
+            context: run.context,
+            memory: selection,
+            assistantPage: run.assistantPage,
+          );
+          for (final exchange in run.exchanges) {
+            messages.add(exchange.assistant.toRequest());
+            messages.add({'role': 'user', 'content': exchange.results});
+          }
+          return messages;
         }
 
-        return _request(run, messages);
+        return _request(run, messagesFrom, oldLines.length);
       },
     );
   }
 
   Future<({CompanionAgentMessage message, String requestId})?> _request(
     _CompanionAgentRun run,
-    List<Map<String, Object?>> messages,
+    List<Map<String, Object?>> Function(int skip) messagesFrom,
+    int historyCount,
   ) async {
-    final route = await _modelTransport(isCurrent: () => _turnCurrent(run));
+    final selected = await _modelTransport(isCurrent: () => _turnCurrent(run));
     if (!_current(run)) return null;
-    if (route is! CompanionAgentModelTransport) {
+    if (selected is! CompanionAgentModelTransport) {
       throw const CompanionHostError(CompanionHostFailure.unavailable);
     }
-    if (!route.agentConfigured) {
-      if (route is CompanionLightMemoryTransport) throw const CompanionLightError(CompanionLightFailure.noKey);
+    if (!selected.agentConfigured) {
+      if (selected is CompanionLightMemoryTransport) throw const CompanionLightError(CompanionLightFailure.noKey);
       throw const CompanionHostError(CompanionHostFailure.unavailable);
     }
-    run.modelCurrent = () => route.current;
+    // A phone fallback still belongs to this captured Host selection and turn.
+    run.modelCurrent = () => selected.current;
     if (!_current(run)) return null;
     final system = '${run.system}${run.memory.relationshipContext(run.source['character_id'] as String?)}';
     final definitions = _definitions(run);
-    final requestId = run.memory.store.reserveRequest(
-      category: 'chat',
-      provider: route.provider,
-      model: route.model,
-      inputTokens: estimateTokens(
-        jsonEncode({
-          'system': system,
-          'messages': messages,
-          'tools': [for (final tool in definitions) tool.toJson()],
-        }),
-      ).ceil(),
-      outputTokens: 800,
-    )!;
-    final request = _CompanionAgentRequest(requestId);
-    run.request = request;
-    run.memory.retainReceipt(request.settled.future);
-    final priorText = run.text;
-    try {
-      final message = await route.readAgent(
-        request: request,
-        system: system,
-        messages: messages,
-        tools: definitions,
-        isCurrent: () => _current(run),
-        onText: (delta) {
-          if (request.text.isEmpty && run.text.isNotEmpty && delta.isNotEmpty) run.text += '\n';
-          request.text += delta;
-          run.text += delta;
-          notifyListeners();
-        },
-        onDispatchUncertain: () {
-          if (!_current(run)) throw const DshClosedException('Companion turn changed');
-          run.memory.store.markRequestUncertain(requestId);
-          request.uncertain = true;
-        },
-        onSent: () {
-          // Host callbacks report an observed dispatch, even after this turn
-          // retires. Light checks its permission before sending instead.
-          run.memory.store.markRequestSent(requestId);
-          request.sent = true;
-        },
-        onUsage: (usage) {
-          // These identities never come from current UI/turn fields.
-          run.memory.store.recordUsage(requestId, usage);
-          run.memory.store.finishRequest(requestId, terminal: usage['terminal']! as String);
-          request.finalized = true;
-          run.memory.changed();
-          if (!_disposed) _onUsage?.call(CompanionUsage.fromReceipt(usage));
-        },
-        onUsageSettled: (usage, {required partial}) {
-          if (!_disposed) _onUsageSettled?.call(usage, partial: partial);
-        },
-      );
-      if (message != null && route is CompanionHostMemoryTransport && _current(run)) {
-        // Some adapters emit complete block text only at block-end. Keep the
-        // real deltas live, then seal this request with the validated message.
-        request.text = message.text;
-        run.text = [if (priorText.isNotEmpty) priorText, if (request.text.isNotEmpty) request.text].join('\n');
-        notifyListeners();
-      }
-      return message == null ? null : (message: message, requestId: requestId);
-    } finally {
-      request.client?.close();
+    final toolJson = [for (final tool in definitions) tool.toJson()];
+    CompanionAgentModelTransport route = selected;
+    while (true) {
+      if (!_current(run)) return null;
+      var messages = messagesFrom(0);
+      final requestId = run.memory.store.reserveRequest(
+        category: 'chat',
+        provider: route.provider,
+        model: route.model,
+        inputTokens: estimateTokens(
+          jsonEncode({'system': system, 'messages': messages, 'tools': toolJson}),
+        ).ceil(),
+        outputTokens: 800,
+      )!;
+      final request = _CompanionAgentRequest(requestId);
+      run.request = request;
+      run.memory.retainReceipt(request.settled.future);
+      final priorText = run.text;
+      CompanionLightMemoryTransport? fallback;
       try {
-        await request.drain();
-      } finally {
-        try {
-          if (request.notSentProven && !request.sent) {
-            run.memory.store.finishRequest(requestId, terminal: 'not_sent');
-          } else if (!request.finalized) {
-            run.memory.store.finishRequest(requestId, terminal: request.sent || request.uncertain ? 'cancelled' : 'not_sent');
+        if (route is CompanionHostMemoryTransport) {
+          var skipped = 0;
+          while (companionAgentRequestBytes(
+                route.capability,
+                requestId: requestId,
+                system: system,
+                messages: messages,
+                tools: toolJson,
+                maxTokens: 800,
+              ) > companionAgentRequestMaxBytes &&
+              skipped < historyCount) {
+            // Rebuild from raw old lines: adjacent users may have been merged
+            // with the current input. Current data and exchanges stay intact.
+            messages = messagesFrom(++skipped);
           }
-          _saveReply(run, request);
+        }
+        final message = await route.readAgent(
+          request: request,
+          system: system,
+          messages: messages,
+          tools: definitions,
+          isCurrent: () => _current(run),
+          onText: (delta) {
+            if (request.text.isEmpty && run.text.isNotEmpty && delta.isNotEmpty) run.text += '\n';
+            request.text += delta;
+            run.text += delta;
+            notifyListeners();
+          },
+          onDispatchUncertain: () {
+            if (!_current(run)) throw const DshClosedException('Companion turn changed');
+            run.memory.store.markRequestUncertain(requestId);
+            request.uncertain = true;
+          },
+          onSent: () {
+            // Host callbacks report an observed dispatch, even after this turn
+            // retires. Light checks its permission before sending instead.
+            run.memory.store.markRequestSent(requestId);
+            request.sent = true;
+          },
+          onUsage: (usage) {
+            // These identities never come from current UI/turn fields.
+            run.memory.store.recordUsage(requestId, usage);
+            run.memory.store.finishRequest(requestId, terminal: usage['terminal']! as String);
+            request.finalized = true;
+            run.memory.changed();
+            if (!_disposed) _onUsage?.call(CompanionUsage.fromReceipt(usage));
+          },
+          onUsageSettled: (usage, {required partial}) {
+            if (!_disposed) _onUsageSettled?.call(usage, partial: partial);
+          },
+        );
+        if (message != null && route is CompanionHostMemoryTransport && _current(run)) {
+          // Some adapters emit complete block text only at block-end. Keep the
+          // real deltas live, then seal this request with the validated message.
+          request.text = message.text;
+          run.text = [if (priorText.isNotEmpty) priorText, if (request.text.isNotEmpty) request.text].join('\n');
+          notifyListeners();
+        }
+        return message == null ? null : (message: message, requestId: requestId);
+      } on CompanionHostError {
+        final phone = CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
+        if (route is! CompanionHostMemoryTransport ||
+            !request.notSentProven ||
+            request.sent ||
+            !_current(run) ||
+            !phone.configured) {
+          rethrow;
+        }
+        fallback = phone;
+      } finally {
+        request.client?.close();
+        try {
+          await request.drain();
         } finally {
-          request.settled.complete();
-          if (identical(run.request, request)) run.request = null;
+          try {
+            if (request.notSentProven && !request.sent) {
+              run.memory.store.finishRequest(requestId, terminal: 'not_sent');
+            } else if (!request.finalized) {
+              run.memory.store.finishRequest(requestId, terminal: request.sent || request.uncertain ? 'cancelled' : 'not_sent');
+            }
+            _saveReply(run, request);
+          } finally {
+            request.settled.complete();
+            if (identical(run.request, request)) run.request = null;
+          }
         }
       }
+      // Drain and settle the Host attempt before reserving a separate phone
+      // request. A thrown finalizer or a retired selection cannot start it.
+      if (!_current(run)) return null;
+      route = fallback;
     }
   }
 
