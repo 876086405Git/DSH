@@ -171,18 +171,27 @@ class NotificationGate(
     }
 
     /** A distinct result notification, independent of ordinary chat notification preferences. */
-    fun notifyFinished(taskId: Long, sessionId: String?, host: String?): Boolean = runCatching {
-        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel(CHANNEL_RESULT,
-            AppStrings.get(app, R.string.phone_prompt_result_channel), NotificationManager.IMPORTANCE_HIGH))
-        if (!channelAvailable(CHANNEL_RESULT, NotificationManager.IMPORTANCE_MIN)) return false
+    fun notifyFinished(taskId: Long, sessionId: String?, host: String?): Boolean =
+        notifyResult(taskId, sessionId, host, null)
+
+    fun notifyDraft(taskId: Long, sessionId: String, display: String): Boolean =
+        notifyResult(taskId, sessionId, null, display)
+
+    private fun notifyResult(taskId: Long, sessionId: String?, host: String?, display: String?): Boolean = runCatching {
+        val channel = if (display == null) CHANNEL_RESULT else SystemActions.CHANNEL_NOTIFY
+        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel(channel,
+            AppStrings.get(app, if (display == null) R.string.phone_prompt_result_channel else R.string.phone_reminder_channel),
+            if (display == null) NotificationManager.IMPORTANCE_HIGH else NotificationManager.IMPORTANCE_DEFAULT))
+        if (!channelAvailable(channel, NotificationManager.IMPORTANCE_MIN)) return false
         val intent = if (sessionId != null) EntryActivity.openChat(app, sessionId, host) else EntryActivity.openApp(app)
-        val key = resultTag(taskId, sessionId, host)
+        val key = (if (display == null) "" else "skill-") + resultTag(taskId, sessionId, host)
         intent.data = Uri.fromParts("dsh-phone-result", key, null)
         val pi = PendingIntent.getActivity(app, RESULT_ID, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        nm.notify(key, RESULT_ID, builder(CHANNEL_RESULT).setSmallIcon(R.drawable.ic_stat_dsh)
-            .setContentTitle(AppStrings.get(app, R.string.phone_prompt_result_title))
-            .setContentText(AppStrings.get(app, R.string.phone_prompt_result_text))
+        nm.notify(key, RESULT_ID, builder(channel).setSmallIcon(R.drawable.ic_stat_dsh)
+            .setContentTitle(if (display == null) AppStrings.get(app, R.string.phone_prompt_result_title)
+                else AppStrings.get(app, R.string.phone_skill_draft_title, display))
+            .setContentText(AppStrings.get(app, if (display == null) R.string.phone_prompt_result_text else R.string.phone_skill_draft_open))
             .setContentIntent(pi).setAutoCancel(true).setVisibility(Notification.VISIBILITY_PRIVATE).build())
         true
     }.getOrDefault(false)

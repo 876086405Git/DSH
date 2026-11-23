@@ -42,6 +42,9 @@ class PhoneBridge(
     private val log: (String) -> Unit,
     private val admit: (McpServer.Dispatch.Call) -> PhoneCallWork = { call -> PhoneCallWork({ call.run() }) },
     private val admitEnd: (McpServer.Dispatch.RunEnd) -> EndWork = { EndWork(it.ack()) {} },
+    private val skillWork: (McpServer.Dispatch.Skills) -> (() -> String) = { request ->
+        { McpServer.error(request.id, McpServer.METHOD_NOT_FOUND, "Skill service unavailable") }
+    },
 ) {
     class EndWork(val reply: String, val finish: () -> Unit)
     @Volatile private var running = false
@@ -212,6 +215,10 @@ class PhoneBridge(
                     when (val d = server.dispatch(line)) {
                         McpServer.Dispatch.None -> Unit
                         is McpServer.Dispatch.Reply -> send(d.line)
+                        is McpServer.Dispatch.Skills -> {
+                            val work = synchronized(this@PhoneBridge) { if (current(token)) skillWork(d) else null } ?: break
+                            calls.execute { val reply = work(); runCatching { send(reply) } }
+                        }
                         is McpServer.Dispatch.RunEnd -> {
                             val finish = synchronized(this@PhoneBridge) {
                                 if (current(token)) admitEnd(d) else null

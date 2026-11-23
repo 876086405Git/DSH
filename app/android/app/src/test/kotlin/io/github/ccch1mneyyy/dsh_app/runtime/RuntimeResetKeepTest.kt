@@ -104,6 +104,18 @@ class RuntimeResetKeepTest {
         assertTrue(File(base, "rootfs/root/workspace").isDirectory)
     }
 
+    @Test fun resetUsesTheSameKeepChoiceForPrivateSkillAuthorityAndGuestDocuments() {
+        installed()
+        val privateRecord = File(files, "phone-skills/drafts.json")
+        privateRecord.parentFile.mkdirs()
+        privateRecord.writeText("private fixture")
+        retireRuntime(base, retired, keep, ui)
+        assertTrue(privateRecord.isFile)
+        // A second explicit reset can discard a prior keep before the next installation.
+        retireRuntime(base, retired, keep, emptyList())
+        assertFalse(privateRecord.exists())
+    }
+
     @Test fun keepsUiAndSkillsThroughResetAndInstall() {
         installed()
         retireRuntime(base, retired, keep, ui)

@@ -34,12 +34,15 @@ class PhoneCallerGuestTest {
                 assertEquals(PhoneGuest.PATCH_YAML + PhoneGuest.DIAGNOSTICS_PRESET_YAML, PhoneGuest.patchYaml(root))
             }
             info.writeText(Json.write(mapOf("dshPatches" to listOf(PhoneGuest.CALLER_PATCH))))
-            PhoneGuest.writeFiles(root)
+            PhoneGuest.writeFiles(root, "export const name = 'phone-skills-test';")
             val overlay = PhoneGuest.guestFile(root, PhoneGuest.PATCH).readText()
-            assertEquals(PhoneGuest.PATCH_YAML + "        dshGoPhoneCaller: true\n" + PhoneGuest.DIAGNOSTICS_PRESET_YAML, overlay)
+            assertEquals(PhoneGuest.PATCH_YAML + "        dshGoPhoneCaller: true\n" +
+                "    - id: dsh-app-phone-skills\n      name: '" + PhoneGuest.SKILLS + "'\n" +
+                PhoneGuest.DIAGNOSTICS_PRESET_YAML, overlay)
             assertTrue(overlay.indexOf("dshGoPhoneCaller: true") < overlay.indexOf("    - id: preset-dsh-go-diagnostics"))
             assertEquals(PhoneGuest.RELAY_JS, PhoneGuest.guestFile(root, PhoneGuest.RELAY).readText())
             assertEquals(PhoneGuest.DIAGNOSTICS_POLICY_JS, PhoneGuest.guestFile(root, PhoneGuest.DIAGNOSTICS_POLICY).readText())
+            assertEquals("export const name = 'phone-skills-test';", PhoneGuest.guestFile(root, PhoneGuest.SKILLS).readText())
         } finally {
             root.deleteRecursively()
         }

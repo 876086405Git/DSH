@@ -12,7 +12,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillDrafts
-import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillBridge
 import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillReplaySelections
 import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillReplayApps
 import io.github.ccch1mneyyy.dsh_app.runtime.RuntimeController
@@ -242,12 +241,10 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
                 val args = call.arguments as? Map<*, *>
                 control.background.setBackgroundViewport(if (args != null && args.keys == setOf("preset")) args["preset"] else null)
             }
-            "setSkillSavePrompt" -> {
-                val enabled = (call.arguments as? Map<*, *>)?.get("enabled") as? Boolean
-                if (enabled == null) result.success(false)
-                else async(result, shortControl = true) { control.setSkillSavePrompt(enabled) }
+            "skills.list", "skills.get", "skills.setLearn", "skills.accept", "skills.discard", "skills.save",
+            "skills.setEnabled", "skills.restore", "skills.delete" -> control.skillsCall(call.method, call.arguments) { value ->
+                main.post { result.success(value) }
             }
-            "skillDraft", "saveSkillDraft", "discardSkillDraft" -> skillCall(call, result)
             "inspectSkillReplay" -> inspectSkillReplay(call, result)
             "prepareSkillReplay" -> prepareSkillReplay(call, result)
             "discardSkillReplay" -> {
@@ -488,26 +485,6 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
                             "parameterNames" to emptyList<String>()))
                     }
                 }
-            }
-        }
-    }
-
-    private fun skillCall(call: MethodCall, result: MethodChannel.Result) {
-        val client = skillClient
-        if (client == null) { result.success(PhoneSkillBridge.rejected("stale")); return }
-        controlIo.execute {
-            fun finish(value: Map<String, Any?>) {
-                main.post {
-                    if (skillClient === client) result.success(value)
-                    else result.success(PhoneSkillBridge.rejected("stale"))
-                }
-            }
-            if (call.method == "skillDraft" && (call.arguments as? Map<*, *>)?.get("action") == "check_save") {
-                control.skillBridge.checkSave(client, call.arguments, ::finish)
-            } else {
-                val value = try { control.skillBridge.call(client, call.method, call.arguments) }
-                    catch (_: Exception) { PhoneSkillBridge.rejected("io") }
-                finish(value)
             }
         }
     }

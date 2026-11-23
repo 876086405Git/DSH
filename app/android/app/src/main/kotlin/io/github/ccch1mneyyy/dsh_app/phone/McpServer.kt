@@ -51,6 +51,7 @@ class McpServer(
         object None : Dispatch
 
         class Reply(val line: String) : Dispatch
+        class Skills(val id: Any?, val params: Map<*, *>) : Dispatch
         class RunEnd(val id: Any?, val sessionId: String, val runId: String, val completion: String) : Dispatch {
             fun ack(): String = result(id, emptyMap<String, Any?>())
         }
@@ -71,7 +72,7 @@ class McpServer(
         Dispatch.None -> null
         is Dispatch.Reply -> d.line
         is Dispatch.Call -> d.run()
-        is Dispatch.RunEnd -> null
+        is Dispatch.RunEnd, is Dispatch.Skills -> null
     }
 
     fun dispatch(line: String): Dispatch {
@@ -99,6 +100,7 @@ class McpServer(
             "initialize" -> Dispatch.Reply(result(id, initializeResult(params["protocolVersion"] as? String)))
             "ping" -> Dispatch.Reply(result(id, emptyMap<String, Any?>()))
             "tools/list" -> Dispatch.Reply(result(id, mapOf("tools" to tools)))
+            "dsh-go/phone-skills" -> Dispatch.Skills(id, params)
             "dsh-go/phone-run-end" -> {
                 val session = PhoneCaller.identifier(params["sessionId"])
                 val run = PhoneCaller.identifier(params["runId"])

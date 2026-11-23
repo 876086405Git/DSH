@@ -2,29 +2,25 @@ package io.github.ccch1mneyyy.dsh_app.phone.skills
 
 import io.github.ccch1mneyyy.dsh_app.phone.Json
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneToolCatalog
-import java.util.Locale
 
 internal object PhoneSkillDrafter {
     const val TEMPLATE_ASSET = "phone/skill_draft.md"
     data class Target(val document: PhoneSkillDocument, val base: PhoneSkillBase)
     data class Proposal(val document: PhoneSkillDocument, val target: PhoneSkillBase?)
 
-    /** The prompt deliberately has no task text, final message, snapshots, or stable skill IDs. */
+    /** The engine supplies the original goal and final answer as user input to the same auxiliary call. */
     fun prepare(template: String, english: Boolean, trace: PhoneTaskTrace.Snapshot, targets: List<Target>): Request? {
         if (!trace.canLearn) return null
         val apps = trace.steps.filter { it.receipt == PhoneTaskTrace.Receipt.RETURNED_OK }
             .mapNotNull { it.packageName }.distinct()
         val references = targets.mapIndexed { index, target -> "S${index + 1}" to target }.toMap()
         val procedures = references.map { (reference, target) ->
-            val description = (target.document.display + " " + target.document.description).lowercase(Locale.ROOT)
-            mapOf("reference" to reference, "apps" to target.document.apps,
-                "public_topics" to topics.filterValues { patterns -> patterns.any { it.containsMatchIn(description) } }.keys.toList())
+            val doc = target.document
+            mapOf("reference" to reference, "apps" to doc.apps, "display" to shortHint(doc.display),
+                "description" to shortHint(doc.description), "when_to_use" to shortHint(doc.whenToUse))
         }
-        val accepted = trace.steps.filter { it.receipt == PhoneTaskTrace.Receipt.RETURNED_OK }
         val data = mapOf(
             "language" to if (english) "en" else "zh",
-            "inferred_goal" to mapOf("apps" to apps, "last_public_action" to
-                (accepted.lastOrNull { it.anchor != null }?.anchor?.name ?: accepted.last().action.name)),
             "run_result" to "completed",
             "available_tools" to PhoneToolCatalog.names.map { "mcp__phone__" + it },
             "actions" to trace.steps.map { step ->
@@ -74,19 +70,7 @@ internal object PhoneSkillDrafter {
 
     private val modelFields = setOf("name", "display", "description", "when-to-use", "apps", "source", "updates")
 
-    // Only constants from this vocabulary may represent editable catalog descriptions in a draft request.
-    private val topics = mapOf(
-        "search" to listOf("搜索", "查找", "\\bsearch\\b", "\\bfind\\b"),
-        "send" to listOf("发送", "发语音", "\\bsend\\b"),
-        "message" to listOf("消息", "聊天", "\\bmessages?\\b", "\\bchat\\b"),
-        "voice" to listOf("语音", "\\bvoice\\b"),
-        "save" to listOf("保存", "\\bsave\\b"),
-        "open" to listOf("打开", "\\bopen\\b"),
-        "select" to listOf("选择", "\\bselect\\b"),
-        "delete" to listOf("删除", "\\bdelete\\b"),
-        "submit" to listOf("提交", "\\bsubmit\\b"),
-        "settings" to listOf("设置", "\\bsettings\\b"),
-        "contact" to listOf("联系人", "\\bcontacts?\\b"),
-        "file" to listOf("文件", "\\bfiles?\\b"),
-    ).mapValues { (_, patterns) -> patterns.map(::Regex) }
+    // The store supplies validated single-line metadata. Bound each hint without splitting a Unicode character.
+    private fun shortHint(value: String): String =
+        value.substring(0, value.offsetByCodePoints(0, minOf(96, value.codePointCount(0, value.length))))
 }

@@ -99,7 +99,7 @@ class PhoneTaskSessionsTest {
             beforeRecoveryRead()
             ready
         },
-        startSkillScope = { skillEpoch }, completeSkillScope = { owner, epoch, result -> completeSkill(owner, epoch, result) },
+        startSkillScope = { _, _, _ -> skillEpoch }, completeSkillScope = { owner, epoch, result -> completeSkill(owner, epoch, result) },
         prepareBackground = { _, _ -> backgroundPreparations.incrementAndGet(); null },
         createBackgroundWorker = { SerialWorker("session-background", time::get) { false }.also { backgroundWorkers += it } })
     private fun admit(session: String?, run: String = "1") = sessions.admit(session?.let { PhoneCaller(it, run, "call", runLifecycle = 1) })
@@ -977,6 +977,17 @@ class PhoneTaskSessionsTest {
         end("A")
         assertFalse(invoke("A", "2").isError) // 下一轮恢复。
         assertTrue(invoke("A", "1").isError) // 已结束的 run 不会被重开。
+    }
+
+    @Test fun duplicateSkillFinishForEarlierRunCannotClearSuccessorStop() {
+        assertFalse(invoke("A", "old").isError)
+        end("A", "old")
+        assertFalse(invoke("A", "new").isError)
+        assertTrue(sessions.stop(task("A", "new"), "user"))
+        assertNull(sessions.admitSkillEnd("A", "old", "completed") { true })
+        assertTrue(invoke("A", "following").isError)
+        end("A", "new")
+        assertFalse(invoke("A", "following").isError)
     }
 
     @Test fun exactHostEndClearsTheStopHoldAndSessionFenceForTheNextRun() {

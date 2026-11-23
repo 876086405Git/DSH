@@ -61,6 +61,10 @@ internal class PhoneSkillStore(
         return PhoneSkillListing(saved, drafts(), legacy, archived)
     }
 
+    /** Suppress unconfirmed same-prefix files in the engine provider without adopting their bytes. */
+    fun quarantined(accepted: Set<String>): List<String> = children(skills).map { it.fileName.toString() }
+        .filter { PhoneSkillDocument.validName(it) && it !in accepted }.sorted()
+
     fun get(name: String): PhoneSkillSaved = saved(existing(name))
 
     fun putDraft(document: PhoneSkillDocument, from: PhoneSkillOrigin, target: PhoneSkillBase? = null,

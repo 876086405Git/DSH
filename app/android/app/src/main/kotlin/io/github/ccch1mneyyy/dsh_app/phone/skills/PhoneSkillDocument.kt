@@ -37,7 +37,8 @@ internal data class PhoneSkillDocument(
         append("\ndisplay: ").append(Json.write(display))
         append("\napps: ").append(Json.write(apps))
         append("\nsource: ").append(source).append("\nstate: ").append(state)
-        if (state == "suspended") append("\ndisable-model-invocation: true\nuser-invocable: false")
+        // Invocation is granted only by the scoped native provider; filesystem copies remain inert.
+        append("\ndisable-model-invocation: true\nuser-invocable: false")
         if (from != null) append("\nlearned-from: ").append(Json.write(from.sessionId + "/" + from.taskId))
         append("\n---\n")
         for ((key, heading) in if (english) englishHeadings else chineseHeadings) {

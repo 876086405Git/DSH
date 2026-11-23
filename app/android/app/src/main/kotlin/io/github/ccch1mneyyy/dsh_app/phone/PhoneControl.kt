@@ -32,8 +32,10 @@ import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillReplayApps
 import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillReplaySelections
 import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillOutcomes
 import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillDrafts
-import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillBridge
-import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillLifecycle
+import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillDrafter
+import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillProblem
+import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillRuns
+import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillService
 import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneTaskTrace
 import io.github.ccch1mneyyy.dsh_app.runtime.RuntimeController
 import io.github.ccch1mneyyy.dsh_app.runtime.DshService
@@ -167,21 +169,18 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         read = { prefs.getString("skillReplayOutcomesV1", null) },
         commit = { prefs.edit().putString("skillReplayOutcomesV1", it).commit() },
         process = java.util.UUID.randomUUID().toString().replace("-", ""))
-    private val skillLifecycle = PhoneSkillLifecycle(skillTrace, skillDrafts)
-    internal val skillBridge = PhoneSkillBridge(skillDrafts,
-        { write, done -> RuntimeController.get(app).savePhoneSkill(write, done) }, ::emitStatus,
-        check = { binding, publication, done ->
-            val origin = binding.origin
-            if (origin == null) done(io.github.ccch1mneyyy.dsh_app.runtime.PhoneSkillInstallResult.BundleUnverified(
-                binding.identity, publication, io.github.ccch1mneyyy.dsh_app.runtime.PhoneSkillBundleInstaller.Verification.ORIGIN_UNAVAILABLE))
-            else origin.runtime.checkPhoneSkillSave(binding, publication, done)
-        })
+    private val skillRuns = PhoneSkillRuns(skillTrace)
+    private fun learnsSkills() = prefs.getBoolean(K_LEARN_SKILLS, prefs.getBoolean(K_SKILL_PROMPT, true))
+    private val learnedSkills = PhoneSkillService(skillRuns, ::learnsSkills, { on ->
+        check(prefs.edit().putBoolean(K_LEARN_SKILLS, on).commit()) { "Could not save learning preference." }
+    }, { AppStrings.isEnglish(app) }, { app.assets.open(PhoneSkillDrafter.TEMPLATE_ASSET).bufferedReader().use { it.readText() } },
+        ::publishSkillEvent)
     private val displaySelection = PhoneDisplaySelection()
     private val legacyObservations = PhoneTaskObservations(tasks)
     val core = PhoneCore(this, tasks, log, skillTrace = skillTrace,
         onExecution = { owner -> selectExecution(tasks, owner) })
     val notificationGate = NotificationGate(app) { text, ifCurrent -> setStatusLine(text, ifCurrent) }
-    val prompts: PhonePrompts = PhonePrompts(app, tasks, ::isEnabled, ::isLocked, notificationGate, ::reopen, displaySelection) { id, session ->
+    val prompts: PhonePrompts = PhonePrompts(app, tasks, ::isEnabled, ::isLocked, notificationGate, ::reopen, displaySelection, skillTrace::userIntervened) { id, session ->
         sessions.task(id)?.takeIf { it.sessionId == null || it.sessionId == session }?.tasks
     }
     private val sessions = PhoneTaskSessions(SystemClock::elapsedRealtime, taskIds::incrementAndGet, ::createSessionCore, tasks, core, ::emitStatus,
@@ -194,8 +193,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         backgroundCapacity = { background.parallelism().effectiveLimit },
         screenRecoveryReady = { isEnabled() && !isLocked() },
         prepareBackground = { task, owner -> background.prepareForTask(owner) { task.tasks.isCurrent(owner) } },
-        startSkillScope = skillLifecycle::startManaged,
-        completeSkillScope = skillLifecycle::completeDrained,
+        startSkillScope = skillRuns::start,
+        completeSkillScope = skillRuns::complete,
         cancelScope = { record, state ->
             // Registry admission stays sealed until these lock-free side effects finish.
             background.sealTask(state.id)
@@ -226,7 +225,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         } catch (_: PhoneTaskSessions.CapacityExceeded) {
             PhoneBridge.EndWork(McpServer.error(end.id, -32000, PhoneTaskSessions.CAPACITY_MESSAGE)) {}
         }
-    })
+    }, ::prepareSkillRpc)
 
     /** Private prepared invocation only; status/cancel/duplicates never take a Task admission. */
     private fun replayWork(call: McpServer.Dispatch.Call): PhoneCallWork {
@@ -379,7 +378,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         if (!enabled) {
             // l10n:keep agent stop reason
             sessions.stopAll("手机操控已关闭")
-            skillLifecycle.retired()
+            retireSkills()
             stopBridge(stopTransport = false)
         } else {
             tasks.clearStop()
@@ -442,7 +441,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     fun prepareLaunch(rootfs: File, safe: Boolean, log: (String) -> Unit): Boolean {
         logger = log
         tasks.invalidateOwners()
-        skillLifecycle.retired()
+        retireSkills()
         stopBridge()
         sessions.beginCallerLaunch()
         this.rootfs = rootfs
@@ -453,9 +452,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
             return false
         }
         return try {
-            PhoneGuest.writeFiles(rootfs)
+            PhoneGuest.writeFiles(rootfs, app.assets.open("phone/skills.mjs").bufferedReader().use { it.readText() })
             tasks.clearStop()
-            skillLifecycle.launched()
             val ep = bridge.start(withTcp = prefs.getBoolean(K_TCP_FALLBACK, false))
             PhoneGuest.writeConfig(rootfs, ep)
             refreshScreenOff()
@@ -463,7 +461,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
             true
         } catch (e: Exception) {
             log("[dsh-app] phone control: setup failed (${e.message}); starting without phone tools")
-            skillLifecycle.retired()
+            retireSkills()
             stopBridge()
             false
         }
@@ -472,7 +470,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     /** After the launch command was built: [mounted] false means this runtime's template had no `dsh web` to add the overlay to. */
     fun launched(mounted: Boolean) {
         if (mounted) return
-        skillLifecycle.retired()
+        retireSkills()
         logger("[dsh-app] phone control: this runtime's launch command has no `dsh web` to add the phone overlay to; phone tools are off")
         stopBridge()
     }
@@ -508,11 +506,16 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     fun onEngineStopped() {
         tasks.invalidateOwners()
-        skillLifecycle.retired()
+        retireSkills()
         stopBridge()
         core.worker.retire()
         tasks.endTask()
         emitStatus()
+    }
+
+    private fun retireSkills() {
+        skillRuns.retire()
+        skillDrafts.onEngineRetired() // Retire client grants held by the existing replay skeleton.
     }
 
     private fun stopBridge(stopTransport: Boolean = true) {
@@ -676,7 +679,6 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     private fun onTask(s: PhoneTasks.Snapshot) {
         if (!s.active || s.paused || s.stopped) shell.cancel(s.id)
         preview.refresh() // Clear local pixels before endTask can enter blocking release IPC.
-        skillLifecycle.changed(s)
         prompts.check()
         val record = sessions.all().firstOrNull { it.tasks === tasks }
         if (!s.active && record != null) sessions.onInactive(record, s)
@@ -834,18 +836,61 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         }
     }
 
-    fun setSkillSavePrompt(enabled: Boolean): Boolean {
-        prefs.edit().putBoolean(K_SKILL_PROMPT, enabled).apply()
-        emitStatus()
-        return true
+    internal fun skillsCall(method: String, raw: Any?, done: (Map<String, Any?>) -> Unit) {
+        val args = raw as? Map<*, *> ?: if (raw == null) emptyMap<String, Any?>() else {
+            done(mapOf("error" to "invalid", "detail" to "arguments")); return
+        }
+        RuntimeController.get(app).phoneSkills(null) { learnedSkills.ui(method, args, it) }
+            .whenComplete { value, failure -> done(if (failure == null) value else skillError(failure)) }
     }
 
-    private fun skillsStatus(): Map<String, Any?> = mapOf(
-        "v" to 1, "askAfterSuccess" to prefs.getBoolean(K_SKILL_PROMPT, false),
-        "saveResults" to skillDrafts.saveResults(),
-        "candidates" to skillDrafts.candidates().map { mapOf(
-            "taskId" to it.owner.taskId, "generation" to it.owner.lifecycle, "steps" to it.steps) },
-    )
+    private fun prepareSkillRpc(call: McpServer.Dispatch.Skills): () -> String {
+        // Bridge admission holds its transport monitor. Runtime termination takes the opposite
+        // path (Runtime -> Bridge.stop), so capture the runtime only on the connection worker.
+        val epoch = skillRuns.epoch()
+        return {
+            val value = try {
+                val runtime = RuntimeController.get(app)
+                val origin = runtime.capturePhoneSkillOrigin()
+                val op = call.params["op"]
+                if (origin == null || skillRuns.epoch() != epoch || !runtime.phoneSkillOriginCurrent(origin) ||
+                    !isEnabled() && op != "catalog" && op != "get") throw PhoneSkillProblem("unavailable", "Phone control is unavailable.")
+                val drained = if (call.params["op"] == "finish") {
+                    val key = learnedSkills.runKey(call.params)
+                    val completion = call.params["completion"] as? String
+                    if (completion !in setOf("completed", "other", "unknown")) throw PhoneSkillProblem("invalid", "completion")
+                    val task = sessions.admitSkillEnd(key.session, key.run, completion!!) { skillRuns.epoch() == epoch }
+                    if (task != null) {
+                        background.sealTask(task.tasks.snapshot().id)
+                        sessions.settleEnd(task)
+                    }
+                    skillRuns.awaitFinish(key, epoch)
+                } else null
+                runtime.phoneSkills(origin) {
+                    val result = learnedSkills.engine(call.params, it, epoch, drained)
+                    if (op == "catalog") result + ("control" to isEnabled()) else result
+                }.get()
+            } catch (e: Exception) { skillError(e) }
+            McpServer.result(call.id, value)
+        }
+    }
+
+    private fun skillError(failure: Throwable): Map<String, Any?> {
+        val cause = if (failure is java.util.concurrent.ExecutionException || failure is java.util.concurrent.CompletionException)
+            failure.cause else failure
+        return if (cause is PhoneSkillProblem) mapOf("error" to cause.code, "detail" to cause.detail)
+        else mapOf("error" to "io", "detail" to "Phone skill storage is unavailable.")
+    }
+
+    private fun publishSkillEvent(event: Map<String, Any?>) {
+        main.post {
+            sinks.forEach { sink -> runCatching { sink(event) } }
+            val draft = event["draft"] as? Map<*, *> ?: return@post
+            val from = draft["from"] as? Map<*, *> ?: return@post
+            if (!AppVisibility.visible) notificationGate.notifyDraft(from["taskId"] as Long, from["sessionId"] as String,
+                draft["display"] as String)
+        }
+    }
 
     fun acknowledgeTaskInterruption(batchToken: String): Boolean =
         taskJournal.acknowledge(batchToken).also { emitStatus() }
@@ -865,7 +910,6 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     private fun captureStatus(): Map<String, Any?> {
         val value = linkedMapOf<String, Any?>(
             "enabled" to isEnabled(),
-            "skills" to skillsStatus(),
             "bridgeListening" to bridge.listening,
             "a11y" to linkedMapOf("enabled" to a11yEnabledInSettings(), "serviceConnected" to (PhoneRegistry.mainDriver != null)),
             "overlay" to (PhoneRegistry.overlayGate != null),
@@ -1015,7 +1059,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     // ── PhoneEnv ────────────────────────────────────────────────────────────────────
 
-    override fun onTaskStarted(owner: PhoneTasks.Owner) = skillLifecycle.started(owner)
+    override fun onTaskStarted(owner: PhoneTasks.Owner) = skillTrace.discard(PhoneTaskTrace.key(owner))
 
     override fun enabled(): Boolean = isEnabled()
 
@@ -1101,6 +1145,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         const val SERVER_VERSION = "1"
         private const val PREFS = "dsh_phone"
         private const val K_ENABLED = "enabled"
+        private const val K_LEARN_SKILLS = "learnPhoneSkills"
         private const val K_SKILL_PROMPT = "skillSavePrompt"
 
         /** Only master preference publication and the keeper's final settings writes share this lock. */

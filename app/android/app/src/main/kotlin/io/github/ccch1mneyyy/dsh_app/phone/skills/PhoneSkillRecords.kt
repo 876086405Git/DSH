@@ -33,6 +33,8 @@ internal data class PhoneSkillSaved(
     val status: PhoneSkillStatus, val updatedAt: Long, val history: List<Long>, val fingerprint: String,
 ) {
     val body get() = document.render(status.state, source, from)
+    // An outcome may promote a skill while another turn is using the same approved instructions.
+    val readFingerprint get() = skillFingerprint(document.render("trial", "learned", null))
     fun targetSnapshot() = PhoneSkillBase(document.name, body, fingerprint)
     fun toMap(detail: Boolean = true): Map<String, Any?> = buildMap {
         put("name", document.name); put("display", document.display); put("description", document.description)

@@ -22,6 +22,7 @@ object PhoneGuest {
     const val GUEST_DIR = "/opt/dsh-app/phone"
     const val RELAY = "$GUEST_DIR/relay.cjs"
     const val DIAGNOSTICS_POLICY = "$GUEST_DIR/diagnostics-policy.mjs"
+    const val SKILLS = "$GUEST_DIR/skills.mjs"
     const val PATCH = "$GUEST_DIR/phone.patch.yml"
     const val STATE_DIR = "/var/lib/dsh-app/phone"
     const val CONFIG = "$STATE_DIR/bridge.json"
@@ -135,17 +136,19 @@ export function apply(ctx) {
     ) + "\n"
 
     /** Writes the relay, fixed diagnostic policy and overlay (world-readable, no secrets). */
-    fun writeFiles(rootfs: File) {
+    fun writeFiles(rootfs: File, skillsModule: String) {
         val dir = realDir(guestFile(rootfs, GUEST_DIR), ownerOnly = false)
         writeAtomic(File(dir, "relay.cjs"), RELAY_JS, ownerOnly = false)
         writeAtomic(File(dir, "diagnostics-policy.mjs"), DIAGNOSTICS_POLICY_JS, ownerOnly = false)
+        writeAtomic(File(dir, "skills.mjs"), skillsModule, ownerOnly = false)
         writeAtomic(File(dir, "phone.patch.yml"), patchYaml(rootfs), ownerOnly = false)
     }
 
     internal fun patchYaml(rootfs: File): String {
         val info = runCatching { Json.parse(guestFile(rootfs, "/etc/dsh-app/runtime.json").readText()) as? Map<*, *> }.getOrNull()
         val supported = (info?.get("dshPatches") as? List<*>)?.contains(CALLER_PATCH) == true
-        return PATCH_YAML + (if (supported) "        dshGoPhoneCaller: true\n" else "") + DIAGNOSTICS_PRESET_YAML
+        return PATCH_YAML + (if (supported) "        dshGoPhoneCaller: true\n" +
+            "    - id: dsh-app-phone-skills\n      name: '$SKILLS'\n" else "") + DIAGNOSTICS_PRESET_YAML
     }
 
     /** Writes this launch's socket name and token, owner-only. */
@@ -211,7 +214,7 @@ function say (line) { try { process.stderr.write('[phone-relay] ' + line + '\n')
 
 let cfg
 try {
-  cfg = JSON.parse(fs.readFileSync(CONFIG, 'utf8'))
+  cfg = JSON.parse(fs.readFileSync(globalThis[Symbol.for('dsh.go.direct')]?.toHost(CONFIG) ?? CONFIG, 'utf8'))
 } catch (e) {
   say('phone control is not available (' + CONFIG + ': ' + (e.code || e.message) + ')')
   process.exit(1)

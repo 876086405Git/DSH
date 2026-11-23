@@ -64,6 +64,10 @@ class PhoneSkillStoreTest {
         val installed = s.accept(pending.id)
         assertEquals("<parameter>", installed.document.display)
         assertEquals(installed.body, guest().readText())
+        val header = PhoneSkillDocument.metadata(guest().readText())
+        assertEquals("trial", header["state"])
+        assertEquals("true", header["disable-model-invocation"])
+        assertEquals("false", header["user-invocable"])
         val explicitEdit = d.sections + ("steps" to "1. Choose the saved list.")
         assertEquals(explicitEdit, s.save(d.name, sections = explicitEdit).document.sections)
         error("sensitive") { s.save(d.name, sections = explicitEdit + ("steps" to "blocked")) }

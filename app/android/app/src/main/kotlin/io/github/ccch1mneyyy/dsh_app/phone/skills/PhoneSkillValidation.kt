@@ -13,6 +13,8 @@ internal object PhoneSkillValidation {
     private val amount = Regex("""(?i)(?:\p{Sc}|USD|CNY|RMB|EUR|GBP|HKD)\s*[-+]?\s*\p{Nd}[\p{Nd}.,]*|(?<![\p{Nd}.,])[-+]?\p{Nd}[\p{Nd}.,]*\s*(?:\p{Sc}|(?:美元|人民币|港元|欧元|英镑|元|块钱|块|角|毛|分)|(?:USD|CNY|RMB|EUR|GBP|HKD|dollars?|yuan|euros?|pounds?)\b)|[零〇一二两三四五六七八九十百千万亿点壹贰叁肆伍陆柒捌玖拾佰仟萬億]+(?:美元|欧元|英镑|港元|块钱|块|元|角|毛|分)""")
     private val numberGroup = Regex("""\+?\p{Nd}(?:[ ().-]*\p{Nd}){3,14}""")
     private val digits = Regex("""\p{Nd}+(?:[.,]\p{Nd}+)+|\p{Nd}{2,}""")
+    private val assignedCredential = Regex("""(?im)(?<![\w])(?:[a-z]+[_-])*(?:api[_ -]?key|secret|token|password|passwd|authorization|(?:set-)?cookie|密钥|令牌|密码)["']?[ \t]*[:=][ \t]*[^\r\n]+""")
+    private val tokenValue = Regex("""(?i)(?:\bsk-[a-z0-9_-]{16,}|\bgh[pousr]_[a-z0-9_]{16,}|\bgithub_pat_[a-z0-9_]{16,}|\b(?:bearer|basic)[ \t]+[a-z0-9./_+~=-]{8,})""")
     private val tool = Regex("""(?i)(?<![\w.])(?:mcp__phone__|phone\.)([a-z_][a-z0-9_-]*)""")
     private val secretMarker = Regex("""(?i)\b(?:api[_ -]?key|access[_ -]?token|passwd|pwd|sms[_ -]?code|auth[_ -]?code|verify[_ -]?code)\b""")
     private val packageToken = Regex("""(?<![\w.])[a-zA-Z][\w]*(?:\.[a-zA-Z][\w]*)+(?![\w.])""")
@@ -58,7 +60,8 @@ internal object PhoneSkillValidation {
 
     private fun redact(text: String, apps: List<String>, param: String): String {
         fun mask(value: String): String {
-            val withoutValues = email.replace(url.replace(quoted.replace(value, param), param), param)
+            val withoutCredentials = tokenValue.replace(assignedCredential.replace(value, param), param)
+            val withoutValues = email.replace(url.replace(quoted.replace(withoutCredentials, param), param), param)
             return buildString {
                 var start = 0
                 for (match in packageToken.findAll(withoutValues)) {
