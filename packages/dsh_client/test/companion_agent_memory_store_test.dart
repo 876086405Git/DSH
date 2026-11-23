@@ -1757,6 +1757,122 @@ void main() {
       ),
     );
     expect(store.requests(), paid);
+
+    // Surviving direct proof and a current parent both support the refreshed
+    // basis. A retained child checks the preview before the same values persist.
+    store.closeAgentTurn(moving);
+    now += 60000;
+    final refreshR10 = say('refresh-r10', '我喜欢陶笛，也参加周末合奏。');
+    final refreshFirst = begin(refreshR10);
+    final refreshCard = call(refreshFirst, 'refresh-r', 'remember', {'text': '我喜欢陶笛。'}).targetId!;
+    final refreshChild = call(refreshFirst, 'refresh-c', 'remember', {'text': '我参加周末合奏。'}).targetId!;
+    store.closeAgentTurn(refreshFirst);
+    now += 60000;
+    final refreshR20 = say('refresh-r20', '我住银杏路，也喜欢陶笛。');
+    final refreshSecond = begin(refreshR20);
+    final refreshRoot = call(refreshSecond, 'refresh-x', 'remember', {
+      'text': '我住银杏路。',
+      'keywords': ['银杏路'],
+    }).targetId!;
+    final refreshDuplicate = call(refreshSecond, 'refresh-duplicate', 'remember', {'text': '我喜欢陶笛。'}).targetId!;
+    store.closeAgentTurn(refreshSecond);
+    final refreshMerge = begin(say('refresh-merge', '两条陶笛记录是同一个爱好。'), [
+      actualCard(refreshCard),
+      actualCard(refreshDuplicate),
+    ]);
+    expect(
+      call(refreshMerge, 'refresh-merge', 'merge', {
+        'card': refreshCard,
+        'from': [refreshDuplicate],
+      }).applied,
+      isTrue,
+    );
+    store.closeAgentTurn(refreshMerge);
+    now += 60000;
+    final refreshR30 = say('refresh-r30', '我把音乐当作长期爱好，临时玻璃展已经看完。');
+    final refreshThird = begin(refreshR30);
+    final refreshParent = call(refreshThird, 'refresh-p', 'remember', {'text': '我把音乐当作长期爱好。'}).targetId!;
+    final refreshDisposable = call(refreshThird, 'refresh-d', 'remember', {'text': '临时玻璃展已经看完。'}).targetId!;
+    store.closeAgentTurn(refreshThird);
+    final refreshLink = begin(say('refresh-link', '忘掉临时玻璃展，陶笛和合奏的记录参照音乐爱好。'), [
+      actualCard(refreshDisposable),
+      actualCard(refreshCard),
+      actualCard(refreshChild),
+      actualCard(refreshParent),
+    ]);
+    expect(
+      call(refreshLink, 'refresh-link', 'forget', {
+        'changes': [
+          {'card': refreshDisposable, 'forget': true},
+          {
+            'card': refreshCard,
+            'text': '我喜欢陶笛。',
+            'references': [refreshParent],
+          },
+          {
+            'card': refreshChild,
+            'text': '我参加周末合奏。',
+            'references': [refreshCard],
+          },
+        ],
+      }).applied,
+      isTrue,
+    );
+    store.closeAgentTurn(refreshLink);
+    final refreshBefore = actualCard(refreshCard);
+    final refreshChildBefore = actualCard(refreshChild);
+    final refreshParentBefore = actualCard(refreshParent);
+    final refreshProofs = (refreshBefore['evidence'] as List).cast<MemoryRow>();
+    expect(refreshProofs.map((proof) => proof['support_group']).toSet(), hasLength(2));
+    expect(refreshProofs.map((proof) => proof['message_id']), unorderedEquals([refreshR10['id'], refreshR20['id']]));
+    expect(refreshBefore['current_basis_seq'], refreshR30['first_seq']);
+    expect(refreshChildBefore['current_basis_seq'], refreshR30['first_seq']);
+    final refreshDeleting = begin(say('refresh-delete', '忘掉银杏路，连原话也删。'), [
+      actualCard(refreshRoot),
+      refreshBefore,
+      refreshChildBefore,
+    ]);
+    final refreshRemoved = call(refreshDeleting, 'refresh-delete', 'forget', {
+      'card': refreshRoot,
+      'deleteChat': true,
+      'changes': [
+        {'card': refreshRoot, 'forget': true},
+        {
+          'card': refreshChild,
+          'text': '我参加周末合奏。',
+          'references': [refreshCard],
+        },
+      ],
+    });
+    expect(refreshRemoved.applied, isTrue);
+    expect(refreshRemoved.changedCardIds, unorderedEquals([refreshRoot, refreshCard, refreshChild]));
+    final refreshed = actualCard(refreshCard);
+    expect(refreshed['row_rev'], (refreshBefore['row_rev']! as int) + 1);
+    expect(refreshed['current_basis_seq'], refreshR30['first_seq']);
+    expect(refreshed['source_at_ms'], refreshR30['said_at_utc']);
+    expect((refreshed['evidence'] as List).single, containsPair('message_id', refreshR10['id']));
+    final refreshedChild = actualCard(refreshChild);
+    expect(refreshedChild['row_rev'], (refreshChildBefore['row_rev']! as int) + 1);
+    expect(refreshedChild['current_basis_seq'], refreshR30['first_seq']);
+    expect(refreshedChild['source_at_ms'], refreshR30['said_at_utc']);
+    expect(
+      (refreshedChild['evidence'] as List).single,
+      allOf(
+        containsPair('message_id', refreshR10['id']),
+        containsPair('source_rev', refreshR10['source_rev']),
+        containsPair('quote', refreshR10['text']),
+      ),
+    );
+    expect(actualCard(refreshParent), refreshParentBefore);
+    expect(
+      store.memoryRetrievalCandidates(characterId: null).map((card) => card['id']),
+      containsAll([refreshCard, refreshChild, refreshParent]),
+    );
+    expect(store.messages().any((source) => source['id'] == refreshR20['id']), isFalse);
+    expect(store.messages().singleWhere((source) => source['id'] == refreshR10['id']), refreshR10);
+    expect(store.messages().singleWhere((source) => source['id'] == refreshR30['id']), refreshR30);
+    expect(store.requests(), paid);
+    store.closeAgentTurn(refreshDeleting);
   });
 
   test('retrieval checks matching and obsolete paths to the same ancestor in one query', () {

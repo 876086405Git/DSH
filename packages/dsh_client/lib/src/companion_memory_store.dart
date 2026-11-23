@@ -825,6 +825,23 @@ class CompanionMemoryStore {
     _db.execute('DELETE FROM memory_card_sources WHERE card_id=? AND support_group=?', [cardId, groupId]);
   }
 
+  ({int basis, int sourceAt}) _currentParentSourceValues(Row card) {
+    var basis = 0, sourceAt = 0;
+    for (final parent in _db.select(
+      '''
+      SELECT p.id,p.current_basis_seq,p.source_at_ms FROM memory_card_references r
+      JOIN memory_cards p ON p.id=r.parent_card_id AND p.row_rev=r.parent_row_rev
+      WHERE r.card_id=? AND (p.character_id IS NULL OR p.character_id IS ?)
+    ''',
+      [card['id'], card['character_id']],
+    )) {
+      if (!_memoryReferencesCurrent(parent['id'] as String)) continue;
+      basis = math.max(basis, parent['current_basis_seq'] as int? ?? 0);
+      sourceAt = math.max(sourceAt, parent['source_at_ms'] as int);
+    }
+    return (basis: basis, sourceAt: sourceAt);
+  }
+
   void _refreshSources(Set<String> affected, {bool eraseUnsupported = false}) {
     for (final id in affected) {
       final card = _db.select('SELECT * FROM memory_cards WHERE id=?', [id]).single;
@@ -841,15 +858,16 @@ class CompanionMemoryStore {
         _deleteCards([id]);
         continue;
       }
+      final parents = !manual && supported ? _currentParentSourceValues(card) : (basis: 0, sourceAt: 0);
       final sourceAt = manual || !supported
           ? card['source_at_ms']
-          : sources.map((source) => source['at'] as int).reduce(math.max);
+          : math.max(parents.sourceAt, sources.map((source) => source['at'] as int).reduce(math.max));
       // Cancellation is an explicit later user control, not an inferred tense
       // or the timestamp of a remaining older proof.
       final basis = manual || const ['cancelled', 'postponed'].contains(card['plan_state'])
           ? card['current_basis_seq']
           : supported
-          ? sources.map((source) => source['first_seq'] as int).reduce(math.max)
+          ? math.max(parents.basis, sources.map((source) => source['first_seq'] as int).reduce(math.max))
           : null;
       final keywords = (jsonDecode(card['keywords'] as String) as List)
           .cast<String>()
