@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show FontLoader;
 
 import '../../../l10n/l10n.dart';
+import '../../../pets/pet_name_alias.dart';
 import '../../../themes/theme_library.dart';
 import '../../../themes/theme_pack.dart';
 import '../../../themes/theme_pack_validator.dart';
@@ -369,15 +370,25 @@ class ThemeStudioController extends ChangeNotifier {
     setImage(slot, name);
   }
 
-  /// Whether [name] already holds a font other than [bytes].
-  bool _fontNameTaken(String name, Uint8List bytes) {
-    final picked = assets[name];
-    if (picked != null) return !listEquals(picked, bytes);
-    if (!_onDisk.contains(name)) return false;
-    try {
-      return !listEquals(File('${_pack.folderPath}/$name').readAsBytesSync(), bytes);
-    } on FileSystemException {
-      return true;
+  /// The file name [bytes] go under, starting from [base]: the name they already have when this
+  /// very file is in the draft or the folder, else the first one no other font answers to. A pack
+  /// takes names that differ only in case or Unicode form for one name, so those count as taken.
+  String _fontNameFor(String base, String extension, Uint8List bytes) {
+    for (var n = 1; ; n++) {
+      final name = n == 1 ? '$base$extension' : '$base-$n$extension';
+      final alias = petNameAlias(name);
+      final picked = assets.keys.where((k) => petNameAlias(k) == alias).firstOrNull;
+      if (picked != null) {
+        if (listEquals(assets[picked], bytes)) return picked;
+        continue;
+      }
+      final saved = _onDisk.where((k) => petNameAlias(k) == alias).firstOrNull;
+      if (saved == null) return name;
+      try {
+        if (listEquals(File('${_pack.folderPath}/$saved').readAsBytesSync(), bytes)) return saved;
+      } on FileSystemException {
+        // Unreadable: taken, as far as this pick can tell.
+      }
     }
   }
 
@@ -402,10 +413,7 @@ class ThemeStudioController extends ChangeNotifier {
         .replaceAll(RegExp(r'^[-_]+|-+$'), '');
     final base = stem.isEmpty ? 'font-${role.name}' : stem.substring(0, stem.length.clamp(0, 60));
     // Another file of this name may already serve a role: this one takes a name of its own.
-    var name = '$base$extension';
-    for (var n = 2; _fontNameTaken(name, bytes); n++) {
-      name = '$base-$n$extension';
-    }
+    final name = _fontNameFor(base, extension, bytes);
     assets[name] = bytes;
     try {
       // A family per pick: a replaced file must not show the font loaded before it.
