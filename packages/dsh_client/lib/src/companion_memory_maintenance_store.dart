@@ -19,6 +19,7 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
       String? character, {
       String? localDay,
       String? zoneId,
+      bool checked = false,
     }) => _planAgentMaintenanceContext(
       kind: kind,
       characterId: character,
@@ -26,6 +27,7 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
       zoneId: zoneId,
       sources: sources,
       cards: cards,
+      checked: checked,
       estimateTokens: estimateTokens,
       estimateContextTokens: estimateContextTokens,
     );
@@ -256,11 +258,25 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
               !_memoryReferencesCurrent(card['id'] as String)) {
             continue;
           }
-          final candidate = context(sources, [...selected, card], character, localDay: localDay, zoneId: zoneId);
+          final candidate = context(
+            sources,
+            [...selected, card],
+            character,
+            localDay: localDay,
+            zoneId: zoneId,
+            checked: true,
+          );
           if (_agentContextTokens(candidate, estimateTokens, estimateContextTokens) > memoryBatchInputTokens) continue;
           selected.add(card);
         }
-        final selectedContext = context(sources, selected, character, localDay: localDay, zoneId: zoneId);
+        final selectedContext = context(
+          sources,
+          selected,
+          character,
+          localDay: localDay,
+          zoneId: zoneId,
+          checked: true,
+        );
         if (kind == 'organize') {
           final sourceWork = (selectedContext['sources'] as List<MemoryRow>).any(
             (source) => examinedSources[character ?? '']?[source['id']] != source['source_rev'],
@@ -329,16 +345,24 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
     required List<MemoryRow> cards,
     required int Function(String) estimateTokens,
     required int Function(MemoryRow)? estimateContextTokens,
+    bool checked = false,
   }) {
     final scopedSources = _agentSourcesForScope(sources, characterId, kind, localDay: localDay);
-    final revisions = {for (final card in cards) card['id']: card['row_rev']};
-    final selected = [
-      for (final card in _memoryDomainCards(characterId))
-        if (revisions[card['id']] == card['row_rev'] &&
-            card['status'] != 'withdrawn' &&
-            _memoryReferencesCurrent(card['id'] as String))
-          card,
-    ];
+    // [checked]: the claim's own selection, already taken from this scope's
+    // domain in its order and filtered the same way, in this transaction.
+    // Reading the domain again per tried card made one selection O(cards²).
+    List<MemoryRow> current() {
+      final revisions = {for (final card in cards) card['id']: card['row_rev']};
+      return [
+        for (final card in _memoryDomainCards(characterId))
+          if (revisions[card['id']] == card['row_rev'] &&
+              card['status'] != 'withdrawn' &&
+              _memoryReferencesCurrent(card['id'] as String))
+            card,
+      ];
+    }
+
+    final selected = checked ? cards : current();
     final context = _agentContext(characterId, localDay, zoneId, scopedSources, selected, const []);
     if (_agentContextTokens(context, estimateTokens, estimateContextTokens) > memoryBatchInputTokens) return context;
     final tickets = <MemoryRow>[];
