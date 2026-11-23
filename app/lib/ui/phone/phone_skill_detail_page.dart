@@ -191,26 +191,38 @@ class _RecentDots extends StatelessWidget {
     if (recent.isEmpty) {
       return Text(l10n.phoneSkillRecentNone, style: theme.textTheme.labelSmall?.copyWith(color: dsh.textTertiary));
     }
-    return Row(
-      children: [
-        Text(l10n.phoneSkillRecent, style: theme.textTheme.labelSmall?.copyWith(color: dsh.textTertiary)),
-        const SizedBox(width: 8),
-        for (final outcome in recent)
-          Padding(
-            padding: const EdgeInsets.only(right: 5),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: switch (outcome) {
-                  PhoneSkillOutcome.ok => dsh.success,
-                  PhoneSkillOutcome.miss => dsh.danger,
-                  PhoneSkillOutcome.unscored => dsh.textDisabled,
-                },
+    final words = [
+      for (final outcome in recent)
+        switch (outcome) {
+          PhoneSkillOutcome.ok => l10n.phoneSkillRecentOk,
+          PhoneSkillOutcome.miss => l10n.phoneSkillRecentMiss,
+          PhoneSkillOutcome.unscored => l10n.phoneSkillRecentVoid,
+        },
+    ];
+    return Semantics(
+      label: '${l10n.phoneSkillRecent}: ${words.join(l10n.phoneSkillRecentSeparator)}',
+      excludeSemantics: true,
+      child: Row(
+        children: [
+          Text(l10n.phoneSkillRecent, style: theme.textTheme.labelSmall?.copyWith(color: dsh.textTertiary)),
+          const SizedBox(width: 8),
+          for (final outcome in recent)
+            Padding(
+              padding: const EdgeInsets.only(right: 5),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: switch (outcome) {
+                    PhoneSkillOutcome.ok => dsh.success,
+                    PhoneSkillOutcome.miss => dsh.danger,
+                    PhoneSkillOutcome.unscored => dsh.textDisabled,
+                  },
+                ),
+                child: const SizedBox.square(dimension: 7),
               ),
-              child: const SizedBox.square(dimension: 7),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
