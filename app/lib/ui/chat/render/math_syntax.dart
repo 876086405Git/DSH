@@ -30,7 +30,7 @@ String normalizeMath(String source, {bool streaming = false}) {
   final dollar = source.lastIndexOf(r'$');
   final bracket = streaming ? source.lastIndexOf(r'\[') : -1;
   // One `$` pairs with nothing; a streaming `\[` may still need its pending fence.
-  if (bracket < 0 && source.indexOf(r'$') == dollar) return source;
+  if (bracket < 0 && (dollar < 0 || source.indexOf(r'$') == dollar)) return source;
   return _MathScanner(source, streaming).run(bracket > dollar ? bracket : dollar);
 }
 
