@@ -159,6 +159,8 @@ internal object PetOverlay {
     private var companionName = "Companion"
     private var companionBubble: PetBubble? = null
     private var companionDisplayedId: String? = null
+    /** The reply the body has already reacted to: once per reply, when the stage could take it. */
+    private var companionReactedId: String? = null
     private var companionEndpoint: CompanionFloatEndpoint? = null
     private var companionView: CompanionFloatView? = null
     private var companionEpoch = 0L
@@ -337,9 +339,11 @@ internal object PetOverlay {
         companionBubble = PetBubble(key, "companion", words, companionName, null, null, now() + 15_000)
         evaluate()
         val shown = bubbleId == key && bubbleView?.isAttachedToWindow == true
-        if (shown && companionDisplayedId != id) {
+        if (shown) {
             companionDisplayedId = id
-            companionView?.companionLine(emotion ?: "neutral", words.length, speaking)
+            if (companionReactedId != id && companionView?.companionLine(emotion ?: "neutral", words.length, speaking) == true) {
+                companionReactedId = id
+            }
         }
         main.removeCallbacks(companionExpiry)
         main.postDelayed(companionExpiry, 15_000)
