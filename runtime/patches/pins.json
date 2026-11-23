@@ -342,6 +342,14 @@
         }
       }
     },
+    "file-reference-score-upper-bound.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-file-reference-local/lib/index.js": {
+          "after": "c3dd704df70e5bfe95f2812bffcea2df68848dd579836d21535a0e0329b4b07a",
+          "before": "d38a9bd0b98234315a9224a67c1357e5cce00a306c243641362a251e7f2692da"
+        }
+      }
+    },
     "fork-default-effort.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
@@ -2956,6 +2964,7 @@
       "glob-card-source-retention.diff",
       "file-reference-basename-match.diff",
       "file-reference-ranked-page.diff",
+      "file-reference-score-upper-bound.diff",
       "zzzzzzz-input-recovery.diff",
       "zzzzzzz-job-follow-removal.diff",
       "search-card-byte-budget.diff",
@@ -3179,6 +3188,7 @@
       "glob-card-source-retention.diff",
       "file-reference-basename-match.diff",
       "file-reference-ranked-page.diff",
+      "file-reference-score-upper-bound.diff",
       "zzzzzzz-input-recovery.diff",
       "zzzzzzz-job-follow-removal.diff",
       "search-card-byte-budget.diff",

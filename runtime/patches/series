@@ -41,6 +41,7 @@ zzzzzzz-grep-retention-preview.diff
 glob-card-source-retention.diff
 file-reference-basename-match.diff
 file-reference-ranked-page.diff
+file-reference-score-upper-bound.diff
 zzzzzzz-input-recovery.diff
 zzzzzzz-job-follow-removal.diff
 search-card-byte-budget.diff
