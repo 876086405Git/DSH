@@ -12,7 +12,10 @@ test('文件补全返回相同的首选项，排序批次最多包含两页', {
   const { WorkspaceFileSearch } = await import(pathToFileURL(entry));
   const root = await mkdtemp(join(tmpdir(), 'file-reference-page-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const names = Array.from({ length: 99 }, (_, i) => `file-${String(i).padStart(2, '0')}`);
+  // Unpadded names: shorter ones rank first but are listed after file-10..file-19,
+  // so the page needs winners that arrive after the first batch was cut.
+  const names = Array.from({ length: 99 }, (_, i) => `file-${i}`)
+    .sort((a, b) => a.length - b.length || (a < b ? -1 : 1));
   await Promise.all(names.map(name => writeFile(join(root, name), '')));
   const config = { maxResults: 5, maxEntries: 100, excludedDirectories: [] };
   const search = new WorkspaceFileSearch(root, config);
