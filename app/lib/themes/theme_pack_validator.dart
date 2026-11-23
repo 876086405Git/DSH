@@ -51,13 +51,30 @@ bool _hasMagic(Uint8List bytes, String magic, [int offset = 0]) {
 bool _withinImageCaps(int w, int h) =>
     w >= 1 && h >= 1 && w <= themeImageSideCap && h <= themeImageSideCap && w * h * 4 <= themeImageDecodedCap;
 
-/// The canvas a WebP or GIF declares in its header (width, height); null when
-/// the header is too short or not one of the three WebP layouts.
+/// The canvas a WebP or GIF decodes to (width, height), read from its header and, for a GIF,
+/// its first frame; null when that is cut short, a GIF has no frame, or a WebP is not one of
+/// the three layouts.
 (int, int)? themeImageCanvas(Uint8List bytes) {
   int le16(int at) => bytes[at] | (bytes[at + 1] << 8);
   int le24(int at) => le16(at) | (bytes[at + 2] << 16);
   if (_hasMagic(bytes, 'GIF8')) {
-    return bytes.length < 10 ? null : (le16(6), le16(8));
+    // The decoder grows the logical screen to hold a first frame that reaches past it.
+    if (bytes.length < 13) return null;
+    var at = 13 + (bytes[10] & 0x80 == 0 ? 0 : 3 << ((bytes[10] & 7) + 1));
+    while (at + 9 < bytes.length) {
+      if (bytes[at] == 0x2C) {
+        final right = le16(at + 1) + le16(at + 5), bottom = le16(at + 3) + le16(at + 7);
+        return (right > le16(6) ? right : le16(6), bottom > le16(8) ? bottom : le16(8));
+      }
+      if (bytes[at] != 0x21) return null;
+      // An extension: its label, then sub-blocks up to an empty one.
+      at += 2;
+      while (at < bytes.length && bytes[at] != 0) {
+        at += bytes[at] + 1;
+      }
+      at++;
+    }
+    return null;
   }
   if (!_hasMagic(bytes, 'RIFF') || !_hasMagic(bytes, 'WEBP', 8) || bytes.length < 30) return null;
   if (_hasMagic(bytes, 'VP8X', 12)) return (le24(24) + 1, le24(27) + 1);

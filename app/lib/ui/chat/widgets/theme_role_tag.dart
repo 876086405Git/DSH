@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../themes/theme_library.dart' show themeAvatarDecodeWidth;
 import '../../theme/theme.dart';
 
 /// The pack's label and 24dp avatar for one side of the chat, 4 above the
@@ -22,7 +23,7 @@ Widget? themeRoleTag(BuildContext context, DshThemeStyle style, {required bool u
             key: style.assetKey(avatarName!),
             width: 24,
             height: 24,
-            cacheWidth: 96,
+            cacheWidth: themeAvatarDecodeWidth,
             fit: BoxFit.cover,
             errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),

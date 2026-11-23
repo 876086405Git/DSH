@@ -7,7 +7,6 @@ import 'dart:ui' show Color;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart' show FileImage, PaintingBinding;
 import 'package:flutter/services.dart' show FontLoader;
 
 import '../../../l10n/l10n.dart';
@@ -115,7 +114,7 @@ class ThemeStudioController extends ChangeNotifier {
       }
       final file = File('${folder.path}/$name')..writeAsBytesSync(bytes);
       // The same name may have held another picture a moment ago.
-      PaintingBinding.instance.imageCache.evict(FileImage(file));
+      evictThemeImage(file);
       _staged++;
     } on FileSystemException {
       // The preview goes without the new picture; saving does not need the copy.
@@ -370,33 +369,53 @@ class ThemeStudioController extends ChangeNotifier {
     setImage(slot, name);
   }
 
+  /// Whether [name] already holds a font other than [bytes].
+  bool _fontNameTaken(String name, Uint8List bytes) {
+    final picked = assets[name];
+    if (picked != null) return !listEquals(picked, bytes);
+    if (!_onDisk.contains(name)) return false;
+    try {
+      return !listEquals(File('${_pack.folderPath}/$name').readAsBytesSync(), bytes);
+    } on FileSystemException {
+      return true;
+    }
+  }
+
   Future<void> pickFont(ThemeFontRole role) async {
     try {
       final picked = await _pickBounded(const ['ttf', 'otf'], themeFontByteCap);
-      if (picked == null) return;
-      final bytes = picked.bytes;
-      if (!isValidThemeFontBytes(bytes)) return fail(_t('这不是有效的 TTF/OTF 字体。', 'Not a valid TTF/OTF font.'));
-      final extension = String.fromCharCodes(bytes.sublist(0, 4)) == 'OTTO' ? '.otf' : '.ttf';
-      final stem = picked.name
-          .replaceFirst(RegExp(r'\.[^.]*$'), '')
-          .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '-')
-          .replaceAll(RegExp(r'^[-_]+|-+$'), '');
-      final name = '${stem.isEmpty ? 'font-${role.name}' : stem.substring(0, stem.length.clamp(0, 60))}$extension';
-      assets[name] = bytes;
-      try {
-        // A family per pick: a replaced file must not show the font loaded before it.
-        final family = 'dsh-studio-${identityHashCode(bytes)}-$name';
-        await (FontLoader(family)..addFont(Future.value(ByteData.sublistView(bytes)))).load();
-        fontFamilies[name] = family;
-      } on Object {
-        // The preview keeps its fallback font; the file is still saved.
-      }
-      chooseFont(role, name);
+      if (picked != null) await useFont(role, picked.name, picked.bytes);
     } on ThemeImportException catch (e) {
       fail(themeImportProblemText(e, english: AppLocale.isEnglish));
     } on Object {
       fail(_t('读取字体失败。', 'Could not read the font.'));
     }
+  }
+
+  /// Makes [bytes], picked as the file [pickedName], the font of [role].
+  Future<void> useFont(ThemeFontRole role, String pickedName, Uint8List bytes) async {
+    if (!isValidThemeFontBytes(bytes)) return fail(_t('这不是有效的 TTF/OTF 字体。', 'Not a valid TTF/OTF font.'));
+    final extension = String.fromCharCodes(bytes.sublist(0, 4)) == 'OTTO' ? '.otf' : '.ttf';
+    final stem = pickedName
+        .replaceFirst(RegExp(r'\.[^.]*$'), '')
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '-')
+        .replaceAll(RegExp(r'^[-_]+|-+$'), '');
+    final base = stem.isEmpty ? 'font-${role.name}' : stem.substring(0, stem.length.clamp(0, 60));
+    // Another file of this name may already serve a role: this one takes a name of its own.
+    var name = '$base$extension';
+    for (var n = 2; _fontNameTaken(name, bytes); n++) {
+      name = '$base-$n$extension';
+    }
+    assets[name] = bytes;
+    try {
+      // A family per pick: a replaced file must not show the font loaded before it.
+      final family = 'dsh-studio-${identityHashCode(bytes)}-$name';
+      await (FontLoader(family)..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+      fontFamilies[name] = family;
+    } on Object {
+      // The preview keeps its fallback font; the file is still saved.
+    }
+    chooseFont(role, name);
   }
 
   bool isMissing(String? name) => name != null && !assets.containsKey(name) && !_onDisk.contains(name);

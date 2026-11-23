@@ -265,7 +265,10 @@ class _PackLook {
         coverWidth: s.backdropRepeat ? _imageSide : step(size.width * k),
         coverHeight: s.backdropRepeat ? _imageSide : step(size.height * k),
         maxSide: _imageSide,
-        loop: s.backdropAnimate && !(MediaQuery.maybeDisableAnimationsOf(context) ?? false),
+        loop:
+            s.backdropAnimate &&
+            !(MediaQuery.maybeDisableAnimationsOf(context) ?? false) &&
+            !(MediaQuery.maybeHighContrastOf(context) ?? false),
         revision: style.assetRevision,
       );
       if (s.backdropBlur > 0 && !size.isEmpty) {

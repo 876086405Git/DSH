@@ -253,7 +253,13 @@ void main() {
       'surfaces': {'backdropImage': 'rain.gif'},
       'components': {'assistantAvatar': 'bot.webp', 'userAvatar': 'me.png'},
     });
-    final gif = Uint8List.fromList([...'GIF89a'.codeUnits, 1, 0, 1, 0, 0, 0, 0]);
+    // Header, logical screen, a graphic control extension, then the first frame's descriptor.
+    Uint8List gifOf(int screen, int frame) => Uint8List.fromList([
+      ...'GIF89a'.codeUnits, screen & 0xFF, screen >> 8, screen & 0xFF, screen >> 8, 0, 0, 0, //
+      0x21, 0xF9, 4, 0, 0, 0, 0, 0,
+      0x2C, 0, 0, 0, 0, frame & 0xFF, frame >> 8, frame & 0xFF, frame >> 8, 0, 2, 2, 0x4C, 0x01, 0, 0x3B,
+    ]);
+    final gif = gifOf(1, 1);
     Uint8List webpOf(int w, int h) => Uint8List.fromList([
       ...'RIFF'.codeUnits, 22, 0, 0, 0, ...'WEBP'.codeUnits, ...'VP8X'.codeUnits, 10, 0, 0, 0, 0, 0, 0, 0,
       (w - 1) & 0xFF, ((w - 1) >> 8) & 0xFF, 0, (h - 1) & 0xFF, ((h - 1) >> 8) & 0xFF, 0, //
@@ -269,8 +275,12 @@ void main() {
       {'rain.gif': gif, 'bot.webp': webp, 'me.png': gif},
       // A canvas past the PNG limits, declared by a few bytes of header.
       {'rain.gif': gif, 'bot.webp': webpOf(5000, 16), 'me.png': png},
+      {'rain.gif': gifOf(4096 + 1, 1), 'bot.webp': webp, 'me.png': png},
+      // A first frame larger than the screen it declares: the decoder grows the canvas to fit.
+      {'rain.gif': gifOf(1, 8192), 'bot.webp': webp, 'me.png': png},
+      // No frame at all.
       {
-        'rain.gif': Uint8List.fromList([...'GIF89a'.codeUnits, 0, 16, 0, 16, 0, 0, 0]),
+        'rain.gif': Uint8List.fromList([...'GIF89a'.codeUnits, 1, 0, 1, 0, 0, 0, 0, 0x3B]),
         'bot.webp': webp,
         'me.png': png,
       },

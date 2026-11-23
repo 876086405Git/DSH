@@ -118,7 +118,9 @@ it('validates theme packs, referenced PNGs/fonts, and rejects undeclared extras'
 });
 it('accepts the theme seam fields and rejects out-of-range values, unknown enums and mislabelled images', () => {
   const base = { schema: 1, id: 'sample', name: 'Seams', author: 'Synthetic author', license: 'CC0-1.0', source: 'https://example.org/synthetic' };
-  const gif = Buffer.concat([Buffer.from('GIF89a'), Buffer.from([1, 0, 1, 0, 0, 0, 0])]);
+  const gifOf = (screen: number, frame: number) => Buffer.concat([Buffer.from('GIF89a'), Buffer.from([screen & 255, screen >> 8, screen & 255, screen >> 8, 0, 0, 0,
+    0x21, 0xf9, 4, 0, 0, 0, 0, 0, 0x2c, 0, 0, 0, 0, frame & 255, frame >> 8, frame & 255, frame >> 8, 0, 2, 2, 0x4c, 0x01, 0, 0x3b])]);
+  const gif = gifOf(1, 1);
   const webpOf = (w: number, h: number) => Buffer.concat([Buffer.from('RIFF'), Buffer.from([22, 0, 0, 0]), Buffer.from('WEBPVP8X'),
     Buffer.from([10, 0, 0, 0, 0, 0, 0, 0, (w - 1) & 255, ((w - 1) >> 8) & 255, 0, (h - 1) & 255, ((h - 1) >> 8) & 255, 0])]);
   const webp = webpOf(64, 64);
@@ -149,5 +151,8 @@ it('accepts the theme seam fields and rejects out-of-range values, unknown enums
   expect(theme({ surfaces: { backdropImage: 'rain.gif' } }, [['rain.gif', webp]])).toThrow('theme_image_header');
   expect(theme({ components: { userAvatar: 'me.webp' } }, [['me.webp', png(4, 4)]])).toThrow('theme_image_header');
   expect(theme({ components: { userAvatar: 'me.webp' } }, [['me.webp', webpOf(5000, 16)]])).toThrow('theme_image_size');
+  // A first frame larger than the screen the GIF declares: the decoder grows the canvas to fit.
+  expect(theme({ surfaces: { backdropImage: 'rain.gif' } }, [['rain.gif', gifOf(1, 8192)]])).toThrow('theme_image_size');
+  expect(theme({ surfaces: { backdropImage: 'rain.gif' } }, [['rain.gif', Buffer.concat([Buffer.from('GIF89a'), Buffer.from([1, 0, 1, 0, 0, 0, 0, 0x3b])])]])).toThrow('theme_image_size');
   expect(theme({ emptyState: { heroStyle: 'customImage', heroImage: 'hero.png' } }, [['hero.png', gif]])).toThrow('png_');
 });

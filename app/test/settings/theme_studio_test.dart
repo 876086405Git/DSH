@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dsh_app/themes/theme_library.dart';
 import 'package:dsh_app/ui/chat/empty_state.dart';
@@ -174,6 +175,20 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     c.dispose();
     expect(Directory(staged.folderPath!).existsSync(), isFalse);
+  });
+
+  test('two different fonts picked under one file name stay two files', () async {
+    Uint8List font(int mark) => Uint8List.fromList([0x4F, 0x54, 0x54, 0x4F, 0, 0, 0, 0, 0, 0, 0, mark]);
+    final c = ThemeStudioController(initial: ThemePack.paper);
+    addTearDown(c.dispose);
+    await c.useFont(ThemeFontRole.ui, 'Regular.otf', font(1));
+    await c.useFont(ThemeFontRole.code, 'Regular.otf', font(2));
+    // The same file again shares the name it already has.
+    await c.useFont(ThemeFontRole.heading, 'Regular.otf', font(1));
+    final t = c.pack.typography;
+    expect((t.uiFont, t.codeFont, t.headingFont), ('Regular.otf', 'Regular-2.otf', 'Regular.otf'));
+    expect(c.assets['Regular.otf']!.last, 1);
+    expect(c.assets['Regular-2.otf']!.last, 2);
   });
 
   test('parser messages are said in the studio\'s words', () {

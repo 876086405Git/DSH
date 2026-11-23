@@ -83,7 +83,19 @@ const themeMagic = (bytes: Uint8Array, magic: string, offset = 0): boolean =>
 // The canvas a WebP or GIF header declares; null when it is too short or not one of the three WebP layouts.
 function themeImageCanvas(b: Uint8Array): [number, number] | null {
   const le16 = (at: number) => b[at]! | (b[at + 1]! << 8), le24 = (at: number) => le16(at) | (b[at + 2]! << 16);
-  if (themeMagic(b, 'GIF8')) return b.length < 10 ? null : [le16(6), le16(8)];
+  if (themeMagic(b, 'GIF8')) {
+    // The decoder grows the logical screen to hold a first frame that reaches past it.
+    if (b.length < 13) return null;
+    let at = 13 + ((b[10]! & 0x80) === 0 ? 0 : 3 << ((b[10]! & 7) + 1));
+    while (at + 9 < b.length) {
+      if (b[at] === 0x2c) return [Math.max(le16(6), le16(at + 1) + le16(at + 5)), Math.max(le16(8), le16(at + 3) + le16(at + 7))];
+      if (b[at] !== 0x21) return null;
+      at += 2;
+      while (at < b.length && b[at] !== 0) at += b[at]! + 1;
+      at++;
+    }
+    return null;
+  }
   if (b.length < 30) return null;
   if (themeMagic(b, 'VP8X', 12)) return [le24(24) + 1, le24(27) + 1];
   if (themeMagic(b, 'VP8 ', 12)) return [le16(26) & 0x3fff, le16(28) & 0x3fff];
