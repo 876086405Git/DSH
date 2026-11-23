@@ -53028,10 +53028,16 @@ abstract class L10n {
   /// **'支持 JPEG、PNG、WebP 等，上传前自动缩小。不选就显示名字的第一个字。'**
   String get workshopPublishCoverHelper;
 
+  /// No description provided for @workshopPublishCoverGenerating.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在生成封面，也可以自己选。'**
+  String get workshopPublishCoverGenerating;
+
   /// No description provided for @workshopPublishCoverChosen.
   ///
   /// In zh, this message translates to:
-  /// **'自选封面'**
+  /// **'投稿封面'**
   String get workshopPublishCoverChosen;
 
   /// No description provided for @workshopPublishCoverReplace.

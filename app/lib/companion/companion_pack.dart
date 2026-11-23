@@ -172,10 +172,10 @@ class CompanionPackStore {
     return () => state.before.remove(stopReaders);
   }
 
-  Future<T> _exclusive<T>(Future<T> Function() body) {
+  Future<T> _exclusive<T>(Future<T> Function() body, {bool recover = true}) {
     final state = _state;
     final run = state.queue.then((_) async {
-      await _recover();
+      if (recover) await _recover();
       return body();
     });
     state.queue = run.then((_) {}, onError: (_) {});
@@ -223,9 +223,14 @@ class CompanionPackStore {
   /// A file-integrity gate for offering the floating renderer. The pinned
   /// runtime, index and all model references must be complete. This cannot
   /// prove that a device's WebGL/Core will render the model successfully.
-  Future<String?> unavailableReason() async {
+  Future<String?> unavailableReason() => _unavailableReason(recover: true);
+
+  /// A cover is optional and must never modify the pack being submitted.
+  Future<String?> coverUnavailableReason() => _unavailableReason(recover: false);
+
+  Future<String?> _unavailableReason({required bool recover}) async {
     try {
-      return await _exclusive(() => compute(_packUnavailable, (pack.path, expectedRuntime)));
+      return await _exclusive(() => compute(_packUnavailable, (pack.path, expectedRuntime)), recover: recover);
     } on CompanionPackException catch (error) {
       return error.detail == 'companion_readers_busy' ? error.detail : 'companion_storage';
     } on FileSystemException {

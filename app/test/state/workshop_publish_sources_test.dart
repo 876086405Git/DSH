@@ -60,7 +60,7 @@ class _Repository extends WorkshopRepository {
   }
   @override
   Future<WorkshopPreparedUpload> preparePet(PetLibrary library, String localId, File destination,
-    WorkshopPublication publication) async {
+    WorkshopPublication publication, {bool petIdleDownscale = false}) async {
     selected = localId;
     return _write(destination, publication);
   }

@@ -20,6 +20,7 @@
 // worded as cancelling.
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,6 +40,7 @@ import '../common/list_page_row.dart';
 import '../settings/settings_widgets.dart' show SettingsSection;
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
+import 'workshop_auto_cover.dart';
 import 'workshop_disclosure.dart';
 import 'workshop_publish_form.dart';
 import 'workshop_publish_preview.dart';
@@ -95,9 +97,9 @@ class _WorkshopPublishPageState extends ConsumerState<WorkshopPublishPage> {
   /// How many times this visit asked again about an unknown result.
   int _rechecks = 0;
 
-  /// The companion cover the person picked, kept for its thumbnail. Only
-  /// drawn while its input is the one the state layer has ([_coverOf]).
+  /// Drawn only while its input is the one the state layer has ([_coverOf]).
   WorkshopCover? _cover;
+  bool _autoCoverPending = false;
 
   /// The let-go offer whose dialog was already shown, so one offer asks once.
   WorkshopPendingAbandonOffer? _letGoAsked;
@@ -154,6 +156,7 @@ class _WorkshopPublishPageState extends ConsumerState<WorkshopPublishPage> {
         _carry = null;
         _rechecks = 0;
         _cover = null;
+        _autoCoverPending = false;
         _formEpoch++;
       });
       _letGoAsked = null;
@@ -214,9 +217,8 @@ class _WorkshopPublishPageState extends ConsumerState<WorkshopPublishPage> {
       showBriefNotice(context, refusal == null ? l10n.workshopErrorBusy : workshopPublishErrorText(l10n, refusal));
       return;
     }
-    // A pet goes with its preview unless the person turns it off. A
-    // companion starts without a cover, whatever the last one had.
-    if (source.kind == 'pet' && workshopTakesPreview(ref.read(workshopAccessProvider), source.kind)) {
+    final takesPreview = workshopTakesPreview(ref.read(workshopAccessProvider), source.kind);
+    if (source.kind == 'pet' && takesPreview) {
       workshopPublishSetPreview(context, ref, const WorkshopPreviewInput.petIdle());
     }
     setState(() {
@@ -225,7 +227,33 @@ class _WorkshopPublishPageState extends ConsumerState<WorkshopPublishPage> {
       _seenResult = null;
       _editing = false;
       _cover = null;
+      _autoCoverPending = takesPreview;
       _formEpoch++;
+    });
+  }
+
+  void _finishAutoCover(int epoch, Uint8List? bytes) {
+    if (!mounted || !_autoCoverPending || _formEpoch != epoch) return;
+    final publish = ref.read(workshopPublishProvider);
+    final source = publish.source;
+    WorkshopCover? cover;
+    if (bytes != null && source?.kind == 'pet') {
+      // The Worker derives the actual upload from the pack, not this thumbnail.
+      cover = (input: const WorkshopPreviewInput.petIdle(), bytes: bytes);
+    } else if (bytes != null && source != null && source.preview == null && !publish.working &&
+        workshopTakesPreview(ref.read(workshopAccessProvider), source.kind)) {
+      try {
+        final input = source.kind == 'theme'
+            ? WorkshopPreviewInput.themePng(bytes)
+            : WorkshopPreviewInput.companionPng(bytes);
+        if (ref.read(workshopPublishProvider.notifier).setPreview(input)) cover = (input: input, bytes: bytes);
+      } on WorkshopException {
+        // A generated image can fail the same checks as a picked cover.
+      }
+    }
+    setState(() {
+      _autoCoverPending = false;
+      if (cover != null) _cover = cover;
     });
   }
 
@@ -438,20 +466,46 @@ class _WorkshopPublishPageState extends ConsumerState<WorkshopPublishPage> {
           ],
         );
       case _Step.form:
-        return WorkshopPublishForm(
-          key: ValueKey(_formEpoch),
+        final epoch = _formEpoch;
+        final form = WorkshopPublishForm(
+          key: ValueKey(epoch),
           source: publish.source!,
           seed: _seed ?? publish.input,
           cover: _coverOf(publish),
-          onCover: (cover) => setState(() => _cover = cover),
+          generatingCover: _autoCoverPending,
+          onCover: (cover) => setState(() {
+            _autoCoverPending = false;
+            _cover = cover;
+          }),
           notes: notes,
           onChangeSource: () => unawaited(_changeSource()),
           // From here the state layer has the details: a later look at the
           // form starts from what it accepted.
           onNext: () => setState(() {
+            _autoCoverPending = false;
             _editing = false;
             _seed = null;
           }),
+        );
+        return Stack(
+          fit: StackFit.passthrough,
+          children: [
+            if (_autoCoverPending)
+              Positioned(
+                key: ValueKey(('auto-cover', epoch)),
+                top: 0,
+                left: 0,
+                child: ExcludeSemantics(
+                  child: IgnorePointer(
+                    child: ref.read(workshopAutoCoverBuilderProvider)(
+                      publish.source!,
+                      (bytes) => _finishAutoCover(epoch, bytes),
+                    ),
+                  ),
+                ),
+              ),
+            form,
+          ],
         );
       case _Step.review:
         return WorkshopPublishReview(

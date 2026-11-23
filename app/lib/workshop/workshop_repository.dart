@@ -318,11 +318,12 @@ class WorkshopRepository {
   });
 
   /// Exporting is explicit; no account settings or personal state are read.
-  Future<WorkshopPreparedUpload> preparePet(PetLibrary library, String localId, File destination, WorkshopPublication publication) => _exclusive(() async {
+  Future<WorkshopPreparedUpload> preparePet(PetLibrary library, String localId, File destination, WorkshopPublication publication,
+    {bool petIdleDownscale = false}) => _exclusive(() async {
     if (publication.kind != 'pet') workshopInvalid('workshop_unsupported_kind');
     final file = await library.exportZip(localId, destination, publicId: publication.id,
       author: publication.author, license: publication.license, source: publication.source);
-    return _prepared(file, publication);
+    return _prepared(file, publication, petIdleDownscale: petIdleDownscale);
   });
 
   Future<WorkshopPreparedUpload> prepareTheme(
@@ -415,13 +416,15 @@ class WorkshopRepository {
     }
   });
 
-  Future<WorkshopPreparedUpload> _prepared(File file, WorkshopPublication publication) async {
+  Future<WorkshopPreparedUpload> _prepared(File file, WorkshopPublication publication, {bool petIdleDownscale = false}) async {
     final size = await file.length();
     if (size < 1 || size > workshopArchiveBytes) workshopInvalid('workshop_body_too_large');
     final metadata = publication.withArchive(await _hasher(file), size);
     final bytes = await workshopArchiveSnapshot(file, metadata);
     final archive = ZipDecoder().decodeBytes(bytes);
-    if (publication.previewSource == 'pet-idle') workshopCheckPetPreview(archive);
+    if (publication.previewSource == 'pet-idle') {
+      workshopCheckPetPreview(archive, petIdleDownscale: petIdleDownscale);
+    }
     return WorkshopPreparedUpload(file: file, metadata: metadata,
       files: List.unmodifiable(archive.files.where((f) => f.isFile).map((f) => f.name).toList()..sort()));
   }

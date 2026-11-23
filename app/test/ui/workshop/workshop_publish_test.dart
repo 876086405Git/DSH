@@ -13,6 +13,7 @@ import 'package:dsh_app/state/workshop_preferences.dart';
 import 'package:dsh_app/state/workshop_publication.dart';
 import 'package:dsh_app/state/workshop_publish_sources.dart';
 import 'package:dsh_app/state/workshop_publish_state.dart';
+import 'package:dsh_app/ui/workshop/workshop_auto_cover.dart';
 import 'package:dsh_app/ui/workshop/workshop_publish_page.dart';
 import 'package:dsh_app/ui/workshop/workshop_publish_preview.dart';
 import 'package:dsh_app/ui/workshop/workshop_publish_text.dart';
@@ -48,6 +49,8 @@ class _World {
 
   /// What the cover picker hands back after local normalization.
   Future<Uint8List?> Function()? pickCover;
+  ValueChanged<Uint8List?>? finishAutoCover;
+  bool generateCover = false;
   late final client = PublishClient(events);
   late final drafts = PublishDrafts(events);
   List<WorkshopPublishSource> sources = [publishSource];
@@ -82,6 +85,14 @@ class _World {
     workshopSourcesLoaderProvider.overrideWithValue(
       () async => WorkshopPublishSources(values: sources, issues: issues),
     ),
+    workshopAutoCoverBuilderProvider.overrideWithValue((source, onResult) {
+      if (generateCover) {
+        finishAutoCover = onResult;
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) => onResult(null));
+      }
+      return const SizedBox.shrink();
+    }),
     workshopCoverPickerProvider.overrideWithValue(() async => pickCover == null ? null : await pickCover!()),
     if (publisher case final publisher?) workshopPublishProvider.overrideWith(publisher),
   ];
@@ -899,6 +910,48 @@ void main() {
       expect(find.text('选一张封面'), findsNothing);
       expect(find.text('预览图'), findsNothing);
       expect(_publish(tester).source?.preview, isNull);
+    });
+
+    testWidgets('an automatic cover is reviewed and stays removed once dismissed', (tester) async {
+      final world = _World()
+        ..capabilities(previews: _bothPreviews)
+        ..sources = [_companion]
+        ..generateCover = true;
+      await _open(tester, world);
+      await _fillCompanion(tester);
+      expect(find.text('正在生成封面，也可以自己选。'), findsOneWidget);
+
+      final png = workshopPng(48, 24);
+      world.finishAutoCover!(png);
+      await _settle(tester);
+      expect(_publish(tester).source?.previewSource, 'companion-preview');
+      expect(find.text('48×24 · ${formatBytes(png.length)}'), findsOneWidget);
+      await _tapVisible(tester, find.text('下一步'));
+      expect(_publish(tester).preparedMetadata?.previewSource, 'companion-preview');
+      expect(tester.widget<WorkshopCoverThumb>(find.byType(WorkshopCoverThumb)).bytes, same(png));
+
+      await _tapVisible(tester, find.text('修改资料'));
+      await _tapVisible(tester, find.text('移除'));
+      expect(_publish(tester).source?.preview, isNull);
+      expect(find.text('正在生成封面，也可以自己选。'), findsNothing);
+    });
+
+    testWidgets('a late generated image cannot replace a manually selected cover', (tester) async {
+      final world = _World()
+        ..capabilities(previews: _bothPreviews)
+        ..sources = [_companion]
+        ..generateCover = true
+        ..pickCover = () async => workshopPng(32, 16);
+      await _open(tester, world);
+      await _tapVisible(tester, find.text('现在的伙伴'));
+      final finish = world.finishAutoCover!;
+      await _tapVisible(tester, find.text('选一张封面'));
+      final chosen = _publish(tester).source!.preview;
+      expect(chosen?.width, 32);
+
+      finish(workshopPng(48, 24));
+      await _settle(tester);
+      expect(_publish(tester).source?.preview, same(chosen));
     });
 
     testWidgets('a companion cover: the thumbnail, its size, and the packed result carries it', (tester) async {
