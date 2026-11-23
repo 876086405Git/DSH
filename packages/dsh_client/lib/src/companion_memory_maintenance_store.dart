@@ -156,7 +156,7 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
           return null;
         }
         if (_agentContextTokens(
-              context(const [], const [], null, localDay: localDay, zoneId: 'offset:$offsetMinutes'),
+              context(const [], const [], null, localDay: localDay, zoneId: 'offset:$offsetMinutes', checked: true),
               estimateTokens,
               estimateContextTokens,
             ) >
@@ -183,6 +183,27 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
               ..clear()
               ..addAll(candidate);
           }
+        }
+        // No source of yesterday, every card checked, and no parent left a
+        // private role unserved: no scope can have work. Skip the whole
+        // history and domain read that an idle tick would otherwise repeat.
+        if (sources.isEmpty &&
+            _db
+                .select("SELECT 1 FROM memory_cards WHERE status!='withdrawn' AND maintenance_row_rev!=row_rev LIMIT 1")
+                .isEmpty &&
+            _db
+                .select(
+                  '''
+              SELECT 1 FROM memory_agent_maintenance_claims p
+              WHERE p.kind='organize' AND p.archive_id=? AND p.state!='not_sent' AND EXISTS(
+                SELECT value FROM json_each(p.scope_characters) WHERE type='text'
+                EXCEPT SELECT value FROM json_each(p.completed_scopes)
+              ) LIMIT 1
+            ''',
+                  [meta['id']],
+                )
+                .isEmpty) {
+          return null;
         }
         // These are the original captured IDs/revisions, not another queue or
         // a replay of a closed turn. A served scope consumes only its sources.
