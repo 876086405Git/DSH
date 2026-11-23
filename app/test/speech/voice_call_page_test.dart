@@ -337,6 +337,55 @@ void main() {
     });
   }
 
+  testWidgets('less motion: captions stay built while their reveal clock keeps up', (tester) async {
+    final reduced = ValueNotifier(true);
+    addTearDown(reduced.dispose);
+    const stillKey = ValueKey('still-caption');
+    const movingKey = ValueKey('moving-caption');
+    final text = List.filled(16, 'abcdefghij').join();
+    const style = TextStyle(fontSize: 14, color: Colors.white);
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Column(
+          children: [
+            ValueListenableBuilder<bool>(
+              valueListenable: reduced,
+              builder: (_, value, child) => MediaQuery(data: MediaQueryData(disableAnimations: value), child: child!),
+              child: RevealText(key: stillKey, text: text, style: style),
+            ),
+            MediaQuery(
+              data: const MediaQueryData(disableAnimations: false),
+              child: RevealText(key: movingKey, text: text, style: style),
+            ),
+          ],
+        ),
+      ),
+    );
+    TextSpan span(Key key) => tester
+        .widget<CaptionWindow>(find.descendant(of: find.byKey(key), matching: find.byType(CaptionWindow)))
+        .span as TextSpan;
+    await tester.pump(const Duration(milliseconds: 16));
+    final still = span(stillKey);
+    var moving = span(movingKey);
+    var movingBuilds = 0;
+    expect(still.toPlainText(), text);
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(span(stillKey), same(still));
+      final next = span(movingKey);
+      if (!identical(next, moving)) movingBuilds++;
+      moving = next;
+    }
+    expect(movingBuilds, 20);
+    expect(moving.toPlainText().length, lessThan(text.length));
+    reduced.value = false;
+    await tester.pump();
+    // TextSpan equality includes every child's text and style, including the fading tail.
+    expect(span(stillKey), span(movingKey));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test('less motion: the colours hold still; only a voice changes the size', () {
     final scene = CallScene();
     addTearDown(scene.dispose);
