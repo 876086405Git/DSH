@@ -21,6 +21,35 @@ sourceTest('locked runtime and actual adapter serialize exactly one text-only mo
   assert.equal(chunks.find(e => e.type === 'usage').usage.inputTokens, 11);
   assert.equal(chunks.at(-1).reason.kind, 'stop');
   assert.throws(() => call.stream({ system: 'again', input: 'again' }), { code: 'INVALID_PREPARED_CALL' });
+  const g = await sourceFixture(root, { image: true });
+  const imageCapability = await g.llm.companionScreenCapability(g.config.provider, g.config.model, g.abort.signal);
+  assert.equal(imageCapability.transientImage, 'jpeg-512-inline');
+  // A bounded SOF envelope isolates encoded dimensions and exact serialization;
+  // this transport fixture is not a JPEG decoder or a device screenshot test.
+  const image = { mediaType: 'image/jpeg', width: 1, height: 1, data: '/9j/wAALCAABAAEBAREA/9k=' };
+  const imageCall = await g.prepare();
+  await collect(imageCall.stream({ system: 'Classify external screen data.', input: 'SCREEN_TEXT', screenImage: image }));
+  assert.equal(g.requests.length, 1, 'inline pixels never invoke Files upload or a second model request');
+  const wire = g.requests[0];
+  assert.equal(wire.url, 'https://synthetic.invalid/anthropic/v1/messages');
+  assert.equal(wire.body.messages[0].content[0].text, 'SCREEN_TEXT');
+  assert.deepEqual(wire.body.messages[0].content.at(-1), { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } });
+  assert.equal(wire.body.tools, undefined); assert.equal(wire.init.headers['anthropic-beta'], undefined);
+  assert.deepEqual(g.events.map(e => e.type), ['dispatch', 'http', 'usage', 'stop', 'usage', 'complete']);
+  const bad = await sourceFixture(root, { image: true });
+  const badCall = await bad.prepare();
+  await assert.rejects(collect(badCall.stream({ system: 'fixed', input: 'fixed', screenImage: { ...image, width: 512 } })), { code: 'UNSUPPORTED_CONTENT' });
+  assert.equal(bad.requests.length, 0, 'declared dimensions cannot replace the encoded SOF');
+  const larger = Buffer.from(image.data, 'base64');
+  larger.writeUInt16BE(2, 7); larger.writeUInt16BE(2, 9);
+  for (const limits of [{ imagePixelBudget: 1 }, { imageMaxBytes: 1 }]) {
+    const bounded = await sourceFixture(root, { image: true });
+    Object.assign(bounded.connection.models[0], limits);
+    const boundedCall = await bounded.prepare();
+    await assert.rejects(collect(boundedCall.stream({ system: 'fixed', input: 'fixed',
+      screenImage: { ...image, width: 2, height: 2, data: larger.toString('base64') } })), { code: 'UNSUPPORTED_CONTENT' });
+    assert.equal(bounded.requests.length, 0, 'a selected model limit is not bypassed by the transient path');
+  }
 });
 
 sourceTest('actual auth failure and cancellation during auth make zero fetch invocations', async () => {
@@ -33,6 +62,14 @@ sourceTest('actual auth failure and cancellation during auth make zero fetch inv
   f.abort.abort(); release();
   await assert.rejects(pending, { code: 'ABORTED' });
   assert.equal(f.requests.length, 0); assert.equal(f.events.length, 0);
+  let imageRelease; const imageAuthGate = new Promise(r => { imageRelease = r; });
+  const image = await sourceFixture(root, { image: true, authGate: imageAuthGate });
+  const imageCall = await image.prepare();
+  const imagePending = collect(imageCall.stream({ system: 'fixed', input: 'screen',
+    screenImage: { mediaType: 'image/jpeg', width: 1, height: 1, data: '/9j/wAALCAABAAEBAREA/9k=' } }));
+  await new Promise(r => setImmediate(r)); image.abort.abort(); imageRelease();
+  await assert.rejects(imagePending, { code: 'ABORTED' });
+  assert.equal(image.requests.length, 0); assert.equal(image.events.length, 0);
 });
 
 sourceTest('physical guard rejects a changed provider registration after preparation/auth without dispatch', async () => {
@@ -42,6 +79,15 @@ sourceTest('physical guard rejects a changed provider registration after prepara
   f.llm.adapters.set(f.config.provider, { ...f.registration }); release();
   await assert.rejects(pending, { code: 'COMPANION_AUXILIARY_STALE' });
   assert.equal(f.requests.length, 0); assert.equal(f.events.length, 0);
+  let imageRelease; const imageAuthGate = new Promise(r => { imageRelease = r; });
+  const image = await sourceFixture(root, { image: true, authGate: imageAuthGate });
+  const imageCall = await image.prepare();
+  const imagePending = collect(imageCall.stream({ system: 'fixed', input: 'screen',
+    screenImage: { mediaType: 'image/jpeg', width: 1, height: 1, data: '/9j/wAALCAABAAEBAREA/9k=' } }));
+  await new Promise(r => setImmediate(r));
+  image.llm.adapters.set(image.config.provider, { ...image.registration }); imageRelease();
+  await assert.rejects(imagePending, { code: 'COMPANION_AUXILIARY_STALE' });
+  assert.equal(image.requests.length, 0); assert.equal(image.events.length, 0);
 });
 
 sourceTest('actual HTTP error makes one dispatch even with a retry policy and does not run file recovery', async () => {
@@ -51,6 +97,11 @@ sourceTest('actual HTTP error makes one dispatch even with a retry policy and do
   const aux = { observer: f.observer, dispatched: true };
   assert.throws(() => f.companionAuxiliaryFetch(aux, 'https://synthetic.invalid/second', { signal: f.abort.signal }), { code: 'COMPANION_AUXILIARY_RETRY_DENIED' });
   assert.equal(f.requests.length, 1);
+  const image = await sourceFixture(root, { image: true, transport: () => Promise.resolve(new Response('rejected', { status: 400 })) });
+  const call = await image.prepare();
+  await assert.rejects(collect(call.stream({ system: 'fixed', input: 'screen',
+    screenImage: { mediaType: 'image/jpeg', width: 1, height: 1, data: '/9j/wAALCAABAAEBAREA/9k=' } })), { code: 'INVALID_REQUEST' });
+  assert.equal(image.requests.length, 1, 'a rejected image has no text retry');
 });
 
 sourceTest('sync fetch throw is an invocation; truncated SSE retains raw usage without claiming complete', async () => {
@@ -70,6 +121,10 @@ sourceTest('runtime only refuses an absent call entry point or invalid extra con
   await assert.rejects(f.llm.prepareCompanionAuxiliaryCall({ ...f.config, provider: 'other-provider' }, f.abort.signal, f.observer), { code: 'COMPANION_AUXILIARY_UNAVAILABLE' });
   await assert.rejects(f.llm.prepareCompanionAuxiliaryCall({ ...f.config, tools: [] }, f.abort.signal, f.observer), { code: 'INVALID_PREPARED_CALL' });
   assert.equal(f.requests.length, 0);
+  assert.equal(await f.llm.companionScreenCapability(f.config.provider, f.config.model, f.abort.signal), undefined);
+  const call = await f.prepare();
+  assert.throws(() => call.stream({ system: 'fixed', input: 'fixed', screenImage: {} }), { code: 'UNSUPPORTED_CONTENT' });
+  assert.equal(f.requests.length, 0, 'a text-only model cannot use the image entry');
 });
 
 sourceTest('actual runtime generic path uses the existing selected adapter prepareCall exactly once and makes no false physical/raw capability claim', async () => {

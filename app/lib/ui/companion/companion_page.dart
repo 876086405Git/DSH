@@ -48,12 +48,14 @@ import '../../speech/voice_cloud.dart';
 import '../../state/app_mode_state.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
+import '../../state/models_state.dart';
 import '../../state/sessions_state.dart';
 import '../../state/settings_state.dart';
 import '../../state/voice_model_state.dart';
 import '../../state/voice_settings.dart';
 import '../../state/voice_state.dart';
 import '../../usage/usage_stats.dart';
+import '../chat/model_sheet.dart';
 import '../chat/voice/voice_controller.dart';
 import '../common/app_dialog.dart';
 import '../common/app_sheet.dart';
@@ -2387,6 +2389,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
             final l10n = sheet.l10n;
             final enabled = state['enabled'] == true;
             final canSee = state['accessibility'] == true || state['projection_active'] == true;
+            final visionEnabled = state['vision_enabled'] == true;
+            final visionSelection = ModelSelection.fromJson(state['vision_selection']);
             final frequency = state['frequency'] as String? ?? 'normal';
             final cost = (state['today_estimated_cny'] as num?)?.toDouble() ?? 0;
             final caption = Theme.of(sheet).textTheme.bodySmall;
@@ -2421,6 +2425,41 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                             tinted: false,
                             title: l10n.companionScreenUsageAccess,
                             onTap: () => send(screen.requestUsageAccess()),
+                          ),
+                        SettingsSwitchTile(
+                          tinted: false,
+                          title: l10n.companionScreenVision,
+                          subtitle: !visionEnabled
+                              ? l10n.companionScreenVisionHint
+                              : state['image_capture_supported'] != true
+                              ? l10n.companionScreenVisionTextOnly
+                              : switch (state['vision_status']) {
+                                  'available' => l10n.companionScreenVisionAvailable,
+                                  'checking' || 'unchecked' => l10n.companionScreenVisionChecking,
+                                  _ => l10n.companionScreenVisionUnavailable,
+                                },
+                          value: visionEnabled,
+                          onChanged: (on) => send(screen.configure(visionEnabled: on)),
+                        ),
+                        if (visionEnabled)
+                          SettingsTile(
+                            tinted: false,
+                            title: l10n.companionScreenVisionModel,
+                            subtitle: visionSelection == null
+                                ? l10n.companionScreenVisionChoose
+                                : '${visionSelection.provider} / ${visionSelection.model}',
+                            onTap: () {
+                              final scope = ref.read(modelSelectionScopeProvider);
+                              final host = companionHostKey(ref.read(activeHostProvider));
+                              unawaited(showModelSheet(
+                                sheet,
+                                current: state['vision_host'] == host ? visionSelection : null,
+                                onSelected: (selection) {
+                                  if (!mounted || !ref.mounted || !identical(scope, ref.read(modelSelectionScopeProvider))) return;
+                                  send(screen.configure(visionSelection: selection.toJson(), visionHost: host));
+                                },
+                              ));
+                            },
                           ),
                       ],
                     ),

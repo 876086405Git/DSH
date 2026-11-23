@@ -2781,6 +2781,18 @@
           "before": "a1ad048cbbb7caefe5471c583f076aa8e393f534efbc5b11b625308096efdace"
         }
       }
+    },
+    "companion-screen-image.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
+          "before": "1531441767d72f938a63be7358efdb54f65e617c5a4b6ab514ff0fa74a14abd4",
+          "after": "86704e2345ee881d7a3aab97243910ab03f3d0fc621699fdb36399975e6a3c44"
+        },
+        "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
+          "before": "ecc4935b23db523a1f6bbd8c901bdf9fc36bc2da498f354fca7dd44485b42dee",
+          "after": "4bb17cac3768f19be0f9ea303cfdfb0ce78424003a12ab5a3179ee41b4aa0feb"
+        }
+      }
     }
   },
   "schema": 2,
@@ -2987,6 +2999,7 @@
       "companion-find-drafts-files.diff",
       "companion-read-file-capacity.diff",
       "companion-compare-output-window.diff",
+      "companion-screen-image.diff",
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
       "ohos-web-converter-lazy.diff",
@@ -3195,6 +3208,7 @@
       "companion-find-drafts-files.diff",
       "companion-read-file-capacity.diff",
       "companion-compare-output-window.diff",
+      "companion-screen-image.diff",
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
       "ohos-web-converter-lazy.diff",

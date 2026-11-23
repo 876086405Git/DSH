@@ -1,0 +1,157 @@
+diff --git a/node_modules/@deepseek-ai/dsh-llm/lib/index.js b/node_modules/@deepseek-ai/dsh-llm/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-llm/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm/lib/index.js
+@@ -2534,6 +2534,17 @@
+ 			if (typeof adapter.prepareCall !== "function") return;
+ 			return Object.freeze({ physicalDispatch: "unknown", rawUsage: "unavailable", maxPhysicalRequests: null, noTools: true });
+ 		}
++		/** Optional screen pixels have a narrower contract than text auxiliary calls. */
++		async companionScreenCapability(provider, model, signal) {
++			const registration = this.registration(provider);
++			const capability = this.companionAuxiliaryCapability(provider);
++			if (registration.adapter.dshGoCompanionScreenImage !== true || capability?.physicalDispatch !== "fetch-invoked") return;
++			const info = await this.resolveModelInfoFor(registration, model, signal);
++			signal?.throwIfAborted();
++			if (this.adapters.get(provider) !== registration) throw new LlmError("Screen image provider changed", "COMPANION_AUXILIARY_STALE");
++			if (info.inputModalities?.includes("image") !== true) return;
++			return Object.freeze({ ...capability, transientImage: "jpeg-512-inline" });
++		}
+ 		/** Owner bridge only: no Session, AgentLoop, tools or llm/stream middleware. */
+ 		async prepareCompanionAuxiliaryCall(config, signal, observer) {
+ 			if (config == null || Object.keys(config).some((key) => !["provider", "model", "reasoningEffort", "maxTokens"].includes(key)) ||
+@@ -2560,9 +2571,12 @@
+ 			let used = false;
+ 			return Object.freeze({
+ 				config: resolved, capability, contextWindow: info.context?.contextWindow ?? null,
+-				stream: ({ system, input }) => {
++				stream: ({ system, input, screenImage }) => {
+ 					if (used) throw new LlmError("An auxiliary handle can only be dispatched once", "INVALID_PREPARED_CALL");
+ 					if (typeof system !== "string" || typeof input !== "string") throw new LlmError("Auxiliary requests require plain text", "INVALID_PREPARED_CALL");
++					if (screenImage !== void 0 && (!observed || registration.adapter.dshGoCompanionScreenImage !== true ||
++						info.inputModalities?.includes("image") !== true)) throw new LlmError("Selected auxiliary model cannot receive screen images", "UNSUPPORTED_CONTENT");
++					const transientImage = screenImage === void 0 ? void 0 : deepFreeze(structuredClone(screenImage));
+ 					used = true;
+ 					guard();
+ 					// Construct only model input; never serialize credentials, signal,
+@@ -2575,7 +2589,7 @@
+ 					if (!observed) observer.observe({ type: "handoff", atMs: Date.now(), boundary: "adapter-invoked" });
+ 					return adapterCall.stream(Object.freeze({ ...resolved, ...request,
+ 						...signal === void 0 ? {} : { signal }
+-					}));
++					}), transientImage);
+ 				}
+ 			});
+ 		}
+diff --git a/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js b/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
+@@ -1429,6 +1429,51 @@
+ * @param signal - request cancellation.
+ * @returns projected history and prepared image bytes keyed by attachment id.
+ */
++/** One request-owned JPEG; no attachment store, Files API or durable reference. */
++function prepareCompanionScreenImage(history, connection, modelId, image) {
++	const invalid = () => { throw new LlmError("Invalid transient screen image", "UNSUPPORTED_CONTENT"); };
++	if (image === null || typeof image !== "object" || Array.isArray(image) ||
++		Object.keys(image).some((key) => !["mediaType", "width", "height", "data"].includes(key)) ||
++		image.mediaType !== "image/jpeg" || !Number.isSafeInteger(image.width) || !Number.isSafeInteger(image.height) ||
++		image.width < 1 || image.width > 512 || image.height < 1 || image.height > 512 ||
++		typeof image.data !== "string" || image.data.length > 1398104 ||
++		!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(image.data)) invalid();
++	const data = Buffer.from(image.data, "base64");
++	if (data.length < 4 || data.length > 1048576 || data.toString("base64") !== image.data ||
++		data[0] !== 255 || data[1] !== 216) invalid();
++	// Read the encoded SOF dimensions, not just the caller's metadata.
++	let dimensions;
++	for (let offset = 2; offset < data.length;) {
++		if (data[offset++] !== 255) invalid();
++		while (data[offset] === 255) offset++;
++		const marker = data[offset++];
++		if (marker === 218 || marker === 217 || offset + 2 > data.length) break;
++		const length = data.readUInt16BE(offset);
++		if (length < 2 || offset + length > data.length) invalid();
++		if (marker === 192 || marker === 194) {
++			if (length < 8) invalid();
++			dimensions = { height: data.readUInt16BE(offset + 3), width: data.readUInt16BE(offset + 5) };
++			break;
++		}
++		offset += length;
++	}
++	const model = connection.models.find((entry) => entry.id === modelId);
++	if (dimensions?.width !== image.width || dimensions?.height !== image.height ||
++		model?.inputModalities?.includes("image") !== true ||
++		history.length !== 1 || history[0].role !== "user" ||
++		history[0].content.some((block) => block.type !== "text")) invalid();
++	// This private path does not re-encode an image to a smaller model target.
++	// Refuse before fetch instead of bypassing its configured request limits.
++	const pixels = model.imagePixelBudget === "low" ? 512 * 512 : model.imagePixelBudget;
++	if ((pixels !== void 0 && image.width * image.height > pixels) ||
++		(model.imageMaxBytes !== void 0 && data.length > model.imageMaxBytes)) invalid();
++	const ref = Object.freeze({ attachmentId: "sha256:" + createHash("sha256").update(data).digest("hex"),
++		name: "Transient screen observation", mediaType: image.mediaType, width: image.width, height: image.height, bytes: data.length });
++	const versions = new Map([[ref.attachmentId, { ...ref, data }]]);
++	const messages = [{ ...history[0], content: [...history[0].content, { type: "image", attachment: ref }] }];
++	assertImagesFit(messages, versions, connection, "base64");
++	return { messages, versions };
++}
+ async function prepareImages(history, connection, modelId, attachments, access, signal) {
+ 	const versions = /* @__PURE__ */ new Map();
+ 	const messages = projectOffloadedImages(history, (ref) => offloadedImageText(ref, access(ref)));
+@@ -2168,6 +2213,7 @@
+ var DeepSeekAdapter = class extends LlmAdapter {
+ 	dshGoRecallVersion = 1;
+ 	dshGoCompanionAuxiliary = true;
++	dshGoCompanionScreenImage = true;
+ 	dshGoCompanionChatUsage = true;
+ 	dependencies;
+ 	files;
+@@ -2211,14 +2257,17 @@
+ 			stream: (options) => this.generate(options, connection)
+ 		};
+ 	}
+-	/** Bound connection and private observer for a text-only, one-POST call. */
++	/** Bound connection and private observer for one POST; optional screen pixels stay request-local. */
+ 	async prepareCompanionAuxiliaryCall(provider, model, signal, observer) {
+ 		const connection = await this.connection(signal);
+ 		this.dependencies.admit?.(connection, model);
+ 		const auxiliary = { observer, dispatched: false };
+ 		return {
+ 			model: modelInfo(connection, provider, model),
+-			stream: (options) => this.generate(options, connection, auxiliary)
++			stream: (options, screenImage) => {
++				auxiliary.screenImage = screenImage;
++				return this.generate(options, connection, auxiliary);
++			}
+ 		};
+ 	}
+ 	stream(options) {
+@@ -2268,14 +2317,18 @@
+ 	async *request(options, connection, signal, activity, auxiliary) {
+ 		const chat = auxiliary === void 0 ? dshGoRecall.chatUsage(options) : void 0;
+ 		signal.throwIfAborted();
+-		const { messages, versions } = await prepareImages(options.messages, connection, options.model, this.dependencies.resolveAttachments?.(), this.imageAccess, signal);
++		const transientImage = auxiliary?.screenImage;
++		const { messages, versions } = transientImage === void 0
++			? await prepareImages(options.messages, connection, options.model, this.dependencies.resolveAttachments?.(), this.imageAccess, signal)
++			: prepareCompanionScreenImage(options.messages, connection, options.model, transientImage);
++		const imageAccess = transientImage === void 0 ? this.imageAccess : () => void 0;
+ 		const auth = await this.dependencies.resolveAuth(connection);
+ 		try {
+ 			const files = new RequestFiles(this.files, {
+ 				baseURL: connection.baseURL,
+ 				headers: auth.headers
+ 			}, connection.filePolicy, connection.filesApiTimeoutMs, signal, activity);
+-			let inline = false;
++			let inline = transientImage !== void 0;
+ 			while (true) {
+ 				signal.throwIfAborted();
+ 				files.beginAttempt();
+@@ -2287,7 +2340,7 @@
+ 					inline = true;
+ 					continue;
+ 				}
+-				const body = serialize(options, connection, inline ? inlineImages(messages, versions, connection) : messages, versions, this.imageAccess, (reason) => {
++				const body = serialize(options, connection, inline ? inlineImages(messages, versions, connection) : messages, versions, imageAccess, (reason) => {
+ 					this.dependencies.onReplayDegrade?.({
+ 						provider: options.provider,
+ 						model: options.model,

@@ -28,9 +28,9 @@ export async function loadAuxiliarySource(root, fetch) {
   ]);
   for (const [name, value] of [['dsh-llm', llm], ['dsh-llm-deepseek', deepseek]]) {
     assert.equal(createHash('sha256').update(value).digest('hex'),
-      pins.patches['companion-auxiliary-single-request.diff']['0.2.2-rc.1'][`node_modules/@deepseek-ai/${name}/lib/index.js`].after);
+      pins.patches['companion-screen-image.diff']['0.2.2-rc.1'][`node_modules/@deepseek-ai/${name}/lib/index.js`].after);
   }
-  const globals = { ...values, ...timeouts, ...sse, fetch,
+  const globals = { ...values, ...timeouts, ...sse, fetch, createHash,
     createRequire: () => createRequire(pathToFileURL(join(root, 'dsh-llm/lib/index.js'))),
     TypertRemoteService: class { constructor(ctx) { this.ctx = ctx; } },
     Remote() {}, __esDecorate() {}, __runInitializers() {},
@@ -41,7 +41,7 @@ export async function loadAuxiliarySource(root, fetch) {
     isAttachmentError: () => false,
     // No AgentLoop/sessionId exists in this entry point. The separate full
     // engine fixture verifies composition with the real existing recall gate.
-    dshGoRecall: { async beforeFetch() {}, guardFetch() {} },
+    dshGoRecall: { async beforeFetch() {}, guardFetch() {}, chatUsage() {}, chatObserve() {} },
   };
   const source = [
     region(llm, 'error'), region(llm, 'content'), region(llm, 'attribution'),
@@ -126,9 +126,11 @@ export async function sourceFixture(root, options = {}) {
     return options.transport ? options.transport(url, init) : Promise.resolve(auxiliarySse(options.response));
   });
   const connection = {
-    baseURL: 'https://synthetic.invalid/anthropic', models: [{ id: 'chosen-model', inputModalities: ['text'], contextWindow: 8192 }],
+    baseURL: 'https://synthetic.invalid/anthropic', models: [{ id: 'chosen-model', inputModalities: options.image ? ['text', 'image'] : ['text'], contextWindow: 8192 }],
     defaults: { thinking: 'disabled' }, maxTokens: 1024, defaultContextWindow: 8192,
     streamIdleTimeoutMs: 5000, filesApiTimeoutMs: 5000, retryPolicy: { mode: 'normal', maxRetries: 8 },
+    maxInlineRequestImageBytes: 2 * 1024 * 1024, maxRequestFilesBytes: 2 * 1024 * 1024,
+    maxImagesPerRequest: 1, inlineImageOffloadByteQuantum: 1024, imageOffloadByteQuantum: 1024, imageOffloadCountQuantum: 1,
   };
   const adapter = new engine.DeepSeekAdapter({ options: () => connection, resolveFiles: () => ({}),
     async resolveAuth() {

@@ -22,7 +22,8 @@ internal class CompanionScreenSampler(private val service: PhoneA11yService, ove
 
     fun close() { closed = true; shooter.close() }
 
-    fun sample(control: PhoneControl, excluded: Set<String>, current: () -> Boolean): Map<String, Any?> {
+    fun sample(control: PhoneControl, excluded: Set<String>, current: () -> Boolean,
+               image: Boolean = false): Map<String, Any?> {
         fun live() = !closed && current() && PhoneA11yService.instance === service && !control.isLocked()
         if (!live()) return skipped("inactive")
         if (control.shownControls() != null) return skipped("phone_busy")
@@ -41,13 +42,17 @@ internal class CompanionScreenSampler(private val service: PhoneA11yService, ove
             // Keep the original phone OCR qualifications. A change grid alone
             // does not establish the provenance/privacy of pixels to recognize.
             val readLocal = formatted.poorTree && fresh && ocrQualified(cap)
+            // Export pixels only for the same fresh, complete single-app window.
+            // A good text tree alone does not qualify arbitrary display pixels.
+            val imageQualified = image && fresh && ocrQualified(cap)
             val shot = shooter.shoot(cap.windows.singleOrNull(), cap.screen, emptyList(), emptyList(), 3500,
-                image = false, readLocalText = readLocal && epoch != null,
+                image = imageQualified, maxImageSide = if (imageQualified) 512 else 1300,
+                readLocalText = readLocal && epoch != null,
                 localTextPrivacyAllowed = readLocal,
                 localTextCancelled = { !live() || ocr.enabledEpoch() != epoch },
                 frameWanted = { grid ->
                     due = changes.changed(grid, SystemClock.uptimeMillis(), textChanged)
-                    due && readLocal
+                    due && (readLocal || imageQualified)
                 })
             if (!live() || shot.secure || shot.error != null || shot.luminanceGrid == null) return skipped("capture_unavailable")
             previousPackage = pkg
@@ -61,6 +66,8 @@ internal class CompanionScreenSampler(private val service: PhoneA11yService, ove
                 if (!live() || !permitted(check, control, excluded) || check.packageName != pkg ||
                     check.windows.map { it.id } != cap.windows.map { it.id }) return skipped("changed")
                 if (formatted.poorTree && (!readLocal || !checkFresh || !ocrQualified(check))) return skipped("ocr_unavailable")
+                if (imageQualified && (!checkFresh || !ocrQualified(check) ||
+                    shot.capturedWindowId != cap.windows.single().id)) return skipped("changed")
             } finally { check.recycle() }
             val text: String
             val method: String
@@ -76,13 +83,24 @@ internal class CompanionScreenSampler(private val service: PhoneA11yService, ove
                 text = formatted.text
                 method = "tree"
             }
+            val geometry = shot.geometry
+            val imageBytes = shot.bytes?.takeIf { imageQualified && it.isNotEmpty() &&
+                it.size <= 512 * 512 * 4 && shot.mime == "image/jpeg" &&
+                geometry != null && geometry.width in 1..512 && geometry.height in 1..512 }
             val filtered = control.core.safety.filterScreen(ScreenSnapshot(id, text, null, pkg,
-                readPackages = cap.windows.mapNotNull { it.packageName }.toSet()))
+                image = imageBytes, imageMime = if (imageBytes == null) null else shot.mime,
+                readPackages = cap.windows.mapNotNull { it.packageName }.toSet(),
+                imageReadPackages = if (imageBytes == null) emptySet() else setOf(pkg)))
             if (!live() || filtered.text != text) return skipped("protected")
+            val picture = if (imageBytes != null && filtered.image === imageBytes && geometry != null)
+                mapOf("mime_type" to "image/jpeg", "width" to geometry.width, "height" to geometry.height,
+                    "bytes" to imageBytes) else null
             return mapOf("status" to "observed", "observed_at_ms" to System.currentTimeMillis(),
                 "package_name" to pkg, "window_title" to ScreenMask.mask(title),
                 "capture_method" to method, "text" to text,
-                "busy" to busy(cap))
+                "busy" to busy(cap)) + if (image) mapOf("image" to picture,
+                    "image_status" to if (picture != null) "available" else if (!imageQualified)
+                        "source_metadata_unavailable" else "capture_unavailable") else emptyMap()
         } finally { cap.recycle() }
     }
 

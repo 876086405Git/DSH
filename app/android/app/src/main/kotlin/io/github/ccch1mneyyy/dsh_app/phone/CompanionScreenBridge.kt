@@ -3,6 +3,7 @@ package io.github.ccch1mneyyy.dsh_app.phone
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import io.flutter.plugin.common.BinaryMessenger
@@ -102,19 +103,29 @@ class CompanionScreenBridge(context: Context, private val control: PhoneControl,
             } else !requireIdle && CompanionScreenProjectionService.permitsCurrent(app, control, shared.excluded, lease.packageName)
             return status(if (valid && current(lease)) "valid" else "stale")
         }
-        if (args != null && args.isNotEmpty()) return status("invalid_arguments")
+        if (args != null && args.isNotEmpty() && (args.keys.any { it !in setOf("image", "generation") } ||
+            args["image"] !is Boolean)) return status("invalid_arguments")
         val generation = shared.generation
+        val image = args?.get("image") == true
+        val requestedGeneration = args?.get("generation")
+        if (image && ((requestedGeneration as? Number)?.toLong() != generation ||
+            requestedGeneration !is Int && requestedGeneration !is Long)) return status("stale")
+        if (image && (!shared.visionEnabled || shared.visionSelection == null || shared.visionHost == null))
+            return status("image_not_enabled")
         fun live() = !closed && shared.active(owner, generation) && !control.isLocked()
         if (!live()) return status("inactive")
         val service = PhoneA11yService.instance
-        val result = if (service != null) service.companionScreenSample(control, shared.excluded, ::live)
+        val result = if (service != null) service.companionScreenSample(control, shared.excluded, ::live, image)
             else CompanionScreenProjectionService.sample(app, control, shared.excluded, ::live)
         if (!live()) return status("inactive")
         if (result["status"] != "observed") return result
         val pkg = result["package_name"] as? String ?: return status("unknown_application")
         val lease = Lease(UUID.randomUUID().toString(), generation, System.currentTimeMillis(), pkg, service)
         latest = lease
-        return result + mapOf("sample_id" to lease.id)
+        // UsageEvents/OCR do not establish all pixel sources without a11y.
+        // Projection keeps its original text-only capability after opt-in.
+        return result + mapOf("sample_id" to lease.id) + if (image && service == null)
+            mapOf("image" to null, "image_status" to "source_metadata_unavailable") else emptyMap()
     }
 
     private fun current(lease: Lease): Boolean {
@@ -137,6 +148,7 @@ class CompanionScreenBridge(context: Context, private val control: PhoneControl,
 
     private fun snapshot(): Map<String, Any?> = shared.snapshot() + mapOf(
         "accessibility" to PhoneA11yService.isConnected(),
+        "image_capture_supported" to (PhoneA11yService.isConnected() && Build.VERSION.SDK_INT in 34..37),
         "projection_active" to CompanionScreenProjectionService.running,
         "usage_access" to CompanionScreenProjectionService.hasUsageAccess(app))
 
@@ -169,6 +181,12 @@ private class ScreenSettings(private val app: Context) {
     private val lock = Any()
     val listeners = CopyOnWriteArrayList<() -> Unit>()
     @Volatile var enabled = prefs.getBoolean("enabled", false)
+        private set
+    @Volatile var visionEnabled = prefs.getBoolean("vision_enabled", false)
+        private set
+    @Volatile var visionSelection = readVisionSelection(prefs.getString("vision_selection", null))
+        private set
+    @Volatile var visionHost = prefs.getString("vision_host", null)?.takeIf { validChoice(it, 512) }
         private set
     @Volatile var generation = 0L
         private set
@@ -231,18 +249,28 @@ private class ScreenSettings(private val app: Context) {
 
     fun configure(args: Map<*, *>): Boolean {
         val result = synchronized(lock) {
-            if (args.keys.any { it !in setOf("op", "enabled", "frequency", "excluded_packages", "serious_per_hour") }) return false
+            if (args.keys.any { it !in setOf("op", "enabled", "frequency", "excluded_packages", "serious_per_hour",
+                    "vision_enabled", "vision_selection", "vision_host") }) return false
             val on = args["enabled"] ?: enabled
+            val pictures = args["vision_enabled"] ?: visionEnabled
+            val selected = if (args.containsKey("vision_selection"))
+                readVisionSelection(args["vision_selection"]) ?: return false else visionSelection
+            val host = args["vision_host"] ?: visionHost
             val mode = args["frequency"] ?: frequency
             val apps = args["excluded_packages"] ?: excluded.toList()
             val limit = args["serious_per_hour"] ?: seriousPerHour
-            if (on !is Boolean || mode !in setOf("quiet", "normal", "chatty") || apps !is List<*> ||
+            if (on !is Boolean || pictures !is Boolean || host != null && (host !is String || !validChoice(host, 512)) ||
+                mode !in setOf("quiet", "normal", "chatty") || apps !is List<*> ||
                 apps.any { it !is String || it.isBlank() } || limit !is Int || limit !in 0..60) return false
             val packages = apps.map { it as String }.toSet()
+            val selectedHost = host as String?
             val saved = prefs.edit().putBoolean("enabled", on).putString("frequency", mode as String)
+                .putBoolean("vision_enabled", pictures).putString("vision_selection", selected?.let { JSONObject(it).toString() })
+                .putString("vision_host", selectedHost)
                 .putStringSet("excluded_packages", packages).putInt("serious_per_hour", limit).commit()
             if (!saved) { enabled = false; generation++; captureGeneration++; return@synchronized false }
             if (enabled != on) captureGeneration++
+            visionEnabled = pictures; visionSelection = selected; visionHost = selectedHost
             enabled = on; frequency = mode; excluded = packages; seriousPerHour = limit; generation++
             true
         }
@@ -293,6 +321,7 @@ private class ScreenSettings(private val app: Context) {
         val values = costs.keys().asSequence().map { costs.opt(it) }.toList()
         val estimated = if (values.any { it !is Number }) null else values.sumOf { (it as Number).toDouble() }
         mapOf("enabled" to enabled, "generation" to generation, "resident_active" to (residentOwner != null),
+            "vision_enabled" to visionEnabled, "vision_selection" to visionSelection, "vision_host" to visionHost,
             "frequency" to frequency, "excluded_packages" to excluded.sorted(), "serious_per_hour" to seriousPerHour,
             "muted_until_ms" to mutedUntil,
             "today_activities" to activities.sorted(),
@@ -322,6 +351,21 @@ private class ScreenSettings(private val app: Context) {
     }
 
     companion object {
+        private fun validChoice(value: String, limit: Int = 256): Boolean = value.isNotBlank() &&
+            value.length <= limit && value.none { it < ' ' || it == '\u007f' }
+        private fun readVisionSelection(value: Any?): Map<String, String>? {
+            val map = when (value) {
+                is Map<*, *> -> value
+                is String -> runCatching { JSONObject(value).let { json ->
+                    json.keys().asSequence().associateWith { json.get(it) }
+                } }.getOrNull()
+                else -> null
+            } ?: return null
+            if (map.keys.any { it !in setOf("provider", "model", "reasoningEffort") } ||
+                map["provider"] !is String || map["model"] !is String ||
+                map.values.any { it !is String || !validChoice(it) }) return null
+            return map.entries.associate { it.key as String to it.value as String }
+        }
         // Existing PhonePolicies continue to supply banks/payment exclusions.
         // These are only the additional screen-companionship defaults.
         val DEFAULT_EXCLUDED = setOf("com.tencent.mm", "com.tencent.mobileqq", "com.whatsapp",
