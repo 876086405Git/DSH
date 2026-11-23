@@ -141,6 +141,7 @@ class CompanionSectionNav extends StatelessWidget {
                         selected: index == selected,
                         button: true,
                         label: item.label,
+                        onTap: () => onSelect(index),
                         excludeSemantics: true,
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,

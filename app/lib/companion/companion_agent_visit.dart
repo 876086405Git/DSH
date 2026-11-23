@@ -450,7 +450,10 @@ class _CompanionAgentVisit {
   Future<CompanionMemoryOwner> readMemory() async {
     final directory = await root;
     if (!active) throw const DshClosedException('Companion visit closed');
-    final owner = await ref.read(companionMemoryOwnerProvider(directory.absolute.path).future);
+    final provider = companionMemoryOwnerProvider(directory.absolute.path);
+    // A failed open is not kept: the next attempt (a retry) opens again.
+    if (ref.read(provider).hasError) ref.invalidate(provider);
+    final owner = await ref.read(provider.future);
     if (!active) return owner;
     memory = owner;
     bindCharacter();

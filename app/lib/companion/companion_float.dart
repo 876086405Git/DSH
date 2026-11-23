@@ -248,9 +248,12 @@ final companionFloatStoreProvider = Provider<Future<CompanionPackStore> Function
 
 /// Her pack's own name, for places outside her room (the drawer); null with
 /// no pack. The room refreshes it whenever her pack changes.
-final companionPackNameProvider = FutureProvider<String?>((ref) async {
+final companionPackNameProvider = FutureProvider.autoDispose<String?>((ref) async {
   try {
     final store = await ref.watch(companionFloatStoreProvider)();
+    // A pack installed or removed anywhere (the room, the workshop) renames her.
+    final changes = store.revisions.listen((_) => ref.invalidateSelf());
+    ref.onDispose(changes.cancel);
     return (await store.character()).name;
   } on Object {
     return null;

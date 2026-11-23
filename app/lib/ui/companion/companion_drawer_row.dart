@@ -82,8 +82,9 @@ class CompanionDrawerRow extends ConsumerWidget {
           child: InkWell(
             onTap: onTap,
             customBorder: shape,
-            child: SizedBox(
-              height: 44,
+            // Grows with enlarged text instead of clipping it.
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Row(

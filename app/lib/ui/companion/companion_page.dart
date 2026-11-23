@@ -306,6 +306,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (tab != _CompanionTab.room) {
       _hush();
       _focus.unfocus();
+      // Dictation belongs to the room's composer, which is hidden now.
+      if (_voice.active) _voice.stop();
     }
     setState(() => _tab = tab);
   }
@@ -2993,7 +2995,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         widget.sections &&
         insets == 0 &&
         !(_logOpen && _tab == _CompanionTab.room) &&
-        (_tab != _CompanionTab.room || (showStage && _stageReady));
+        // Her memories and errands stay reachable with no pack yet; only
+        // while she's arriving does the room keep the whole screen.
+        (_tab != _CompanionTab.room || (showStage ? _stageReady : _phase != _Phase.checking && !_arriving));
     final navSpace = navShown ? CompanionSectionNav.height + 10 : 0.0;
     final room = Stack(
       fit: StackFit.expand,
@@ -3236,7 +3240,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
             children: [
               for (final tab in _CompanionTab.values)
                 if (tab == _CompanionTab.room)
-                  room
+                  // Her stage's chrome keeps clear of the bar itself; the
+                  // first-run and failure screens get it as bottom padding.
+                  showStage
+                      ? room
+                      : MediaQuery(
+                          data: MediaQuery.of(context)
+                              .copyWith(padding: padding.copyWith(bottom: padding.bottom + navSpace)),
+                          child: room,
+                        )
                 else if (!_visited.contains(tab))
                   const SizedBox.shrink()
                 else
@@ -3356,6 +3368,8 @@ class _CompanionPageTaskUi implements CompanionAgentTaskUi {
       current() &&
       page.mounted &&
       !page._leaving &&
+      // Another page of the section over her room covers it like a route.
+      (!page.widget.sections || page._tab == _CompanionTab.room) &&
       epoch == page._notesForegroundEpoch &&
       !page._logOpen &&
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
