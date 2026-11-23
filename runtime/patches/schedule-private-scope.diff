@@ -1,0 +1,13 @@
+--- a/node_modules/@deepseek-ai/dsh-schedule/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-schedule/lib/index.js
+@@ -1536,1 +1536,2 @@
+-const recordSchema = z$1.unknown().transform((value, context) => {
++const scheduleTaskSchema = z$1.lazy(() => {
++const recordSchema = z$1.unknown().transform((value, context) => {
+@@ -1592,1 +1593,1 @@
+-const scheduleTaskSchema = z$1.lazy(() => z$1.object({
++return z$1.object({
+@@ -1672,1 +1673,2 @@
+-}, { message: "Last delivery must match the latest saved delivery receipt" }));
++}, { message: "Last delivery must match the latest saved delivery receipt" });
++});
