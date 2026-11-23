@@ -1,0 +1,9 @@
+--- a/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+@@ -3115,1 +3115,2 @@
+-	const includes = /* @__PURE__ */ new Set();
++	const includes = /* @__PURE__ */ new Set();
++	let runtimeVersion;
+@@ -3121,1 +3122,1 @@
+-			const issue = evaluatePluginCompatibility(manifest, exemptions);
++			const issue = evaluatePluginCompatibility(manifest, exemptions, runtimeVersion ??= getDshRuntimeVersion());

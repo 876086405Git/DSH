@@ -1,0 +1,19 @@
+--- a/node_modules/@deepseek-ai/dsh-client-modules/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-client-modules/lib/index.js
+@@ -325,2 +325,7 @@
+-function comboScript(input, sourceMapUrl) {
+-	return Buffer.from(sourceMapUrl === void 0 ? input : `${input}//# sourceMappingURL=${sourceMapUrl}\n`);
++function comboScript(parts, sourceMapUrl) {
++	if (sourceMapUrl !== void 0) parts.push(`//# sourceMappingURL=${sourceMapUrl}\n`);
++	const bytes = parts.reduce((size, part) => size + Buffer.byteLength(part), 0);
++	const output = Buffer.allocUnsafe(bytes);
++	let offset = 0;
++	for (const part of parts) offset += output.write(part, offset);
++	return output;
+@@ -396,3 +401,3 @@
+-	let source = "";
+-	for (const resource of resources) source += `${prepareSource(resource).source};\n`;
+-	return comboScript(source, sourceMapUrl);
++	const parts = [];
++	for (const resource of resources) parts.push(prepareSource(resource).source, ";\n");
++	return comboScript(parts, sourceMapUrl);

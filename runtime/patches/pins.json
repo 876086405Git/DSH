@@ -24,6 +24,14 @@
         }
       }
     },
+    "client-modules-combo-buffer.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-client-modules/lib/index.js": {
+          "after": "df8d52b11e513073225b8a47175dd267039744e048e30c18cc45a88d26d3759a",
+          "before": "8c8288cb4ecafcbc0271eaf2656a716384d5fb74543c147a2c10d3d496d48bc4"
+        }
+      }
+    },
     "client-modules-combo-rebuild.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-client-modules/lib/index.js": {
@@ -567,8 +575,8 @@
     "ohos-plugin-hmr-transaction.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "aef4ea832662917ca5b1bcb3867d33aa884e50805d6f926df06e09d27949de1e",
-          "before": "72e6598bb443cdcb9bb471fc013d313b972d6b5f384c1596d5c06e8b479d9d41"
+          "after": "575d6941483904f0c69b8881b1fa7ae06fcae75f4f51a089e1d5f61c560d84a1",
+          "before": "8e3c887434303bc28ea2342d33eb7d5c4c7fb18108061a1811be879a0098d7a0"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "3ee700fc06ab7f0a357231337f7f33bed885290f26fe7226945a42d189680020",
@@ -579,8 +587,8 @@
     "ohos-plugin-linkless.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "669afca1174235ec421be7dd61df70e96e8626b9350a823172978321ee46adc1",
-          "before": "6fac7ace58fbba9b17e730a50bfb3d3193bc2d674d0b05511655065f67734490"
+          "after": "d1e221fa254e15070931890bf3c5b3d3e681f55c2afb011f5a3d663fe3cb12db",
+          "before": "9a0af36c5b51a342e9111c5d11a3972690dfdd35b2be036ae8707a294ee9a6f3"
         },
         "node_modules/@deepseek-ai/dsh-app-boot/lib/worker/profile-resolution-bootstrap.js": {
           "after": "82e895216414eaa3a8f29d5d7aad31366272c8a6382e2ab4fe00fe30601e13c4",
@@ -591,16 +599,16 @@
     "ohos-plugin-locale-bom.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "6fac7ace58fbba9b17e730a50bfb3d3193bc2d674d0b05511655065f67734490",
-          "before": "0c30d73925ee84060dc029f4d076244449a2778fc07227c53e08fb3641b9e889"
+          "after": "9a0af36c5b51a342e9111c5d11a3972690dfdd35b2be036ae8707a294ee9a6f3",
+          "before": "7b7f56911615d4fa31f660bdeb9775db29afcf7913a543d8c85353ba47a2f4ab"
         }
       }
     },
     "ohos-plugin-manifest-bom.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "0c30d73925ee84060dc029f4d076244449a2778fc07227c53e08fb3641b9e889",
-          "before": "aef4ea832662917ca5b1bcb3867d33aa884e50805d6f926df06e09d27949de1e"
+          "after": "7b7f56911615d4fa31f660bdeb9775db29afcf7913a543d8c85353ba47a2f4ab",
+          "before": "575d6941483904f0c69b8881b1fa7ae06fcae75f4f51a089e1d5f61c560d84a1"
         }
       }
     },
@@ -841,6 +849,14 @@
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
           "after": "94cfe0db086613da4c84cd321b98c19ca2d8c95e654300d02c3dd5ea1025193d",
           "before": "0efe3b6c4be30e101982c0740b55d3e035fb754e32ad366a197a9b7ec5be6cdb"
+        }
+      }
+    },
+    "profile-runtime-version-preflight.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "ee56662e186b7067c6faec67ec3f55eb24aae1a2b2fa65b31336c03ca29d27af",
+          "before": "4c5500b2b961fffacb85dffc5cbe05fff4ad69976e53046ccd0f4cee4cbb24f1"
         }
       }
     },
@@ -2305,8 +2321,8 @@
     "zzzzzzzzzzzzzz-ohos-plugin-packages.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "72e6598bb443cdcb9bb471fc013d313b972d6b5f384c1596d5c06e8b479d9d41",
-          "before": "4c5500b2b961fffacb85dffc5cbe05fff4ad69976e53046ccd0f4cee4cbb24f1"
+          "after": "8e3c887434303bc28ea2342d33eb7d5c4c7fb18108061a1811be879a0098d7a0",
+          "before": "ee56662e186b7067c6faec67ec3f55eb24aae1a2b2fa65b31336c03ca29d27af"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "b3de75959b7c463dc952f00c02a9a08a42ff9417a3439cb99767cb6af653756a",
@@ -2769,6 +2785,7 @@
       "client-hmr-closed-response.diff",
       "client-modules-combo-rebuild.diff",
       "client-modules-manifest-read.diff",
+      "client-modules-combo-buffer.diff",
       "schemastery-json-context.diff",
       "session-title-word-prefix.diff",
       "str-editor-view-prefix.diff",
@@ -2932,6 +2949,7 @@
       "plugin-compatibility-exact-version.diff",
       "profile-sibling-package-lookup.diff",
       "profile-runtime-version-validation.diff",
+      "profile-runtime-version-preflight.diff",
       "messages-usage-evidence.diff",
       "piai-usage-evidence.diff",
       "piai-tool-call-id.diff",
@@ -2973,6 +2991,7 @@
       "client-hmr-closed-response.diff",
       "client-modules-combo-rebuild.diff",
       "client-modules-manifest-read.diff",
+      "client-modules-combo-buffer.diff",
       "schemastery-json-context.diff",
       "session-title-word-prefix.diff",
       "str-editor-view-prefix.diff",
@@ -3136,6 +3155,7 @@
       "plugin-compatibility-exact-version.diff",
       "profile-sibling-package-lookup.diff",
       "profile-runtime-version-validation.diff",
+      "profile-runtime-version-preflight.diff",
       "messages-usage-evidence.diff",
       "piai-usage-evidence.diff",
       "piai-tool-call-id.diff",
