@@ -256,7 +256,12 @@ class CompanionAgent extends ChangeNotifier {
           ? _memoryTransport?.call() ?? CompanionLightMemoryTransport(apiKey: _apiKey, client: _client)
           : CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
     }
-    if (connection == null) throw const CompanionHostError(CompanionHostFailure.disconnected);
+    // Full keeps its source and tools when only this model round uses the phone.
+    final phone = CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
+    if (connection == null) {
+      if (phone.configured) return phone;
+      throw const CompanionHostError(CompanionHostFailure.disconnected);
+    }
     final host = ref.read(activeHostProvider);
     final client = connection.client;
     final scope = ref.read(modelSelectionScopeProvider);
@@ -268,23 +273,31 @@ class CompanionAgent extends ChangeNotifier {
         ref.read(activeHostProvider) == host &&
         identical(ref.read(activeConnectionProvider).value?.client, client) &&
         identical(ref.read(modelSelectionScopeProvider), scope);
+    CompanionMemoryTransport phoneOrFail(CompanionHostError error) {
+      if (!current()) throw const DshClosedException('Companion Host route changed');
+      if (phone.configured) return phone;
+      throw error;
+    }
+
     try {
       // Resolve the current full Session each round. A phone tool may retire
       // its previous binding without cancelling this same logical turn.
       final selected = await ref.read(companionSessionsProvider.notifier).ensure();
       if (!current()) throw const DshClosedException('Companion Host route changed');
       final capability = await client.readCompanionAuxiliaryCapability(selected.sessionId);
-      if (!current()) throw const DshClosedException('Companion Host route changed');
       if (capability == null || !capability.supported) {
-        throw const CompanionHostError(CompanionHostFailure.unavailable);
+        return phoneOrFail(const CompanionHostError(CompanionHostFailure.unavailable));
       }
+      if (!current()) throw const DshClosedException('Companion Host route changed');
+      if (!capability.agentSupported && phone.configured) return phone;
+      // Without a phone key, legacy auxiliary can still serve no-tool followup.
       return CompanionHostMemoryTransport(client: client, capability: capability, isCurrent: current);
     } on CompanionAuxiliaryFailure catch (error) {
-      throw CompanionHostError(companionHostFailure(error.code), error.code);
+      return phoneOrFail(CompanionHostError(companionHostFailure(error.code), error.code));
     } on DshClosedException {
-      throw const CompanionHostError(CompanionHostFailure.disconnected);
+      return phoneOrFail(const CompanionHostError(CompanionHostFailure.disconnected));
     } on DshException catch (error) {
-      throw CompanionHostError(CompanionHostFailure.unavailable, '$error');
+      return phoneOrFail(CompanionHostError(CompanionHostFailure.unavailable, '$error'));
     }
   }
 

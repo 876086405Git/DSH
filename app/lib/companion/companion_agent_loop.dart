@@ -225,7 +225,10 @@ class CompanionAgentModelRequest {
       if (!isCurrent() || abort.isAborted) return null;
       final message = result.message;
       if (message == null) {
-        throw CompanionHostError(companionHostFailure(result.errorCode), result.errorCode ?? result.terminal);
+        throw CompanionHostError(
+          companionHostFailure(result.errorCode, httpStatus: result.httpStatus),
+          result.errorCode ?? result.terminal,
+        );
       }
       return CompanionAgentMessage(
         content: (message['content']! as List).cast<Map<String, Object?>>(),
@@ -234,7 +237,7 @@ class CompanionAgentModelRequest {
       );
     } on CompanionAuxiliaryFailure catch (error) {
       notSentProven = error.notSent;
-      throw CompanionHostError(companionHostFailure(error.code), error.code);
+      throw CompanionHostError(companionHostFailure(error.code, httpStatus: error.httpStatus), error.code);
     } finally {
       abort.abort();
     }

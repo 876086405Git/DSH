@@ -73,11 +73,13 @@ List<CompanionLine> companionLightContext(Iterable<CompanionLine> lines, {int wi
 
 enum CompanionLightFailure { noKey, badKey, busy, network, server }
 
-enum CompanionHostFailure { disconnected, modelUnavailable, unavailable, requestFailed }
+enum CompanionHostFailure { disconnected, modelUnavailable, unavailable, busy, requestFailed }
 
 // Host failures keep their route identity through the Agent's existing error
 // channel. In particular they never ask for a phone-only DeepSeek key.
-CompanionHostFailure companionHostFailure(String? code) => switch (code) {
+CompanionHostFailure companionHostFailure(String? code, {int? httpStatus}) => switch (code) {
+  _ when httpStatus == 429 => CompanionHostFailure.busy,
+  'RATE_LIMIT' || 'companion/auxiliary-busy' => CompanionHostFailure.busy,
   'companion/auxiliary-model-unavailable' || 'UNKNOWN_MODEL' || 'MISSING_MODEL' =>
     CompanionHostFailure.modelUnavailable,
   'transport-error' || 'cancelled' => CompanionHostFailure.disconnected,
@@ -103,7 +105,11 @@ class CompanionLightError implements Exception {
 /// Fits the existing Agent error channel without widening Light's enum or
 /// losing the Host reason when the Agent retains a failed turn.
 class CompanionHostError extends CompanionLightError {
-  const CompanionHostError(this.hostFailure, [String? detail]) : super(CompanionLightFailure.server, detail);
+  const CompanionHostError(this.hostFailure, [String? detail])
+    : super(
+        hostFailure == CompanionHostFailure.busy ? CompanionLightFailure.busy : CompanionLightFailure.server,
+        detail,
+      );
 
   final CompanionHostFailure hostFailure;
 }

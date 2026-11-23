@@ -493,7 +493,9 @@ class CompanionMemoryWorker {
       return error.configuration ? CompanionMemoryWork.configuration : CompanionMemoryWork.waiting;
     } on CompanionLightError catch (error) {
       if (cancelled.isCompleted) return CompanionMemoryWork.stale;
-      return (error is CompanionHostError && error.hostFailure != CompanionHostFailure.requestFailed) ||
+      return (error is CompanionHostError &&
+              error.hostFailure != CompanionHostFailure.requestFailed &&
+              error.hostFailure != CompanionHostFailure.busy) ||
           const [CompanionLightFailure.noKey, CompanionLightFailure.badKey].contains(error.failure)
           ? CompanionMemoryWork.configuration
           : CompanionMemoryWork.waiting;

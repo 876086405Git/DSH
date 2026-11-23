@@ -4,10 +4,12 @@ import 'dart:io';
 
 import 'package:dsh_app/companion/companion_agent.dart';
 import 'package:dsh_app/companion/companion_agent_tools.dart';
+import 'package:dsh_app/companion/companion_context.dart' show estimateCompanionMemoryTokens;
 import 'package:dsh_app/companion/companion_host_memory_transport.dart';
 import 'package:dsh_app/companion/companion_light.dart';
 import 'package:dsh_app/companion/companion_local.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
+import 'package:dsh_app/companion/companion_memory_worker.dart' show CompanionMemoryWork;
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -155,6 +157,7 @@ void main() {
     server.listen((request) async {
       final raw = await utf8.decoder.bind(request).join();
       final response = request.response;
+      response.bufferOutput = false;
       if (request.method == 'GET') {
         getUris.add(request.uri);
         response.headers.contentType = ContentType.json;
@@ -175,6 +178,13 @@ void main() {
       } else {
         final body = jsonDecode(raw) as Map<String, Object?>;
         posts.add(body);
+        if (posts.length == 3 || posts.length == 6) {
+          response.statusCode = 429;
+          response.headers.contentType = ContentType.text;
+          response.write('Busy');
+          await response.close();
+          return;
+        }
         final first = posts.length == 1;
         final terminal = first ? 'tool-calls' : 'complete';
         // A buffered dart:io response holds the flushed frames until close.
@@ -183,6 +193,39 @@ void main() {
         void emit(Map<String, Object?> frame) =>
             response.write('${jsonEncode({...frame, 'requestId': body['requestId']})}\n');
         emit({'type': 'accepted', 'instanceId': 'host-generation', 'provider': provider, 'model': model});
+        if (posts.length == 4 || posts.length == 5) {
+          final status = posts.length == 4 ? 429 : null;
+          final failureTerminal = status == 429 ? 'http_error' : 'provider_error';
+          emit({
+            'type': 'finish',
+            'dispatched': null,
+            'dispatchAtMs': null,
+            'terminal': failureTerminal,
+            'complete': false,
+            'stopReason': null,
+            'httpStatus': status,
+            'error': {'code': status == 429 ? 'AUXILIARY_FAILED' : 'RATE_LIMIT'},
+            'usage': {
+              'provider': provider,
+              'model': model,
+              'start_usage': null,
+              'final_usage': null,
+              'start_event': null,
+              'final_event': null,
+              'usage_semantics': 'unknown',
+              'input_uncached': null,
+              'input_cache_read': null,
+              'input_cache_write': null,
+              'output_tokens': null,
+              'stop_reason': null,
+              'terminal': failureTerminal,
+              'complete': false,
+              'http_status': status,
+            },
+          });
+          await response.close();
+          return;
+        }
         emit({'type': 'text', 'text': first ? '我先看看。' : '第一件没改，'});
         emit({
           'type': 'message',
@@ -346,6 +389,161 @@ void main() {
       expect(row['estimated_cny'], isNull);
       expect(row['output_tokens'], isNull);
       expect((row['raw_usage'] as Map)['runtime_normalized_usage_semantics'], 'runtime-normalized-events');
+    }
+
+    // The outer response has no proof that the provider was never sent.
+    final outerBusySource = hostMemory.store.submitMessage(
+      id: 'host-busy-http-user',
+      sessionId: 'full-session',
+      text: '这句遇到外层限流也先留好。',
+      saidAtUtc: 1795309200000,
+      offsetMinutes: 480,
+    );
+    final outerBusySaved = hostMemory.store.messages().singleWhere((row) => row['id'] == outerBusySource['id']);
+    await hostAgent.say(
+      memory: hostMemory,
+      source: outerBusySource,
+      system: 'Synthetic test persona.',
+      isCurrent: () => true,
+      tools: const [],
+    );
+    expect(
+      hostAgent.error,
+      isA<CompanionHostError>()
+          .having((error) => error.hostFailure, 'hostFailure', CompanionHostFailure.busy)
+          .having((error) => error.failure, 'failure', CompanionLightFailure.busy)
+          .having((error) => error.detail, 'detail', 'http-error'),
+    );
+    expect(hostAgent.running, isFalse);
+    expect(posts, hasLength(3), reason: 'busy does not silently retry or switch to the phone');
+    expect(hostMemory.store.messages().singleWhere((row) => row['id'] == outerBusySource['id']), outerBusySaved);
+    final outerBusy = hostMemory.store.requests().singleWhere((row) => row['id'] == posts.last['requestId']);
+    expect((outerBusy['raw_usage'] as Map)['proxy_finish_observed'], isFalse);
+    expect((outerBusy['raw_usage'] as Map)['terminal'], 'http_error');
+
+    // This final frame needs its actual HTTP status, not a RATE_LIMIT code.
+    final statusBusySource = hostMemory.store.submitMessage(
+      id: 'host-busy-status-user',
+      sessionId: 'full-session',
+      text: '这句遇到模型状态限流也先留好。',
+      saidAtUtc: 1795309200000,
+      offsetMinutes: 480,
+    );
+    final statusBusySaved = hostMemory.store.messages().singleWhere((row) => row['id'] == statusBusySource['id']);
+    await hostAgent.say(
+      memory: hostMemory,
+      source: statusBusySource,
+      system: 'Synthetic test persona.',
+      isCurrent: () => true,
+      tools: const [],
+    );
+    expect(
+      hostAgent.error,
+      isA<CompanionHostError>()
+          .having((error) => error.hostFailure, 'hostFailure', CompanionHostFailure.busy)
+          .having((error) => error.failure, 'failure', CompanionLightFailure.busy)
+          .having((error) => error.detail, 'detail', 'AUXILIARY_FAILED'),
+    );
+    expect(hostAgent.running, isFalse);
+    expect(posts, hasLength(4), reason: 'one captured attempt settles this status failure');
+    expect(hostMemory.store.messages().singleWhere((row) => row['id'] == statusBusySource['id']), statusBusySaved);
+    final statusBusy = hostMemory.store.requests().singleWhere((row) => row['id'] == posts.last['requestId']);
+    expect((statusBusy['raw_usage'] as Map)['http_status'], 429);
+    expect((statusBusy['raw_usage'] as Map)['terminal'], 'http_error');
+
+    // Generic adapters can preserve the stable code without an HTTP status.
+    final codeBusySource = hostMemory.store.submitMessage(
+      id: 'host-busy-code-user',
+      sessionId: 'full-session',
+      text: '这句遇到模型限流码也先留好。',
+      saidAtUtc: 1795309200000,
+      offsetMinutes: 480,
+    );
+    final codeBusySaved = hostMemory.store.messages().singleWhere((row) => row['id'] == codeBusySource['id']);
+    await hostAgent.say(
+      memory: hostMemory,
+      source: codeBusySource,
+      system: 'Synthetic test persona.',
+      isCurrent: () => true,
+      tools: const [],
+    );
+    expect(
+      hostAgent.error,
+      isA<CompanionHostError>()
+          .having((error) => error.hostFailure, 'hostFailure', CompanionHostFailure.busy)
+          .having((error) => error.failure, 'failure', CompanionLightFailure.busy)
+          .having((error) => error.detail, 'detail', 'RATE_LIMIT'),
+    );
+    expect(hostAgent.running, isFalse);
+    expect(posts, hasLength(5), reason: 'a stream error does not open another attempt');
+    expect(hostMemory.store.messages().singleWhere((row) => row['id'] == codeBusySource['id']), codeBusySaved);
+    final codeBusy = hostMemory.store.requests().singleWhere((row) => row['id'] == posts.last['requestId']);
+    expect((codeBusy['raw_usage'] as Map)['http_status'], isNull);
+    expect((codeBusy['raw_usage'] as Map)['terminal'], 'provider_error');
+
+    final busyCosts = {
+      for (final row in hostMemory.store.requests())
+        if (!costs.containsKey(row['id'])) row['id']: row,
+    };
+    expect(busyCosts, hasLength(3));
+    expect(busyCosts.keys.toSet(), posts.skip(2).map((post) => post['requestId']).toSet());
+    expect(posts.map((post) => post['requestId']).toSet(), hasLength(5));
+    expect(phoneClients, 0);
+    expect(phonePosts, 0);
+    expect(hostCalls, [1, 2]);
+    expect(hostUsage, hasLength(5));
+    for (final row in busyCosts.values) {
+      expect(row['provider'], provider);
+      expect(row['model'], model);
+      expect(row['uncertain_at_ms'], isNotNull);
+      expect(row['sent_at_ms'], isNull);
+      expect(row['state'], 'interrupted');
+      expect(row['terminal'], 'dispatch_unknown');
+      expect(row['estimated_cny'], isNull);
+      expect(row['output_tokens'], isNull);
+      expect((row['raw_usage'] as Map)['complete'], isFalse);
+      expect((row['raw_usage'] as Map)['usage_semantics'], 'unknown');
+      expect((row['raw_usage'] as Map)['host_dispatch_at_ms'], isNull);
+    }
+
+    // The same real Host busy response must leave maintenance waiting, not
+    // turn a temporary limit into a configuration error. Its source queue and
+    // physical receipt are owned by the public MemoryOwner/Worker path.
+    final room = Object();
+    hostMemory.enter(room, transport: () => route, estimateTokens: estimateCompanionMemoryTokens);
+    try {
+      final work = await hostMemory.extract(room, forceTail: true, offsetMinutes: 480);
+      expect(work, CompanionMemoryWork.waiting);
+      expect(posts, hasLength(6), reason: 'maintenance busy does not start a second request');
+      final maintenancePost = posts.last;
+      expect(maintenancePost['kind'], 'agent');
+      expect(maintenancePost['tools'], isNotEmpty);
+      final context =
+          jsonDecode(((maintenancePost['messages']! as List).single as Map)['content']! as String) as Map;
+      expect(context['kind'], 'extract');
+      expect((context['sources']! as List).cast<Map>().map((source) => source['id']), contains('host-agent-user'));
+      final receipt = hostMemory.store.requests().singleWhere((row) => row['id'] == maintenancePost['requestId']);
+      expect(receipt['category'], 'extract');
+      expect(receipt['provider'], provider);
+      expect(receipt['model'], model);
+      expect(receipt['uncertain_at_ms'], isNotNull);
+      expect(receipt['sent_at_ms'], isNull);
+      expect(receipt['state'], 'interrupted');
+      expect(receipt['terminal'], 'dispatch_unknown');
+      expect(receipt['estimated_cny'], isNull);
+      expect(receipt['output_tokens'], isNull);
+      final rawUsage = receipt['raw_usage'] as Map;
+      expect(rawUsage['usage_semantics'], 'unknown');
+      expect(rawUsage['terminal'], 'http_error');
+      expect(rawUsage['proxy_finish_observed'], isFalse);
+      expect(rawUsage['complete'], isFalse);
+      expect(hostMemory.store.requests(), hasLength(6));
+      expect(posts.map((post) => post['requestId']).toSet(), hasLength(6));
+      expect(hostMemory.working, isFalse);
+      expect(phoneClients, 0);
+      expect(phonePosts, 0);
+    } finally {
+      hostMemory.leave(room);
     }
   });
 

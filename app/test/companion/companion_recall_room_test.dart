@@ -545,10 +545,12 @@ void main() {
     final room = _Room(root)..bridge.chatUsage = true;
     await room.open(tester);
     var observed = false;
-    room.beforeModel = (_) {
+    room.beforeModel = (sent) {
       final receipt = room.memory.store.requests().single;
       expect(receipt['category'], 'chat');
       expect(receipt['provider'], 'deepseek');
+      expect(receipt['model'], 'deepseek-flash');
+      expect(sent['model'], receipt['model']);
       // Through the Host (ADD67) the phone records the handoff before its POST;
       // the Host's own dispatch receipt then marks it sent.
       expect(receipt['uncertain_at_ms'], isNotNull);

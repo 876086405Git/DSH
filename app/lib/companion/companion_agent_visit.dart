@@ -519,7 +519,7 @@ class _CompanionAgentVisit {
       final background = residentUi;
       if (background != null && !identical(background, foreground)) background.controlChanged(own: own);
       unawaited(clearWidget());
-      unawaited(ref.read(companionSessionsProvider.notifier).forgetAll());
+      ref.read(companionSessionsProvider.notifier).retirePending();
       if (!own && ui.stageReady) unawaited(refreshKeeper());
       queueExtraction();
     }
