@@ -122,11 +122,14 @@ void main() {
     final coffeeTopic = actualCard(coffeeCard)['topic_id'];
     final interviewSource = say('rewrite-interview-source', '面试安排在周五下午。');
     final interview = begin(interviewSource, [actualCard(card['id']! as String)]);
-    expect(call(interview, 'rewrite-interview-keyword', 'remember', {
-      'card': card['id'],
-      'text': '面试安排在周五下午',
-      'keywords': ['面试'],
-    }).applied, isTrue);
+    expect(
+      call(interview, 'rewrite-interview-keyword', 'remember', {
+        'card': card['id'],
+        'text': '面试安排在周五下午',
+        'keywords': ['面试'],
+      }).applied,
+      isTrue,
+    );
     expect(call(interview, 'rewrite-interview-never', 'quiet', {'card': card['id'], 'mode': 'never'}).applied, isTrue);
     store.closeAgentTurn(interview);
     final interviewTopic = actualCard(card['id']! as String)['topic_id'];
@@ -157,7 +160,10 @@ void main() {
       'anchors': ['面试'],
       'character_id': null,
     });
-    expect(call(restoringOld, 'rewrite-restore-old', 'quiet', {'topic': interviewTopic, 'mode': 'normal'}).applied, isTrue);
+    expect(
+      call(restoringOld, 'rewrite-restore-old', 'quiet', {'topic': interviewTopic, 'mode': 'normal'}).applied,
+      isTrue,
+    );
     expect(actualCard(card['id']! as String), rewrittenCard);
     expect(actualCard(coffeeCard)['topic_mode'], 'never');
     expect(explicitMemoryTopics('无糖', store.cards()), isEmpty);
@@ -1722,7 +1728,10 @@ void main() {
       'text': '我喝咖啡不加糖。',
       'keywords': ['咖啡'],
     }).targetId!;
-    expect(call(destinationMaking, 'destination-never', 'quiet', {'card': destination, 'mode': 'never'}).applied, isTrue);
+    expect(
+      call(destinationMaking, 'destination-never', 'quiet', {'card': destination, 'mode': 'never'}).applied,
+      isTrue,
+    );
     store.closeAgentTurn(destinationMaking);
     final destinationTopic = actualCard(destination)['topic_id'];
     final movingMaking = begin(say('moving-source', '我想折一架纸飞机。'));
@@ -1738,7 +1747,12 @@ void main() {
     final moved = call(moving, 'move-and-forget', 'forget', {
       'changes': [
         {'card': destination, 'forget': true},
-        {'card': movingCard, 'text': '我最近的咖啡甜度是无糖。', 'keywords': ['无糖'], 'sources': [movingSource['id']]},
+        {
+          'card': movingCard,
+          'text': '我最近的咖啡甜度是无糖。',
+          'keywords': ['无糖'],
+          'sources': [movingSource['id']],
+        },
       ],
     });
     expect(moved.applied, isTrue);
@@ -1869,8 +1883,15 @@ void main() {
       containsAll([refreshCard, refreshChild, refreshParent]),
     );
     expect(store.messages().any((source) => source['id'] == refreshR20['id']), isFalse);
-    expect(store.messages().singleWhere((source) => source['id'] == refreshR10['id']), refreshR10);
-    expect(store.messages().singleWhere((source) => source['id'] == refreshR30['id']), refreshR30);
+    // The surviving originals keep every field the test captured; the store may
+    // also carry its own extraction bookkeeping on them.
+    Map<String, Object?> captured(Map<String, Object?> like) {
+      final row = store.messages().singleWhere((source) => source['id'] == like['id']);
+      return {for (final key in like.keys) key: row[key]};
+    }
+
+    expect(captured(refreshR10), refreshR10);
+    expect(captured(refreshR30), refreshR30);
     expect(store.requests(), paid);
     store.closeAgentTurn(refreshDeleting);
   });
@@ -2195,7 +2216,10 @@ void main() {
       'text': '我喝咖啡不加糖。',
       'keywords': ['咖啡'],
     }).targetId!;
-    expect(call(bodyExternalMaking, 'body-external-less', 'quiet', {'card': bodyExternal, 'mode': 'less'}).applied, isTrue);
+    expect(
+      call(bodyExternalMaking, 'body-external-less', 'quiet', {'card': bodyExternal, 'mode': 'less'}).applied,
+      isTrue,
+    );
     store.closeAgentTurn(bodyExternalMaking);
     final bodyTargetRaw = say('body-target-source', '我最近的咖啡都是拿铁，甜度是无糖。');
     final bodyTargetMaking = begin(bodyTargetRaw);
@@ -2211,13 +2235,19 @@ void main() {
       'keywords': ['无糖'],
     }).targetId!;
     store.closeAgentTurn(bodyFromMaking);
-    final bodyQuieting = begin(say('body-quiet-source', '拿铁少提，无糖的这条不要主动提。'), [actualCard(bodyTarget), actualCard(bodyFrom)]);
+    final bodyQuieting = begin(say('body-quiet-source', '拿铁少提，无糖的这条不要主动提。'), [
+      actualCard(bodyTarget),
+      actualCard(bodyFrom),
+    ]);
     expect(call(bodyQuieting, 'body-target-less', 'quiet', {'card': bodyTarget, 'mode': 'less'}).applied, isTrue);
     expect(call(bodyQuieting, 'body-from-never', 'quiet', {'card': bodyFrom, 'mode': 'never'}).applied, isTrue);
     store.closeAgentTurn(bodyQuieting);
     final bodyNeverTopic = actualCard(bodyFrom)['topic_id'];
     final bodyExternalTopic = actualCard(bodyExternal)['topic_id'];
-    final bodyJoining = begin(say('body-merge-source', '这两条拿铁记录是同一种咖啡的无糖甜度。'), [actualCard(bodyTarget), actualCard(bodyFrom)]);
+    final bodyJoining = begin(say('body-merge-source', '这两条拿铁记录是同一种咖啡的无糖甜度。'), [
+      actualCard(bodyTarget),
+      actualCard(bodyFrom),
+    ]);
     final beforeMixedBody = store.cards(includeInactive: true);
     final beforeMixedArchive = store.archive;
     final bodyControls = store.topicControls();
@@ -2243,7 +2273,10 @@ void main() {
     expect(internalBody.changedCardIds, unorderedEquals([bodyTarget, bodyFrom]));
     expect(actualCard(bodyTarget)['topic_id'], bodyNeverTopic);
     expect(actualCard(bodyTarget)['topic_mode'], 'never');
-    expect((actualCard(bodyTarget)['evidence'] as List).cast<MemoryRow>().map((row) => row['message_id']), unorderedEquals([bodyTargetRaw['id'], bodyFromRaw['id']]));
+    expect(
+      (actualCard(bodyTarget)['evidence'] as List).cast<MemoryRow>().map((row) => row['message_id']),
+      unorderedEquals([bodyTargetRaw['id'], bodyFromRaw['id']]),
+    );
     expect(store.topicControls(), bodyControls);
     store.closeAgentTurn(bodyJoining);
 
@@ -2255,7 +2288,10 @@ void main() {
       'keywords': ['饮品'],
     }).targetId!;
     store.closeAgentTurn(bodyAnotherMaking);
-    final bodyExternalJoining = begin(say('body-external-merge-source', '这条饮品记录与前面的咖啡甜度是同一件事。'), [actualCard(bodyTarget), actualCard(bodyAnother)]);
+    final bodyExternalJoining = begin(say('body-external-merge-source', '这条饮品记录与前面的咖啡甜度是同一件事。'), [
+      actualCard(bodyTarget),
+      actualCard(bodyAnother),
+    ]);
     final externalBody = call(bodyExternalJoining, 'body-external-merge', 'merge', {
       'card': bodyTarget,
       'from': [bodyAnother],
@@ -2269,7 +2305,10 @@ void main() {
     expect(store.cards(includeInactive: true).any((row) => row['id'] == bodyAnother), isFalse);
     expect(store.cards(includeInactive: true).where((row) => row['topic_id'] == bodyNeverTopic), isEmpty);
     expect(store.topicControls(), bodyControls);
-    expect(call(bodyExternalJoining, 'body-still-quiet', 'ask_later', {'card': bodyTarget, 'whenMs': now}).code, 'topic_quiet');
+    expect(
+      call(bodyExternalJoining, 'body-still-quiet', 'ask_later', {'card': bodyTarget, 'whenMs': now}).code,
+      'topic_quiet',
+    );
     expect(store.requests(), isEmpty);
   });
 
@@ -2519,25 +2558,40 @@ void main() {
 
     // The Page also exposes an existing private impression. Its real stored
     // role, not shared or another role's stronger control, chooses the topic.
-    final editingImpression = store.cards().singleWhere((row) => row['collection'] == 'impression' && row['character_id'] == firstRole);
-    final otherImpression = store.cards().singleWhere((row) => row['collection'] == 'impression' && row['character_id'] == secondRole);
+    final editingImpression = store.cards().singleWhere(
+      (row) => row['collection'] == 'impression' && row['character_id'] == firstRole,
+    );
+    final otherImpression = store.cards().singleWhere(
+      (row) => row['collection'] == 'impression' && row['character_id'] == secondRole,
+    );
     final editorOwnMaking = begin(sayAs('editor-own-source', '我们最近聊过咖啡。', firstRole));
     final editorOwn = call(editorOwnMaking, 'editor-own', 'remember', {
-      'collection': 'our_story', 'text': '我们最近聊过咖啡。', 'keywords': ['咖啡'],
+      'collection': 'our_story',
+      'text': '我们最近聊过咖啡。',
+      'keywords': ['咖啡'],
     }).targetId!;
     expect(call(editorOwnMaking, 'editor-own-less', 'quiet', {'card': editorOwn, 'mode': 'less'}).applied, isTrue);
     store.closeAgentTurn(editorOwnMaking);
     final editorOtherMaking = begin(sayAs('editor-other-source', '我们谈过咖啡的温度。', secondRole));
     final editorOther = call(editorOtherMaking, 'editor-other', 'remember', {
-      'collection': 'our_story', 'text': '我们谈过咖啡的温度。', 'keywords': ['咖啡'],
+      'collection': 'our_story',
+      'text': '我们谈过咖啡的温度。',
+      'keywords': ['咖啡'],
     }).targetId!;
-    expect(call(editorOtherMaking, 'editor-other-never', 'quiet', {'card': editorOther, 'mode': 'never'}).applied, isTrue);
+    expect(
+      call(editorOtherMaking, 'editor-other-never', 'quiet', {'card': editorOther, 'mode': 'never'}).applied,
+      isTrue,
+    );
     store.closeAgentTurn(editorOtherMaking);
     final editorSharedMaking = begin(say('editor-shared-source', '我喝咖啡不加糖。'));
     final editorShared = call(editorSharedMaking, 'editor-shared', 'remember', {
-      'text': '我喝咖啡不加糖。', 'keywords': ['咖啡'],
+      'text': '我喝咖啡不加糖。',
+      'keywords': ['咖啡'],
     }).targetId!;
-    expect(call(editorSharedMaking, 'editor-shared-never', 'quiet', {'card': editorShared, 'mode': 'never'}).applied, isTrue);
+    expect(
+      call(editorSharedMaking, 'editor-shared-never', 'quiet', {'card': editorShared, 'mode': 'never'}).applied,
+      isTrue,
+    );
     store.closeAgentTurn(editorSharedMaking);
     final editorOwnBefore = actualCard(editorOwn);
     final editorOtherBefore = actualCard(editorOther);
@@ -2546,7 +2600,10 @@ void main() {
     final editorRequests = store.requests();
     final editingImpressionId = editingImpression['id']! as String;
     expect(store.memoryPageCards(characterId: firstRole).map((row) => row['id']), contains(editingImpressionId));
-    expect(store.memoryPageCards(characterId: secondRole).map((row) => row['id']), isNot(contains(editingImpressionId)));
+    expect(
+      store.memoryPageCards(characterId: secondRole).map((row) => row['id']),
+      isNot(contains(editingImpressionId)),
+    );
     store.saveManual(
       CompanionMemory(
         id: editingImpressionId,
@@ -2576,28 +2633,35 @@ void main() {
     // makes the fixed-layer invitation and ambiguity checks independent.
     final magnoliaMaking = begin(sayAs('fixed-magnolia-source', '我们看过玉兰，也谈过散步。', firstRole));
     final magnolia = call(magnoliaMaking, 'fixed-magnolia', 'remember', {
-      'collection': 'our_story', 'text': '我们看过玉兰。', 'keywords': ['玉兰'],
+      'collection': 'our_story',
+      'text': '我们看过玉兰。',
+      'keywords': ['玉兰'],
     });
     expect(magnolia.applied, isTrue);
-    expect(call(magnoliaMaking, 'fixed-magnolia-never', 'quiet', {
-      'card': magnolia.targetId, 'mode': 'never',
-    }).applied, isTrue);
+    expect(
+      call(magnoliaMaking, 'fixed-magnolia-never', 'quiet', {'card': magnolia.targetId, 'mode': 'never'}).applied,
+      isTrue,
+    );
     store.closeAgentTurn(magnoliaMaking);
     final bookMaking = begin(say('fixed-book-source', '我喜欢读纸书。'));
     final book = call(bookMaking, 'fixed-book', 'remember', {
-      'text': '我喜欢读纸书。', 'keywords': ['纸书'],
+      'text': '我喜欢读纸书。',
+      'keywords': ['纸书'],
     });
     expect(book.applied, isTrue);
     store.closeAgentTurn(bookMaking);
     final impressionSource = sayAs('fixed-invitation-source', '我们聊过玉兰，散步时更自在。', firstRole);
     final impressionWriting = begin(impressionSource, [actualCard(editingImpressionId), actualCard(book.targetId!)]);
-    expect(call(impressionWriting, 'fixed-invitation-impression', 'impression', {
-      'card': editingImpressionId,
-      'text': '聊过玉兰后，散步时彼此更自在。',
-      'keywords': ['散步'],
-      'sources': [impressionSource['id']],
-      'references': [book.targetId],
-    }).applied, isTrue);
+    expect(
+      call(impressionWriting, 'fixed-invitation-impression', 'impression', {
+        'card': editingImpressionId,
+        'text': '聊过玉兰后，散步时彼此更自在。',
+        'keywords': ['散步'],
+        'sources': [impressionSource['id']],
+        'references': [book.targetId],
+      }).applied,
+      isTrue,
+    );
     store.closeAgentTurn(impressionWriting);
     final invitedImpression = actualCard(editingImpressionId);
     expect(invitedImpression['topic_id'], actualCard(magnolia.targetId!)['topic_id']);
@@ -2607,21 +2671,45 @@ void main() {
     final controlsBeforeFixedReads = store.topicControls();
     final archiveBeforeFixedReads = store.archive;
     final requestsBeforeFixedReads = store.requests();
-    expect(store.memoryFixedLayerCards(
-      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
-    ).map((row) => row['id']), isNot(contains(editingImpressionId)));
-    expect(store.memoryFixedLayerCards(
-      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
-      explicitUserInput: '聊聊玉兰',
-    ).map((row) => row['id']), contains(editingImpressionId));
-    expect(store.memoryFixedLayerCards(
-      characterId: null, fromDay: '2026-10-02', beforeDay: '2026-10-04',
-      explicitUserInput: '聊聊玉兰',
-    ).map((row) => row['id']), isNot(contains(editingImpressionId)));
-    expect(store.memoryFixedLayerCards(
-      characterId: secondRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
-      explicitUserInput: '聊聊玉兰',
-    ).map((row) => row['id']), isNot(contains(editingImpressionId)));
+    expect(
+      store
+          .memoryFixedLayerCards(characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04')
+          .map((row) => row['id']),
+      isNot(contains(editingImpressionId)),
+    );
+    expect(
+      store
+          .memoryFixedLayerCards(
+            characterId: firstRole,
+            fromDay: '2026-10-02',
+            beforeDay: '2026-10-04',
+            explicitUserInput: '聊聊玉兰',
+          )
+          .map((row) => row['id']),
+      contains(editingImpressionId),
+    );
+    expect(
+      store
+          .memoryFixedLayerCards(
+            characterId: null,
+            fromDay: '2026-10-02',
+            beforeDay: '2026-10-04',
+            explicitUserInput: '聊聊玉兰',
+          )
+          .map((row) => row['id']),
+      isNot(contains(editingImpressionId)),
+    );
+    expect(
+      store
+          .memoryFixedLayerCards(
+            characterId: secondRole,
+            fromDay: '2026-10-02',
+            beforeDay: '2026-10-04',
+            explicitUserInput: '聊聊玉兰',
+          )
+          .map((row) => row['id']),
+      isNot(contains(editingImpressionId)),
+    );
     expect(store.cards(), cardsBeforeFixedReads);
     expect(store.topicControls(), controlsBeforeFixedReads);
     expect(store.archive, archiveBeforeFixedReads);
@@ -2631,39 +2719,73 @@ void main() {
     // same real selection domain, so it can make the invitation ambiguous.
     final ambiguousMaking = begin(say('fixed-shared-magnolia-source', '我在窗边养了一盆玉兰。'));
     final ambiguous = call(ambiguousMaking, 'fixed-shared-magnolia', 'remember', {
-      'text': '我在窗边养了一盆玉兰。', 'keywords': ['玉兰'],
+      'text': '我在窗边养了一盆玉兰。',
+      'keywords': ['玉兰'],
     });
     expect(ambiguous.applied, isTrue);
-    expect(call(ambiguousMaking, 'fixed-shared-magnolia-never', 'quiet', {
-      'card': ambiguous.targetId, 'mode': 'never',
-    }).applied, isTrue);
+    expect(
+      call(ambiguousMaking, 'fixed-shared-magnolia-never', 'quiet', {
+        'card': ambiguous.targetId,
+        'mode': 'never',
+      }).applied,
+      isTrue,
+    );
     expect(actualCard(ambiguous.targetId!)['topic_id'], isNot(invitedImpression['topic_id']));
     expect(store.memoryPageCards(characterId: firstRole).map((row) => row['id']), contains(editingImpressionId));
-    expect(store.memoryFixedLayerCards(
-      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
-      explicitUserInput: '聊聊玉兰',
-    ).map((row) => row['id']), isNot(contains(editingImpressionId)));
-    expect(call(ambiguousMaking, 'fixed-shared-magnolia-forget', 'forget', {
-      'card': ambiguous.targetId,
-    }).applied, isTrue);
+    expect(
+      store
+          .memoryFixedLayerCards(
+            characterId: firstRole,
+            fromDay: '2026-10-02',
+            beforeDay: '2026-10-04',
+            explicitUserInput: '聊聊玉兰',
+          )
+          .map((row) => row['id']),
+      isNot(contains(editingImpressionId)),
+    );
+    expect(
+      call(ambiguousMaking, 'fixed-shared-magnolia-forget', 'forget', {'card': ambiguous.targetId}).applied,
+      isTrue,
+    );
     store.closeAgentTurn(ambiguousMaking);
-    expect(store.memoryFixedLayerCards(
-      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
-      explicitUserInput: '聊聊玉兰',
-    ).map((row) => row['id']), contains(editingImpressionId));
+    expect(
+      store
+          .memoryFixedLayerCards(
+            characterId: firstRole,
+            fromDay: '2026-10-02',
+            beforeDay: '2026-10-04',
+            explicitUserInput: '聊聊玉兰',
+          )
+          .map((row) => row['id']),
+      contains(editingImpressionId),
+    );
 
     // The other role can update a shared parent without rewriting this
     // private impression. An invitation cannot revive its stale reference.
-    final bookChanging = begin(sayAs('fixed-book-changed-source', '我现在主要读电子书。', secondRole), [actualCard(book.targetId!)]);
-    expect(call(bookChanging, 'fixed-book-changed', 'remember', {
-      'card': book.targetId, 'text': '我现在主要读电子书。', 'keywords': ['电子书'],
-    }).applied, isTrue);
+    final bookChanging = begin(sayAs('fixed-book-changed-source', '我现在主要读电子书。', secondRole), [
+      actualCard(book.targetId!),
+    ]);
+    expect(
+      call(bookChanging, 'fixed-book-changed', 'remember', {
+        'card': book.targetId,
+        'text': '我现在主要读电子书。',
+        'keywords': ['电子书'],
+      }).applied,
+      isTrue,
+    );
     store.closeAgentTurn(bookChanging);
     expect(store.memoryPageCards(characterId: firstRole).map((row) => row['id']), isNot(contains(editingImpressionId)));
-    expect(store.memoryFixedLayerCards(
-      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
-      explicitUserInput: '聊聊玉兰',
-    ).map((row) => row['id']), isNot(contains(editingImpressionId)));
+    expect(
+      store
+          .memoryFixedLayerCards(
+            characterId: firstRole,
+            fromDay: '2026-10-02',
+            beforeDay: '2026-10-04',
+            explicitUserInput: '聊聊玉兰',
+          )
+          .map((row) => row['id']),
+      isNot(contains(editingImpressionId)),
+    );
 
     // These are the Scope's explicit half-open date bounds, not a claim
     // that the Owner's current October 4 window includes October 1.
@@ -2675,24 +2797,51 @@ void main() {
       realityKnown: true,
     );
     final diaryQuieting = begin(say('fixed-diary-quiet-source', '那天日记里的红茶暂时不主动聊。'), [actualCard(diary.targetId!)]);
-    expect(call(diaryQuieting, 'fixed-diary-never', 'quiet', {'card': diary.targetId, 'mode': 'never'}).applied, isTrue);
+    expect(
+      call(diaryQuieting, 'fixed-diary-never', 'quiet', {'card': diary.targetId, 'mode': 'never'}).applied,
+      isTrue,
+    );
     store.closeAgentTurn(diaryQuieting);
     expect(actualCard(diary.targetId!)['local_day'], '2026-10-01');
-    expect(store.memoryFixedLayerCards(
-      characterId: firstRole, fromDay: '2026-09-30', beforeDay: '2026-10-02',
-    ).map((row) => row['id']), isNot(contains(diary.targetId)));
-    expect(store.memoryFixedLayerCards(
-      characterId: firstRole, fromDay: '2026-09-30', beforeDay: '2026-10-02',
-      explicitUserInput: '聊聊红茶',
-    ).map((row) => row['id']), contains(diary.targetId));
-    expect(store.memoryFixedLayerCards(
-      characterId: firstRole, fromDay: '2026-09-30', beforeDay: '2026-10-01',
-      explicitUserInput: '聊聊红茶',
-    ).map((row) => row['id']), isNot(contains(diary.targetId)));
-    expect(store.memoryFixedLayerCards(
-      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
-      explicitUserInput: '聊聊红茶',
-    ).map((row) => row['id']), isNot(contains(diary.targetId)));
+    expect(
+      store
+          .memoryFixedLayerCards(characterId: firstRole, fromDay: '2026-09-30', beforeDay: '2026-10-02')
+          .map((row) => row['id']),
+      isNot(contains(diary.targetId)),
+    );
+    expect(
+      store
+          .memoryFixedLayerCards(
+            characterId: firstRole,
+            fromDay: '2026-09-30',
+            beforeDay: '2026-10-02',
+            explicitUserInput: '聊聊红茶',
+          )
+          .map((row) => row['id']),
+      contains(diary.targetId),
+    );
+    expect(
+      store
+          .memoryFixedLayerCards(
+            characterId: firstRole,
+            fromDay: '2026-09-30',
+            beforeDay: '2026-10-01',
+            explicitUserInput: '聊聊红茶',
+          )
+          .map((row) => row['id']),
+      isNot(contains(diary.targetId)),
+    );
+    expect(
+      store
+          .memoryFixedLayerCards(
+            characterId: firstRole,
+            fromDay: '2026-10-02',
+            beforeDay: '2026-10-04',
+            explicitUserInput: '聊聊红茶',
+          )
+          .map((row) => row['id']),
+      isNot(contains(diary.targetId)),
+    );
   });
 
   test('a genuinely unsent maintenance claim closes without consuming a daily permit or reopening its turn', () {
@@ -2918,199 +3067,223 @@ void main() {
     });
   }
 
-  test('a new diary needs its real target-day source while a controlled old-diary rewrite keeps its original day and proof', () {
-    now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
-    final original = say('old-day-source', '我住在杭州，也喜欢红茶。');
-    final initial = begin(original);
-    final location = call(initial, 'location', 'remember', {'text': '住在杭州'}).targetId!;
-    store.closeAgentTurn(initial);
-    now += 86400000;
-    final claim = store.nextAgentMaintenance(
-      kind: 'organize',
-      offsetMinutes: 0,
-      estimateTokens: (text) => text.length,
-    )!;
-    final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
-    grantMaintenance(turn);
-    final before = store.archive['memory_revision'];
-    expect(
-      call(turn['id']! as String, 'references-only', 'diary', {
-        'text': '仅凭旧卡不能填写当天发生了什么。',
-        'references': [location],
-      }).code,
-      'diary_day_source_required',
-    );
-    expect(store.archive['memory_revision'], before);
-    expect(store.cards(), hasLength(1));
-    final diary = call(turn['id']! as String, 'real-day', 'diary', {
-      'text': '住在杭州，也喜欢红茶。',
-      'source': original['id'],
-    }).targetId!;
-    expect(actualCard(diary)['local_day'], '2026-10-01');
-    expect(actualCard(diary)['keywords'], ['住在杭州，也喜欢红茶。']);
-    store.finishAgentMaintenance(turnId: turn['id']! as String, complete: true);
-    final control = say('later-control', '不要记住我的住处，喜欢红茶这件事保留。');
-    now += 86400000;
-    final nextClaim = store.nextAgentMaintenance(
-      kind: 'organize',
-      offsetMinutes: 0,
-      estimateTokens: (text) => text.length,
-    )!;
-    final next = store.beginAgentMaintenance(kind: 'organize', claimId: nextClaim['id']! as String);
-    grantMaintenance(next);
-    expect(next['local_day'], '2026-10-02');
-    expect(
-      call(next['id']! as String, 'retain-tea', 'forget', {
-        'changes': [
-          {'card': location, 'forget': true},
-          {'card': diary, 'text': '喜欢红茶。'},
-        ],
-      }).applied,
-      isTrue,
-    );
-    final retained = actualCard(diary);
-    expect(retained['text'], '喜欢红茶。');
-    expect(retained['keywords'], ['喜欢红茶。']);
-    expect(retained['local_day'], '2026-10-01');
-    expect(retained['day_zone_id'], 'offset:0');
-    expect((retained['evidence'] as List).map((proof) => (proof as MemoryRow)['message_id']), [original['id']]);
-    expect((retained['evidence'] as List).any((proof) => (proof as MemoryRow)['message_id'] == control['id']), isFalse);
-    expect(store.cards().map((row) => row['id']), [diary]);
-    final fresh = store.beginAgentMaintenance(kind: 'organize', claimId: nextClaim['id']! as String);
-    expect(fresh['id'], next['id']);
-    expect(fresh['closed'], 0);
-    expect(fresh['sources'], isEmpty, reason: 'the same live claim uses the new history cutoff');
-    final visible = (fresh['cards'] as List<MemoryRow>).single;
-    expect(visible['id'], diary);
-    expect(visible['row_rev'], retained['row_rev']);
-    expect(visible['text'], '喜欢红茶。');
-    expect(visible['keywords'], ['喜欢红茶。']);
-    expect(jsonEncode(fresh), isNot(contains('杭州')));
-    expect(visible['local_day'], retained['local_day']);
-    expect(visible['evidence'], isEmpty, reason: 'the retained local proof still contains the forgotten address');
-    grantMaintenance(fresh);
-    expect(store.isAgentTurnCurrent(next['id']! as String), isTrue);
-    expect(actualCard(diary), retained, reason: 'context projection and actual grants do not rewrite local proof');
-    expect(store.messages().singleWhere((row) => row['id'] == original['id'])['text'], original['text']);
-  });
+  test(
+    'a new diary needs its real target-day source while a controlled old-diary rewrite keeps its original day and proof',
+    () {
+      now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
+      final original = say('old-day-source', '我住在杭州，也喜欢红茶。');
+      final initial = begin(original);
+      final location = call(initial, 'location', 'remember', {'text': '住在杭州'}).targetId!;
+      store.closeAgentTurn(initial);
+      now += 86400000;
+      final claim = store.nextAgentMaintenance(
+        kind: 'organize',
+        offsetMinutes: 0,
+        estimateTokens: (text) => text.length,
+      )!;
+      final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+      grantMaintenance(turn);
+      final before = store.archive['memory_revision'];
+      expect(
+        call(turn['id']! as String, 'references-only', 'diary', {
+          'text': '仅凭旧卡不能填写当天发生了什么。',
+          'references': [location],
+        }).code,
+        'diary_day_source_required',
+      );
+      expect(store.archive['memory_revision'], before);
+      expect(store.cards(), hasLength(1));
+      final diary = call(turn['id']! as String, 'real-day', 'diary', {
+        'text': '住在杭州，也喜欢红茶。',
+        'source': original['id'],
+      }).targetId!;
+      expect(actualCard(diary)['local_day'], '2026-10-01');
+      expect(actualCard(diary)['keywords'], ['住在杭州，也喜欢红茶。']);
+      store.finishAgentMaintenance(turnId: turn['id']! as String, complete: true);
+      final control = say('later-control', '不要记住我的住处，喜欢红茶这件事保留。');
+      now += 86400000;
+      final nextClaim = store.nextAgentMaintenance(
+        kind: 'organize',
+        offsetMinutes: 0,
+        estimateTokens: (text) => text.length,
+      )!;
+      final next = store.beginAgentMaintenance(kind: 'organize', claimId: nextClaim['id']! as String);
+      grantMaintenance(next);
+      expect(next['local_day'], '2026-10-02');
+      expect(
+        call(next['id']! as String, 'retain-tea', 'forget', {
+          'changes': [
+            {'card': location, 'forget': true},
+            {'card': diary, 'text': '喜欢红茶。'},
+          ],
+        }).applied,
+        isTrue,
+      );
+      final retained = actualCard(diary);
+      expect(retained['text'], '喜欢红茶。');
+      expect(retained['keywords'], ['喜欢红茶。']);
+      expect(retained['local_day'], '2026-10-01');
+      expect(retained['day_zone_id'], 'offset:0');
+      expect((retained['evidence'] as List).map((proof) => (proof as MemoryRow)['message_id']), [original['id']]);
+      expect(
+        (retained['evidence'] as List).any((proof) => (proof as MemoryRow)['message_id'] == control['id']),
+        isFalse,
+      );
+      expect(store.cards().map((row) => row['id']), [diary]);
+      final fresh = store.beginAgentMaintenance(kind: 'organize', claimId: nextClaim['id']! as String);
+      expect(fresh['id'], next['id']);
+      expect(fresh['closed'], 0);
+      expect(fresh['sources'], isEmpty, reason: 'the same live claim uses the new history cutoff');
+      final visible = (fresh['cards'] as List<MemoryRow>).single;
+      expect(visible['id'], diary);
+      expect(visible['row_rev'], retained['row_rev']);
+      expect(visible['text'], '喜欢红茶。');
+      expect(visible['keywords'], ['喜欢红茶。']);
+      expect(jsonEncode(fresh), isNot(contains('杭州')));
+      expect(visible['local_day'], retained['local_day']);
+      expect(visible['evidence'], isEmpty, reason: 'the retained local proof still contains the forgotten address');
+      grantMaintenance(fresh);
+      expect(store.isAgentTurnCurrent(next['id']! as String), isTrue);
+      expect(actualCard(diary), retained, reason: 'context projection and actual grants do not rewrite local proof');
+      expect(store.messages().singleWhere((row) => row['id'] == original['id'])['text'], original['text']);
+    },
+  );
 
-  test('an unsent role after a sent shared scope interrupts the parent and resumes only that unserved role in a new parent', () {
-    now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
-    final role = character('local:unserved-role');
-    final source = sayAs('unserved-source', '今天一起谈了散步。', role);
-    now += 86400000;
-    final first = store.nextAgentMaintenance(
-      kind: 'organize',
-      offsetMinutes: 0,
-      estimateTokens: (text) => text.length,
-    )!;
-    final shared = store.beginAgentMaintenance(kind: 'organize', claimId: first['id']! as String);
-    final request = store.reserveAgentMaintenanceRequest(
-      turnId: shared['id']! as String,
-      provider: 'deepseek',
-      model: 'deepseek-flash',
-      inputTokens: 100,
-      outputTokens: 10,
-    )!;
-    observed(request);
-    store.finishAgentMaintenance(turnId: shared['id']! as String, complete: true);
-    final untouched = store.beginAgentMaintenance(kind: 'organize', claimId: first['id']! as String, characterId: role);
-    store.finishAgentMaintenance(turnId: untouched['id']! as String, complete: false);
-    final old = database.select('SELECT state,completed_scopes FROM memory_agent_maintenance_claims WHERE id=?', [
-      first['id'],
-    ]).single;
-    expect(old['state'], 'interrupted');
-    expect(jsonDecode(old['completed_scopes'] as String), ['']);
-    expect(store.isAgentTurnCurrent(untouched['id']! as String), isFalse);
-    expect(
-      store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length),
-      isNull,
-    );
-    now += 86400000;
-    reopen();
-    final next = store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length)!;
-    expect(next['id'], isNot(first['id']));
-    expect(next['scope_characters'], [role]);
-    final live = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String, characterId: role);
-    expect(live['id'], isNot(untouched['id']));
-    expect((live['sources'] as List).map((row) => (row as MemoryRow)['id']), [source['id']]);
-    expect(call(untouched['id']! as String, 'no-reopen', 'remember', {'text': '不能重开旧机会。'}).code, 'turn_closed');
-    final nextRequest = store.reserveAgentMaintenanceRequest(
-      turnId: live['id']! as String,
-      provider: 'deepseek',
-      model: 'deepseek-flash',
-      inputTokens: 100,
-      outputTokens: 10,
-    )!;
-    observed(nextRequest);
-    expect(
-      call(live['id']! as String, 'real-impression', 'impression', {
-        'text': '用户愿意分享一起散步的日常。',
-        'source': source['id'],
-      }).applied,
-      isTrue,
-    );
-    store.finishAgentMaintenance(turnId: live['id']! as String, complete: true);
-    now += 86400000;
-    reopen();
-    expect(
-      store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length),
-      isNull,
-    );
-    expect(store.requests().map((row) => row['id']), unorderedEquals([request, nextRequest]));
-  });
+  test(
+    'an unsent role after a sent shared scope interrupts the parent and resumes only that unserved role in a new parent',
+    () {
+      now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
+      final role = character('local:unserved-role');
+      final source = sayAs('unserved-source', '今天一起谈了散步。', role);
+      now += 86400000;
+      final first = store.nextAgentMaintenance(
+        kind: 'organize',
+        offsetMinutes: 0,
+        estimateTokens: (text) => text.length,
+      )!;
+      final shared = store.beginAgentMaintenance(kind: 'organize', claimId: first['id']! as String);
+      final request = store.reserveAgentMaintenanceRequest(
+        turnId: shared['id']! as String,
+        provider: 'deepseek',
+        model: 'deepseek-flash',
+        inputTokens: 100,
+        outputTokens: 10,
+      )!;
+      observed(request);
+      store.finishAgentMaintenance(turnId: shared['id']! as String, complete: true);
+      final untouched = store.beginAgentMaintenance(
+        kind: 'organize',
+        claimId: first['id']! as String,
+        characterId: role,
+      );
+      store.finishAgentMaintenance(turnId: untouched['id']! as String, complete: false);
+      final old = database.select('SELECT state,completed_scopes FROM memory_agent_maintenance_claims WHERE id=?', [
+        first['id'],
+      ]).single;
+      expect(old['state'], 'interrupted');
+      expect(jsonDecode(old['completed_scopes'] as String), ['']);
+      expect(store.isAgentTurnCurrent(untouched['id']! as String), isFalse);
+      expect(
+        store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length),
+        isNull,
+      );
+      now += 86400000;
+      reopen();
+      final next = store.nextAgentMaintenance(
+        kind: 'organize',
+        offsetMinutes: 0,
+        estimateTokens: (text) => text.length,
+      )!;
+      expect(next['id'], isNot(first['id']));
+      expect(next['scope_characters'], [role]);
+      final live = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String, characterId: role);
+      expect(live['id'], isNot(untouched['id']));
+      expect((live['sources'] as List).map((row) => (row as MemoryRow)['id']), [source['id']]);
+      expect(call(untouched['id']! as String, 'no-reopen', 'remember', {'text': '不能重开旧机会。'}).code, 'turn_closed');
+      final nextRequest = store.reserveAgentMaintenanceRequest(
+        turnId: live['id']! as String,
+        provider: 'deepseek',
+        model: 'deepseek-flash',
+        inputTokens: 100,
+        outputTokens: 10,
+      )!;
+      observed(nextRequest);
+      expect(
+        call(live['id']! as String, 'real-impression', 'impression', {
+          'text': '用户愿意分享一起散步的日常。',
+          'source': source['id'],
+        }).applied,
+        isTrue,
+      );
+      store.finishAgentMaintenance(turnId: live['id']! as String, complete: true);
+      now += 86400000;
+      reopen();
+      expect(
+        store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length),
+        isNull,
+      );
+      expect(store.requests().map((row) => row['id']), unorderedEquals([request, nextRequest]));
+    },
+  );
 
-  test('cold interrupted organization consumes its served source scope without marking a later card revision or an unserved role', () {
-    now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
-    final role = character('local:cold-organize');
-    final source = sayAs('cold-organize-source', '今天聊过练琴。', role);
-    final card = seed('偏好简洁的说明。');
-    now += 86400000;
-    final claim = store.nextAgentMaintenance(
-      kind: 'organize',
-      offsetMinutes: 0,
-      estimateTokens: (text) => text.length,
-    )!;
-    final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
-    grantMaintenance(turn);
-    final request = store.reserveAgentMaintenanceRequest(
-      turnId: turn['id']! as String,
-      provider: 'deepseek',
-      model: 'deepseek-flash',
-      inputTokens: 100,
-      outputTokens: 10,
-    )!;
-    store.markRequestUncertain(request);
-    store.setPinned(id: card['id']! as String, expectedRowRev: card['row_rev']! as int, pinned: true);
-    reopen();
-    expect(store.requests().single['terminal'], 'dispatch_unknown');
-    final changed = actualCard(card['id']! as String);
-    expect(changed['row_rev'], (card['row_rev']! as int) + 1);
-    expect(
-      changed['maintenance_row_rev'],
-      isNot(changed['row_rev']),
-      reason: 'the old captured revision cannot consume a new edit',
-    );
-    expect(
-      jsonDecode(
-        database.select('SELECT completed_scopes FROM memory_agent_maintenance_claims WHERE id=?', [
-              claim['id'],
-            ]).single['completed_scopes']
-            as String,
-      ),
-      [''],
-    );
-    now += 86400000;
-    final next = store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length)!;
-    expect(next['scope_characters'], [null, role]);
-    final shared = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String);
-    expect(shared['sources'], isEmpty, reason: 'old role material cannot become a new shared diary day');
-    grantMaintenance(shared);
-    store.finishAgentMaintenance(turnId: shared['id']! as String, complete: true);
-    final pending = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String, characterId: role);
-    expect((pending['sources'] as List).map((row) => (row as MemoryRow)['id']), [source['id']]);
-    expect(store.requests(), hasLength(1));
-  });
+  test(
+    'cold interrupted organization consumes its served source scope without marking a later card revision or an unserved role',
+    () {
+      now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
+      final role = character('local:cold-organize');
+      final source = sayAs('cold-organize-source', '今天聊过练琴。', role);
+      final card = seed('偏好简洁的说明。');
+      now += 86400000;
+      final claim = store.nextAgentMaintenance(
+        kind: 'organize',
+        offsetMinutes: 0,
+        estimateTokens: (text) => text.length,
+      )!;
+      final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+      grantMaintenance(turn);
+      final request = store.reserveAgentMaintenanceRequest(
+        turnId: turn['id']! as String,
+        provider: 'deepseek',
+        model: 'deepseek-flash',
+        inputTokens: 100,
+        outputTokens: 10,
+      )!;
+      store.markRequestUncertain(request);
+      store.setPinned(id: card['id']! as String, expectedRowRev: card['row_rev']! as int, pinned: true);
+      reopen();
+      expect(store.requests().single['terminal'], 'dispatch_unknown');
+      final changed = actualCard(card['id']! as String);
+      expect(changed['row_rev'], (card['row_rev']! as int) + 1);
+      expect(
+        changed['maintenance_row_rev'],
+        isNot(changed['row_rev']),
+        reason: 'the old captured revision cannot consume a new edit',
+      );
+      expect(
+        jsonDecode(
+          database.select('SELECT completed_scopes FROM memory_agent_maintenance_claims WHERE id=?', [
+                claim['id'],
+              ]).single['completed_scopes']
+              as String,
+        ),
+        [''],
+      );
+      now += 86400000;
+      final next = store.nextAgentMaintenance(
+        kind: 'organize',
+        offsetMinutes: 0,
+        estimateTokens: (text) => text.length,
+      )!;
+      expect(next['scope_characters'], [null, role]);
+      final shared = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String);
+      expect(shared['sources'], isEmpty, reason: 'old role material cannot become a new shared diary day');
+      grantMaintenance(shared);
+      store.finishAgentMaintenance(turnId: shared['id']! as String, complete: true);
+      final pending = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String, characterId: role);
+      expect((pending['sources'] as List).map((row) => (row as MemoryRow)['id']), [source['id']]);
+      expect(store.requests(), hasLength(1));
+    },
+  );
 
   test('scoped followup selection skips a failed candidate without asking it or crossing character invitations', () {
     final firstRole = character('local:followup-first');
