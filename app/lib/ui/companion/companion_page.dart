@@ -3031,13 +3031,25 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
           },
           // Her top bar, words and input blur what's behind them once between
           // them (they never overlap), not once each, each time her stage draws.
-          child: BackdropGroup(child: Builder(builder: _buildPage)),
+          child: BackdropGroup(child: Builder(builder: _buildSections)),
         ),
       ),
     );
   }
 
-  Widget _buildPage(BuildContext context) {
+  Widget _buildSections(BuildContext context) {
+    // Her room follows the keyboard frame by frame. The memory and task pages
+    // kept behind it query the store as they build, so they are made here,
+    // once per page build, and not again for each frame of the keyboard.
+    final hidden = <_CompanionTab, Widget>{
+      if (_tab == _CompanionTab.room)
+        for (final tab in _visited)
+          if (tab == _CompanionTab.memory || tab == _CompanionTab.tasks) tab: _sectionPage(context, tab),
+    };
+    return Builder(builder: (context) => _buildPage(context, hidden));
+  }
+
+  Widget _buildPage(BuildContext context, Map<_CompanionTab, Widget> hidden) {
     final l10n = context.l10n;
     final insets = MediaQuery.viewInsetsOf(context).bottom;
     final padding = MediaQuery.paddingOf(context);
@@ -3349,7 +3361,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                   MediaQuery(
                     data: MediaQuery.of(context)
                         .copyWith(padding: padding.copyWith(bottom: padding.bottom + CompanionSectionNav.height + 10)),
-                    child: TickerMode(enabled: _tab == tab, child: _sectionPage(context, tab)),
+                    child: TickerMode(enabled: _tab == tab, child: hidden[tab] ?? _sectionPage(context, tab)),
                   ),
             ],
           ),

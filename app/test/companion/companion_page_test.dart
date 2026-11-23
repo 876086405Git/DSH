@@ -862,6 +862,8 @@ void main() {
       await tester.tap(find.text('记忆'));
       await _until2(tester, () => find.byType(CompanionMemoryPage).evaluate().isNotEmpty);
       expect(find.text('还没有记下什么'), findsOneWidget);
+      await tester.tap(find.text('交代'));
+      await _until2(tester, () => find.byType(CompanionTasksPage).evaluate().isNotEmpty);
 
       await tester.tap(find.text('她').last);
       await _until2(tester, () => find.text('她多主动').evaluate().isNotEmpty);
@@ -872,6 +874,20 @@ void main() {
       expect(find.byType(CompanionPage, skipOffstage: false), findsOneWidget);
       expect(find.text('已附当前页面文字'), findsOneWidget);
       expect(find.text('和鲸鱼娘说点什么'), findsOneWidget);
+
+      // The keyboard moves her room; the pages kept behind it (which query
+      // the store as they build) don't build again.
+      final rebuilt = <Type>[];
+      debugOnRebuildDirtyWidget = (element, _) {
+        if (element.widget case CompanionMemoryPage() || CompanionTasksPage()) rebuilt.add(element.widget.runtimeType);
+      };
+      addTearDown(tester.view.resetViewInsets);
+      for (final inset in [120.0, 240.0]) {
+        tester.view.viewInsets = FakeViewPadding(bottom: inset);
+        await tester.pump();
+      }
+      debugOnRebuildDirtyWidget = null;
+      expect(rebuilt, isEmpty);
 
       await tester.pumpWidget(_app(const SizedBox()));
       await tester.pump(const Duration(seconds: 10));
