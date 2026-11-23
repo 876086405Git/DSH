@@ -9326,6 +9326,78 @@ abstract class L10n {
   /// **'语音'**
   String get companionVoice;
 
+  /// No description provided for @companionSystemAssistant.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统数字助理'**
+  String get companionSystemAssistant;
+
+  /// No description provided for @companionAssistantChoose.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择默认数字助理'**
+  String get companionAssistantChoose;
+
+  /// No description provided for @companionAssistantChooseHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在 Android 设置选中 DSH Go 小屋伙伴，再用手机的助理手势或按键唤起。'**
+  String get companionAssistantChooseHint;
+
+  /// No description provided for @companionAssistantSelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'小屋伙伴已设为默认助理。再次打开可切换回其他助理。'**
+  String get companionAssistantSelected;
+
+  /// No description provided for @companionAssistantSettingsMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'找不到助理选择页。请在系统设置搜索「默认数字助理」。'**
+  String get companionAssistantSettingsMissing;
+
+  /// No description provided for @companionAssistantSharePage.
+  ///
+  /// In zh, this message translates to:
+  /// **'带上唤起时的页面文字'**
+  String get companionAssistantSharePage;
+
+  /// No description provided for @companionAssistantSharePageHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅使用 Android 允许提供的文字，发送本轮问题时交给伙伴模型。你可以在发送前移除。'**
+  String get companionAssistantSharePageHint;
+
+  /// No description provided for @companionAssistantPageAttached.
+  ///
+  /// In zh, this message translates to:
+  /// **'已附当前页面文字'**
+  String get companionAssistantPageAttached;
+
+  /// No description provided for @companionAssistantCalendarAccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许读取日历'**
+  String get companionAssistantCalendarAccess;
+
+  /// No description provided for @companionAssistantCalendarHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'让伙伴和手机工具读取可见日程。查询结果会发给当前模型。'**
+  String get companionAssistantCalendarHint;
+
+  /// No description provided for @companionAssistantCalendarAllowed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已授权读取。点此可在系统应用权限中撤回。'**
+  String get companionAssistantCalendarAllowed;
+
+  /// No description provided for @companionAssistantAppPermissions.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开系统应用权限'**
+  String get companionAssistantAppPermissions;
+
   /// No description provided for @companionStop.
   ///
   /// In zh, this message translates to:

@@ -15,6 +15,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
 import io.github.ccch1mneyyy.dsh_app.R
+import io.github.ccch1mneyyy.dsh_app.companion.CompanionAssistant
 import io.github.ccch1mneyyy.dsh_app.icons.LauncherIconPlugin
 import java.util.UUID
 import java.util.concurrent.ExecutorService
@@ -147,6 +148,15 @@ class ShortcutsPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         }
         // Consumed either way: an entry without our token goes nowhere.
         if (intent.getStringExtra(EXTRA_TOKEN) != token) return true
+        if (kind == KIND_COMPANION_ASSISTANT) {
+            val event = mapOf("kind" to kind,
+                "page" to CompanionAssistant.takePage(intent.getStringExtra(EXTRA_ASSIST_PAGE)),
+                "returnToApp" to intent.getBooleanExtra(EXTRA_ASSIST_RETURN, false))
+            // Repeated system invocations while Flutter is starting all open the same room.
+            pending.removeAll { it["kind"] == KIND_COMPANION_ASSISTANT }
+            if (ready) methods.invokeMethod("entry", event) else pending += event
+            return true
+        }
         if (kind == KIND_COMPANION_TASK) {
             val taskId = intent.getStringExtra(EXTRA_TASK)
             val revision = intent.getLongExtra(EXTRA_TASK_REV, 0)
@@ -177,6 +187,9 @@ class ShortcutsPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         const val EXTRA_TOKEN = "io.github.ccch1mneyyy.dsh_app.entry.TOKEN"
         const val EXTRA_TASK = "io.github.ccch1mneyyy.dsh_app.entry.TASK"
         const val EXTRA_TASK_REV = "io.github.ccch1mneyyy.dsh_app.entry.TASK_REV"
+        const val EXTRA_ASSIST_PAGE = "io.github.ccch1mneyyy.dsh_app.entry.ASSIST_PAGE"
+        const val EXTRA_ASSIST_RETURN = "io.github.ccch1mneyyy.dsh_app.entry.ASSIST_RETURN"
+        const val KIND_COMPANION_ASSISTANT = "companion_assistant"
         private const val EXTRA_TAKEN = "io.github.ccch1mneyyy.dsh_app.entry.TAKEN"
 
         const val KIND_NEW = "new"

@@ -69,7 +69,7 @@ class CompanionAgentAttachment {
 
   Future<CompanionMemoryOwner> openMemory() =>
       isAttached ? _visit.openMemory() : Future.error(const DshClosedException('Companion window closed'));
-  Future<void> submit(String raw) async {
+  Future<void> submit(String raw, {String? assistantPage, bool returnToApp = false}) async {
     if (isAttached) {
       await _visit.submit(
         raw,
@@ -77,6 +77,8 @@ class CompanionAgentAttachment {
         origin: _window.ui,
         handoff: _window.mapHandoff,
         originCurrent: () => isAttached,
+        assistantPage: assistantPage,
+        returnToApp: returnToApp,
       );
     }
   }
@@ -567,6 +569,8 @@ class _CompanionAgentVisit {
     required CompanionMapHandoff handoff,
     required bool Function() originCurrent,
     bool replacePreparing = false,
+    String? assistantPage,
+    bool returnToApp = false,
     void Function(MemoryRow)? onCommitted,
   }) async {
     if (!active || !originCurrent() || raw.trim().isEmpty || (preparing && !replacePreparing)) return;
@@ -764,6 +768,7 @@ class _CompanionAgentVisit {
         memory: owner,
         source: source,
         turnId: memoryTools.turnId,
+        returnToApp: returnToApp,
         isCurrent: () => current() && memoryTools?.isCurrent == true,
         onStep: (text) {
           if (residentUi case final CompanionAgentAmbientUi target when current() && target.presentationAvailable) {
@@ -780,6 +785,7 @@ class _CompanionAgentVisit {
         source: source,
         system: system,
         context: turnContext,
+        assistantPage: assistantPage,
         tools: [...memoryTools.bindings, ...taskTools.bindings, ...phoneTools.bindings],
         isCurrent: current,
         onSelected: memoryTools.grantSelection,

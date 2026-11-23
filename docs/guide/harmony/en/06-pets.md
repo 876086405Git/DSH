@@ -29,6 +29,8 @@ Tap the **Switch mode** button at the top of the chat list, then **Companion roo
 
 On HarmonyOS she can't live in a floating window.
 
+On HarmonyOS, open the room from its home-screen card and use voice in the composer. The default digital assistant entry is available on Android.
+
 What you can do:
 
 - Touch her: stroke her head to pat it, and tap her face, body or tail for different reactions. Three quick pokes make her dizzy. None of this calls a model or spends tokens.

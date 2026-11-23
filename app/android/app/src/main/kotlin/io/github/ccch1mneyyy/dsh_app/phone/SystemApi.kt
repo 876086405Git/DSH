@@ -49,6 +49,8 @@ interface SystemApi {
     fun notify(title: String, text: String): SysResult
     fun clipboardSet(text: String): SysResult
     fun clipboardGet(): SysResult
+    fun calendarList(start: LocalDate, until: LocalDate, zone: ZoneId): SysResult =
+        SysResult(false, "CALENDAR_UNAVAILABLE")
 }
 
 /** PM adapter data. No package-name heuristic can identify every platform/OEM resolver. */

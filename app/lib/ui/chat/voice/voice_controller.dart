@@ -157,6 +157,7 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
   DshClient? _probedClient;
   MuxGeneration? _probedGeneration;
   Future<void>? _refreshing;
+  Future<void>? _cancelling;
   int _catalogProbe = 0;
   bool _disposed = false;
   bool _foreground = true;
@@ -272,6 +273,7 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> start() async {
+    if (_cancelling case final pending?) await pending;
     if (active || _disposed || !_foreground) return;
     final operation = ++_operation;
     _fallbackTried = false;
@@ -660,13 +662,20 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
     input.value = base;
   }
 
-  Future<void> cancel() async {
-    if (!active) return;
+  bool get cancelling => _cancelling != null;
+
+  Future<void> cancel() {
+    if (_cancelling case final pending?) return pending;
+    if (!active) return Future<void>.value();
     _restoreDraft();
+    final done = Future<void>.sync(bridge.cancel)
+        .catchError((Object _) {
+          // The bridge may already have detached.
+        })
+        .whenComplete(() => _cancelling = null);
+    _cancelling = done;
     _finish();
-    try {
-      await bridge.cancel();
-    } catch (_) {}
+    return done;
   }
 
   void _error(int operation, int code) {

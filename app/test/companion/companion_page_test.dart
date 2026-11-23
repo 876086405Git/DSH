@@ -16,6 +16,7 @@ import 'package:dsh_app/companion/companion_public_lookup.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/companion/companion_voice_source.dart';
 import 'package:dsh_app/companion/companion_widget.dart';
+import 'package:dsh_app/links/launcher_entries.dart';
 import 'package:dsh_app/pets/pet_mood.dart';
 import 'package:dsh_app/pets/pet_signals.dart';
 import 'package:dsh_app/notify/chat_alerts.dart' show companionHostKey;
@@ -740,6 +741,53 @@ void main() {
       expect(find.text('导入素材包'), findsOneWidget);
     });
 
+    testWidgets('assistant waits for the foreground and keeps typing available after microphone denial', (
+      tester,
+    ) async {
+      const channel = MethodChannel('dsh/voice');
+      var permissionRequests = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'capabilities') return {'recognizer': true};
+        if (call.method == 'requestPermission') {
+          permissionRequests++;
+          return 'denied';
+        }
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+      final lifecycle = tester.binding.lifecycleState;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      if (lifecycle != null) addTearDown(() => tester.binding.handleAppLifecycleStateChanged(lifecycle));
+      CompanionStageEvents? stageEvents;
+      await tester.pumpWidget(
+        _app(
+          CompanionPage(
+            storeOverride: installedStore(),
+            assistantEntry: const CompanionAssistantEntry(page: 'Train arrives at 9:30'),
+            stageBuilder: (_, events) {
+              stageEvents = events;
+              return const SizedBox.expand();
+            },
+          ),
+        ),
+      );
+      final stage = await _stageUp(tester, () => stageEvents);
+      stage.onReady();
+      await tester.pump();
+      expect(permissionRequests, 0);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await _settle(tester);
+      expect(permissionRequests, 1);
+      expect(find.byType(EditableText), findsOneWidget);
+      final attachment = tester.widget<InputChip>(find.byType(InputChip));
+      expect(find.text('已附当前页面文字'), findsOneWidget);
+      attachment.onDeleted!();
+      await tester.pump();
+      expect(find.text('已附当前页面文字'), findsNothing);
+      await tester.pumpWidget(_app(const SizedBox()));
+      await _settle(tester);
+    });
+
     testWidgets('once the stage is ready: greeting, name, input; touches get a line', (tester) async {
       final commands = <(String, Map<String, Object?>)>[];
       CompanionStageEvents? stageEvents;
@@ -782,15 +830,24 @@ void main() {
     testWidgets('the section: her room, what she remembers and her own page share one bar', (tester) async {
       SharedPreferences.setMockInitialValues({'companion_touch_hint_done': true, 'companion_home_hint_done': true});
       CompanionStageEvents? stageEvents;
+      late VoidCallback openAssistant;
       await tester.pumpWidget(
         _app(
-          CompanionPage(
-            storeOverride: installedStore(),
-            sections: true,
-            stageBuilder: (controller, events) {
-              stageEvents = events;
-              return const SizedBox.expand();
+          Consumer(
+            builder: (context, ref, child) {
+              openAssistant = () => unawaited(
+                openCompanionAssistant(context, ref, const CompanionAssistantEntry(page: 'Train arrives at 9:30')),
+              );
+              return child!;
             },
+            child: CompanionPage(
+              storeOverride: installedStore(),
+              sections: true,
+              stageBuilder: (controller, events) {
+                stageEvents = events;
+                return const SizedBox.expand();
+              },
+            ),
           ),
         ),
       );
@@ -810,8 +867,10 @@ void main() {
       await _until2(tester, () => find.text('她多主动').evaluate().isNotEmpty);
       expect(find.text('她的声音'), findsOneWidget);
 
-      await tester.tap(find.text('小屋'));
+      openAssistant();
       await _settle(tester);
+      expect(find.byType(CompanionPage, skipOffstage: false), findsOneWidget);
+      expect(find.text('已附当前页面文字'), findsOneWidget);
       expect(find.text('和鲸鱼娘说点什么'), findsOneWidget);
 
       await tester.pumpWidget(_app(const SizedBox()));

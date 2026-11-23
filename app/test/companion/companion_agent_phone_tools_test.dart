@@ -147,6 +147,54 @@ void main() {
     expect(steps, isEmpty);
   });
 
+  test('assistant yields the original task once, after approval and before the first main-screen read', () async {
+    const appChannel = MethodChannel('dsh/app');
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final order = <String>[];
+    messenger.setMockMethodCallHandler(appChannel, (call) async {
+      order.add(call.method);
+      return true;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(appChannel, null));
+    messenger.setMockMethodCallHandler(_channel, (call) async {
+      switch (call.method) {
+        case 'companionPhoneTools':
+          return [
+            {'name': 'screen', 'description': 'Read screen', 'inputSchema': <String, Object?>{}},
+          ];
+        case 'companionPhoneBegin':
+          order.add('approved');
+          return {'decision': 'allowed-once'};
+        case 'companionPhoneCall':
+          final args = call.arguments as Map;
+          order.add(args['callId'] as String);
+          return '{"result":{"content":[]}}';
+        case 'companionPhoneEnd':
+          return null;
+        default:
+          throw StateError(call.method);
+      }
+    });
+    phone = CompanionAgentPhoneTools(
+      memory: memory,
+      source: source,
+      turnId: turnId,
+      isCurrent: () => current,
+      onStep: steps.add,
+      returnToApp: true,
+    );
+    await phone.prepare();
+    for (final (id, input) in [
+      ('background', <String, Object?>{'background': true}),
+      ('first', <String, Object?>{}),
+      ('second', <String, Object?>{}),
+    ]) {
+      final result = await phone.execute(CompanionAgentToolCall(id: id, name: 'phone_screen', input: input));
+      expect(result.isError, isFalse);
+    }
+    expect(order, ['approved', 'background', 'yieldCompanionAssistant', 'first', 'second']);
+  });
+
   test('stop during native approval fences the late approval and close awaits one original drain', () async {
     final began = Completer<void>();
     final approval = Completer<Map<String, Object?>>();

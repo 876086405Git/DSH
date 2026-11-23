@@ -8,6 +8,8 @@ import android.provider.Settings
 import android.speech.RecognitionService
 import android.speech.SpeechRecognizer
 import android.util.Log
+import io.github.ccch1mneyyy.dsh_app.companion.CompanionAssistant
+import io.github.ccch1mneyyy.dsh_app.companion.CompanionAssistantRecognitionService
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -21,10 +23,12 @@ object VoiceDiagnostics {
     @Suppress("DEPRECATION")
     fun environment(context: Context): VoiceEnvironment {
         // VOICE_RECOGNITION_SERVICE is not part of the public Settings.Secure constants.
-        val component = runCatching {
+        val default = runCatching {
             Settings.Secure.getString(context.contentResolver, "voice_recognition_service")
                 ?.let(ComponentName::unflattenFromString)
         }.getOrNull()
+        val companion = ComponentName(context, CompanionAssistantRecognitionService::class.java)
+        val component = if (default == companion) CompanionAssistant.systemRecognizer(context) else default
         val pkg = component?.let { runCatching { context.packageManager.getPackageInfo(it.packageName, 0) }.getOrNull() }
         return VoiceEnvironment(
             sdk = Build.VERSION.SDK_INT,
@@ -33,7 +37,16 @@ object VoiceDiagnostics {
             servicePackage = component?.packageName,
             serviceVersion = pkg?.let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode else it.versionCode.toLong() },
             serviceUpdatedAt = pkg?.lastUpdateTime,
-            recognizerAvailable = runCatching { SpeechRecognizer.isRecognitionAvailable(context) }.getOrDefault(false),
+            // The room's compatibility service delegates recognition. Its registration alone
+            // should not make dictation look available on a phone without a recognizer.
+            recognizerAvailable = runCatching {
+                when (default) {
+                    companion -> component != null
+                    null -> context.packageManager.queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
+                        .any { ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) != companion }
+                    else -> SpeechRecognizer.isRecognitionAvailable(context)
+                }
+            }.getOrDefault(false),
             // Both this query and the on-device factory were introduced in API 31, not 33.
             onDeviceAvailable = if (Build.VERSION.SDK_INT >= 31) {
                 runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }.getOrNull()

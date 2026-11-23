@@ -40,6 +40,11 @@ internal class CompanionPhoneBridge(
     // text-only model cannot consume the image required by coordinate actions.
     private val tools = PhoneToolCatalog.tools.filter {
         it.name != PhoneToolCatalog.DIAGNOSTICS && it.name != PhoneToolCatalog.TAP_XY
+    }.map {
+        if (it.name == PhoneToolCatalog.SCREEN) PhoneToolCatalog.Tool(it.name,
+            "读当前屏幕的文字和元素。编号只在本屏有效，background:true 读后台屏。无法核对目标就 handoff。", // l10n:keep agent tool catalog
+            it.properties - "image", it.required)
+        else it
     }
     private val names = tools.map { it.name }.toSet()
 
@@ -123,7 +128,8 @@ internal class CompanionPhoneBridge(
             // Match the JSON numeric/map types used by the original MCP parser.
             @Suppress("UNCHECKED_CAST")
             val normalized = Json.parse(Json.write(input)) as Map<String, Any?>
-            control.companionPhoneCall(PhoneCaller(key.session, key.run, callId, 1), name!!, normalized, run.epoch,
+            val arguments = if (name == PhoneToolCatalog.SCREEN) normalized + ("image" to false) else normalized
+            control.companionPhoneCall(PhoneCaller(key.session, key.run, callId, 1), name!!, arguments, run.epoch,
                 { current(run) }, { reply, publish -> step.set(Step(reply, publish)) })
         } catch (_: Exception) {
             result.success(failure(callId, "手机暂时无法接纳这一条，没有重新排队。")); return // l10n:keep agent error

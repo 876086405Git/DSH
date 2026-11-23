@@ -181,6 +181,7 @@ class CompanionAgent extends ChangeNotifier {
     required MemoryRow source,
     required String system,
     CompanionTurnContext? context,
+    String? assistantPage,
     required List<
       ({CompanionAgentTool definition, Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute})
     >
@@ -198,12 +199,13 @@ class CompanionAgent extends ChangeNotifier {
       source: Map<String, Object?>.unmodifiable(source),
       system: system,
       context: context,
+      assistantPage: assistantPage,
       tools: List.unmodifiable(tools),
       isCurrent: isCurrent,
       onSelected: onSelected,
       onStop: onStop,
       controlRevision: memory.store.archive['control_revision'] as int,
-    );
+    )..externalWebContent = assistantPage != null;
     _run = run;
     memory.retainReceipt(run.settled.future);
     notifyListeners();
@@ -324,6 +326,7 @@ class CompanionAgent extends ChangeNotifier {
           [for (final line in lines) (role: line.role, text: line.text)],
           context: run.context,
           memory: selection,
+          assistantPage: run.assistantPage,
         );
         for (final exchange in run.exchanges) {
           messages.add({'role': 'assistant', 'content': exchange.assistant.content});
@@ -513,6 +516,7 @@ class _CompanionAgentRun {
     required this.source,
     required this.system,
     required this.context,
+    required this.assistantPage,
     required this.tools,
     required this.isCurrent,
     required this.onSelected,
@@ -526,6 +530,7 @@ class _CompanionAgentRun {
   final MemoryRow source;
   final String system;
   final CompanionTurnContext? context;
+  final String? assistantPage;
   final List<
     ({CompanionAgentTool definition, Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute})
   >

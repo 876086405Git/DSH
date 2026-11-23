@@ -5386,6 +5386,46 @@ class L10nEn extends L10n {
   String get companionVoice => 'Voice';
 
   @override
+  String get companionSystemAssistant => 'System digital assistant';
+
+  @override
+  String get companionAssistantChoose => 'Choose the default assistant';
+
+  @override
+  String get companionAssistantChooseHint =>
+      'Choose DSH Go Companion in Android Settings, then use your phone\'s assistant gesture or button.';
+
+  @override
+  String get companionAssistantSelected => 'Companion is the default. Open Android Settings here to switch assistants.';
+
+  @override
+  String get companionAssistantSettingsMissing =>
+      'The assistant picker is unavailable. Search for the default digital assistant in Android Settings.';
+
+  @override
+  String get companionAssistantSharePage => 'Include page text on wake';
+
+  @override
+  String get companionAssistantSharePageHint =>
+      'Send text Android makes available to the companion model with this turn. You can remove it before sending.';
+
+  @override
+  String get companionAssistantPageAttached => 'Page text attached';
+
+  @override
+  String get companionAssistantCalendarAccess => 'Allow calendar access';
+
+  @override
+  String get companionAssistantCalendarHint =>
+      'Let the companion and phone tools read visible events. Results are sent to the active model.';
+
+  @override
+  String get companionAssistantCalendarAllowed => 'Calendar access is on. Tap to manage it in Android app permissions.';
+
+  @override
+  String get companionAssistantAppPermissions => 'Open Android app permissions';
+
+  @override
   String get companionStop => 'Ask her to stop';
 
   @override
