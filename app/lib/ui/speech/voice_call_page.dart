@@ -122,6 +122,9 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   /// and the page comes in without its staggered rise.
   bool _still = false;
 
+  /// Audio levels keep changing after the words have settled.
+  ({String source, String words})? _captionCache;
+
   @override
   void initState() {
     super.initState();
@@ -481,6 +484,14 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     unawaited(showCallTranscript(context, _call));
   }
 
+  String _captionText(String source) {
+    final cached = _captionCache;
+    if (cached != null && cached.source == source) return cached.words;
+    final words = speakable(source).replaceAll('\n', ' ');
+    _captionCache = (source: source, words: words);
+    return words;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -511,7 +522,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     final hearing = _call.phase == CallPhase.hearing;
     final heard = ended ? '' : _call.heard;
     // While the person speaks, her last words step aside for theirs.
-    final reply = hearing ? '' : speakable(_call.caption).replaceAll('\n', ' ');
+    final reply = hearing ? '' : _captionText(_call.caption);
     final failing = ended ? null : error;
     // Light or dark as the theme is; a picture or her behind always reads as dark.
     final dark = theme.brightness == Brightness.dark || image != null || her;
