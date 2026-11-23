@@ -523,8 +523,8 @@
     "ohos-attachment-diagnostic.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "13d9a8a8b87453bf098c6d25bae78c7e8ba49d9a9fb10e57c18254163130736a",
-          "before": "c8072bf4b2f636c53524a1cb57e7c28f820a99a324dee8e1ba6644fd41471d32"
+          "after": "e8a5b9f5d4187b4bd18f14f73180a0438731aa79ebc1369b682c3e4fc6849912",
+          "before": "e344108b2a9061faffb23bbcd5c342525f8f98e91fb1806cc1258224a58b53c4"
         }
       }
     },
@@ -655,8 +655,8 @@
     "ohos-piai-empty-models.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
-          "after": "e8a5b9f5d4187b4bd18f14f73180a0438731aa79ebc1369b682c3e4fc6849912",
-          "before": "13d9a8a8b87453bf098c6d25bae78c7e8ba49d9a9fb10e57c18254163130736a"
+          "after": "e344108b2a9061faffb23bbcd5c342525f8f98e91fb1806cc1258224a58b53c4",
+          "before": "c8072bf4b2f636c53524a1cb57e7c28f820a99a324dee8e1ba6644fd41471d32"
         }
       }
     },
@@ -3161,7 +3161,8 @@
       "office-data-buffer-scope.diff",
       "input-recovery.diff",
       "ohos-client-hmr-idle.diff",
-      "ohos-skill-root-events.diff"
+      "ohos-skill-root-events.diff",
+      "ohos-piai-empty-models.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -3388,6 +3389,7 @@
       "input-recovery.diff",
       "ohos-client-hmr-idle.diff",
       "ohos-skill-root-events.diff",
+      "ohos-piai-empty-models.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
@@ -3421,7 +3423,6 @@
       "ohos-workspace-grant-paths.diff",
       "ohos-workspace-edit.diff",
       "ohos-image-codec.diff",
-      "ohos-piai-empty-models.diff",
       "ohos-mcp-start-close.diff",
       "ohos-jobs-active.diff",
       "ohos-piai-text-preabort.diff"
