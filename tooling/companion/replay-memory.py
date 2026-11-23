@@ -150,6 +150,11 @@ def checkout_identity(root):
         except (OSError, subprocess.CalledProcessError) as error:
             raise ValueError('cannot read checkout source identity') from error
 
+    # diff deliberately trusts these index flags, so it cannot identify the
+    # working bytes beneath them. Reject, without changing the owner's index.
+    entries = git('ls-files', '-v', '-z').split(b'\0')
+    if any(entry[:1].islower() or entry.startswith(b'S ') for entry in entries):
+        raise ValueError('checkout contains assume-unchanged or skip-worktree entries')
     head = git('rev-parse', 'HEAD').decode('ascii').strip()
     changes = git('-c', 'core.filemode=true', 'diff', '--binary', '--full-index',
                   '--no-ext-diff', '--no-textconv', '--no-renames', 'HEAD', '--')
@@ -278,13 +283,27 @@ def main():
     parser.add_argument('--engine-report', type=Path, help='use the actual runtime CI engine XML; run SDK/App here')
     args = parser.parse_args()
     output = args.output.resolve()
+    in_place_collection = args.reports is not None and args.reports.resolve() == output
     output.mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat()
+
+    def reject_collection(issue):
+        # A rejected collection has not acquired the destination for writing.
+        # Report this attempt on stdout; retain every original evidence byte.
+        summary = {'run_id': now, 'mode': 'offline', 'case_counts': {'NOT_RUN': 15},
+                   'execution_status': 'NOT_RUN', 'acceptance_status': 'NOT_RUN',
+                   'fixture_issue': issue, 'reports_considered': False,
+                   'collection_only': True, 'output_preserved': True}
+        print(json.dumps(summary, ensure_ascii=False))
+        return 2
+
     try:
         data = read_cases(args.cases)
         manifest_sha256 = sha256(args.cases.read_bytes()).hexdigest()
     except (OSError, ValueError, KeyError, TypeError) as error:
         issue = f'case manifest not verified: {error}'
+        if in_place_collection:
+            return reject_collection(issue)
         for name in ('summary.json', 'results.jsonl', 'run-inputs.json'):
             (output / name).unlink(missing_ok=True)
         if not args.reports:
@@ -341,8 +360,11 @@ def main():
                       'engine_report': str(args.engine_report) if args.engine_report else 'launched by replay'}
     except (OSError, ValueError, KeyError, TypeError) as error:
         fixture_issue = f'replay inputs not verified: {error}'
+    if fixture_issue and in_place_collection:
+        return reject_collection(fixture_issue)
     # No old completion may describe partially replaced reports. The original
-    # input record and report bytes above are already retained for --reports=output.
+    # input record and bytes above are retained, and an in-place collection has
+    # passed every input check before it may replace its original evidence.
     for name in ('summary.json', 'results.jsonl', 'run-inputs.json'):
         (output / name).unlink(missing_ok=True)
     if fixture_issue:

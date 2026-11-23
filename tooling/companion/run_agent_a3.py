@@ -261,9 +261,36 @@ def main() -> int:
             key_handoff.stopping.set()
             key_claimed = key_claimed or key_handoff.consumed
         if reverse_state == "created":
-            removed = cleanup_command("remove-key-reverse", adb + ["reverse", "--remove", reverse_port])
-            if removed is not None and removed.returncode == 0:
-                reverse_state = "removed"
+            mappings = cleanup_command("list-key-reverse", adb + ["reverse", "--list"])
+            if mappings is None or mappings.returncode != 0:
+                reverse_state = "unresolved"
+            else:
+                try:
+                    rows = [line.split() for line in mappings.stdout.decode("utf-8").splitlines()
+                            if line.strip()]
+                except UnicodeDecodeError:
+                    rows = None
+                if rows is None or any(len(row) != 3 for row in rows):
+                    reverse_state = "unresolved"
+                    cleanup_errors.append("key_reverse_list_invalid")
+                else:
+                    current = [row for row in rows if row[1] == reverse_port]
+                    if len(current) > 1:
+                        reverse_state = "unresolved"
+                        cleanup_errors.append("key_reverse_list_ambiguous: " + reverse_port)
+                    elif not current:
+                        reverse_state = "already_absent"
+                    elif current[0][2] != reverse_port:
+                        # This run created port -> port. Another local endpoint
+                        # now owns the remote port; do not remove its mapping.
+                        reverse_state = "replaced_left_untouched"
+                    else:
+                        # adb has no conditional remove. This check cannot close
+                        # the read/remove race or identify an identical rebind.
+                        removed = cleanup_command(
+                            "remove-key-reverse", adb + ["reverse", "--remove", reverse_port])
+                        if removed is not None and removed.returncode == 0:
+                            reverse_state = "removed"
         elif reverse_state == "pending":
             # A timeout/error does not establish ownership. A competing client
             # may have won --no-rebind; keep the port for explicit recovery.
