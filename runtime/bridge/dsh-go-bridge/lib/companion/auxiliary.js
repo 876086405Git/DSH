@@ -27,6 +27,112 @@ function validate(value) {
   return Object.fromEntries(inputKeys.map(key => [key, value[key]]));
 }
 
+const plainText = value => typeof value === 'string' &&
+  !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value) && value.isWellFormed();
+const agentSupported = capability => capability?.agent?.v === 1 &&
+  capability.agent.tools === 'return-only' && capability.agent.streaming === true;
+
+function agentContent(content, role) {
+  if (typeof content === 'string') return plainText(content);
+  if (!Array.isArray(content)) return false;
+  const ids = new Set();
+  return content.every(block => {
+    if (block?.type === 'text') return fields(block, ['type', 'text']) && plainText(block.text);
+    if (role === 'assistant' && block?.type === 'thinking') {
+      return fields(block, ['type', 'thinking']) && plainText(block.thinking);
+    }
+    if (role === 'assistant' && block?.type === 'tool_use') {
+      if (!fields(block, ['type', 'id', 'name', 'input']) || !contextId(block.id) ||
+          !contextId(block.name) || !isObject(block.input) || ids.has(block.id)) return false;
+      ids.add(block.id);
+      return true;
+    }
+    return role === 'user' && block?.type === 'tool_result' &&
+      fields(block, ['type', 'tool_use_id', 'content'], ['is_error']) && contextId(block.tool_use_id) &&
+      (block.is_error === undefined || typeof block.is_error === 'boolean') &&
+      (plainText(block.content) || Array.isArray(block.content) && block.content.every(part =>
+        fields(part, ['type', 'text']) && part.type === 'text' && plainText(part.text)));
+  });
+}
+
+function validateAgent(value) {
+  const keys = ['v', 'instanceId', 'requestId', 'sessionId', 'provider', 'model', 'kind', 'system', 'messages', 'tools', 'maxTokens'];
+  const names = new Set();
+  if (!fields(value, keys) || value.v !== 1 || value.kind !== 'agent' ||
+      !['instanceId', 'requestId', 'sessionId', 'provider', 'model'].every(key => contextId(value[key])) ||
+      !text(value.system) || !Number.isSafeInteger(value.maxTokens) || value.maxTokens < 1 || value.maxTokens > 4000 ||
+      !Array.isArray(value.messages) || value.messages.length === 0 || !value.messages.every(message =>
+        fields(message, ['role', 'content'], ['source']) && ['user', 'assistant'].includes(message.role) &&
+        agentContent(message.content, message.role) && (message.source === undefined || message.role === 'assistant' &&
+          fields(message.source, ['kind', 'provider', 'model'], ['replayState']) && message.source.kind === 'model' &&
+          contextId(message.source.provider) && contextId(message.source.model))) ||
+      !Array.isArray(value.tools) || !value.tools.every(tool => {
+        if (!fields(tool, ['name', 'input_schema'], ['description']) || !contextId(tool.name) ||
+            names.has(tool.name) || !isObject(tool.input_schema) || tool.description !== undefined && !plainText(tool.description)) return false;
+        names.add(tool.name);
+        return true;
+      })) throw failure(400, 'invalid-request', 'Invalid companion Agent request');
+  return Object.fromEntries(keys.map(key => [key, value[key]]));
+}
+
+// Only the phone's model-facing history crosses this boundary. The Host Session
+// contributes selection/currentness, never its transcript or tool execution.
+function agentInput(body) {
+  const messages = [];
+  for (const message of body.messages) {
+    const blocks = typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : message.content;
+    if (message.role === 'assistant') {
+      messages.push({ id: randomUUID(), role: 'assistant',
+        // Old phone text has no historical route. This is a local absence
+        // marker, not attribution to the currently selected model.
+        source: message.source ?? { kind: 'model', provider: 'unknown', model: 'unknown' },
+        content: blocks.map(block => block.type === 'thinking' ? { type: 'reasoning', text: block.thinking }
+          : block.type === 'tool_use' ? { type: 'tool-call', id: block.id, name: block.name, arguments: JSON.stringify(block.input) }
+            : { type: 'text', text: block.text }) });
+      continue;
+    }
+    let content = [];
+    const flush = () => {
+      if (content.length) messages.push({ id: randomUUID(), role: 'user', source: { kind: 'user' }, content });
+      content = [];
+    };
+    for (const block of blocks) {
+      if (block.type !== 'tool_result') { content.push({ type: 'text', text: block.text }); continue; }
+      flush();
+      messages.push({ id: randomUUID(), role: 'tool', source: { kind: 'tool', callId: block.tool_use_id },
+        toolCallId: block.tool_use_id,
+        content: typeof block.content === 'string' ? [{ type: 'text', text: block.content }] : block.content,
+        ...(block.is_error === undefined ? {} : { isError: block.is_error }) });
+    }
+    flush();
+  }
+  return { system: body.system, messages,
+    tools: body.tools.map(tool => ({ name: tool.name, description: tool.description ?? '', parameters: tool.input_schema })) };
+}
+
+function agentOutput(message, finish, body) {
+  const invalid = () => { throw failure(502, 'invalid-message', 'The Agent response is not a complete model message'); };
+  if (message?.role !== 'assistant' || message.source?.kind !== 'model' ||
+      message.source.provider !== body.provider || message.source.model !== body.model || !Array.isArray(message.content)) invalid();
+  const content = message.content.map(block => {
+    if (block.type === 'text' && plainText(block.text)) return { type: 'text', text: block.text };
+    if (block.type === 'reasoning' && plainText(block.text)) return { type: 'thinking', thinking: block.text };
+    if (block.type !== 'tool-call' || !contextId(block.id) || !contextId(block.name) || typeof block.arguments !== 'string') return invalid();
+    let input;
+    try { input = JSON.parse(block.arguments); } catch { return invalid(); }
+    if (!isObject(input)) return invalid();
+    return { type: 'tool_use', id: block.id, name: block.name, input };
+  });
+  const calls = content.filter(block => block.type === 'tool_use');
+  if (!['stop', 'tool-calls'].includes(finish?.kind) || (finish.kind === 'tool-calls') !== (calls.length > 0) ||
+      new Set(calls.map(block => block.id)).size !== calls.length) invalid();
+  const result = { content, stopReason: finish.kind === 'tool-calls' ? 'tool_use' : 'end_turn',
+    source: { kind: 'model', provider: body.provider, model: body.model,
+      ...(message.source.replayState === undefined ? {} : { replayState: message.source.replayState }) } };
+  if (Buffer.byteLength(JSON.stringify(result)) > MAX_BYTES) throw failure(502, 'output-limit', 'Agent message exceeded its byte limit');
+  return result;
+}
+
 function validateScreen(value) {
   const keys = ['v', 'instanceId', 'requestId', 'provider', 'model', 'reasoningEffort', 'kind', 'system', 'input', 'image', 'maxTokens'];
   const image = value?.image;
@@ -161,9 +267,14 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
       if (previous) error.receipt = snapshot(previous);
       throw error;
     }
-    if (active) throw failure(409, 'busy', 'Another companion auxiliary request is still active');
-    // The busy gate proves all retained records have finished; evict only detail.
-    if (receipts.size === MAX_RECEIPTS) receipts.delete(receipts.keys().next().value);
+    if (body.kind !== 'agent' && active) throw failure(409, 'busy', 'Another companion auxiliary request is still active');
+    // Agent rounds have independent captured requests. Never evict a live
+    // request (or its cancellation handle) to make room for another one.
+    if (receipts.size === MAX_RECEIPTS) {
+      const finished = [...receipts].find(([, record]) => record.finished);
+      if (!finished) throw failure(409, 'busy', 'Companion model requests are still active');
+      receipts.delete(finished[0]);
+    }
     const controller = new AbortController();
     const record = { requestId: body.requestId, provider: body.provider, model: body.model, controller,
       dispatched: false, dispatchAtMs: null, startUsage: null, finalUsage: null, stopReason: null,
@@ -171,7 +282,7 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
       rawUsageAvailable: false, normalizedUsage: [], handoffAtMs: null, runtimeFinishKind: null };
     requestDigests.set(body.requestId, digest);
     receipts.set(body.requestId, record);
-    active = record;
+    if (body.kind !== 'agent') active = record;
     const abort = () => controller.abort(new Error('Auxiliary client disconnected'));
     req.once('aborted', abort);
     res.once('close', abort);
@@ -213,12 +324,13 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
       const target = body.kind === 'screen' ? await resolveScreen(body, controller.signal) : await resolve(body.sessionId, body);
       record.agent = target.agent;
       if (!target.capability || typeof target.llm.prepareCompanionAuxiliaryCall !== 'function') throw failure(422, 'unavailable', 'This provider has no callable auxiliary model transport');
+      if (body.kind === 'agent' && !agentSupported(target.capability)) throw failure(422, 'unavailable', 'This Host has no callable companion Agent transport');
       record.rawUsageAvailable = target.capability.rawUsage === 'deepseek-messages-cumulative';
       guard = () => { controller.signal.throwIfAborted(); target.guard(); };
       guard();
       // DeepSeek's verified extraction path disables thinking. Other models
       // retain the selected effort/default; do not impose an unsupported knob.
-      const reasoningEffort = body.kind === 'screen' ? target.selected.reasoningEffort
+      const reasoningEffort = body.kind === 'screen' || body.kind === 'agent' ? target.selected.reasoningEffort
         : record.rawUsageAvailable ? 'off' : target.selected.reasoningEffort;
       const call = await target.llm.prepareCompanionAuxiliaryCall({ provider: body.provider, model: body.model,
         ...(reasoningEffort === undefined ? {} : { reasoningEffort }), maxTokens: body.maxTokens }, controller.signal, { guard, observe });
@@ -226,16 +338,20 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
       if (call.config.provider !== body.provider || call.config.model !== body.model ||
           call.config.maxTokens !== body.maxTokens || reasoningEffort !== undefined && call.config.reasoningEffort !== reasoningEffort) throw failure(409, 'selection-changed', 'The auxiliary request controls changed');
       let outputBytes = 0, finish;
-      for await (const chunk of call.stream({ system: body.system, input: body.input,
+      for await (const chunk of call.stream(body.kind === 'agent' ? agentInput(body) : { system: body.system, input: body.input,
         ...(body.kind === 'screen' ? { screenImage: body.image } : {}) })) {
         guard();
-        if (chunk.type === 'tool-call-delta' || chunk.type === 'block-start' && chunk.blockType === 'tool-call') {
+        if (body.kind !== 'agent' && (chunk.type === 'tool-call-delta' || chunk.type === 'block-start' && chunk.blockType === 'tool-call')) {
           throw failure(502, 'tool-output', 'Auxiliary requests cannot execute tools');
         }
         if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
           outputBytes += Buffer.byteLength(chunk.text);
           if (outputBytes > MAX_BYTES) throw failure(502, 'output-limit', 'Auxiliary output exceeded its byte limit');
           if (chunk.type === 'text-delta') emit({ type: 'text', text: chunk.text });
+        }
+        if (body.kind === 'agent' && chunk.type === 'tool-call-delta') {
+          outputBytes += Buffer.byteLength(chunk.argumentsDelta);
+          if (outputBytes > MAX_BYTES) throw failure(502, 'output-limit', 'Agent output exceeded its byte limit');
         }
         if (chunk.type === 'finish') finish = chunk.reason;
         if (chunk.type === 'usage' && !record.rawUsageAvailable) {
@@ -248,19 +364,27 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
       }
       // The iterator may finish without yielding another guarded chunk.
       guard();
-      record.complete = (!record.rawUsageAvailable || providerComplete) &&
-        (['stop', 'max-tokens'].includes(finish?.kind) || ['REFUSAL', 'EMPTY_RESPONSE'].includes(finish?.failure?.code));
+      record.complete = (!record.rawUsageAvailable || providerComplete) && (body.kind === 'agent'
+        ? ['stop', 'tool-calls'].includes(finish?.kind)
+        : ['stop', 'max-tokens'].includes(finish?.kind) || ['REFUSAL', 'EMPTY_RESPONSE'].includes(finish?.failure?.code));
       if (!record.rawUsageAvailable) record.runtimeFinishKind = finish?.kind ?? null;
       if (record.complete && finish?.kind === 'stop') record.terminal = 'complete';
-      else if (record.complete && finish?.kind === 'max-tokens') record.terminal = 'max_tokens';
+      else if (body.kind === 'agent' && record.complete && finish?.kind === 'tool-calls') record.terminal = 'tool-calls';
+      else if ((record.complete || body.kind === 'agent') && finish?.kind === 'max-tokens') record.terminal = 'max_tokens';
       else if (record.stopReason === 'refusal' || finish?.failure?.code === 'REFUSAL') record.terminal = 'refusal';
       else if (finish?.kind === 'aborted') record.terminal = 'cancelled';
       else if (finish?.kind === 'error') { record.terminal = 'provider_error'; failureCode = errorCode(finish.failure); }
+      if (body.kind === 'agent' && record.complete) {
+        const message = agentOutput(call.agentMessage, finish, body);
+        guard();
+        emit({ type: 'message', message });
+        guard();
+      }
     } catch (error) {
       record.complete = false;
       // Complete empty/refusal responses keep their finite proposal outcome,
       // but only while this same owner/model still accepts the attempt.
-      if (providerComplete && ['EMPTY_RESPONSE', 'REFUSAL'].includes(errorCode(error))) {
+      if (body.kind !== 'agent' && providerComplete && ['EMPTY_RESPONSE', 'REFUSAL'].includes(errorCode(error))) {
         try { guard(); record.complete = true; }
         catch (stale) { error = stale; }
       }
@@ -287,10 +411,12 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
   // These hooks cancel promptly; the synchronous physical guard remains the
   // final check if a switch/disposal happens during asynchronous preparation.
   const removeDisposed = ctx?.on?.('agent/disposed', ({ agent }) => {
-    if (active?.agent === agent) active.controller.abort();
+    for (const record of receipts.values()) if (!record.finished && record.agent === agent) record.controller.abort();
   });
   const removeSelection = ctx?.on?.('session/event', (session, event) => {
-    if (event.type === 'model/selection' && active?.agent?.session === session) active.controller.abort();
+    if (event.type === 'model/selection') for (const record of receipts.values()) {
+      if (!record.finished && record.agent?.session === session) record.controller.abort();
+    }
   });
 
   return {
@@ -308,12 +434,13 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
             : await resolve(url.searchParams.get('sessionId'));
           send(res, 200, { v: 1, instanceId, provider: target.selected.provider, model: target.selected.model,
             ...(screen ? { kind: 'screen', ...target.selected.reasoningEffort === undefined ? {} : { reasoningEffort: target.selected.reasoningEffort } } : {}),
+            ...(!screen && agentSupported(target.capability) ? { agent: target.capability.agent } : {}),
             supported: Boolean(target.capability), ...(target.capability ? { capability: target.capability } : { reason: 'adapter-call-unavailable' }) });
         } else if ((path === ROOT || path === `${ROOT}/screen`) && req.method === 'POST') {
           if (String(req.headers['content-type']).split(';', 1)[0].trim().toLowerCase() !== 'application/json') throw failure(415, 'content-type', 'Content-Type must be application/json');
           const screen = path === `${ROOT}/screen`;
           const value = await readJson(req, screen ? MAX_SCREEN_BYTES : MAX_BYTES, true);
-          const body = screen ? validateScreen(value) : validate(value);
+          const body = screen ? validateScreen(value) : value?.kind === 'agent' ? validateAgent(value) : validate(value);
           await execute(req, res, body);
         } else if (path.startsWith(`${ROOT}/requests/`) && req.method === 'GET') {
           req.resume();
@@ -338,7 +465,7 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
     },
     dispose() {
       closed = true;
-      active?.controller.abort();
+      for (const record of receipts.values()) if (!record.finished) record.controller.abort();
       if (typeof removeDisposed === 'function') removeDisposed();
       if (typeof removeSelection === 'function') removeSelection();
     },

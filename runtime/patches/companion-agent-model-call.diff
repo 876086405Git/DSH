@@ -1,0 +1,107 @@
+diff --git a/node_modules/@deepseek-ai/dsh-llm/lib/index.js b/node_modules/@deepseek-ai/dsh-llm/lib/index.js
+--- a/node_modules/@deepseek-ai/dsh-llm/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-llm/lib/index.js
+@@ -2528,11 +2528,12 @@
+ 		/** Keep every callable selected route; report observation limits honestly. */
+ 		companionAuxiliaryCapability(provider) {
+ 			const adapter = this.registration(provider).adapter;
++			const agent = Object.freeze({ v: 1, tools: "return-only", streaming: true });
+ 			if (adapter.dshGoCompanionAuxiliary === true && typeof adapter.prepareCompanionAuxiliaryCall === "function") {
+-				return Object.freeze({ physicalDispatch: "fetch-invoked", rawUsage: "deepseek-messages-cumulative", maxPhysicalRequests: 1, noTools: true });
++				return Object.freeze({ physicalDispatch: "fetch-invoked", rawUsage: "deepseek-messages-cumulative", maxPhysicalRequests: 1, noTools: true, agent });
+ 			}
+ 			if (typeof adapter.prepareCall !== "function") return;
+-			return Object.freeze({ physicalDispatch: "unknown", rawUsage: "unavailable", maxPhysicalRequests: null, noTools: true });
++			return Object.freeze({ physicalDispatch: "unknown", rawUsage: "unavailable", maxPhysicalRequests: null, noTools: true, agent });
+ 		}
+ 		/** Optional screen pixels have a narrower contract than text auxiliary calls. */
+ 		async companionScreenCapability(provider, model, signal) {
+@@ -2553,7 +2554,7 @@
+ 			if (info.inputModalities?.includes("image") !== true) return;
+ 			return Object.freeze({ ...capability, transientImage: "jpeg-512-inline" });
+ 		}
+-		/** Owner bridge only: no Session, AgentLoop, tools or llm/stream middleware. */
++		/** Owner bridge only: no Session, AgentLoop, tool execution or llm/stream middleware. */
+ 		async prepareCompanionAuxiliaryCall(config, signal, observer) {
+ 			if (config == null || Object.keys(config).some((key) => !["provider", "model", "reasoningEffort", "maxTokens"].includes(key)) ||
+ 				typeof config.provider !== "string" || typeof config.model !== "string" || config.reasoningEffort !== void 0 && typeof config.reasoningEffort !== "string" ||
+@@ -2576,12 +2577,17 @@
+ 			guard();
+ 			const info = this.normalizeModelInfo(registration, config.model, adapterCall.model);
+ 			const resolved = deepFreeze(structuredClone(this.resolveCallWithInfo(config, info).config));
+-			let used = false;
++			let used = false, agentMessage;
+ 			return Object.freeze({
+ 				config: resolved, capability, contextWindow: info.context?.contextWindow ?? null,
+-				stream: ({ system, input, screenImage }) => {
++				// Complete content stays in this captured request, never its receipt.
++				get agentMessage() { return agentMessage; },
++				stream: ({ system, input, messages, tools, screenImage }) => {
+ 					if (used) throw new LlmError("An auxiliary handle can only be dispatched once", "INVALID_PREPARED_CALL");
+-					if (typeof system !== "string" || typeof input !== "string") throw new LlmError("Auxiliary requests require plain text", "INVALID_PREPARED_CALL");
++					const agent = messages !== void 0 || tools !== void 0;
++					if (typeof system !== "string" || (agent
++						? !Array.isArray(messages) || !Array.isArray(tools) || input !== void 0 || screenImage !== void 0
++						: typeof input !== "string")) throw new LlmError(agent ? "Invalid auxiliary Agent input" : "Auxiliary requests require plain text", "INVALID_PREPARED_CALL");
+ 					if (screenImage !== void 0 && (registration.adapter.dshGoCompanionScreenImage !== true ||
+ 						!observed && typeof adapterCall.companionScreen?.stream !== "function" ||
+ 						info.inputModalities?.includes("image") !== true)) throw new LlmError("Selected auxiliary model cannot receive screen images", "UNSUPPORTED_CONTENT");
+@@ -2590,7 +2596,8 @@
+ 					guard();
+ 					// Construct only model input; never serialize credentials, signal,
+ 					// callbacks or the adapter connection into an input estimate.
+-					const request = deepFreeze({ system, messages: [{ role: "user", content: [{ type: "text", text: input }] }] });
++					const request = deepFreeze(agent ? structuredClone({ system, messages, tools })
++						: { system, messages: [{ role: "user", content: [{ type: "text", text: input }] }] });
+ 					if (screenImage !== void 0 && !observed) return adapterCall.companionScreen.stream(
+ 						Object.freeze({ ...resolved, ...request, ...signal === void 0 ? {} : { signal } }),
+ 						transientImage, { guard, observe: observer.observe, checkRequest: observer.checkRequest });
+@@ -2599,9 +2606,46 @@
+ 					// A generic adapter call is NOT evidence of a physical POST.
+ 					// Its own transport/retry behavior stays adapter-owned and unknown.
+ 					if (!observed) observer.observe({ type: "handoff", atMs: Date.now(), boundary: "adapter-invoked" });
+-					return adapterCall.stream(Object.freeze({ ...resolved, ...request,
++					const options = Object.freeze({ ...resolved, ...request,
+ 						...signal === void 0 ? {} : { signal }
+-					}), transientImage);
++					});
++					const stream = adapterCall.stream(agent ? this.forAdapter(options, registration.adapter) : options, transientImage);
++					if (!agent) return stream;
++					return (async function* () {
++						const assembler = new BlockAssembler();
++						const toolIds = new Map();
++						let finish;
++						for await (const chunk of stream) {
++							if (chunk.type === "finish") finish = chunk.reason;
++							if (chunk.type === "tool-call-delta") toolIds.set(chunk.index, chunk.id);
++							if (chunk.type === "block-end" && chunk.block.type === "tool-call") toolIds.set(chunk.index, chunk.block.id);
++							assembler.push(chunk);
++							yield chunk;
++						}
++						guard();
++						// Neither the assembler's default stop nor its fallback call ID
++						// proves a complete, executable provider response.
++						if (finish?.kind !== "stop" && finish?.kind !== "tool-calls") return;
++						const invalid = () => { throw new LlmError("Invalid complete Agent response", "INVALID_AGENT_RESPONSE"); };
++						const content = assembler.blocks(), calls = new Set();
++						for (const [position, block] of content.entries()) {
++							if (block.type === "text" || block.type === "reasoning") {
++								if (typeof block.text !== "string") invalid();
++								continue;
++							}
++							if (block.type !== "tool-call" || typeof block.id !== "string" || block.id.trim() === "" ||
++								typeof block.name !== "string" || block.name.trim() === "" || typeof block.arguments !== "string" ||
++								toolIds.get(assembler.order[position]) !== block.id || calls.has(block.id)) invalid();
++							let input;
++							try { input = JSON.parse(block.arguments); } catch { invalid(); }
++							if (input === null || typeof input !== "object" || Array.isArray(input)) invalid();
++							calls.add(block.id);
++						}
++						if ((finish.kind === "tool-calls") !== (calls.size > 0)) invalid();
++						const replayState = assembler.replayState;
++						agentMessage = assembler.message({ provider: resolved.provider, model: resolved.model,
++							...replayState === void 0 ? {} : { replayState } });
++					})();
+ 				}
+ 			});
+ 		}

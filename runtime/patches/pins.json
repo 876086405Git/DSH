@@ -56,6 +56,14 @@
         }
       }
     },
+    "companion-agent-model-call.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
+          "after": "3611638805638c644791572e9bd0b4637e2e334c318fa8dac743b01300520b4d",
+          "before": "57ab66a66ae807b9fcc8c4818a1761cfcbfccfefa99cade79e25efd9a048d11b"
+        }
+      }
+    },
     "companion-auxiliary-single-request.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
@@ -3076,6 +3084,7 @@
       "companion-compare-output-window.diff",
       "companion-screen-image.diff",
       "companion-screen-piai-image.diff",
+      "companion-agent-model-call.diff",
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
       "ohos-web-converter-lazy.diff",

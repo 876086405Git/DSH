@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dsh_client/dsh_client.dart';
 import 'package:http/http.dart' as http;
 
 import 'companion_light.dart';
@@ -133,7 +134,11 @@ class CompanionAgentModelRequest {
   http.Client? client;
   StreamIterator<String>? stream;
   Future<void>? cancellation;
+  DshHttpAbort? _hostAbort;
+  Future<void>? _hostDrain;
   bool sent = false;
+  bool uncertain = false;
+  bool notSentProven = false;
   bool finalized = false;
   String text = '';
 
@@ -173,7 +178,72 @@ class CompanionAgentModelRequest {
     return message;
   }
 
+  Future<CompanionAgentMessage?> readHost({
+    required DshClient client,
+    required CompanionAuxiliaryCapability capability,
+    required String system,
+    required List<Map<String, Object?>> messages,
+    required List<CompanionAgentTool> tools,
+    required bool Function() isCurrent,
+    required void Function(String) onText,
+    required void Function() onDispatchUncertain,
+    required void Function() onSent,
+    required void Function(Map<String, Object?>) onUsage,
+    void Function(Map<String, Object?>, {required bool partial})? onUsageSettled,
+    int maxTokens = 800,
+  }) async {
+    if (!isCurrent()) return null;
+    final abort = _hostAbort = DshHttpAbort();
+    final future = client.callCompanionAgent(
+      capability,
+      requestId: id,
+      system: system,
+      messages: messages,
+      tools: [for (final tool in tools) tool.toJson()],
+      maxTokens: maxTokens,
+      abort: abort,
+      onDispatchUncertain: onDispatchUncertain,
+      onSent: onSent,
+      onText: (delta) {
+        if (!isCurrent()) {
+          abort.abort();
+          return;
+        }
+        onText(delta);
+      },
+      onUsage: (usage) {
+        // Late receipts still belong to this captured physical request.
+        onUsage(usage);
+        final view = CompanionUsage.fromReceipt(usage);
+        onUsageSettled?.call(view.telemetry, partial: !view.complete);
+      },
+    );
+    _hostDrain = future.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    try {
+      final result = await future;
+      notSentProven = result.dispatched == false;
+      if (!isCurrent() || abort.isAborted) return null;
+      final message = result.message;
+      if (message == null) {
+        throw CompanionHostError(companionHostFailure(result.errorCode), result.errorCode ?? result.terminal);
+      }
+      return CompanionAgentMessage(
+        content: (message['content']! as List).cast<Map<String, Object?>>(),
+        stopReason: message['stopReason']! as String,
+        source: message['source']! as Map<String, Object?>,
+      );
+    } on CompanionAuxiliaryFailure catch (error) {
+      notSentProven = error.notSent;
+      throw CompanionHostError(companionHostFailure(error.code), error.code);
+    } finally {
+      abort.abort();
+    }
+  }
+
   Future<void> drain() {
+    _hostAbort?.abort();
+    final host = _hostDrain;
+    if (host != null) return cancellation ??= host;
     final iterator = stream;
     if (iterator == null) return Future<void>.value();
     return cancellation ??= iterator.cancel();

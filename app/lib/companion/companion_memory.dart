@@ -63,7 +63,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
   final Map<String, Future<void>> _usageReads = {};
   final Map<String, ({int at, int delay})> _usageAttempts = {};
   CompanionMemoryWorker? _worker;
-  CompanionMemoryTransport? Function()? _route;
+  FutureOr<CompanionMemoryTransport?> Function()? _route;
   Object? _room;
   bool _disposed = false;
 
@@ -71,7 +71,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
 
   void enter(
     Object room, {
-    required CompanionMemoryTransport? Function() transport,
+    required FutureOr<CompanionMemoryTransport?> Function() transport,
     required int Function(String) estimateTokens,
   }) {
     if (!identical(_room, room)) _worker?.cancel();
