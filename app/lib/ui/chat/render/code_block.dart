@@ -457,6 +457,7 @@ class _CodeBlockState extends State<CodeBlock> {
     final baseStyle = widget.dense ? AppType.monoSmall(color: dsh.codeWellFg) : AppType.mono(color: dsh.codeWellFg);
     final style = themeStyle.pack == null ? baseStyle : themeStyle.codeTextStyle(baseStyle);
 
+    final diff = !widget.showLineNumbers && normalizedLanguage(widget.language) == 'diff';
     final previous = _cachedCode;
     final sameLook =
         _span != null &&
@@ -467,7 +468,13 @@ class _CodeBlockState extends State<CodeBlock> {
         _cachedDense == widget.dense &&
         _cachedFontFamily == style.fontFamily &&
         _cachedFontSize == style.fontSize;
-    if (!sameLook || previous != code) {
+    if (diff) {
+      // Diff rows paint their own colours; discard any previous highlighted text.
+      _span = _shown = null;
+      _cachedCode = null;
+      _cooldown?.cancel();
+      _cooldown = null;
+    } else if (!sameLook || previous != code) {
       final grows = sameLook && previous != null && code.length > previous.length && code.startsWith(previous);
       if (grows && _cooldown != null) {
         _shown = TextSpan(
@@ -496,7 +503,6 @@ class _CodeBlockState extends State<CodeBlock> {
       _shown = _span;
     }
 
-    final diff = !widget.showLineNumbers && normalizedLanguage(widget.language) == 'diff';
     Widget body;
     if (diff) {
       body = _DiffLines(code: code, style: style, wrap: _wrap);
