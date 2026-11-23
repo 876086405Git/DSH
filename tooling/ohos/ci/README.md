@@ -1,6 +1,6 @@
 # 鸿蒙发版打包
 
-dsh-Go 的 Release 发布后，`ohos-release-dispatch.yml` 把发布事件对应的完整 commit SHA 交给私有构建仓。私有仓先调用 `OHOS compile` 在 GitHub 的 macOS runner 编译同一提交的 Dart AOT，再在标有 `dsh-go-ohos` 的 Linux 自托管 runner 组装该提交的 DSH 运行时和 HAP。
+dsh-Go 的 Release 发布后，`ohos-release-dispatch.yml` 把发布事件对应的完整 commit SHA 交给私有构建仓。私有仓先调用 `OHOS compile` 在 GitHub 的 macOS runner 编译同一提交的 Dart AOT，再在标有 `harmony` 和 `dsh-go-ohos-build` 的 Linux 自托管 runner 组装该提交的 DSH 运行时和 HAP。
 
 产物 `dsh-go-ohos-<sha>-unsigned-hap` 在私有仓的 Actions 运行记录中。它是 OpenHarmony 构建的旁加载验收包，使用 `check-arkts.sh --full --hms-stubs` 并通过其 HAP 审计。签名和真机安装在维护者的可信主机上完成。应用市场包需要原有的 HarmonyOS Command Line Tools 构建入口。
 
@@ -12,7 +12,7 @@ dsh-Go 的 Release 发布后，`ohos-release-dispatch.yml` 把发布事件对应
 
 ## Linux runner
 
-按私有仓 **Settings → Actions → Runners → New self-hosted runner** 的指引注册，在 `config.sh` 的标签参数加上 `--labels dsh-go-ohos`。保留默认 `linux` 标签。机器需要满足 `check-arkts.sh` 的 Linux 工具要求，包括 JDK、Python 3.12+、CMake、Ninja 及 OpenHarmony API 26 SDK。设置以下环境变量给 Runner 服务，修改后重启服务使它读取新配置。
+按私有仓 **Settings → Actions → Runners → New self-hosted runner** 的指引在 Linux 上注册，在 `config.sh` 的标签参数加上 `--labels harmony,dsh-go-ohos-build`。机器需要满足 `check-arkts.sh` 的 Linux 工具要求，包括 JDK、Python 3.12+、CMake、Ninja 及 OpenHarmony API 26 SDK。设置以下环境变量给 Runner 服务，修改后重启服务使它读取新配置。
 
 | 变量 | 路径 |
 | --- | --- |

@@ -20,7 +20,7 @@ jobs:
 
   package:
     needs: compile
-    runs-on: [self-hosted, linux, dsh-go-ohos]
+    runs-on: [self-hosted, harmony, dsh-go-ohos-build]
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
