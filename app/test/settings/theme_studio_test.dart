@@ -189,6 +189,13 @@ void main() {
     expect((t.uiFont, t.codeFont, t.headingFont), ('Regular.otf', 'Regular-2.otf', 'Regular.otf'));
     expect(c.assets['Regular.otf']!.last, 1);
     expect(c.assets['Regular-2.otf']!.last, 2);
+
+    // A pack takes names that differ only in case for one name: a third font can't be regular.otf,
+    // and the first one picked again under that spelling is still Regular.otf.
+    await c.useFont(ThemeFontRole.code, 'regular.otf', font(3));
+    await c.useFont(ThemeFontRole.ui, 'REGULAR.otf', font(1));
+    expect((c.pack.typography.codeFont, c.pack.typography.uiFont), ('regular-3.otf', 'Regular.otf'));
+    expect(c.assets.keys.toSet(), {'Regular.otf', 'Regular-2.otf', 'regular-3.otf'});
   });
 
   test('parser messages are said in the studio\'s words', () {
