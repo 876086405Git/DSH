@@ -552,6 +552,41 @@ test('terminal refresh clears credentials; transient refresh and its secret text
   }, { code: null, error: 'access_denied' }), { code: 'siwc_access_denied' })
 })
 
+test('terminal refresh with failed local cleanup publishes pending sign-out until explicit retry', async () => {
+  let blocked = true
+  const savingMetadata = Promise.withResolvers(), releaseSave = Promise.withResolvers()
+  const notices = []
+  const f = fixture({
+    initial: expired(),
+    exchange: () => Response.json({ error: 'invalid_grant' }, { status: 400 }),
+    save: async () => {
+      if (!blocked) return
+      savingMetadata.resolve()
+      await releaseSave.promise
+      throw new Error('mock metadata failure')
+    },
+    onClear: () => { if (blocked) throw new Error('mock clear failure') },
+    onGrantLost: () => notices.push(f.oauth.status()),
+  })
+  const refresh = assert.rejects(f.oauth.token(), { code: 'siwc_sign_out_incomplete' })
+  await savingMetadata.promise
+  const switchAccount = () => f.oauth.signIn({ newAccount: true, notify: () => assert.fail('must not notify') })
+  const queuedSwitch = assert.rejects(switchAccount(), { code: 'siwc_sign_out_incomplete' })
+  releaseSave.resolve()
+  await Promise.all([refresh, queuedSwitch])
+  const pending = { ...RECONNECT, signOutPending: true }
+  assert.deepEqual(await Promise.all(notices), [pending])
+  assert.deepEqual(await f.oauth.status(), pending)
+  assert.equal(f.record().refreshToken, 'old-refresh')
+  await assert.rejects(f.oauth.token(), { code: 'siwc_sign_out_incomplete' })
+  await assert.rejects(switchAccount(), { code: 'siwc_sign_out_incomplete' })
+  blocked = false
+  await f.oauth.signOut()
+  assert.deepEqual(f.record(), META)
+  assert.deepEqual(await f.oauth.status(), RECONNECT)
+  assert.deepEqual(f.calls.map(({ url }) => url), [TOKEN])
+})
+
 test('failed metadata save falls back to clear and preserves the revocation outcome', async (t) => {
   for (const status of [200, 400]) await t.test(String(status), async () => {
     const f = fixture({

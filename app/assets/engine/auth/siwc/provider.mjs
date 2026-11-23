@@ -13,7 +13,7 @@ const hostRequire = createRequire(testPrefix
 const llmPackage = pathToFileURL(hostRequire.resolve('@deepseek-ai/dsh-llm/package.json'))
 const piAi = new URL('../../@earendil-works/pi-ai/dist/', llmPackage)
 const [
-  { CONTEXT_WINDOW_EXCEEDED_CODE, LlmAdapter, LlmError, attributionHeaders, resolveRetryPolicy },
+  { CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, LlmAdapter, LlmError, attributionHeaders, resolveRetryPolicy },
   { convertResponsesMessages, convertResponsesTools, processResponsesStream },
   { AssistantMessageEventStream },
 ] = await Promise.all([
@@ -175,7 +175,7 @@ function readEvent(response, sse) {
   if (type === 'response.completed') {
     const completed = event?.response
     if (!completed || typeof completed !== 'object' || Array.isArray(completed) ||
-        (completed.status !== undefined && completed.status !== 'completed')) {
+        (completed.status === undefined ? !Array.isArray(completed.output) : completed.status !== 'completed')) {
       throw new LlmError('Invalid OpenAI response terminal status.', 'MALFORMED_RESPONSE')
     }
   }
@@ -249,6 +249,7 @@ async function* decodeResponse(response, request, model) {
   await decoded
   request.signal.throwIfAborted()
   if (failure) throw failure
+  if (!output.content.length) throw new LlmError('OpenAI completed without any output.', EMPTY_RESPONSE_CODE)
   // An item-level done event is not enough to dispatch a local tool.
   for (const tool of tools) {
     request.signal.throwIfAborted()
@@ -301,9 +302,10 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
       ...(body ? { body: JSON.stringify(body(scope)) } : {}),
     })
     if (!response.ok) {
+      if (response.status === 401) oauth.rejectAccess(token)
       const payload = await response.json().catch(() => null)
       signal.throwIfAborted()
-      if (response.status === 401) oauth.rejectAccess(token)
+      if (response.status !== 401 && payload?.error?.code === 'subscription_sharing_invalid_user') oauth.rejectAccess(token)
       throw responseError(response, payload?.error, 'OpenAI HTTP ' + response.status, {
         code: 'SIWC_HTTP_ERROR', status: response.status,
       })

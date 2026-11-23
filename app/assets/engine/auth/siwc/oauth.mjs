@@ -314,6 +314,7 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
 
   async function authorize(notify, signal, newAccount) {
     checkSignal(signal)
+    if (pendingSignOut) throw signOutIncomplete()
     await waitFor(load(), signal)
     if (newAccount && grant) throw error('sign_out_required', 'Sign out before connecting another ChatGPT account.')
     const hostId = await waitFor(storage(getHostId), signal)
@@ -401,17 +402,23 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
     grant = null
     rejectedAccess = undefined
     pendingSave = pendingPlanLoss = false
-    if (lost) onGrantLost()
-    if (!registration) {
-      await storage(() => store.clear())
-      return
-    }
     try {
-      // Atomically drop every token but preserve the verified client binding.
-      await storage(() => store.save({ ...registration, scopes: [] }))
-    } catch {
-      // Losing the reconnect metadata is preferable to retaining credentials.
+      if (registration) {
+        try {
+          // Atomically drop every token but preserve the verified client binding.
+          await storage(() => store.save({ ...registration, scopes: [] }))
+          return
+        } catch {
+          // Losing the reconnect metadata is preferable to retaining credentials.
+        }
+      }
       await storage(() => store.clear())
+    } catch (cause) {
+      if (signedOut) throw cause // signOut retains any unconfirmed revocation.
+      pendingSignOut = {}
+      throw signOutIncomplete()
+    } finally {
+      if (lost) onGrantLost()
     }
   }
 

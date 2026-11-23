@@ -299,10 +299,15 @@ test('completed text without a usage object still finishes successfully', async 
 })
 
 test('a completed event still rejects a missing response or an explicit non-completed status', async () => {
-  for (const response of [undefined, null, [], { status: 'failed' }, { status: 'incomplete' }]) {
+  for (const response of [undefined, null, [], {}, { status: 'failed' }, { status: 'incomplete' }]) {
     const { adapter } = harness(() => sse({ type: 'response.completed', response }))
     await assert.rejects(collect(adapter.stream(options)), { code: 'MALFORMED_RESPONSE' })
   }
+})
+
+test('a successful terminal event without streamed output is not a completed reply', async () => {
+  const { adapter } = harness(() => sse(complete))
+  await assert.rejects(collect(adapter.stream(options)), { code: 'EMPTY_RESPONSE' })
 })
 
 test('declares a local function and replays its matching call and result', async () => {
@@ -428,6 +433,7 @@ test('OpenAI errors reach the engine as recoverable auth, context and rate-limit
 test('an invalid signed identity marks the current token for renewal without retrying inference', async () => {
   for (const response of [
     Response.json({ error: { code: 'subscription_sharing_invalid_user' } }, { status: 401 }),
+    Response.json({ error: { code: 'subscription_sharing_invalid_user' } }, { status: 403 }),
     sse({ type: 'response.failed', response: { error: { code: 'subscription_sharing_invalid_user' } } }),
   ]) {
     const { adapter, oauth, requests } = harness(() => response)
