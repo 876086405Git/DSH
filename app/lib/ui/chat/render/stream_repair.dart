@@ -19,9 +19,10 @@
 /// [text] (a reply still arriving) with its unfinished tail repaired.
 ///
 /// Only the last block is looked at; everything before it is final.
-String repairStreamingMarkdown(String text) {
-  if (text.isEmpty) return text;
-  return _repairWithScan(text, _BlockScan(text));
+/// When supplied, [cursor] adds the streaming cursor after repair.
+String repairStreamingMarkdown(String text, {String? cursor}) {
+  if (text.isEmpty) return _placeCursor(text, cursor);
+  return _repairWithScan(text, _BlockScan(text), cursor);
 }
 
 /// The same repair as [repairStreamingMarkdown], retaining the scan of complete
@@ -36,13 +37,13 @@ class StreamingMarkdownRepair {
   var _offset = 0;
   var _prefix = _BlockScan.empty();
 
-  String repair(String text) {
+  String repair(String text, {String? cursor}) {
     if (!text.startsWith(_previous)) {
       _offset = 0;
       _prefix = _BlockScan.empty();
     }
     _previous = text;
-    if (text.isEmpty) return text;
+    if (text.isEmpty) return _placeCursor(text, cursor);
     for (var end = text.indexOf('\n', _offset); end != -1; end = text.indexOf('\n', _offset)) {
       _prefix.addLine(text.substring(_offset, end), _offset);
       _offset = end + 1;
@@ -50,16 +51,16 @@ class StreamingMarkdownRepair {
     final scan = _BlockScan.copy(_prefix);
     if (_offset < text.length) scan.addLine(text.substring(_offset), _offset);
     if (scan.lastBlockStart > text.length) scan.lastBlockStart = text.length;
-    return _repairWithScan(text, scan);
+    return _repairWithScan(text, scan, cursor);
   }
 }
 
-String _repairWithScan(String text, _BlockScan scan) {
+String _repairWithScan(String text, _BlockScan scan, String? cursor) {
   if (scan.openFenceLine != null) {
     // Inside an open fence the code streams as itself, except the opening
     // line while its info string is still being typed.
     final opener = scan.openFenceLine!;
-    return text.indexOf('\n', opener) == -1 ? text.substring(0, opener).trimRight() : text;
+    return _placeCursor(text.indexOf('\n', opener) == -1 ? text.substring(0, opener).trimRight() : text, cursor);
   }
   final start = scan.lastBlockStart;
   final originalTail = text.substring(start);
@@ -68,9 +69,11 @@ String _repairWithScan(String text, _BlockScan scan) {
   if (table != -1) tail = tail.substring(0, table).trimRight();
   tail = _dropPartialLastLine(tail);
   tail = _repairInline(tail);
-  if (tail.trim().isEmpty) return text.substring(0, start).trimRight();
-  if (identical(tail, originalTail)) return text;
-  return text.substring(0, start) + tail;
+  if (tail.trim().isEmpty) return _placeCursor(text.substring(0, start).trimRight(), cursor);
+  if (identical(tail, originalTail)) return _placeCursor(text, cursor);
+  // The nonempty repaired tail starts at a line boundary, so it contains
+  // the whole line where the cursor belongs. Assemble the full reply once.
+  return text.replaceRange(start, text.length, _placeCursor(tail, cursor));
 }
 
 /// Where the last block starts and whether the text ends inside a fence.
@@ -390,3 +393,22 @@ bool _isPunct(String c) {
   // CJK and full-width punctuation count, so `**「重点」**` still pairs.
   return (unit >= 0x3000 && unit <= 0x303F) || (unit >= 0xFF00 && unit <= 0xFF65) || unit == 0x2014 || unit == 0x2026;
 }
+
+/// Places the cursor at the end of the last line, except that a closing
+/// fence or display formula stays alone and a table keeps it in the last cell.
+String _placeCursor(String text, String? cursor) {
+  if (cursor == null) return text;
+  final last = text.substring(text.lastIndexOf('\n') + 1).trim();
+  if (_fenceLine.hasMatch(last) || last.endsWith(r'\]')) {
+    return '$text\n$cursor';
+  }
+  if (last.length > 1 && last.startsWith('|') && last.endsWith('|')) {
+    final pipe = text.lastIndexOf('|');
+    final before = last.substring(0, last.length - 1);
+    final pad = before.length - before.trimRight().length;
+    return text.replaceRange(pipe - pad, pipe, ' $cursor ');
+  }
+  return '$text$cursor';
+}
+
+final _fenceLine = RegExp(r'^(?:>\s*)*(?:`{3,}|~{3,})\s*$');

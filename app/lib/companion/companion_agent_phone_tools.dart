@@ -17,6 +17,7 @@ class CompanionAgentPhoneTools {
     required this.turnId,
     required this._isCurrent,
     required this._onStep,
+    this._returnToApp = false,
     this.channel = const MethodChannel('dsh/phone'),
   }) : _source = Map<String, Object?>.unmodifiable(source),
        _runId = companionMemoryId() {
@@ -42,6 +43,7 @@ class CompanionAgentPhoneTools {
   final _calls = <String>{};
   bool _retired = false;
   bool _beginStarted = false;
+  bool _returnToApp;
   Future<bool>? _approval;
   Future<void>? _ending;
 
@@ -96,6 +98,12 @@ class CompanionAgentPhoneTools {
         return _failure('phone_not_authorized', '没有获得本人本轮确认，没有执行手机操作。');
       }
       if (!_current) return _failure('turn_not_current', '本轮已停止，没有继续操作手机。');
+      if (_returnToApp && nativeName == 'screen' && call.input['background'] != true) {
+        _returnToApp = false;
+        final left = await const MethodChannel('dsh/app').invokeMethod<bool>('yieldCompanionAssistant');
+        if (!_current) return _failure('turn_not_current', '本轮已停止，没有继续操作手机。');
+        if (left != true) return _failure('previous_app_unavailable', '没能返回原来的应用。请用户切回目标应用后再读屏。');
+      }
       final raw = await channel.invokeMethod<String>('companionPhoneCall', {
         'sessionId': _sessionId,
         'runId': _runId,

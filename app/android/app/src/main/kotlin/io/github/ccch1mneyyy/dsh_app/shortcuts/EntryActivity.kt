@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import io.github.ccch1mneyyy.dsh_app.MainActivity
+import io.github.ccch1mneyyy.dsh_app.companion.CompanionAssistant
 import io.github.ccch1mneyyy.dsh_app.companion.CompanionReminderReceiver
 import io.github.ccch1mneyyy.dsh_app.companion.ReminderKey
 import io.github.ccch1mneyyy.dsh_app.pet.PetOverlay
@@ -49,6 +50,10 @@ class EntryActivity : Activity() {
                         putExtra(ShortcutsPlugin.EXTRA_TASK_REV, it.revision)
                     }
                     screenshot?.let { putExtra(ShortcutsPlugin.EXTRA_PATH, it.path) }
+                    if (kind == ShortcutsPlugin.KIND_COMPANION_ASSISTANT) {
+                        putExtra(ShortcutsPlugin.EXTRA_ASSIST_PAGE, intent.getStringExtra(ShortcutsPlugin.EXTRA_ASSIST_PAGE))
+                        putExtra(ShortcutsPlugin.EXTRA_ASSIST_RETURN, intent.getBooleanExtra(ShortcutsPlugin.EXTRA_ASSIST_RETURN, false))
+                    }
                     intent.getStringExtra(EXTRA_SESSION)?.let { putExtra(ShortcutsPlugin.EXTRA_SESSION, it) }
                     intent.getStringExtra(EXTRA_HOST)?.let { putExtra(ShortcutsPlugin.EXTRA_HOST, it) }
                     // 问一句's text the pet couldn't send: into the composer, unsent. Only from the pet.
@@ -83,6 +88,7 @@ class EntryActivity : Activity() {
         const val ACTION_OPEN_CHAT = "io.github.ccch1mneyyy.dsh_app.action.OPEN_CHAT"
         const val ACTION_SCREENSHOT = "io.github.ccch1mneyyy.dsh_app.action.SCREENSHOT"
         const val ACTION_COMPANION_TASK = "io.github.ccch1mneyyy.dsh_app.action.OPEN_COMPANION_TASK"
+        private const val ACTION_COMPANION_ASSISTANT = "io.github.ccch1mneyyy.dsh_app.action.COMPANION_ASSISTANT"
         private const val ACTION_OPEN_APP = "io.github.ccch1mneyyy.dsh_app.action.OPEN_APP"
         const val EXTRA_PET_GENERATION = "pet_generation"
         const val EXTRA_SESSION = "session_id"
@@ -97,12 +103,17 @@ class EntryActivity : Activity() {
             ACTION_OPEN_CHAT -> ShortcutsPlugin.KIND_CHAT
             ACTION_SCREENSHOT -> ShortcutsPlugin.KIND_SCREENSHOT
             ACTION_COMPANION_TASK -> ShortcutsPlugin.KIND_COMPANION_TASK
+            ACTION_COMPANION_ASSISTANT -> ShortcutsPlugin.KIND_COMPANION_ASSISTANT
             else -> null
         }
 
         fun newChat(context: Context): Intent = Intent(context, EntryActivity::class.java).setAction(ACTION_NEW_CHAT)
 
         fun voice(context: Context): Intent = Intent(context, EntryActivity::class.java).setAction(ACTION_VOICE)
+        fun companionAssistant(context: Context, page: String? = null, returnToApp: Boolean = false): Intent =
+            Intent(context, EntryActivity::class.java).setAction(ACTION_COMPANION_ASSISTANT)
+                .putExtra(ShortcutsPlugin.EXTRA_ASSIST_PAGE, CompanionAssistant.stagePage(page))
+                .putExtra(ShortcutsPlugin.EXTRA_ASSIST_RETURN, returnToApp)
 
         fun openApp(context: Context): Intent = Intent(context, EntryActivity::class.java).setAction(ACTION_OPEN_APP)
 

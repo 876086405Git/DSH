@@ -154,7 +154,7 @@ class CompanionAgentMemoryTools {
   static const _maintenanceDescriptions = <String, String>{
     'remember':
         'Save or update a fact, preference or episode. about_you is shared; our_story belongs to this character.',
-    'forget': 'Forget a card or complete changes group. Preserve independent clauses; original chat stays. Report successful deletion.',
+    'forget': 'Forget a card or complete changes group. Preserve independent clauses. Original chat stays unless explicitly requested: deleteChat=true uses top-level card as the single original-source target; when changes is supplied it must forget that card. Report successful deletion.',
     'revise': 'Correct a card or complete changes group. Keep its ID and preserve independent clauses.',
     'related': 'Read and grant same-source candidates and required effects for a card; without card, return only stale cleanup IDs.',
     'merge': 'Merge proven duplicate facts or people into card, preserving proofs and consumed followups. Include required dependency updates.',
@@ -162,13 +162,12 @@ class CompanionAgentMemoryTools {
     'diary': 'Write this completed-day diary from actual user sources. Supply its existing card to update; older diaries use revise or forget.',
     'impression': 'Update this character\'s concise impression, supplying its existing card and only this domain\'s sources or references.',
     'relationship': 'Classify real questions, confiding or answers using supplied original source/display IDs. Never invent events or scores.',
-    'quiet':
-        'Set a memory topic to less or never proactive. All affected cards must be supplied and fit the shared budget.',
+    'quiet': 'Set a supplied card topic to less or never proactive, or restore normal when the user allows it again. The card path requires all affected cards to be supplied and fit the shared budget. Alternatively, restore one quiet control just returned by recall using topic and mode normal, without card. This topic path leaves its cards unchanged and grants no card IDs. After each restoration, use a new recall call to read the next control. Restoring does not reopen old followups.',
     'cancel': 'Cancel a supplied memory plan and retire its followup; not a reminder or computer task.',
     'postpone':
         'Postpone a memory plan without a new time and retire its followup. Use ask_later when the time is known.',
     'ask_later': 'Schedule a real invitation\'s followup on a supplied card at whenMs (UTC milliseconds), within presentation limits.',
-    'recall': 'Read bounded current eligible memories; only returned IDs are granted.',
+    'recall': 'Read bounded current eligible memories and at most one matching quiet control. Only returned card IDs are granted. A returned control may be restored with quiet(topic, normal); use a new recall call after restoring it to read another.',
   };
 
   List<({CompanionAgentTool definition, Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute})>
@@ -250,6 +249,7 @@ class CompanionAgentMemoryTools {
       final block = jsonDecode(selection.block) as Map;
       result['selection'] = block;
       externalNoticeContent = _noticeCards(block['items'] as List);
+      if (receipt.recalledControl case final control?) result['control'] = control;
     }
     if (call.name == 'related') {
       if (receipt.relatedCards == null) return _failure('related_not_current');
@@ -406,11 +406,12 @@ class CompanionAgentMemoryTools {
     ),
     CompanionAgentTool(
       name: 'forget',
-      description: 'First use related to inspect same-source candidates: sharing a source does not mean the same fact. Forget the intended entries atomically; changes must explicitly include all true literal/reference dependencies and preserve independent facts by nonempty rewrites. Original chat stays. Tell the user when deletion succeeds.',
+      description: 'First use related to inspect same-source candidates: sharing a source does not mean the same fact. Forget the intended entries atomically; changes must explicitly include all true literal/reference dependencies and preserve independent facts by nonempty rewrites. Original chat stays unless the user explicitly asks to delete it too: set deleteChat=true and supply top-level card as the single original-source target, also forgotten in changes if present. Other changes are not additional original-source targets. All affected entries must be granted and fit the shared budget. Tell the user when deletion succeeds.',
       inputSchema: {
         'type': 'object',
         'properties': {
           'card': _card,
+          'deleteChat': {'type': 'boolean', 'default': false},
           'changes': {'type': 'array', 'minItems': 1, 'items': _change},
         },
         'anyOf': [
@@ -526,17 +527,37 @@ class CompanionAgentMemoryTools {
     ),
     CompanionAgentTool(
       name: 'quiet',
-      description: 'Mention the topic of this supplied card less, or never proactively. All affected topic cards must be supplied and fit the turn budget.',
+      description: 'Mention the topic of this supplied card less, or never proactively; restore normal when the user allows it again, clearing its saved quiet anchors. The card path requires all affected topic cards to be supplied and fit the turn budget. Alternatively, restore one quiet control just returned by recall using topic and mode normal, without card. This topic path leaves its cards unchanged and grants no card IDs. After each restoration use a new recall call to read the next control. Restoring does not reopen old followups.',
       inputSchema: {
         'type': 'object',
         'properties': {
           'card': _card,
+          'topic': {'type': 'string', 'description': 'A quiet control topic_id just returned by recall.'},
           'mode': {
             'type': 'string',
-            'enum': ['less', 'never'],
+            'enum': ['less', 'never', 'normal'],
           },
         },
-        'required': ['card', 'mode'],
+        'required': ['mode'],
+        'oneOf': [
+          {
+            'required': ['card'],
+            'not': {
+              'required': ['topic'],
+            },
+          },
+          {
+            'required': ['topic'],
+            'not': {
+              'required': ['card'],
+            },
+            'properties': {
+              'mode': {
+                'enum': ['normal'],
+              },
+            },
+          },
+        ],
         'additionalProperties': false,
       },
     ),
@@ -576,7 +597,7 @@ class CompanionAgentMemoryTools {
     ),
     CompanionAgentTool(
       name: 'recall',
-      description: 'Search the current eligible memory cards using the existing bounded selector. Only returned IDs become available to this turn.',
+      description: 'Search the current eligible memory cards using the existing bounded selector. Only returned card IDs become available to this turn. Also read at most one matching quiet control, returned separately as control. Restore it with quiet(topic, normal), then use a new recall call to read another; replaying an old call does not grant the next control.',
       inputSchema: {
         'type': 'object',
         'properties': {'query': _text},

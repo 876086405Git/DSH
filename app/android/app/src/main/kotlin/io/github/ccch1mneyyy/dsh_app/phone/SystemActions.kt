@@ -61,6 +61,8 @@ object AppVisibility : Application.ActivityLifecycleCallbacks {
 
 /** System tools on Android: no permission beyond what the app already has, plus SET_ALARM (normal). */
 class SystemActions(private val app: Context) : SystemApi {
+    override fun calendarList(start: java.time.LocalDate, until: java.time.LocalDate, zone: java.time.ZoneId) =
+        readCalendar(app, start, until, zone)
     private val pm: PackageManager = app.packageManager
     private val main = Handler(Looper.getMainLooper())
     private val nm = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

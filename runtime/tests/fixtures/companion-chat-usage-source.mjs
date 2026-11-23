@@ -32,11 +32,18 @@ export async function loadChatSource(root, fetch, lookupWindow = false) {
     import(pathToFileURL(join(root, 'dsh-timeout/lib/index.js')).href),
     import(pathToFileURL(join(root, 'eventsource-parser/dist/stream.js')).href),
   ]);
+  // The lookup-window copy is the file at the end of the Android chain (later
+  // patches, such as the screen-image ones, keep changing it); the chat-usage
+  // copy is the file right after its own patch.
+  const chainEnd = (file) => {
+    let after;
+    for (const patch of pins.targetSets.android) after = pins.patches[patch]?.['0.2.2-rc.1']?.[file]?.after ?? after;
+    return after;
+  };
   for (const [name, value] of [['dsh-llm', llm], ['dsh-llm-deepseek', deepseek]]) {
-    const patch = lookupWindow ? (name === 'dsh-llm' && pins.patches['companion-compare-output-window.diff']
-      ? 'companion-compare-output-window.diff' : 'companion-lookup-answer-window.diff') : 'companion-chat-usage-receipts.diff';
+    const file = `node_modules/@deepseek-ai/${name}/lib/index.js`;
     assert.equal(createHash('sha256').update(value).digest('hex'),
-      pins.patches[patch]['0.2.2-rc.1'][`node_modules/@deepseek-ai/${name}/lib/index.js`].after);
+      lookupWindow ? chainEnd(file) : pins.patches['companion-chat-usage-receipts.diff']['0.2.2-rc.1'][file].after);
   }
   // The original lock package provenance is recorded in A03-upstream-provenance.
   assert.equal(createHash('sha256').update(agent).digest('hex'), '8673b5cfadfbb6e6ce0bcb341d0ea2877adc2986eab1c2b6c8baf32726534c92');

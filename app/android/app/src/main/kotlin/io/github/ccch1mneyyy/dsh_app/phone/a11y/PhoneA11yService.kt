@@ -56,8 +56,8 @@ class PhoneA11yService : AccessibilityService() {
         private set
 
     internal fun companionScreenSample(control: io.github.ccch1mneyyy.dsh_app.phone.PhoneControl,
-        excluded: Set<String>, current: () -> Boolean): Map<String, Any?> =
-        companionScreens?.sample(control, excluded, current) ?: mapOf("status" to "disconnected")
+        excluded: Set<String>, current: () -> Boolean, image: Boolean = false): Map<String, Any?> =
+        companionScreens?.sample(control, excluded, current, image) ?: mapOf("status" to "disconnected")
 
     internal fun companionScreenCurrent(control: io.github.ccch1mneyyy.dsh_app.phone.PhoneControl,
         excluded: Set<String>, packageName: String, requireIdle: Boolean): Boolean =

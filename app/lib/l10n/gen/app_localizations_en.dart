@@ -5386,6 +5386,46 @@ class L10nEn extends L10n {
   String get companionVoice => 'Voice';
 
   @override
+  String get companionSystemAssistant => 'System digital assistant';
+
+  @override
+  String get companionAssistantChoose => 'Choose the default assistant';
+
+  @override
+  String get companionAssistantChooseHint =>
+      'Choose DSH Go Companion in Android Settings, then use your phone\'s assistant gesture or button.';
+
+  @override
+  String get companionAssistantSelected => 'Companion is the default. Open Android Settings here to switch assistants.';
+
+  @override
+  String get companionAssistantSettingsMissing =>
+      'The assistant picker is unavailable. Search for the default digital assistant in Android Settings.';
+
+  @override
+  String get companionAssistantSharePage => 'Include page text on wake';
+
+  @override
+  String get companionAssistantSharePageHint =>
+      'Send text Android makes available to the companion model with this turn. You can remove it before sending.';
+
+  @override
+  String get companionAssistantPageAttached => 'Page text attached';
+
+  @override
+  String get companionAssistantCalendarAccess => 'Allow calendar access';
+
+  @override
+  String get companionAssistantCalendarHint =>
+      'Let the companion and phone tools read visible events. Results are sent to the active model.';
+
+  @override
+  String get companionAssistantCalendarAllowed => 'Calendar access is on. Tap to manage it in Android app permissions.';
+
+  @override
+  String get companionAssistantAppPermissions => 'Open Android app permissions';
+
+  @override
   String get companionStop => 'Ask her to stop';
 
   @override
@@ -7599,6 +7639,34 @@ class L10nEn extends L10n {
   String get companionScreenAllowProjection => 'Allow screen recording';
 
   @override
+  String get companionScreenVision => 'Allow screen images';
+
+  @override
+  String get companionScreenVisionHint =>
+      'Send a screen image up to 512 pixels on its longest side to the model you choose; the image is not saved';
+
+  @override
+  String get companionScreenVisionTextOnly =>
+      'The current screen capture can provide text only. Images need accessibility capture with verified window sources';
+
+  @override
+  String get companionScreenVisionModel => 'Model for screen images';
+
+  @override
+  String get companionScreenVisionChoose => 'Choose a model that accepts images';
+
+  @override
+  String get companionScreenVisionAvailable =>
+      'The selected model can receive qualified screen images up to 512 pixels; images are not saved';
+
+  @override
+  String get companionScreenVisionChecking => 'Checking the selected model; screen images are not active yet';
+
+  @override
+  String get companionScreenVisionUnavailable =>
+      'Images are unavailable for this connection or model; screen observation uses text';
+
+  @override
   String get companionScreenFrequency => 'How often she speaks';
 
   @override
@@ -7706,6 +7774,55 @@ class L10nEn extends L10n {
   @override
   String get companionMemoryNoticesClearBody =>
       'Every note she made from notifications is deleted, and the same things won\'t be noted again.';
+
+  @override
+  String get companionPanelCompany => 'Company';
+
+  @override
+  String get companionPanelHer => 'Her';
+
+  @override
+  String get companionPanelTalk => 'Conversation';
+
+  @override
+  String get companionPanelMore => 'More';
+
+  @override
+  String get companionFullNoKey =>
+      'Your computer\'s model can\'t reach me yet, so for now I need a DeepSeek API key to talk. Add one in Settings.';
+
+  @override
+  String get companionDrawerHere => 'Always here';
+
+  @override
+  String get companionDrawerRoom => 'Companion room';
+
+  @override
+  String get companionTabRoom => 'Room';
+
+  @override
+  String get companionTabMemory => 'Memories';
+
+  @override
+  String get companionTabTasks => 'Errands';
+
+  @override
+  String get companionTabHer => 'Her';
+
+  @override
+  String companionDrawerReminderToday(String time) {
+    return 'Reminder at $time';
+  }
+
+  @override
+  String companionDrawerReminderTomorrow(String time) {
+    return 'Tomorrow $time';
+  }
+
+  @override
+  String companionDrawerReminderLater(String date) {
+    return 'Reminder $date';
+  }
 
   @override
   String get automaticDiagnosticsRecover => 'Recover local records';

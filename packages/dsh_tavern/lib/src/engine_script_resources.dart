@@ -120,7 +120,7 @@ extension _ScriptRawResources on _ScriptCoordinator {
           },
         ),
       );
-      engine._cacheCharacterDetail(characterId, Future.value(stored));
+      engine._cacheCharacterRecord(characterId, stored);
       engine._notifyLists();
       final stats = engine._store.characterChatStats()[characterId];
       return stored.toCharacter(chatCount: stats?.count ?? 0, lastChatAt: stats?.lastAt);
@@ -351,7 +351,7 @@ extension _ScriptRawResources on _ScriptCoordinator {
               },
             ),
           );
-          engine._cacheCharacterDetail(characterId, Future.value(stored));
+          engine._cacheCharacterRecord(characterId, stored);
           engine._notifyLists();
           return TavernScriptBookSnapshot(ref: ref, version: adoptedVersion!, book: book);
       }

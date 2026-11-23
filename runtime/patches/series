@@ -178,6 +178,7 @@ config-editor-empty-layer-copy.diff
 piai-overflow-output-limit.diff
 schedule-authorization-availability.diff
 schedule-task-schema-on-demand.diff
+schedule-private-scope.diff
 deepseek-refusal.diff
 deepseek-unnamed-stream-error.diff
 web-empty-reply-notice.diff
@@ -208,6 +209,8 @@ ohos-api-gateway-idle.diff
 companion-find-drafts-files.diff
 companion-read-file-capacity.diff
 companion-compare-output-window.diff
+companion-screen-image.diff
+companion-screen-piai-image.diff
 companion-receipt-file-bytes.diff
 web-table-pipes.diff
 ohos-web-converter-lazy.diff

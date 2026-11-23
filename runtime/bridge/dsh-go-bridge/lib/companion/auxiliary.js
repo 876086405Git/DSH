@@ -6,6 +6,7 @@ import { contextId, FULL_PRESET } from './prompt-context.js';
 
 const ROOT = '/dsh-go/v1/companion/auxiliary';
 const MAX_BYTES = 65536;
+const MAX_SCREEN_BYTES = 2 * 1024 * 1024;
 const MAX_RECEIPTS = 4096;
 const DEADLINE_MS = 90000;
 // The pinned Cordis getTraceable wrapper publishes this original identity.
@@ -24,6 +25,25 @@ function validate(value) {
     throw failure(400, 'invalid-request', 'Invalid companion auxiliary request');
   }
   return Object.fromEntries(inputKeys.map(key => [key, value[key]]));
+}
+
+function validateScreen(value) {
+  const keys = ['v', 'instanceId', 'requestId', 'provider', 'model', 'reasoningEffort', 'kind', 'system', 'input', 'image', 'maxTokens'];
+  const image = value?.image;
+  if (!fields(value, keys.filter(key => key !== 'reasoningEffort'), ['reasoningEffort']) ||
+      value.v !== 1 || value.kind !== 'screen' ||
+      !['instanceId', 'requestId', 'provider', 'model'].every(key => contextId(value[key])) ||
+      value.reasoningEffort !== undefined && !contextId(value.reasoningEffort) ||
+      !text(value.system) || !text(value.input) || Buffer.byteLength(value.system) + Buffer.byteLength(value.input) > MAX_BYTES ||
+      !Number.isSafeInteger(value.maxTokens) || value.maxTokens < 1 || value.maxTokens > 3000 ||
+      !fields(image, ['mediaType', 'width', 'height', 'data']) || image.mediaType !== 'image/jpeg' ||
+      !Number.isSafeInteger(image.width) || !Number.isSafeInteger(image.height) ||
+      image.width < 1 || image.width > 512 || image.height < 1 || image.height > 512 ||
+      typeof image.data !== 'string' || image.data.length < 4 || image.data.length > 1398104) {
+    throw failure(400, 'invalid-request', 'Invalid transient screen request');
+  }
+  // The selected adapter validates encoded JPEG dimensions before any fetch.
+  return Object.fromEntries(keys.filter(key => value[key] !== undefined).map(key => [key, value[key]]));
 }
 
 export function errorCode(error) {
@@ -100,6 +120,25 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
     return { agent, session, scope, llm, selected, guard, capability };
   }
 
+  async function resolveScreen(requested, signal) {
+    if (!contextId(requested.provider) || !contextId(requested.model) ||
+        requested.reasoningEffort !== undefined && !contextId(requested.reasoningEffort)) {
+      throw failure(400, 'invalid-request', 'A screen model selection is required');
+    }
+    const llm = ctx.get('llm');
+    const selected = { provider: requested.provider, model: requested.model,
+      ...(requested.reasoningEffort === undefined ? {} : { reasoningEffort: requested.reasoningEffort }) };
+    const guard = () => {
+      signal?.throwIfAborted();
+      if (closed || raw(ctx.get('llm')) !== raw(llm)) throw failure(409, 'selection-changed', 'The screen model service changed');
+    };
+    guard();
+    const capability = typeof llm?.companionScreenCapability === 'function'
+      ? await llm.companionScreenCapability(selected.provider, selected.model, signal) : undefined;
+    guard();
+    return { llm, selected, guard, capability };
+  }
+
   function snapshot(record) {
     return { v: 1, instanceId, requestId: record.requestId, phase: record.finished ? 'finished' : 'accepted',
       // An active pre-fetch request can still dispatch later: never prove false.
@@ -171,7 +210,7 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
       res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
       emit({ type: 'accepted', instanceId, provider: body.provider, model: body.model });
       controller.signal.throwIfAborted();
-      const target = await resolve(body.sessionId, body);
+      const target = body.kind === 'screen' ? await resolveScreen(body, controller.signal) : await resolve(body.sessionId, body);
       record.agent = target.agent;
       if (!target.capability || typeof target.llm.prepareCompanionAuxiliaryCall !== 'function') throw failure(422, 'unavailable', 'This provider has no callable auxiliary model transport');
       record.rawUsageAvailable = target.capability.rawUsage === 'deepseek-messages-cumulative';
@@ -179,14 +218,16 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
       guard();
       // DeepSeek's verified extraction path disables thinking. Other models
       // retain the selected effort/default; do not impose an unsupported knob.
-      const reasoningEffort = record.rawUsageAvailable ? 'off' : target.selected.reasoningEffort;
+      const reasoningEffort = body.kind === 'screen' ? target.selected.reasoningEffort
+        : record.rawUsageAvailable ? 'off' : target.selected.reasoningEffort;
       const call = await target.llm.prepareCompanionAuxiliaryCall({ provider: body.provider, model: body.model,
         ...(reasoningEffort === undefined ? {} : { reasoningEffort }), maxTokens: body.maxTokens }, controller.signal, { guard, observe });
       guard();
       if (call.config.provider !== body.provider || call.config.model !== body.model ||
           call.config.maxTokens !== body.maxTokens || reasoningEffort !== undefined && call.config.reasoningEffort !== reasoningEffort) throw failure(409, 'selection-changed', 'The auxiliary request controls changed');
       let outputBytes = 0, finish;
-      for await (const chunk of call.stream({ system: body.system, input: body.input })) {
+      for await (const chunk of call.stream({ system: body.system, input: body.input,
+        ...(body.kind === 'screen' ? { screenImage: body.image } : {}) })) {
         guard();
         if (chunk.type === 'tool-call-delta' || chunk.type === 'block-start' && chunk.blockType === 'tool-call') {
           throw failure(502, 'tool-output', 'Auxiliary requests cannot execute tools');
@@ -261,12 +302,18 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
         const url = new URL(req.url, 'http://dsh-go.invalid');
         if (path === ROOT && req.method === 'GET') {
           req.resume();
-          const target = await resolve(url.searchParams.get('sessionId'));
+          const screen = url.searchParams.get('kind') === 'screen';
+          const target = screen ? await resolveScreen({ provider: url.searchParams.get('provider'), model: url.searchParams.get('model'),
+            ...(url.searchParams.has('reasoningEffort') ? { reasoningEffort: url.searchParams.get('reasoningEffort') } : {}) })
+            : await resolve(url.searchParams.get('sessionId'));
           send(res, 200, { v: 1, instanceId, provider: target.selected.provider, model: target.selected.model,
+            ...(screen ? { kind: 'screen', ...target.selected.reasoningEffort === undefined ? {} : { reasoningEffort: target.selected.reasoningEffort } } : {}),
             supported: Boolean(target.capability), ...(target.capability ? { capability: target.capability } : { reason: 'adapter-call-unavailable' }) });
-        } else if (path === ROOT && req.method === 'POST') {
+        } else if ((path === ROOT || path === `${ROOT}/screen`) && req.method === 'POST') {
           if (String(req.headers['content-type']).split(';', 1)[0].trim().toLowerCase() !== 'application/json') throw failure(415, 'content-type', 'Content-Type must be application/json');
-          const body = validate(await readJson(req, MAX_BYTES, true));
+          const screen = path === `${ROOT}/screen`;
+          const value = await readJson(req, screen ? MAX_SCREEN_BYTES : MAX_BYTES, true);
+          const body = screen ? validateScreen(value) : validate(value);
           await execute(req, res, body);
         } else if (path.startsWith(`${ROOT}/requests/`) && req.method === 'GET') {
           req.resume();

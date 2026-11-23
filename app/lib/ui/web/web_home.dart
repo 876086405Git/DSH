@@ -40,6 +40,7 @@ import '../../state/ui_mode_state.dart';
 import '../common/discard_guard.dart';
 import '../common/empty_view.dart';
 import '../companion/companion_tasks_page.dart';
+import '../companion/companion_page.dart';
 import '../forum/forum_link_host.dart';
 import '../notify/chat_alert_host.dart';
 import '../pets/pet_settings_page.dart';
@@ -356,6 +357,8 @@ class _WebEntryHostState extends ConsumerState<WebEntryHost> {
             ),
           );
         }
+      case CompanionAssistantEntry():
+        if (mounted) await openCompanionAssistant(context, ref, entry);
     }
   }
 

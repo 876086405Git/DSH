@@ -1017,9 +1017,9 @@ class CompanionMemoryStore {
     final sequence = _sequence();
     _removeFactRelations(
       {id},
-      domainSnapshot: _memoryDomainCards(
-        rows.single['character_id'] as String?,
-      ).where((card) => card['character_id'] == rows.single['character_id']).toList(),
+      domainSnapshot: _memoryDomainCards(rows.single['character_id'] as String?)
+          .where((card) => card['character_id'] == rows.single['character_id'])
+          .toList(),
     );
     _bumpMemory();
     _bumpControl(historyAfterSeq: sequence);
@@ -1276,6 +1276,10 @@ class CompanionMemoryStore {
     // Decide the complete deletion before any write, including cards that
     // lose their last proof through an explicitly selected raw-message deletion.
     final snapshot = domainSnapshot ?? cards(includeInactive: true);
+    // Losing a proof may remove another fact, but does not authorize forgetting
+    // that fact's independent originals. Keep semantic targets separate from
+    // those source-removal effects, using the unchanged literal-only plan.
+    final literalTargets = deleteChat ? _planFactRelations(roots, domainSnapshot: snapshot).cards : null;
     final groups = {for (final card in snapshot) card['id'] as String: _supportGroups(card)};
     final ending = RegExp(r'[。.!！?？]+$');
     final clauseBreak = RegExp(r'[，,。.;；\r\n]+');
@@ -1309,7 +1313,7 @@ class CompanionMemoryStore {
     var expanded = true;
     while (expanded) {
       final before = deleting.length + rawSources.length;
-      final known = snapshot.where((card) => deleting.contains(card['id'])).toList();
+      final known = snapshot.where((card) => (literalTargets ?? deleting).contains(card['id'])).toList();
       for (final card in snapshot) {
         if (card['scope'] != 'real' || deleting.contains(card['id'])) {
           continue;
@@ -1931,16 +1935,10 @@ class CompanionMemoryStore {
         };
         if (_canonicalJson(references(targetId)) != _canonicalJson(references(fromId))) continue;
         if (target['topic_mode'] == 'less') {
-          List<String> anchors(Object? topic) =>
-              (jsonDecode(
-                        _db.select('SELECT control_anchors FROM memory_topics WHERE id=?', [
-                              topic,
-                            ]).single['control_anchors']
-                            as String,
-                      )
-                      as List)
-                  .cast<String>()
-                ..sort();
+          List<String> anchors(Object? topic) => (jsonDecode(
+            _db.select('SELECT control_anchors FROM memory_topics WHERE id=?', [topic]).single['control_anchors']
+                as String,
+          ) as List).cast<String>()..sort();
           if (jsonEncode(anchors(target['topic_id'])) != jsonEncode(anchors(from['topic_id']))) continue;
         }
         final aliases = _db.select('SELECT alias,normalized_alias FROM memory_person_aliases WHERE card_id=?', [
@@ -1998,9 +1996,9 @@ class CompanionMemoryStore {
       _bumpMemory();
       rows = _mergeRows(at);
     }
-    final groups = memoryMergeGroups(
-      rows,
-    ).where((group) => group.any((row) => row['maintenance_row_rev'] != row['row_rev'])).toList();
+    final groups = memoryMergeGroups(rows)
+        .where((group) => group.any((row) => row['maintenance_row_rev'] != row['row_rev']))
+        .toList();
     if (groups.isEmpty) {
       _db.execute('UPDATE memory_archive SET maintenance_revision=memory_revision WHERE singleton=1');
       return null;
@@ -2739,7 +2737,7 @@ class CompanionMemoryStore {
   /// The local physical request's existing cost fields, without projecting history.
   MemoryRow? localRequestCost(String id) {
     final rows = _db.select(
-      'SELECT sent_at_ms,reserved_at_ms,estimated_cny,reserved_cny FROM memory_requests WHERE id=?',
+      'SELECT sent_at_ms,uncertain_at_ms,state,reserved_at_ms,estimated_cny,reserved_cny FROM memory_requests WHERE id=?',
       [id],
     );
     return rows.isEmpty ? null : rows.single;
@@ -3100,10 +3098,10 @@ class CompanionMemoryStore {
   /// Currentness protects an existing display as well as a pending ticket.
   /// Asked may remain visible for its original eight seconds; only pending
   /// can reserve, so this is never permission to show the question twice.
-  bool isFollowupCurrent(MemoryRow captured, {required int nowMs}) => _db
-      .select(
-        '''
-    SELECT 1 FROM memory_followups f JOIN memory_cards c ON c.id=f.card_id
+  bool isFollowupCurrent(MemoryRow captured, {required int nowMs}) {
+    final rows = _db.select(
+      '''
+    SELECT f.* FROM memory_followups f JOIN memory_cards c ON c.id=f.card_id
     JOIN memory_topics t ON t.id=c.topic_id JOIN memory_messages m ON m.id=f.message_id
     JOIN memory_archive a ON a.singleton=1 LEFT JOIN memory_messages support ON support.id=f.support_message_id
     WHERE f.id=? AND f.row_rev=? AND f.card_id=? AND f.card_rev=? AND f.control_revision=?
@@ -3118,25 +3116,34 @@ class CompanionMemoryStore {
       AND (f.wait_subject IS NULL OR (support.source_rev=f.support_source_rev AND support.role='user'
         AND support.scope='real' AND support.first_seq>m.first_seq))
   ''',
-        [
-          captured['id'],
-          captured['row_rev'],
-          captured['card_id'],
-          captured['card_rev'],
-          captured['control_revision'],
-          captured['message_id'],
-          captured['source_rev'],
-          captured['support_message_id'],
-          captured['support_source_rev'],
-          nowMs,
-          nowMs,
-          nowMs,
-        ],
-      )
-      .isNotEmpty;
+      [
+        captured['id'],
+        captured['row_rev'],
+        captured['card_id'],
+        captured['card_rev'],
+        captured['control_revision'],
+        captured['message_id'],
+        captured['source_rev'],
+        captured['support_message_id'],
+        captured['support_source_rev'],
+        nowMs,
+        nowMs,
+        nowMs,
+      ],
+    );
+    if (rows.isEmpty) return false;
+    final current = rows.single;
+    if (current['agent_origin'] == 1 || current['state'] == 'asked' || current['wait_subject'] == null) return true;
+    // An unshown legacy completion still needs one unambiguous card.
+    // Read the current candidates without altering the presentation debit.
+    final candidateCards = _legacyFollowupCandidates(nowMs).choices
+        .where((row) => row['wait_subject'] == current['wait_subject'])
+        .map((row) => row['card_id'])
+        .toSet();
+    return candidateCards.length == 1 && candidateCards.contains(current['card_id']);
+  }
 
-  void _refreshFollowups(int at) {
-    _refreshAgentFollowups(at);
+  ({Map<String, MemoryRow> sources, List<MemoryRow> choices}) _legacyFollowupCandidates(int at) {
     final meta = archive;
     // Runs on every idle observation: only the cards that carry a follow-up
     // are worth their evidence queries, and without one no message is needed.
@@ -3189,10 +3196,20 @@ class CompanionMemoryStore {
         });
       }
     }
-    final choices = [
-      for (final group in candidates.values)
-        if (group.length == 1) group.single,
-    ];
+    return (
+      sources: sources,
+      choices: [
+        for (final group in candidates.values)
+          if (group.length == 1) group.single,
+      ],
+    );
+  }
+
+  void _refreshFollowups(int at) {
+    _refreshAgentFollowups(at);
+    final candidates = _legacyFollowupCandidates(at);
+    final sources = candidates.sources;
+    final choices = candidates.choices;
     final chosenIds = choices.map((row) => row['id']).toSet();
     final existing = {
       for (final row in _db.select('SELECT * FROM memory_followups WHERE agent_origin=0')) row['id'] as String: row,
@@ -3330,7 +3347,28 @@ class CompanionMemoryStore {
       if (at < 0 || at > 8640000000000000) {
         throw const DshRemoteException('companion/unavailable', 'Companion clock is unavailable', {'status': 503});
       }
-      final topic = previous?['topic_id'] ?? _createId();
+      final controlled = previous == null
+          ? _controlledTopics(
+              {'text': memory.text, 'evidence': const <MemoryRow>[]},
+              controls: [
+                for (final row in _db.select(
+                  "SELECT id,control_anchors FROM memory_topics WHERE character_id IS NULL AND mode IN ('less','never')",
+                ))
+                  {
+                    'topic_id': row['id'],
+                    'anchors': (jsonDecode(row['control_anchors'] as String) as List<Object?>).cast<String>(),
+                  },
+              ],
+            )
+          : const <String>[];
+      if (controlled.length > 1) {
+        throw const DshRemoteException(
+          'companion/invalid-request',
+          'Manual memory matches multiple controlled topics',
+          {'status': 400, 'reason': 'ambiguous_controlled_topic'},
+        );
+      }
+      final topic = previous?['topic_id'] ?? (controlled.isEmpty ? _createId() : controlled.single);
       final changedText = previous == null || previous['text'] != memory.text;
       final changedContext =
           previous == null ||
@@ -3346,12 +3384,12 @@ class CompanionMemoryStore {
         _removeFactRelations(
           {id},
           retainTargetId: id,
-          domainSnapshot: _memoryDomainCards(
-            previous['character_id'] as String?,
-          ).where((card) => card['character_id'] == previous['character_id']).toList(),
+          domainSnapshot: _memoryDomainCards(previous['character_id'] as String?)
+              .where((card) => card['character_id'] == previous['character_id'])
+              .toList(),
         );
       }
-      if (previous == null) _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
+      if (previous == null && controlled.isEmpty) _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
       final revision = previous == null ? 1 : (previous['row_rev'] as int) + 1;
       _db.execute(
         '''

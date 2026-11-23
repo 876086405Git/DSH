@@ -69,7 +69,7 @@ String? pageLinkId(Uri uri) {
 /// the chat, as 全部功能 passes it.
 Widget? pageForId(String id, String? sessionId) {
   if (settingsPageForLink(id, sessionId: sessionId) case final page?) return page;
-  if (id == companionPageLink) return const CompanionPage();
+  if (id == companionPageLink) return const CompanionPage(sections: true);
   if (_registeredPages[id] case final page?) return page();
   if (!catalogPageLinks.contains(id)) return null;
   for (final section in featureSections) {

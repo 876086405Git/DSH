@@ -63,6 +63,12 @@ The companion room is a separate full page with an animated Live2D character. It
 
 Tap the **Switch mode** button at the top of the chat list, then **Companion room**; if you've set a startup mode, the app opens straight into it. When the app comes with her, she swims in by herself the first time; after you remove her from the menu at the top right of the room, you can bring her back or import another asset pack (zip). Her assets stay on this phone.
 
+### Open the room with your phone's assistant (Android)
+
+In the room, open the **Her** tab, or **More** in a standalone room window. Under **Conversation**, open **System digital assistant** and tap **Choose the default assistant**. Select “DSH Go Companion” in Android Settings. Your phone's default-assistant gesture or button now opens the room and starts listening. The gesture or button depends on the phone. On the lock screen, unlock when Android prompts you. You can type if the microphone is unavailable, and you can switch back to your previous assistant from the same settings.
+
+With **Include page text on wake** enabled, any text Android makes available appears as an attachment above the composer. You can remove it or send it to the companion model with your next message. To ask the companion what is on your calendar today or tomorrow, choose **Allow calendar access** on the same settings page. Query results go to the active model. You can revoke access in Android app permissions.
+
 What you can do:
 
 - Touch her: stroke her head to pat it, and tap her face, body or tail for different reactions. Three quick pokes make her dizzy. None of this calls a model or spends tokens.

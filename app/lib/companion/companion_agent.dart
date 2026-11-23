@@ -16,6 +16,8 @@ import '../notify/chat_alerts.dart' show companionHostKey;
 import '../state/connection_state.dart';
 import '../state/android_features.dart';
 import '../state/hosts_state.dart';
+import '../state/models_state.dart';
+import '../state/read_list_identity.dart';
 import '../state/run_pulse.dart' show estimateTokens;
 import '../state/settings_state.dart';
 import 'companion_agent_loop.dart';
@@ -121,6 +123,7 @@ class CompanionAgent extends ChangeNotifier {
   int? get lastUserInteractionAtMs => lastUserInteractionAt?.millisecondsSinceEpoch;
   void Function(String)? onScreenUserText;
   void Function(String requestId, int atMs, double? estimatedCny)? onScreenCost;
+  void Function()? onScreenRouteChanged;
 
   final http.Client Function() _client;
   final String Function() _apiKey;
@@ -128,6 +131,7 @@ class CompanionAgent extends ChangeNotifier {
   final void Function(Map<String, Object?>, {required bool partial})? _onUsageSettled;
   _CompanionAgentRun? _run;
   CompanionAgentModelRequest? _asideRequest;
+  DshHttpAbort? _asideAbort;
   int _asideGeneration = 0;
   int _replies = 0;
   bool _disposed = false;
@@ -184,6 +188,7 @@ class CompanionAgent extends ChangeNotifier {
     required MemoryRow source,
     required String system,
     CompanionTurnContext? context,
+    String? assistantPage,
     required List<
       ({CompanionAgentTool definition, Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute})
     >
@@ -201,12 +206,13 @@ class CompanionAgent extends ChangeNotifier {
       source: Map<String, Object?>.unmodifiable(source),
       system: system,
       context: context,
+      assistantPage: assistantPage,
       tools: List.unmodifiable(tools),
       isCurrent: isCurrent,
       onSelected: onSelected,
       onStop: onStop,
       controlRevision: memory.store.archive['control_revision'] as int,
-    );
+    )..externalWebContent = assistantPage != null;
     if (context?.data['noticeReply'] != null) _markNoticeContent(run);
     _run = run;
     memory.retainReceipt(run.settled.future);
@@ -349,6 +355,7 @@ class CompanionAgent extends ChangeNotifier {
           [for (final line in lines) (role: line.role, text: line.text)],
           context: run.context,
           memory: selection,
+          assistantPage: run.assistantPage,
         );
         for (final exchange in run.exchanges) {
           messages.add({'role': 'assistant', 'content': exchange.assistant.content});
@@ -484,11 +491,17 @@ class CompanionAgent extends ChangeNotifier {
   /// the original owner; neither a new turn nor a new window inherits it.
   void cancelScreenObservation() {
     _asideGeneration++;
+    _asideAbort?.abort();
     final aside = _asideRequest;
     if (aside != null) {
       aside.client?.close();
       unawaited(aside.drain().catchError((Object _) {}));
     }
+  }
+
+  void screenRouteChanged() {
+    cancelScreenObservation();
+    onScreenRouteChanged?.call();
   }
 
   void stop({bool discard = false}) {
@@ -536,6 +549,7 @@ class _CompanionAgentRun {
     required this.source,
     required this.system,
     required this.context,
+    required this.assistantPage,
     required this.tools,
     required this.isCurrent,
     required this.onSelected,
@@ -549,6 +563,7 @@ class _CompanionAgentRun {
   final MemoryRow source;
   final String system;
   final CompanionTurnContext? context;
+  final String? assistantPage;
   final List<
     ({CompanionAgentTool definition, Future<CompanionAgentToolResult> Function(CompanionAgentToolCall) execute})
   >

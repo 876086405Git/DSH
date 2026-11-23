@@ -2692,7 +2692,8 @@ void main() {
       expect(receipt['output_tokens'], isNull);
       expect(receipt['estimated_cny'], isNull);
       expect(store.localRequestCost(request), {
-        for (final key in ['sent_at_ms', 'reserved_at_ms', 'estimated_cny', 'reserved_cny']) key: receipt[key],
+        for (final key in ['sent_at_ms', 'uncertain_at_ms', 'state', 'reserved_at_ms', 'estimated_cny', 'reserved_cny'])
+          key: receipt[key],
       });
       expect(store.localRequestCost('missing'), isNull);
     });

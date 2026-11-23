@@ -12,6 +12,7 @@ import 'package:dsh_app/ui/common/app_sheet.dart';
 import 'package:dsh_app/ui/onboarding/onboarding_scaffold.dart';
 import 'package:dsh_app/ui/onboarding/runtime_setup_page.dart';
 import 'package:dsh_app/ui/shell/brand_mark.dart';
+import 'package:dsh_app/ui/shell/drawer/drawer_filter_bar.dart';
 import 'package:dsh_app/ui/shell/home_shell.dart';
 import 'package:dsh_app/ui/shell/page_frame.dart';
 import 'package:dsh_app/ui/shell/session_search_page.dart';
@@ -66,7 +67,10 @@ void main() {
       expect(tile.left - drawer.left, _near(10));
       expect(drawer.right - tile.right, _near(10));
       expect(search.left - drawer.left, _near(10));
-      expect(drawer.right - search.right, _near(10));
+      // With no workspace row the list's options key ends the search row on the 10 line.
+      final options = find.descendant(of: find.byType(SessionSearchBar), matching: find.byType(DrawerViewButton));
+      final searchRowEnd = options.evaluate().isEmpty ? search.right : tester.getRect(options).right;
+      expect(drawer.right - searchRowEnd, _near(10));
       expect(drawer.right - newChat.right, _near(10));
       // The pill and the lockup share a centre line.
       expect(newChat.center.dy, _near(lockup.center.dy));

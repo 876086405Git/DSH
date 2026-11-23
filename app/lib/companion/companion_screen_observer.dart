@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -15,6 +16,8 @@ class CompanionScreenObserver {
     agent.onScreenUserText = _userCallback;
     _costCallback = _recordCost;
     agent.onScreenCost = _costCallback;
+    _routeCallback = _routeChanged;
+    agent.onScreenRouteChanged = _routeCallback;
   }
   final CompanionAgent agent;
   static const _channel = MethodChannel('dsh/phone');
@@ -23,6 +26,7 @@ class CompanionScreenObserver {
   final _pace = CompanionScreenPace();
   late final void Function(String) _userCallback;
   late final void Function(String, int, double?) _costCallback;
+  late final void Function() _routeCallback;
   StreamSubscription<dynamic>? _subscription;
   Timer? _timer;
   bool _active = false;
@@ -90,6 +94,7 @@ class CompanionScreenObserver {
     _subscription = null;
     if (agent.onScreenUserText == _userCallback) agent.onScreenUserText = null;
     if (agent.onScreenCost == _costCallback) agent.onScreenCost = null;
+    if (agent.onScreenRouteChanged == _routeCallback) agent.onScreenRouteChanged = null;
     state.dispose();
   }
 
@@ -97,6 +102,7 @@ class CompanionScreenObserver {
     if (_disposed) return;
     try {
       _acceptState(await _channel.invokeMethod<Object?>('companionScreenState'));
+      await _refreshVision();
     } on Object {
       if (!_disposed) _cancel();
     }
@@ -109,9 +115,12 @@ class CompanionScreenObserver {
     String? frequency,
     List<String>? excludedPackages,
     int? seriousPerHour,
+    bool? visionEnabled,
+    Map<String, Object?>? visionSelection,
+    String? visionHost,
   }) async {
     if (_disposed) return;
-    if (enabled == false) _cancel();
+    if (enabled == false || visionEnabled != null || visionSelection != null || visionHost != null) _cancel();
     _acceptState(
       await _channel.invokeMethod<Object?>('companionScreenState', {
         'op': 'configure',
@@ -119,8 +128,12 @@ class CompanionScreenObserver {
         'frequency': ?frequency,
         'excluded_packages': ?excludedPackages,
         'serious_per_hour': ?seriousPerHour,
+        'vision_enabled': ?visionEnabled,
+        'vision_selection': ?visionSelection,
+        'vision_host': ?visionHost,
       }),
     );
+    await _refreshVision();
   }
 
   Future<void> requestProjection() async {
@@ -148,8 +161,44 @@ class CompanionScreenObserver {
         (next['muted_until_ms'] as num? ?? 0) > DateTime.now().millisecondsSinceEpoch) {
       _cancel();
     }
+    next['vision_status'] = next['vision_enabled'] != true
+        ? 'off'
+        : next['generation'] == state.value['generation']
+        ? state.value['vision_status'] ?? 'unchecked'
+        : 'unchecked';
     _pace.frequency = next['frequency'] as String? ?? 'normal';
     state.value = Map<String, Object?>.unmodifiable(next);
+  }
+
+  void _routeChanged() {
+    if (_disposed) return;
+    _cancel();
+    _visionStatus('unchecked');
+    unawaited(_refreshVision());
+  }
+
+  void _visionStatus(String status) {
+    if (_disposed) return;
+    state.value = Map<String, Object?>.unmodifiable({...state.value, 'vision_status': status});
+  }
+
+  Future<CompanionScreenVisionRoute?> _refreshVision() async {
+    if (_disposed) return null;
+    final settings = state.value;
+    final generation = _generation;
+    if (settings['vision_enabled'] != true) {
+      _visionStatus('off');
+      return null;
+    }
+    if (settings['image_capture_supported'] != true || !agent.mayCaptureScreenImage(settings)) {
+      _visionStatus('unavailable');
+      return null;
+    }
+    _visionStatus('checking');
+    final route = await agent.prepareScreenVision(settings);
+    if (_disposed || generation != _generation || settings['generation'] != state.value['generation']) return null;
+    _visionStatus(route?.available == true ? 'available' : 'unavailable');
+    return route;
   }
 
   void _cancel() {
@@ -248,7 +297,15 @@ class CompanionScreenObserver {
     _sampling = true;
     final generation = _generation;
     try {
-      final sample = await _channel.invokeMapMethod<String, Object?>('companionScreenSample');
+      // Capability discovery sends no model request or screen data. Capture
+      // pixels only after that explicit route is supported; other routes keep
+      // the original text path before any model handoff occurs.
+      final vision = _pace.cheapDue(DateTime.now().millisecondsSinceEpoch) ? await _refreshVision() : null;
+      if (!_enabled || generation != _generation || (vision != null && !vision.isCurrent())) return;
+      final sample = await _channel.invokeMapMethod<String, Object?>(
+        'companionScreenSample',
+        vision?.available == true ? {'image': true, 'generation': state.value['generation']} : null,
+      );
       if (!_enabled || generation != _generation || sample?['status'] != 'observed') return;
       final token = sample!['sample_id'];
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -261,6 +318,7 @@ class CompanionScreenObserver {
         return;
       }
       _inFlightSample = token;
+      final image = vision?.available == true ? CompanionScreenImage.fromNative(sample['image']) : null;
       final context = <String, Object?>{
         'type': 'screen_observation',
         'observed_at_ms': sample['observed_at_ms'],
@@ -271,7 +329,15 @@ class CompanionScreenObserver {
       };
       if (!await _permit('cheap', token) || !_enabled || generation != _generation) return;
       _pace.cheapStarted(now);
-      final reading = CompanionScreenReading.parse(await agent.classifyScreen(context: context));
+      if (!await _valid(token, generation)) return;
+      final reading = CompanionScreenReading.parse(
+        await agent.classifyScreen(
+          context: context,
+          vision: image == null ? null : vision,
+          image: image,
+          isCurrentObservation: () => _valid(token, generation),
+        ),
+      );
       if (reading == null || !await _valid(token, generation)) return;
       _pace.observed(reading);
       // This is only a local same-day activity label; no screenshot or source text.

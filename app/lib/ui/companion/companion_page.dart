@@ -21,6 +21,7 @@ import '../../companion/companion_adapt.dart';
 import '../../companion/companion_agent.dart';
 import '../../companion/companion_agent_task_ui.dart';
 import '../../companion/companion_always_on.dart' show companionAlwaysOnOwnerProvider;
+import '../../companion/companion_float.dart' show companionPackNameProvider;
 import '../../state/companion_agent_state.dart';
 import '../../companion/companion_initiative.dart';
 import '../../companion/companion_initiative_owner.dart';
@@ -39,6 +40,7 @@ import '../../companion/companion_voice.dart';
 import '../../companion/companion_voice_source.dart';
 import '../../companion/companion_widget.dart';
 import '../../l10n/l10n.dart';
+import '../../links/launcher_entries.dart';
 import '../../notify/chat_alerts.dart' show CompanionAlertDelivery, companionHostKey;
 import '../../pets/pet_mood.dart' show PetEvent, PetEventKind;
 import '../../pets/pet_signals.dart' show petEventBusProvider;
@@ -47,27 +49,35 @@ import '../../speech/speech_settings.dart';
 import '../../speech/voice_cloud.dart';
 import '../../state/android_features.dart' show operatingSystemProvider;
 import '../../state/app_mode_state.dart';
+import '../../state/android_features.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
+import '../../state/models_state.dart';
 import '../../state/sessions_state.dart';
 import '../../state/settings_state.dart';
 import '../../state/voice_model_state.dart';
 import '../../state/voice_settings.dart';
 import '../../state/voice_state.dart';
 import '../../usage/usage_stats.dart';
+import '../chat/model_sheet.dart';
 import '../chat/voice/voice_controller.dart';
 import '../common/app_dialog.dart';
 import '../common/app_sheet.dart';
+import '../common/empty_view.dart';
 import '../common/sheet_title_bar.dart';
 import '../modes/mode_switch.dart';
 import '../settings/settings_widgets.dart';
 import '../theme/accent.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
+import '../theme/semantic_colors.dart';
+import '../theme/motion.dart';
 import '../theme/surfaces.dart';
+import '../shell/page_frame.dart';
 import '../workshop/workshop_screen.dart';
 import '../workspace/directory_picker.dart';
 import 'companion_chrome.dart';
+import 'companion_assistant_settings.dart';
 import 'companion_draft_inputs.dart';
 import 'companion_receipt_inputs.dart';
 import 'companion_log.dart';
@@ -75,6 +85,7 @@ import 'companion_memory_page.dart';
 import 'companion_memory_model_dialog.dart';
 import 'companion_notices_page.dart';
 import 'companion_persona_page.dart';
+import 'companion_room_panel.dart';
 import 'companion_voice_page.dart';
 import 'companion_stage.dart';
 import 'companion_tasks_page.dart';
@@ -90,8 +101,33 @@ enum _Phase { checking, setup, stage, failed }
 
 typedef CompanionStageBuilder = Widget Function(CompanionStageController controller, CompanionStageEvents events);
 
+typedef _AssistantReceiver = bool Function(CompanionAssistantEntry);
+final _assistantRooms = Provider((_) => <_AssistantReceiver>[]);
+
+Future<void> openCompanionAssistant(BuildContext context, WidgetRef ref, CompanionAssistantEntry entry) async {
+  if (ref.read(_assistantRooms).reversed.any((receive) => receive(entry))) return;
+  await Navigator.of(
+    context,
+    rootNavigator: true,
+  ).push(MaterialPageRoute<void>(builder: (_) => CompanionPage(assistantEntry: entry)));
+}
+
 class CompanionPage extends ConsumerStatefulWidget {
-  const CompanionPage({super.key, this.storeOverride, this.stageBuilder, this.stageController, this.bundledPack});
+  const CompanionPage({
+    super.key,
+    this.storeOverride,
+    this.stageBuilder,
+    this.stageController,
+    this.bundledPack,
+    this.sections = false,
+    this.assistantEntry,
+  });
+
+  /// The whole 伙伴小屋 section: her room, what she remembers, what you asked
+  /// her to do and her own page, under one bar along the bottom. Without it,
+  /// just the room with its ⋯ panel.
+  final bool sections;
+  final CompanionAssistantEntry? assistantEntry;
 
   /// Tests point this at a temporary folder.
   final CompanionPackStore? storeOverride;
@@ -117,6 +153,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   final _focus = FocusNode();
   final _random = Random();
   late final VoiceInputController _voice;
+  late final List<_AssistantReceiver> _assistantReceivers;
+  bool _assistantVoicePending = false;
+  bool _assistantReturnToApp = false;
+  String? _assistantPage;
 
   CompanionPackStore? _store;
   String? _characterSourceKey;
@@ -273,6 +313,28 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   /// The invitation shown, until it is answered or the page moves on.
   String? _inviteOpen;
   bool _routeShown = true;
+
+  /// Which of the section's pages shows ([CompanionPage.sections]).
+  _CompanionTab _tab = _CompanionTab.room;
+
+  /// What she remembers, opened once for the section's pages.
+  Future<CompanionMemoryOwner>? _sectionMemory;
+
+  /// A context under the room's own theme, for the sheets that belong to her room.
+  BuildContext? _themedContext;
+
+  void _selectTab(_CompanionTab tab) {
+    if (_tab == tab || !mounted) return;
+    _acted();
+    if (tab != _CompanionTab.room) {
+      _hush();
+      _focus.unfocus();
+      // Dictation belongs to the room's composer, which is hidden now.
+      if (_voice.active) _voice.stop();
+    }
+    setState(() => _tab = tab);
+  }
+
   int _notesForegroundEpoch = 0;
   final _notesSelectionRoutes = <ModalRoute<Object?>>{};
   bool _accessible = false;
@@ -298,10 +360,18 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         if (state != AppLifecycleState.resumed) {
           _notesForegroundEpoch++;
           _mapHandoff.close();
+          if (state == AppLifecycleState.paused && (_assistantPage != null || _assistantReturnToApp)) {
+            setState(() {
+              _assistantPage = null;
+              _assistantReturnToApp = false;
+              _assistantVoicePending = false;
+            });
+          }
         } else if (mounted) {
           // A reply can finish while this window is paused. Its next actual
           // frame, even without another Agent notification, may present it.
           setState(() {});
+          scheduleMicrotask(_startAssistantVoice);
         }
         _observeInitiative();
         _observeLateUse();
@@ -354,7 +424,41 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     }, fireImmediately: true);
     _focus.addListener(_refreshMood);
     _input.addListener(_inputChanged);
+    _assistantReceivers = ref.read(_assistantRooms)..add(_receiveAssistant);
+    if (widget.assistantEntry case final entry?) {
+      _assistantVoicePending = true;
+      _assistantPage = entry.page;
+      _assistantReturnToApp = entry.returnToApp;
+    }
     unawaited(_prepare());
+  }
+
+  bool _receiveAssistant(CompanionAssistantEntry entry) {
+    if (_leaving || !_attachment.isAttached || ModalRoute.of(context)?.isCurrent != true) return false;
+    _selectTab(_CompanionTab.room);
+    _closeLog();
+    setState(() {
+      _assistantPage = entry.page;
+      _assistantReturnToApp = entry.returnToApp;
+      _assistantVoicePending = true;
+    });
+    _startAssistantVoice();
+    return true;
+  }
+
+  void _startAssistantVoice() {
+    if (!mounted ||
+        !_assistantVoicePending ||
+        _phase != _Phase.stage ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    _assistantVoicePending = false;
+    if (_input.text.isNotEmpty || _attachment.preparing) return;
+    _acted();
+    _retireGreeting();
+    _hush();
+    unawaited(_voice.start());
   }
 
   Future<void> _prepare() async {
@@ -375,6 +479,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     // The first time, the pack inside the app is unpacked while she swims over.
     // After the person removed it, it waits on the setup screen to be asked for.
     if (!installed && bundled && !removed) await _installBundled(arriving: true);
+    _startAssistantVoice();
   }
 
   Future<bool> _hasBundled() async {
@@ -389,6 +494,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   @override
   void dispose() {
+    _assistantReceivers.remove(_receiveAssistant);
     _mapHandoff.close();
     // Leaving her: no invitation follows, and nothing comes back to this page.
     _leaving = true;
@@ -607,8 +713,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   void _syncAffinity() {
     final role = _attachment.characterId;
     final affinity = _attachment.affinity;
-    final tier = affinity?['tier'] as int? ?? 0;
-    final settledDay = affinity?['settled_through_day'];
+    final tier = affinity?.tier ?? 0;
+    final settledDay = affinity?.settledDay;
     final previousRole = _affinityCharacter;
     final previousTier = _bondTier;
     final previousDay = _affinitySettledDay;
@@ -744,10 +850,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       setState(() => _showHomeHint = false);
       unawaited(SharedPreferences.getInstance().then((p) => p.setBool(_homeHintDoneKey, true)));
     }
-    if (_vitals != null) {
-      _event(id);
-    } else {
-      // No host to keep it: the page's own guess, so her corner still answers.
+    // The interaction belongs to her memory even while activity state is unavailable.
+    _event(id);
+    if (_vitals == null) {
+      // Keep the same visible activity fallback when no snapshot is available.
       _stage.command('activity', {'name': id, 'remainingMs': _localActivity[id]!.inMilliseconds});
     }
     _remember(id == 'snack' ? 'feed' : 'pet', switch (id) {
@@ -776,9 +882,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   /// A conversation of the person's (not hers) ended its turn, failed, or waits
   /// on them: when it is on the host in front, a pill offers the way there.
-  /// Nothing more from here. Whether she mentions it is the signal gate's
-  /// call (_onTaskSignal), and no note of it goes to the model: sharing one
-  /// would take the person's yes for that item (C902), not built yet.
+  /// Nothing more from here. Separately admitted task metadata reaches her
+  /// Agent through _onTaskSignal; sharing task details still needs the person's
+  /// consent for that item through the original signal gate.
   void _onAgentEvent(PetEvent event) {
     if (!mounted || _leaving || !_stageReady || event.sessionId == _sessionId) return;
     // Stopped is the person's own doing.
@@ -864,6 +970,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
           .listen((delivery) => _onTaskSignal(delivery, ingress));
     }
     _lateUseIngress = _signals.openIngress(_roomSignals);
+    // Retire a held preparation after a consent/source change through the
+    // existing post-frame observer, never by presenting synchronously here.
+    _queueObserve();
   }
 
   /// One of the active host's metadata signals (a turn ended, a request
@@ -918,15 +1027,24 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   void _speakSignal(CompanionSignalV1 signal) {
     final slot = _signals.slots.where((s) => identical(s.signal, signal)).firstOrNull;
     if (slot == null || !mounted) return;
-    final speech = _signals.speechCandidate(
-      slot,
-      language: Localizations.localeOf(context).languageCode == 'zh' ? 'zh' : 'en',
-    );
+    final language = Localizations.localeOf(context).languageCode == 'zh' ? 'zh' : 'en';
+    final speech = _signals.speechCandidate(slot, language: language);
     final line = speech == null ? null : _signalLine(signal);
     if (speech == null || line == null) return;
+    final contextKey = _initiativeContext;
+    if (signal.kind == 'task.terminal') {
+      _attachment.offerTaskSignal(
+        speech,
+        language: language,
+        isCurrent: () => mounted && !_leaving && contextKey == _initiativeContext && _signals.speechCurrent(speech),
+        present: (display, text) =>
+            _presentSignal(display, speech, (line: text, emotion: line.emotion, action: line.action)),
+      );
+      return;
+    }
     final candidate = CompanionInitiativeSignal(
       id: speech.id,
-      contextKey: _initiativeContext,
+      contextKey: contextKey,
       expiresAtMonoMs: speech.expiresAtMonoMs,
       nightKey: speech.nightKey,
     );
@@ -943,7 +1061,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     );
   }
 
-  /// Her words for a signal, in the app's language. Metadata only: no titles.
+  /// Night care keeps its local line. Task phases supply the original visual
+  /// style only; their words above come from the Agent, with no template fallback.
   ({String line, String emotion, String action})? _signalLine(CompanionSignalV1 signal) {
     final l10n = context.l10n;
     return switch (signal.kind) {
@@ -1471,7 +1590,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     stageReady: _stageReady && _phase == _Phase.stage,
     resumed: WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
     inputBusy: _focus.hasFocus || _input.text.trim().isNotEmpty,
-    generating: _sending || _running,
+    generating: _sending || _running || (_agent.running && _attachment.preparingSignalId == null),
     // Her mouth still settling counts: the words may still be on their way out.
     audioBusy:
         _voice.active || (_settleTimer?.isActive ?? false) || (_ttsPending.isNotEmpty && _memoryFollowupTicket == null),
@@ -1522,16 +1641,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   }
 
   @override
-  bool canPresent(CompanionInitiativeTicket ticket) =>
-      mounted &&
-      !_leaving &&
-      // She greets in her own words when the person arrives; only invitations
-      // and signal lines come here.
-      ticket.kind != CompanionPromptKind.greeting &&
-      // No invitation while the pill to another conversation is up.
-      (ticket.kind != CompanionPromptKind.invite || _agentPill == null) &&
-      ticket.contextKey == _initiativeContext &&
-      _presentable(_initiativeView());
+  bool canPresent(CompanionInitiativeTicket ticket) {
+    final preparing = _attachment.preparingSignalId;
+    final ownPreparation =
+        preparing != null && ticket.kind == CompanionPromptKind.signal && ticket.signalId == preparing;
+    return mounted &&
+        !_leaving &&
+        // She greets in her own words when the person arrives; only invitations
+        // and signal lines come here.
+        ticket.kind != CompanionPromptKind.greeting &&
+        // No invitation while the pill to another conversation is up.
+        (ticket.kind != CompanionPromptKind.invite || _agentPill == null) &&
+        ticket.contextKey == _initiativeContext &&
+        (!_agent.running || ownPreparation) &&
+        _presentable(_initiativeView());
+  }
 
   @override
   void show(CompanionInitiativeDisplay display) {
@@ -1594,6 +1718,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _bondTier = 0;
       _resetConversation();
     }
+    if (_character.name != character.name) ref.invalidate(companionPackNameProvider);
     _character = character;
     _characterSourceKey = sourceKey;
   }
@@ -1852,14 +1977,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   Future<void> _send() async {
     final raw = _input.text;
     if (raw.trim().isEmpty || _attachment.preparing || !_attachment.isAttached) return;
+    final page = _assistantPage;
+    final returnToApp = _assistantReturnToApp;
     _acted();
     _hush();
     _retireGreeting();
-    if (_voice.active) unawaited(_voice.cancel());
+    if (_voice.active || _voice.cancelling) {
+      await _voice.cancel();
+      if (!mounted || _attachment.preparing || !_attachment.isAttached) return;
+    }
     _notesSelectionRoutes.clear();
     _bubbleTimer?.cancel();
     _objectTimer?.cancel();
     setState(() {
+      _assistantPage = null;
+      _assistantReturnToApp = false;
       _bubble = null;
       _myLine = raw.trim();
       _lookupResults = const [];
@@ -1867,7 +1999,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _mapResults = const [];
     });
     _stage.command('mood', {'mood': 'thinking'});
-    await _attachment.submit(raw);
+    await _attachment.submit(raw, assistantPage: page, returnToApp: returnToApp);
   }
 
   void _checkNotesSelectionRoute() {
@@ -1912,7 +2044,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   String _failureText(Object error) {
     final l10n = context.l10n;
     return switch (error) {
-      CompanionLightError(failure: CompanionLightFailure.noKey) => l10n.companionLightNoKey,
+      // Full mode still reaches her model straight from the phone for now:
+      // say so, instead of naming a mode the person didn't pick.
+      CompanionLightError(failure: CompanionLightFailure.noKey) =>
+        _light ? l10n.companionLightNoKey : l10n.companionFullNoKey,
       CompanionLightError(failure: CompanionLightFailure.badKey) => l10n.companionLightBadKey,
       CompanionLightError(failure: CompanionLightFailure.busy) => l10n.companionLightBusy,
       DshRemoteException(code: 'companion/agent-retry-closed') => l10n.companionAgentRetryClosed,
@@ -2399,6 +2534,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
             final l10n = sheet.l10n;
             final enabled = state['enabled'] == true;
             final canSee = state['accessibility'] == true || state['projection_active'] == true;
+            final visionEnabled = state['vision_enabled'] == true;
+            final visionSelection = ModelSelection.fromJson(state['vision_selection']);
             final frequency = state['frequency'] as String? ?? 'normal';
             final cost = (state['today_estimated_cny'] as num?)?.toDouble() ?? 0;
             final caption = Theme.of(sheet).textTheme.bodySmall;
@@ -2433,6 +2570,45 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                             tinted: false,
                             title: l10n.companionScreenUsageAccess,
                             onTap: () => send(screen.requestUsageAccess()),
+                          ),
+                        SettingsSwitchTile(
+                          tinted: false,
+                          title: l10n.companionScreenVision,
+                          subtitle: !visionEnabled
+                              ? l10n.companionScreenVisionHint
+                              : state['image_capture_supported'] != true
+                              ? l10n.companionScreenVisionTextOnly
+                              : switch (state['vision_status']) {
+                                  'available' => l10n.companionScreenVisionAvailable,
+                                  'checking' || 'unchecked' => l10n.companionScreenVisionChecking,
+                                  _ => l10n.companionScreenVisionUnavailable,
+                                },
+                          value: visionEnabled,
+                          onChanged: (on) => send(screen.configure(visionEnabled: on)),
+                        ),
+                        if (visionEnabled)
+                          SettingsTile(
+                            tinted: false,
+                            title: l10n.companionScreenVisionModel,
+                            subtitle: visionSelection == null
+                                ? l10n.companionScreenVisionChoose
+                                : '${visionSelection.provider} / ${visionSelection.model}',
+                            onTap: () {
+                              final scope = ref.read(modelSelectionScopeProvider);
+                              final host = companionHostKey(ref.read(activeHostProvider));
+                              unawaited(
+                                showModelSheet(
+                                  sheet,
+                                  current: state['vision_host'] == host ? visionSelection : null,
+                                  onSelected: (selection) {
+                                    if (!mounted || !identical(scope, ref.read(modelSelectionScopeProvider))) {
+                                      return;
+                                    }
+                                    send(screen.configure(visionSelection: selection.toJson(), visionHost: host));
+                                  },
+                                ),
+                              );
+                            },
                           ),
                       ],
                     ),
@@ -2475,16 +2651,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   void _openMenu() {
     _acted();
-    final l10n = context.l10n;
-    final light = _light;
-    final credit = [
-      if (_character.author case final author?) l10n.companionCreditAuthor(author),
-      ?_character.license,
-      ?_character.source,
-    ].join(' · ');
+    // Inside the room's sections her own page has all of this.
+    if (widget.sections) {
+      _selectTab(_CompanionTab.her);
+      return;
+    }
     unawaited(
       showAppSheet<void>(
-        context,
+        // The room's water theme, not the app's: the sheet is part of her room.
+        _themedContext ?? context,
+        isScrollControlled: true,
         // Scrolls on a short screen instead of overflowing.
         builder: (sheet) => SafeArea(
           top: false,
@@ -2493,276 +2669,267 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SheetTitleBar(ref.read(companionNameProvider) ?? _character.name ?? l10n.companionTitle),
-                SheetGroup(
-                  margin: const EdgeInsets.fromLTRB(SheetTitleBar.inset, 0, SheetTitleBar.inset, 12),
-                  children: [
-                    SettingsTile(
-                      icon: AppIcons.edit,
-                      tinted: false,
-                      title: l10n.companionMenuPersona,
-                      value: Text(_name(l10n)),
-                      onTap: () {
-                        Navigator.of(sheet).pop();
-                        unawaited(
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(builder: (_) => CompanionPersonaPage(packName: _character.name)),
-                          ),
-                        );
-                      },
-                    ),
-                    SettingsTile(
-                      icon: AppIcons.configure,
-                      tinted: false,
-                      title: l10n.companionMenuAdapt,
-                      value: _adapting
-                          ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                          : null,
-                      onTap: () {
-                        Navigator.of(sheet).pop();
-                        _openAdapt();
-                      },
-                    ),
-                    SettingsTile(
-                      icon: AppIcons.generating,
-                      tinted: false,
-                      title: l10n.companionMenuMoves,
-                      value: Text('${_moves.expressions.length + _moves.motions.length}'),
-                      onTap: () {
-                        Navigator.of(sheet).pop();
-                        _openMoves();
-                      },
-                    ),
-                    if (_affinityCharacter != null)
-                      SettingsTile(
-                        icon: AppIcons.postLike,
-                        tinted: false,
-                        title: l10n.companionBondTitle,
-                        value: Text(switch (_bondTier) {
-                          0 => l10n.companionBond0,
-                          1 => l10n.companionBond1,
-                          2 => l10n.companionBond2,
-                          3 => l10n.companionBond3,
-                          4 => l10n.companionBond4,
-                          _ => l10n.companionBond5,
-                        }),
-                      ),
-                    SettingsTile(
-                      icon: light ? AppIcons.engineStarting : AppIcons.engine,
-                      tinted: false,
-                      title: l10n.companionMenuMode,
-                      value: Text(light ? l10n.companionModeLight : l10n.companionModeFull),
-                      onTap: () {
-                        Navigator.of(sheet).pop();
-                        _chooseMode();
-                      },
-                    ),
-                    SettingsTile(
-                      icon: AppIcons.bookmark,
-                      tinted: false,
-                      title: l10n.companionMemoryTitle,
-                      onTap: () {
-                        Navigator.of(sheet).pop();
-                        unawaited(_openMemories());
-                      },
-                    ),
-                    SettingsTile(
-                      icon: AppIcons.search,
-                      tinted: false,
-                      title: l10n.companionMemorySearchTitle,
-                      onTap: () {
-                        Navigator.of(sheet).pop();
-                        unawaited(_openMemorySearch());
-                      },
-                    ),
-                    SettingsTile(
-                      icon: AppIcons.reminder,
-                      tinted: false,
-                      title: l10n.companionTasksTitle,
-                      onTap: () {
-                        Navigator.of(sheet).pop();
-                        unawaited(_openTasks());
-                      },
-                    ),
-                    Consumer(
-                      // The page's own context pushes the voice page, not the sheet's.
-                      builder: (_, ref, _) {
-                        final voice = ref.watch(companionVoiceSettingsProvider);
-                        return SettingsTile(
-                          icon: AppIcons.companionVoice,
-                          tinted: false,
-                          title: l10n.companionMenuVoice,
-                          value: Text(switch (voice) {
-                            CompanionVoiceSettings(on: true, follow: true) => l10n.speechVoiceFollow,
-                            CompanionVoiceSettings(on: true, source: CompanionVoiceSource.deepseek) =>
-                              l10n.speechVoiceDeepseek,
-                            CompanionVoiceSettings(on: true, source: CompanionVoiceSource.system) =>
-                              l10n.companionVoiceSystem,
-                            CompanionVoiceSettings(on: true, source: CompanionVoiceSource.preset) =>
-                              voice.presetInfo.name,
-                            CompanionVoiceSettings(on: true, source: CompanionVoiceSource.openai) =>
-                              l10n.companionVoiceOpenai,
-                            CompanionVoiceSettings(on: true, source: CompanionVoiceSource.custom) =>
-                              l10n.companionVoiceCustom,
-                            _ => l10n.companionVoiceOff,
-                          }),
-                          onTap: () {
-                            Navigator.of(sheet).pop();
-                            unawaited(
-                              Navigator.of(context)
-                                  .push(MaterialPageRoute<void>(builder: (_) => const CompanionVoicePage())),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                    Consumer(
-                      builder: (context, ref, _) => SettingsTile(
-                        icon: AppIcons.companionInvite,
-                        tinted: false,
-                        title: l10n.companionMenuPace,
-                        value: Text(_paceChoices(l10n).firstWhere((c) => c.$1 == _paceChoice(ref)).$2),
-                        onTap: () {
-                          Navigator.of(sheet).pop();
-                          _choosePace();
-                        },
-                      ),
-                    ),
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final status = ref.watch(companionResidencyProvider);
-                        if (!status.available) return const SizedBox.shrink();
-                        return SettingsSwitchTile(
-                          icon: AppIcons.pet,
-                          tinted: false,
-                          title: l10n.companionAlwaysOn,
-                          subtitle: switch (status) {
-                            CompanionAlwaysOnStatus(failure: _?) => l10n.companionAlwaysOnFailed,
-                            CompanionAlwaysOnStatus(enabled: true, notificationAvailable: false) =>
-                              l10n.companionAlwaysOnNoNotify,
-                            CompanionAlwaysOnStatus(enabled: true, running: true) => l10n.companionAlwaysOnRunning,
-                            _ => l10n.companionAlwaysOnHint,
-                          },
-                          value: status.enabled,
-                          onChanged: (on) => unawaited(ref.read(companionResidencyProvider.notifier).setEnabled(on)),
-                        );
-                      },
-                    ),
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final status = ref.watch(companionResidencyProvider);
-                        if (!status.available || !status.enabled || !status.running) return const SizedBox.shrink();
-                        return SettingsTile(
-                          icon: AppIcons.preview,
-                          tinted: false,
-                          title: l10n.companionScreen,
-                          onTap: () {
-                            Navigator.of(sheet).pop();
-                            _openScreen();
-                          },
-                        );
-                      },
-                    ),
-                    // 她会留意你的通知: only Android has a notification listener.
-                    if (ref.read(operatingSystemProvider) == 'android')
-                      SettingsTile(
-                        key: const ValueKey('companion-notices'),
-                        icon: AppIcons.mail,
-                        tinted: false,
-                        title: l10n.companionNotices,
-                        onTap: () {
-                          Navigator.of(sheet).pop();
-                          unawaited(
-                            Navigator.of(context)
-                                .push(MaterialPageRoute<void>(builder: (_) => const CompanionNoticesPage())),
-                          );
-                        },
-                      ),
-                    SettingsTile(
-                      icon: AppIcons.notifications,
-                      tinted: false,
-                      title: l10n.companionMenuSignals,
-                      onTap: () {
-                        Navigator.of(sheet).pop();
-                        _openSignals();
-                      },
-                    ),
-                    if (_visibleLightEntries.isNotEmpty)
-                      SettingsTile(
-                        icon: AppIcons.newChat,
-                        tinted: false,
-                        title: l10n.companionMenuRestart,
-                        subtitle: l10n.companionMenuRestartLightHint,
-                        onTap: () {
-                          Navigator.of(sheet).pop();
-                          unawaited(_restart());
-                        },
-                      ),
-                    if (_sessionId != null || _visibleLightEntries.isNotEmpty)
-                      SettingsTile(
-                        icon: AppIcons.history,
-                        tinted: false,
-                        title: l10n.companionMenuHistory,
-                        onTap: () {
-                          Navigator.of(sheet).pop();
-                          unawaited(_openLog());
-                        },
-                      ),
-                    // 创意工坊: companions other people made. Only where this build has one to open.
-                    if (ref.read(workshopAvailableProvider))
-                      SettingsTile(
-                        icon: AppIcons.workshop,
-                        tinted: false,
-                        title: l10n.workshopTitle,
-                        subtitle: l10n.workshopEntrySubtitle,
-                        onTap: () {
-                          Navigator.of(sheet).pop();
-                          unawaited(
-                            Navigator.of(context)
-                                .push(MaterialPageRoute<void>(builder: (_) => const WorkshopScreen()))
-                                .then((_) => _afterWorkshop()),
-                          );
-                        },
-                      ),
-                    SettingsTile(
-                      icon: AppIcons.delete,
-                      tinted: false,
-                      title: l10n.companionMenuRemovePack,
-                      onTap: () {
-                        Navigator.of(sheet).pop();
-                        unawaited(_removePack());
-                      },
-                    ),
-                  ],
-                ),
-                // 模式: 工作 or 酒馆 from here, and which one a launch opens.
-                SheetGroup(
-                  margin: const EdgeInsets.fromLTRB(SheetTitleBar.inset, 0, SheetTitleBar.inset, 12),
-                  children: [
-                    SettingsTile(
-                      key: const ValueKey('companion-mode'),
-                      icon: AppIcons.modes,
-                      tinted: false,
-                      title: l10n.modeSheetTitle,
-                      value: Text(l10n.modeCompanionShort),
-                      onTap: () {
-                        Navigator.of(sheet).pop();
-                        unawaited(showModeSheet(context, current: AppMode.companion));
-                      },
-                    ),
-                  ],
-                ),
-                if (credit.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(SheetTitleBar.inset + 8, 0, SheetTitleBar.inset + 8, 12),
-                    child: Text(credit, style: Theme.of(sheet).textTheme.bodySmall),
-                  ),
+                _panelHeader(context.l10n),
+                ..._panel(context.l10n, (action, {stage = false}) {
+                  Navigator.of(sheet).pop();
+                  action();
+                }, tiles: true),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  /// Her name, how she talks and how close you are: the top of her panel and of her page.
+  Widget _panelHeader(L10n l10n) => CompanionPanelHeader(
+    name: ref.read(companionNameProvider) ?? _character.name ?? l10n.companionTitle,
+    mode: '${l10n.companionMenuMode} · ${_light ? l10n.companionModeLight : l10n.companionModeFull}',
+    bondTitle: _affinityCharacter == null ? null : l10n.companionBondTitle,
+    bondLabel: _affinityCharacter == null
+        ? null
+        : switch (_bondTier) {
+            0 => l10n.companionBond0,
+            1 => l10n.companionBond1,
+            2 => l10n.companionBond2,
+            3 => l10n.companionBond3,
+            4 => l10n.companionBond4,
+            _ => l10n.companionBond5,
+          },
+    bondStep: _bondTier,
+  );
+
+  /// Everything about her and the room, in named groups. [run] does one row's
+  /// action: the sheet closes first; her page goes back to the room first when
+  /// the action plays out on her stage ([stage]). [tiles]: the shortcut tiles
+  /// for 记忆 and 交代的事, which the sections already have as pages.
+  List<Widget> _panel(L10n l10n, void Function(VoidCallback action, {bool stage}) run, {required bool tiles}) {
+    final light = _light;
+    final credit = [
+      if (_character.author case final author?) l10n.companionCreditAuthor(author),
+      ?_character.license,
+      ?_character.source,
+    ].join(' · ');
+    const groupMargin = EdgeInsets.fromLTRB(SheetTitleBar.inset, 0, SheetTitleBar.inset, 14);
+    return [
+      CompanionPanelTiles(
+        tiles: [
+          if (tiles) ...[
+            (
+              icon: AppIcons.bookmark,
+              label: l10n.companionMemoryTitle,
+              onTap: () => run(() => unawaited(_openMemories())),
+            ),
+            (icon: AppIcons.reminder, label: l10n.companionTasksTitle, onTap: () => run(() => unawaited(_openTasks()))),
+          ],
+          if (_sessionId != null || _visibleLightEntries.isNotEmpty)
+            (icon: AppIcons.history, label: l10n.companionLogTitle, onTap: () => run(_openLog, stage: true)),
+          (
+            icon: AppIcons.companionVoice,
+            label: l10n.companionMenuVoice,
+            onTap: () => run(
+              () => unawaited(
+                Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CompanionVoicePage())),
+              ),
+            ),
+          ),
+          if (!tiles)
+            (
+              icon: AppIcons.edit,
+              label: l10n.companionMenuPersona,
+              onTap: () => run(
+                () => unawaited(
+                  Navigator.of(context)
+                      .push(MaterialPageRoute<void>(builder: (_) => CompanionPersonaPage(packName: _character.name))),
+                ),
+              ),
+            ),
+        ],
+      ),
+      // 陪伴: how much she's around, in and out of the room.
+      SheetGroup(
+        title: l10n.companionPanelCompany,
+        margin: groupMargin,
+        children: [
+          Consumer(
+            builder: (context, ref, _) {
+              final status = ref.watch(companionResidencyProvider);
+              if (!status.available) return const SizedBox.shrink();
+              return SettingsSwitchTile(
+                icon: AppIcons.pet,
+                tinted: false,
+                title: l10n.companionAlwaysOn,
+                subtitle: switch (status) {
+                  CompanionAlwaysOnStatus(failure: _?) => l10n.companionAlwaysOnFailed,
+                  CompanionAlwaysOnStatus(enabled: true, notificationAvailable: false) =>
+                    l10n.companionAlwaysOnNoNotify,
+                  CompanionAlwaysOnStatus(enabled: true, running: true) => l10n.companionAlwaysOnRunning,
+                  _ => l10n.companionAlwaysOnHint,
+                },
+                value: status.enabled,
+                onChanged: (on) => unawaited(ref.read(companionResidencyProvider.notifier).setEnabled(on)),
+              );
+            },
+          ),
+          Consumer(
+            builder: (context, ref, _) {
+              final status = ref.watch(companionResidencyProvider);
+              if (!status.available || !status.enabled || !status.running) return const SizedBox.shrink();
+              return SettingsTile(
+                icon: AppIcons.preview,
+                tinted: false,
+                title: l10n.companionScreen,
+                onTap: () => run(_openScreen),
+              );
+            },
+          ),
+          // 她会留意你的通知: only Android has a notification listener.
+          if (ref.read(operatingSystemProvider) == 'android')
+            SettingsTile(
+              key: const ValueKey('companion-notices'),
+              icon: AppIcons.mail,
+              tinted: false,
+              title: l10n.companionNotices,
+              onTap: () => run(
+                () => unawaited(
+                  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CompanionNoticesPage())),
+                ),
+              ),
+            ),
+          Consumer(
+            builder: (context, ref, _) => SettingsTile(
+              icon: AppIcons.companionInvite,
+              tinted: false,
+              title: l10n.companionMenuPace,
+              value: Text(_paceChoices(l10n).firstWhere((c) => c.$1 == _paceChoice(ref)).$2),
+              onTap: () => run(_choosePace),
+            ),
+          ),
+          SettingsTile(
+            icon: AppIcons.notifications,
+            tinted: false,
+            title: l10n.companionMenuSignals,
+            onTap: () => run(_openSignals),
+          ),
+        ],
+      ),
+      // 她: who she is and how she moves.
+      SheetGroup(
+        title: l10n.companionPanelHer,
+        margin: groupMargin,
+        children: [
+          if (tiles)
+            SettingsTile(
+              icon: AppIcons.edit,
+              tinted: false,
+              title: l10n.companionMenuPersona,
+              value: Text(_name(l10n)),
+              onTap: () => run(
+                () => unawaited(
+                  Navigator.of(context)
+                      .push(MaterialPageRoute<void>(builder: (_) => CompanionPersonaPage(packName: _character.name))),
+                ),
+              ),
+            ),
+          SettingsTile(
+            icon: AppIcons.generating,
+            tinted: false,
+            title: l10n.companionMenuMoves,
+            value: Text('${_moves.expressions.length + _moves.motions.length}'),
+            onTap: () => run(_openMoves, stage: true),
+          ),
+          SettingsTile(
+            icon: AppIcons.configure,
+            tinted: false,
+            title: l10n.companionMenuAdapt,
+            value: _adapting
+                ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                : null,
+            onTap: () => run(_openAdapt, stage: true),
+          ),
+          // 创意工坊: companions other people made. Only where this build has one to open.
+          if (ref.read(workshopAvailableProvider))
+            SettingsTile(
+              icon: AppIcons.workshop,
+              tinted: false,
+              title: l10n.workshopTitle,
+              subtitle: l10n.workshopEntrySubtitle,
+              onTap: () => run(
+                () => unawaited(
+                  Navigator.of(context)
+                      .push(MaterialPageRoute<void>(builder: (_) => const WorkshopScreen()))
+                      .then((_) => _afterWorkshop()),
+                ),
+              ),
+            ),
+        ],
+      ),
+      // 对话: where her words go and what she can look back on.
+      SheetGroup(
+        title: l10n.companionPanelTalk,
+        margin: groupMargin,
+        children: [
+          if (ref.watch(operatingSystemProvider) == 'android')
+            SettingsTile(
+              icon: AppIcons.companionVoice,
+              tinted: false,
+              title: l10n.companionSystemAssistant,
+              onTap: () => run(() => unawaited(showCompanionAssistantSettings(context))),
+            ),
+          SettingsTile(
+            icon: light ? AppIcons.engineStarting : AppIcons.engine,
+            tinted: false,
+            title: l10n.companionMenuMode,
+            value: Text(light ? l10n.companionModeLight : l10n.companionModeFull),
+            onTap: () => run(_chooseMode),
+          ),
+          SettingsTile(
+            icon: AppIcons.search,
+            tinted: false,
+            title: l10n.companionMemorySearchTitle,
+            onTap: () => run(() => unawaited(_openMemorySearch())),
+          ),
+          if (_visibleLightEntries.isNotEmpty)
+            SettingsTile(
+              icon: AppIcons.newChat,
+              tinted: false,
+              title: l10n.companionMenuRestart,
+              subtitle: l10n.companionMenuRestartLightHint,
+              onTap: () => run(() => unawaited(_restart()), stage: true),
+            ),
+        ],
+      ),
+      SheetGroup(
+        title: l10n.companionPanelMore,
+        margin: groupMargin,
+        children: [
+          // 模式: 工作 or 酒馆 from here, and which one a launch opens.
+          SettingsTile(
+            key: const ValueKey('companion-mode'),
+            icon: AppIcons.modes,
+            tinted: false,
+            title: l10n.modeSheetTitle,
+            value: Text(l10n.modeCompanionShort),
+            onTap: () => run(() => unawaited(showModeSheet(context, current: AppMode.companion))),
+          ),
+          SettingsTile(
+            icon: AppIcons.delete,
+            tinted: false,
+            title: l10n.companionMenuRemovePack,
+            onTap: () => run(() => unawaited(_removePack()), stage: true),
+          ),
+        ],
+      ),
+      if (credit.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(SheetTitleBar.inset + 8, 0, SheetTitleBar.inset + 8, 12),
+          child: Text(
+            credit,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: DshColors.of(context).textTertiary),
+          ),
+        ),
+    ];
   }
 
   Future<bool> _confirm(String action, String message, {String? confirm}) async {
@@ -2838,7 +3005,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     ref.listen(activeConnectionProvider.select((value) => value.value), (_, _) => _syncSignals());
     // What her invitation depends on that only a build can see: this page in
     // front (a sheet or another page over her isn't), a screen reader, the switch.
-    final routeShown = TickerMode.valuesOf(context).enabled && (ModalRoute.isCurrentOf(context) ?? true);
+    // Another of the section's pages over her room hides it like a page on top.
+    final routeShown =
+        TickerMode.valuesOf(context).enabled &&
+        (ModalRoute.isCurrentOf(context) ?? true) &&
+        (!widget.sections || _tab == _CompanionTab.room);
     if (_routeShown && !routeShown) {
       _checkNotesSelectionRoute();
     }
@@ -2921,228 +3092,356 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       onModel: (info) => unawaited(_onModel(info)),
       onProbe: _onProbe,
     );
+    _themedContext = context;
+    // The section's bar, over every page but a keyboard or her log.
+    final navShown =
+        widget.sections &&
+        insets == 0 &&
+        !(_logOpen && _tab == _CompanionTab.room) &&
+        // Her memories and errands stay reachable with no pack yet; only
+        // while she's arriving does the room keep the whole screen.
+        (_tab != _CompanionTab.room || (showStage ? _stageReady : _phase != _Phase.checking && !_arriving));
+    final navSpace = navShown ? CompanionSectionNav.height + 10 : 0.0;
+    final room = Stack(
+      fit: StackFit.expand,
+      children: [
+        if (showStage)
+          // A finger landing on her already counts, before the stage knows
+          // whether it was a tap, a pat or nothing (C452 §5.1).
+          Listener(
+            onPointerDown: (_) => _acted(),
+            child: ExcludeSemantics(
+              child:
+                  widget.stageBuilder?.call(_stage, events) ??
+                  CompanionStage(
+                    key: ValueKey(_stageRun),
+                    store: store,
+                    controller: _stage,
+                    events: events,
+                    viewKey: _characterSourceKey ?? '',
+                  ),
+            ),
+          ),
+        if ((showStage && !_stageReady) || (_phase == _Phase.setup && _arriving))
+          const CompanionWater(child: CompanionArriving())
+        else if (_phase == _Phase.setup)
+          CompanionWelcome(
+            title: l10n.companionSetupTitle,
+            message: _bundledHere ? l10n.companionSetupBodyBundled : l10n.companionSetupBody,
+            action: _bundledHere ? l10n.companionSetupBundled : l10n.companionSetupImport,
+            busy: _installing,
+            error: _installError,
+            onAction: _bundledHere ? _installBundled : _import,
+            secondary: _bundledHere ? l10n.companionSetupImportOther : null,
+            onSecondary: _import,
+          ),
+        if (_phase == _Phase.failed)
+          CompanionWelcome(
+            title: l10n.companionFailedTitle,
+            message: _loadFailureText(l10n),
+            action: l10n.companionSetupImport,
+            state: PetStateName.error,
+            busy: _installing,
+            error: _installError,
+            onAction: _import,
+            secondary: _failedWithPack ? l10n.commonRetry : null,
+            onSecondary: () => unawaited(_retryStage()),
+          ),
+        Positioned(
+          top: padding.top + 8,
+          left: companionEdge,
+          right: companionEdge,
+          child: Row(
+            children: [
+              CompanionRoundButton(
+                icon: AppIcons.back,
+                label: MaterialLocalizations.of(context).backButtonTooltip,
+                grouped: true,
+                onTap: () {
+                  _acted();
+                  unawaited(Navigator.of(context).maybePop());
+                },
+              ),
+              // In the section her page is on the bar, so no ⋯ here: one key each side.
+              if (!widget.sections) const SizedBox(width: 52),
+              Expanded(
+                child: Center(
+                  child: _stageReady ? CompanionNamePlate(name: name, activity: _activity) : const SizedBox.shrink(),
+                ),
+              ),
+              if (_stageReady) ...[
+                CompanionRoundButton(
+                  icon: AppIcons.history,
+                  label: l10n.companionLogTitle,
+                  grouped: true,
+                  onTap: _openLog,
+                ),
+                if (!widget.sections) ...[
+                  const SizedBox(width: 8),
+                  CompanionRoundButton(icon: AppIcons.more, label: l10n.companionMenu, grouped: true, onTap: _openMenu),
+                ],
+              ] else
+                SizedBox(width: widget.sections ? 44 : 96),
+            ],
+          ),
+        ),
+        if (showStage && _stageReady)
+          Positioned(
+            left: companionEdge,
+            right: companionEdge,
+            bottom: max(insets, padding.bottom + navSpace) + companionEdge,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Her invitation takes the hint's place while it's there.
+                if (_showTouchHint && _bubble == null && !inviting)
+                  CompanionPill(icon: AppIcons.tip, label: l10n.companionTouchHint)
+                else if (_showHomeHint && _bubble == null && !inviting)
+                  CompanionPill(icon: AppIcons.tip, label: l10n.companionTouchHintHome),
+                if (_voiceNotice case final notice?) CompanionPill(icon: AppIcons.tip, label: notice),
+                if (_agentPill case final pill?)
+                  CompanionPill(
+                    icon: AppIcons.conversations,
+                    label: pill.label,
+                    tone: const Color(0xFF9FD8F2),
+                    onTap: () {
+                      _acted();
+                      _openAgent(pill.sessionId);
+                    },
+                  ),
+                CompanionMyLine(text: _myLine),
+                CompanionSpeech(
+                  text: _bubble,
+                  textKey: _bubbleTextKey,
+                  onFrame: _queueReplyPresentation,
+                  error: _bubbleIsError,
+                  thinking: _sending || (_running && _bubble == null),
+                  onPullBack: _openLog,
+                ),
+                if (_bubble != null)
+                  for (final result in _lookupResults)
+                    CompanionPill(
+                      icon: AppIcons.search,
+                      label: l10n.companionLookupViewSources(result.placeName),
+                      onTap: () {
+                        if (_bubble == null || !_lookupResults.contains(result)) {
+                          return;
+                        }
+                        _acted();
+                        unawaited(
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => CompanionTasksPage(memory: _memoryOwner!, taskId: result.taskId),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                if (_bubble != null)
+                  for (final id in _notesResults)
+                    CompanionPill(
+                      icon: AppIcons.document,
+                      label: l10n.companionNotesView,
+                      onTap: () {
+                        if (_bubble == null || !_notesResults.contains(id)) {
+                          return;
+                        }
+                        _acted();
+                        unawaited(
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => CompanionTasksPage(memory: _memoryOwner!, taskId: id),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                if (_bubble != null)
+                  for (final id in _mapResults)
+                    CompanionPill(
+                      icon: AppIcons.plan,
+                      label: l10n.companionMapView,
+                      onTap: () {
+                        if (_bubble == null || !_mapResults.contains(id)) {
+                          return;
+                        }
+                        _acted();
+                        unawaited(
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => CompanionTasksPage(memory: _memoryOwner!, taskId: id),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                CompanionInvite(
+                  ticket: _adaptOffer == null || inviting ? null : 'adapt-${_adaptOffer!.moc}',
+                  mark: const Icon(AppIcons.configure, size: 20, color: Color(0xFFFFD27A)),
+                  text: l10n.companionAdaptOffer,
+                  accept: l10n.companionAdaptOfferYes,
+                  decline: l10n.companionAdaptOfferNo,
+                  onAccept: () => unawaited(_answerAdaptOffer(yes: true)),
+                  onDecline: () => unawaited(_answerAdaptOffer(yes: false)),
+                ),
+                CompanionInvite(
+                  ticket: inviting ? invite.ticket.id : null,
+                  text: l10n.companionInviteRest,
+                  accept: l10n.companionInviteAccept,
+                  decline: l10n.companionInviteDecline,
+                  remaining: inviteLeft,
+                  total: const Duration(milliseconds: CompanionInitiativeRules.promptMs),
+                  onAccept: () => _answerInvite(yes: true),
+                  onDecline: () => _answerInvite(yes: false),
+                ),
+                const SizedBox(height: 10),
+                if (_assistantPage != null)
+                  InputChip(
+                    label: Text(l10n.companionAssistantPageAttached),
+                    onDeleted: () => setState(() => _assistantPage = null),
+                  ),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _input,
+                  builder: (context, value, _) => CompanionComposer(
+                    onUserInput: () {
+                      _acted();
+                      _hush();
+                    },
+                    input: _input,
+                    focus: _focus,
+                    hint: l10n.companionInputHint(name),
+                    running: _running,
+                    busy: _sending,
+                    listening: _voice.active,
+                    voiceAvailable: _voice.available,
+                    onSend: _send,
+                    onStop: _stop,
+                    onVoice: () {
+                      // Reaching for the microphone is already doing something.
+                      _acted();
+                      // Her voice off before the microphone opens.
+                      _hush();
+                      _voice.active ? _voice.stop() : _voice.start();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Positioned.fill(child: CompanionLogTransition(child: _logOpen && showStage ? _log(name) : null)),
+      ],
+    );
+    if (!widget.sections) {
+      return Scaffold(backgroundColor: const Color(0xFF0D2F55), resizeToAvoidBottomInset: false, body: room);
+    }
+    _visited.add(_tab);
     return Scaffold(
       backgroundColor: const Color(0xFF0D2F55),
       resizeToAvoidBottomInset: false,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          if (showStage)
-            // A finger landing on her already counts, before the stage knows
-            // whether it was a tap, a pat or nothing (C452 §5.1).
-            Listener(
-              onPointerDown: (_) => _acted(),
-              child: ExcludeSemantics(
-                child:
-                    widget.stageBuilder?.call(_stage, events) ??
-                    CompanionStage(key: ValueKey(_stageRun), store: store, controller: _stage, events: events),
-              ),
-            ),
-          if ((showStage && !_stageReady) || (_phase == _Phase.setup && _arriving))
-            const CompanionWater(child: CompanionArriving())
-          else if (_phase == _Phase.setup)
-            CompanionWelcome(
-              title: l10n.companionSetupTitle,
-              message: _bundledHere ? l10n.companionSetupBodyBundled : l10n.companionSetupBody,
-              action: _bundledHere ? l10n.companionSetupBundled : l10n.companionSetupImport,
-              busy: _installing,
-              error: _installError,
-              onAction: _bundledHere ? _installBundled : _import,
-              secondary: _bundledHere ? l10n.companionSetupImportOther : null,
-              onSecondary: _import,
-            ),
-          if (_phase == _Phase.failed)
-            CompanionWelcome(
-              title: l10n.companionFailedTitle,
-              message: _loadFailureText(l10n),
-              action: l10n.companionSetupImport,
-              state: PetStateName.error,
-              busy: _installing,
-              error: _installError,
-              onAction: _import,
-              secondary: _failedWithPack ? l10n.commonRetry : null,
-              onSecondary: () => unawaited(_retryStage()),
-            ),
+          IndexedStack(
+            index: _tab.index,
+            sizing: StackFit.expand,
+            children: [
+              for (final tab in _CompanionTab.values)
+                if (tab == _CompanionTab.room)
+                  // Her stage's chrome keeps clear of the bar itself; the
+                  // first-run and failure screens get it as bottom padding.
+                  showStage
+                      ? room
+                      : MediaQuery(
+                          data: MediaQuery.of(context)
+                              .copyWith(padding: padding.copyWith(bottom: padding.bottom + navSpace)),
+                          child: room,
+                        )
+                else if (!_visited.contains(tab))
+                  const SizedBox.shrink()
+                else
+                  // Its own page keeps clear of the bar along the bottom.
+                  MediaQuery(
+                    data: MediaQuery.of(context)
+                        .copyWith(padding: padding.copyWith(bottom: padding.bottom + CompanionSectionNav.height + 10)),
+                    child: TickerMode(enabled: _tab == tab, child: _sectionPage(context, tab)),
+                  ),
+            ],
+          ),
           Positioned(
-            top: padding.top + 8,
-            left: companionEdge,
-            right: companionEdge,
-            child: Row(
-              children: [
-                CompanionRoundButton(
-                  icon: AppIcons.back,
-                  label: MaterialLocalizations.of(context).backButtonTooltip,
-                  grouped: true,
-                  onTap: () {
-                    _acted();
-                    unawaited(Navigator.of(context).maybePop());
-                  },
+            left: companionEdge + 8,
+            right: companionEdge + 8,
+            bottom: padding.bottom + 10,
+            child: IgnorePointer(
+              ignoring: !navShown,
+              child: AnimatedOpacity(
+                opacity: navShown ? 1 : 0,
+                duration: AppMotion.of(context, AppMotion.quick),
+                child: CompanionSectionNav(
+                  selected: _tab.index,
+                  onSelect: (index) => _selectTab(_CompanionTab.values[index]),
+                  items: [
+                    (icon: AppIcons.home, label: l10n.companionTabRoom),
+                    (icon: AppIcons.bookmark, label: l10n.companionTabMemory),
+                    (icon: AppIcons.reminder, label: l10n.companionTabTasks),
+                    (icon: AppIcons.postLike, label: l10n.companionTabHer),
+                  ],
                 ),
-                const SizedBox(width: 52),
-                Expanded(
-                  child: Center(
-                    child: _stageReady ? CompanionNamePlate(name: name, activity: _activity) : const SizedBox.shrink(),
-                  ),
-                ),
-                if (_stageReady) ...[
-                  CompanionRoundButton(
-                    icon: AppIcons.history,
-                    label: l10n.companionLogTitle,
-                    grouped: true,
-                    onTap: _openLog,
-                  ),
-                  const SizedBox(width: 8),
-                  CompanionRoundButton(icon: AppIcons.more, label: l10n.companionMenu, grouped: true, onTap: _openMenu),
-                ] else
-                  const SizedBox(width: 96),
-              ],
+              ),
             ),
           ),
-          if (showStage && _stageReady)
-            Positioned(
-              left: companionEdge,
-              right: companionEdge,
-              bottom: max(insets, padding.bottom) + companionEdge,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Her invitation takes the hint's place while it's there.
-                  if (_showTouchHint && _bubble == null && !inviting)
-                    CompanionPill(icon: AppIcons.tip, label: l10n.companionTouchHint)
-                  else if (_showHomeHint && _bubble == null && !inviting)
-                    CompanionPill(icon: AppIcons.tip, label: l10n.companionTouchHintHome),
-                  if (_voiceNotice case final notice?) CompanionPill(icon: AppIcons.tip, label: notice),
-                  if (_agentPill case final pill?)
-                    CompanionPill(
-                      icon: AppIcons.conversations,
-                      label: pill.label,
-                      tone: const Color(0xFF9FD8F2),
-                      onTap: () {
-                        _acted();
-                        _openAgent(pill.sessionId);
-                      },
-                    ),
-                  CompanionMyLine(text: _myLine),
-                  CompanionSpeech(
-                    text: _bubble,
-                    textKey: _bubbleTextKey,
-                    onFrame: _queueReplyPresentation,
-                    error: _bubbleIsError,
-                    thinking: _sending || (_running && _bubble == null),
-                    onPullBack: _openLog,
-                  ),
-                  if (_bubble != null)
-                    for (final result in _lookupResults)
-                      CompanionPill(
-                        icon: AppIcons.search,
-                        label: l10n.companionLookupViewSources(result.placeName),
-                        onTap: () {
-                          if (_bubble == null || !_lookupResults.contains(result)) {
-                            return;
-                          }
-                          _acted();
-                          unawaited(
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => CompanionTasksPage(memory: _memoryOwner!, taskId: result.taskId),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                  if (_bubble != null)
-                    for (final id in _notesResults)
-                      CompanionPill(
-                        icon: AppIcons.document,
-                        label: l10n.companionNotesView,
-                        onTap: () {
-                          if (_bubble == null || !_notesResults.contains(id)) {
-                            return;
-                          }
-                          _acted();
-                          unawaited(
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => CompanionTasksPage(memory: _memoryOwner!, taskId: id),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                  if (_bubble != null)
-                    for (final id in _mapResults)
-                      CompanionPill(
-                        icon: AppIcons.plan,
-                        label: l10n.companionMapView,
-                        onTap: () {
-                          if (_bubble == null || !_mapResults.contains(id)) {
-                            return;
-                          }
-                          _acted();
-                          unawaited(
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => CompanionTasksPage(memory: _memoryOwner!, taskId: id),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                  CompanionInvite(
-                    ticket: _adaptOffer == null || inviting ? null : 'adapt-${_adaptOffer!.moc}',
-                    mark: const Icon(AppIcons.configure, size: 20, color: Color(0xFFFFD27A)),
-                    text: l10n.companionAdaptOffer,
-                    accept: l10n.companionAdaptOfferYes,
-                    decline: l10n.companionAdaptOfferNo,
-                    onAccept: () => unawaited(_answerAdaptOffer(yes: true)),
-                    onDecline: () => unawaited(_answerAdaptOffer(yes: false)),
-                  ),
-                  CompanionInvite(
-                    ticket: inviting ? invite.ticket.id : null,
-                    text: l10n.companionInviteRest,
-                    accept: l10n.companionInviteAccept,
-                    decline: l10n.companionInviteDecline,
-                    remaining: inviteLeft,
-                    total: const Duration(milliseconds: CompanionInitiativeRules.promptMs),
-                    onAccept: () => _answerInvite(yes: true),
-                    onDecline: () => _answerInvite(yes: false),
-                  ),
-                  const SizedBox(height: 10),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _input,
-                    builder: (context, value, _) => CompanionComposer(
-                      onUserInput: () {
-                        _acted();
-                        _hush();
-                      },
-                      input: _input,
-                      focus: _focus,
-                      hint: l10n.companionInputHint(name),
-                      running: _running,
-                      busy: _sending,
-                      listening: _voice.active,
-                      voiceAvailable: _voice.available,
-                      onSend: _send,
-                      onStop: _stop,
-                      onVoice: () {
-                        // Reaching for the microphone is already doing something.
-                        _acted();
-                        // Her voice off before the microphone opens.
-                        _hush();
-                        _voice.active ? _voice.stop() : _voice.start();
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          Positioned.fill(child: CompanionLogTransition(child: _logOpen && showStage ? _log(name) : null)),
         ],
       ),
     );
   }
+
+  /// The pages of the section other than her room.
+  final _visited = <_CompanionTab>{};
+
+  Widget _sectionPage(BuildContext context, _CompanionTab tab) {
+    final l10n = context.l10n;
+    if (tab == _CompanionTab.her) {
+      return AppPage(
+        title: ref.read(companionNameProvider) ?? _character.name ?? l10n.companionTitle,
+        hero: _panelHeader(l10n),
+        slivers: [
+          SliverList.list(
+            children: _panel(l10n, (action, {stage = false}) {
+              if (stage) _selectTab(_CompanionTab.room);
+              action();
+            }, tiles: false),
+          ),
+        ],
+      );
+    }
+    final title = tab == _CompanionTab.memory ? l10n.companionMemoryTitle : l10n.companionTasksTitle;
+    return FutureBuilder<CompanionMemoryOwner>(
+      future: _sectionMemory ??= _openMemory(),
+      builder: (context, snapshot) => switch (snapshot) {
+        AsyncSnapshot(hasData: true, :final data?) when tab == _CompanionTab.memory => CompanionMemoryPage(
+          memory: data,
+          characterId: _attachment.characterId,
+        ),
+        AsyncSnapshot(hasData: true, :final data?) => CompanionTasksPage(memory: data, allSessions: true),
+        AsyncSnapshot(hasError: true) => AppPage.list(
+          title: title,
+          children: [
+            EmptyView(
+              icon: tab == _CompanionTab.memory ? AppIcons.bookmark : AppIcons.reminder,
+              title: l10n.companionMemoryLoadFailed,
+              actionLabel: l10n.commonRetry,
+              onAction: () => setState(() => _sectionMemory = null),
+            ),
+          ],
+        ),
+        _ => AppPage.list(title: title, children: const []),
+      },
+    );
+  }
 }
+
+/// The pages of the 伙伴小屋 section, in the order of its bar.
+enum _CompanionTab { room, memory, tasks, her }
 
 /// The original Page's real pickers, captured for one submitted turn. An
 /// unrelated route or lifecycle exit retires it even if the room returns.
@@ -3177,6 +3476,8 @@ class _CompanionPageTaskUi implements CompanionAgentTaskUi {
       current() &&
       page.mounted &&
       !page._leaving &&
+      // Another page of the section over her room covers it like a route.
+      (!page.widget.sections || page._tab == _CompanionTab.room) &&
       epoch == page._notesForegroundEpoch &&
       !page._logOpen &&
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
@@ -3390,7 +3691,15 @@ final _darkThemes = <(AppAccent, bool), ThemeData>{};
 
 ThemeData _darkTheme(AppAccent accent, bool blur) {
   if (_darkThemes.length > 4) _darkThemes.clear();
-  return _darkThemes.putIfAbsent((accent, blur), () => buildDarkTheme(accent: accent, glassBlur: blur));
+  return _darkThemes.putIfAbsent((accent, blur), () {
+    final theme = buildDarkTheme(accent: accent, glassBlur: blur);
+    return theme.copyWith(
+      extensions: [
+        for (final extension in theme.extensions.values)
+          if (extension is DshSurfaces) companionWaterSurfaces(extension) else extension,
+      ],
+    );
+  });
 }
 
 /// A new name for one of her moves: the dialog owns its field.

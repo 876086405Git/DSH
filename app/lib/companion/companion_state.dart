@@ -259,7 +259,14 @@ class CompanionNameSetting extends Notifier<String?> {
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
+    // The drawer reads her name too, on every screen: no stored name is
+    // just the pack's own, never an error there.
+    final SharedPreferences prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+    } on Object {
+      return;
+    }
     final saved = prefs.getString(_nameKey)?.trim();
     if (saved != null && saved.isNotEmpty && ref.mounted && state == null) state = saved;
   }

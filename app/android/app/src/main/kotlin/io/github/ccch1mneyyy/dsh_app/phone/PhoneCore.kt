@@ -5,6 +5,9 @@ import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneTaskTrace
 import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillReplaySelections
 import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillOutcomes
 import java.time.ZoneId
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicReference
 
 enum class A11yState { CONNECTED, ENABLED_NOT_CONNECTED, DISABLED }
@@ -376,6 +379,7 @@ class PhoneCore(
                 PhoneToolCatalog.APPS -> apps(a, owner)
                 PhoneToolCatalog.OPEN -> open(call, scope, owner)
                 PhoneToolCatalog.INTENT -> intent(call, scope, owner)
+                PhoneToolCatalog.CALENDAR_LIST -> calendarList(a, owner)
                 PhoneToolCatalog.NOTIFY -> notify(a, owner)
                 PhoneToolCatalog.CLIPBOARD -> clipboard(a, owner)
                 PhoneToolCatalog.SCREEN -> screen(a, owner)
@@ -767,6 +771,25 @@ class PhoneCore(
         return Out(r.message, error = !r.ok, summary = ui.get("phone_log_notify", "通知"), decision = if (r.ok) "ok" else "failed") // l10n:keep test default
     }
 
+    private fun calendarList(a: Args, owner: PhoneTasks.Owner): Out {
+        val summary = PhoneToolCatalog.CALENDAR_LIST
+        if (env.isLocked()) return locked(summary)
+        val invalid = Out("INVALID_DATE_RANGE：提供 YYYY-MM-DD 格式的 start_date 和 end_date；结束日期不包含在内，范围为 1–31 天。",
+            error = true, summary = summary) // l10n:keep agent tool result
+        val start: LocalDate
+        val end: LocalDate
+        try {
+            start = LocalDate.parse(a.str("start_date") ?: return invalid)
+            end = LocalDate.parse(a.str("end_date") ?: return invalid)
+        } catch (_: DateTimeParseException) {
+            return invalid
+        }
+        if (start.year !in 1..9999 || end.year !in 1..9999 || ChronoUnit.DAYS.between(start, end) !in 1L..31L) return invalid
+        val result = env.system().calendarList(start, end, env.zone())
+        if (!current(owner)) return stoppedOut(summary)
+        return Out(result.message, error = !result.ok, summary = summary, decision = if (result.ok) "ok" else "failed")
+    }
+
     private fun clipboard(a: Args, owner: PhoneTasks.Owner): Out {
         if (!current(owner)) return stoppedOut("clipboard")
         val set = a.text("set")
@@ -792,12 +815,12 @@ class PhoneCore(
             A11yState.ENABLED_NOT_CONNECTED -> {
                 env.notifyFix("a11y")
                 // l10n:keep agent tool result
-                "无障碍服务没连上（被系统关了或还在启动）：已通知用户到系统设置重新打开。现在只能用 apps / open / intent / notify / clipboard。"
+                "无障碍服务没连上（被系统关了或还在启动）：已通知用户到系统设置重新打开。仍可调用 apps / open / intent / notify / clipboard / calendar_list。"
             }
             else -> {
                 env.notifyFix("a11y")
                 // l10n:keep agent tool result
-                "无障碍没开，看不了屏幕：已通知用户到 DSH 设置 → 手机操控 开启。现在只能用 apps / open / intent / notify / clipboard。"
+                "无障碍没开，看不了屏幕：已通知用户到 DSH 设置 → 手机操控 开启。仍可调用 apps / open / intent / notify / clipboard / calendar_list。"
             }
         }
     }
@@ -826,7 +849,8 @@ class PhoneCore(
 
     private fun requiredScreens(name: String, a: Args): Either<String, List<PhoneScreen>> {
         return when (name) {
-            PhoneToolCatalog.APPS, PhoneToolCatalog.NOTIFY, PhoneToolCatalog.CLIPBOARD -> Either.Right(emptyList())
+            PhoneToolCatalog.APPS, PhoneToolCatalog.NOTIFY, PhoneToolCatalog.CLIPBOARD,
+            PhoneToolCatalog.CALENDAR_LIST -> Either.Right(emptyList())
             PhoneToolCatalog.OPEN -> Either.Right(if (a.bool("background") == true)
                 listOf(PhoneScreen.MAIN, PhoneScreen.BACKGROUND) else listOf(PhoneScreen.MAIN))
             PhoneToolCatalog.SCREEN -> Either.Right(listOf(if (a.bool("background") == true) PhoneScreen.BACKGROUND else PhoneScreen.MAIN))

@@ -60,6 +60,13 @@ void main() {
     expect(page.loads, [_url]);
   });
 
+  testWidgets('leaving the page destroys its WebView once it is out of the tree', (tester) async {
+    await _pumpPage(tester);
+    final page = _web.controllers.single;
+    await tester.pumpWidget(const SizedBox());
+    expect(_islands.destroyed, [page.webViewIdentifier]);
+  });
+
   testWidgets('a dead renderer leaves one quiet line; 重新打开 is a new WebView', (tester) async {
     await _pumpPage(tester);
     final first = _web.controllers.single;

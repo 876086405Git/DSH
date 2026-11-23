@@ -74,14 +74,19 @@ Future<void> _flush(WidgetTester tester) async {
 }
 
 class _Rig {
-  _Rig({VoiceMode mode = VoiceMode.auto, _Carrier? carrier, Future<VoiceMode> Function()? choose})
-    : wire = carrier ?? _Carrier() {
+  _Rig({
+    VoiceMode mode = VoiceMode.auto,
+    _Carrier? carrier,
+    Future<VoiceMode> Function()? choose,
+    VoidCallback? onRecognized,
+  }) : wire = carrier ?? _Carrier() {
     host = DshClient.withCarrier(wire);
     voice = VoiceInputController(
       input: input,
       bridge: bridge,
       client: () => host,
       mode: choose ?? () async => mode,
+      onRecognized: onRecognized,
       observeLifecycle: false,
     );
     voice.onMessage = (message) => messages.add(message.text);
@@ -228,12 +233,36 @@ void main() {
   });
 
   testWidgets('user cancellation ignores the recognizer error emitted afterwards', (tester) async {
-    final rig = _Rig();
+    var recognized = 0;
+    final rig = _Rig(onRecognized: () => recognized++);
     await rig.voice.start();
     await rig.voice.cancel();
     rig.bridge.emit(const VoiceError(5));
     rig.bridge.emit(const VoiceEnd());
     await _flush(tester);
+    expect(rig.voice.phase, VoicePhase.idle);
+    expect(rig.wire.calls, isEmpty);
+    expect(rig.messages, isEmpty);
+
+    rig.input.value = const TextEditingValue(text: '旧草稿', selection: TextSelection.collapsed(offset: 3));
+    await rig.voice.start();
+    rig.bridge.emit(const VoicePartial('旧识别'));
+    await _flush(tester);
+    expect(rig.input.text, '旧草稿旧识别');
+    const edited = TextEditingValue(
+      text: '我改成键盘输入。',
+      selection: TextSelection(baseOffset: 1, extentOffset: 3),
+      composing: TextRange(start: 0, end: 1),
+    );
+    rig.input.value = edited;
+    await rig.voice.cancel();
+    expect(rig.input.value, edited);
+    rig.bridge.emit(const VoiceFinal('迟到的识别'));
+    rig.bridge.emit(const VoiceError(5));
+    rig.bridge.emit(const VoiceEnd());
+    await _flush(tester);
+    expect(rig.input.value, edited);
+    expect(recognized, 0, reason: 'a later draft is not a recognized result to submit');
     expect(rig.voice.phase, VoicePhase.idle);
     expect(rig.wire.calls, isEmpty);
     expect(rig.messages, isEmpty);
@@ -285,6 +314,25 @@ void main() {
     expect(rig.wire.calls, isEmpty);
   });
 
+  testWidgets('a new capture waits for the prior cancellation acknowledgement', (tester) async {
+    final rig = _Rig(mode: VoiceMode.engine);
+    await rig.voice.start();
+    final cleanup = Completer<void>();
+    rig.bridge.cancelGate = cleanup;
+    addTearDown(() {
+      if (!cleanup.isCompleted) cleanup.complete();
+    });
+    final release = rig.voice.cancel();
+    expect(rig.voice.cancel(), same(release));
+    final next = rig.voice.start();
+    await _flush(tester);
+    expect(rig.bridge.calls.where((s) => s.startsWith('recorder:')), hasLength(1));
+    cleanup.complete();
+    await release;
+    await next;
+    expect(rig.bridge.calls.where((s) => s.startsWith('recorder:')), hasLength(2));
+  });
+
   testWidgets('late mode load from a canceled attempt cannot change new explicit system routing', (tester) async {
     final oldMode = Completer<VoiceMode>();
     var choices = 0;
@@ -320,8 +368,10 @@ void main() {
 
   testWidgets('late old transcript cannot replace a new in-flight transcript', (tester) async {
     final transcripts = <Completer<Object?>>[];
+    var recognized = 0;
     final rig = _Rig(
       mode: VoiceMode.engine,
+      onRecognized: () => recognized++,
       carrier: _Carrier(
         transcribe: () {
           final pending = Completer<Object?>();
@@ -342,10 +392,34 @@ void main() {
     await first;
     expect(rig.voice.phase, VoicePhase.transcribing);
     expect(rig.input.text, isEmpty);
+    // Only moving the caret/composing range still accepts this dictation.
+    rig.input.value = const TextEditingValue(
+      selection: TextSelection.collapsed(offset: 0),
+      composing: TextRange.collapsed(0),
+    );
     transcripts.last.complete({'text': 'new correct text', 'audioSeconds': 1.0});
     await second;
     expect(rig.voice.phase, VoicePhase.idle);
     expect(rig.input.text, 'new correct text');
+    expect(recognized, 1);
+
+    await rig.voice.start();
+    final editedStop = rig.voice.stop();
+    await _flush(tester);
+    expect(transcripts, hasLength(3));
+    expect(rig.voice.phase, VoicePhase.transcribing);
+    const edited = TextEditingValue(
+      text: '这是后来键入的新草稿。',
+      selection: TextSelection(baseOffset: 2, extentOffset: 5),
+      composing: TextRange(start: 2, end: 5),
+    );
+    rig.input.value = edited;
+    transcripts.last.complete({'text': 'late voice must not replace the draft', 'audioSeconds': 1.0});
+    await editedStop;
+    expect(rig.input.value, edited);
+    expect(rig.voice.phase, VoicePhase.idle);
+    expect(recognized, 1, reason: 'preserving the edited draft must not auto-submit it');
+    expect(rig.wire.calls.where((e) => e == 'speech/transcribe'), hasLength(3));
   });
 
   testWidgets('host switch while WAV is pending never redirects audio', (tester) async {

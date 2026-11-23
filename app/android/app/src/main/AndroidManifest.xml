@@ -23,6 +23,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Composer voice input (voice/VoicePlugin.kt), asked for on the first tap of the mic. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
     <!-- Remote 扫码配对电脑 (ui/remote/pairing_page.dart, mobile_scanner), asked for when the
          scanner opens; the photo and paste paths work without it. Never required. -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -219,6 +220,36 @@
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
+
+        <activity
+            android:name=".companion.CompanionAssistantUnlockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+
+        <service
+            android:name=".companion.CompanionAssistantService"
+            android:exported="true"
+            android:label="@string/companion_assistant_label"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+            <meta-data android:name="android.voice_interaction" android:resource="@xml/companion_assistant" />
+        </service>
+        <service
+            android:name=".companion.CompanionAssistantSessionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION" />
+        <service
+            android:name=".companion.CompanionAssistantRecognitionService"
+            android:exported="true"
+            android:permission="android.permission.RECORD_AUDIO">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+            </intent-filter>
+            <meta-data android:name="android.speech" android:resource="@xml/companion_assistant_recognition" />
+        </service>
 
         <!-- The privileged gate starts only this inert receiver. Ordinary apps cannot launch it. -->
         <activity

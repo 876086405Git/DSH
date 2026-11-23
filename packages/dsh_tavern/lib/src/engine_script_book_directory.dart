@@ -436,7 +436,7 @@ extension _ScriptBookDirectory on _ScriptCoordinator {
               },
             ),
           );
-          engine._cacheCharacterDetail(characterId, Future.value(stored));
+          engine._cacheCharacterRecord(characterId, stored);
           engine._notifyLists();
       }
       resourcesChanged();

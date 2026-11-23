@@ -46,20 +46,21 @@ python3 tooling/companion/replay-memory.py \
 
 若仅重算已经产生的结果，可以给 `--reports <原结果目录>`。原目录须有完整 `run-inputs.json` 和它记录的原始报告；cases/catalog、checkout 源码身份、每份 raw 的 SHA256 都须匹配，保留原 run_id 和实际子命令退出码。`--reports` 与 `--output` 可以是同一个目录。summary 标明 collection_only；重算不产生一次新的产品执行，也不能把原来的非零退出码改成成功。
 
-源码身份不是只有 HEAD 或 dirty 布尔值：`checkout_identity` 保存 Git HEAD、全部 tracked 工作区相对 HEAD 的 binary diff SHA256（关闭 external diff/textconv），以及 `app/`、`packages/`、`runtime/` 下非忽略 untracked 文件的路径和内容摘要。因此同一 HEAD 上改了未提交的生产代码，或新加未跟踪的生产 import，也不能重用旧绿结果。启动前、测试结束后各读一次；源码在执行期间改变则不发布完成记录。收集时再次与当前 checkout 比对；Git 不可读也不推定相同。输出使用仓库外的目录，例如上面的 `/tmp/companion-memory-replay`，避免本次生成文件落入被绑定的生产源目录。
+源码身份不是只有 HEAD 或 dirty 布尔值：`checkout_identity` 先以 `git ls-files -v -z` 检查全部 tracked entries；assume-unchanged（小写状态）或 skip-worktree（S/s）会让 diff 漏看工作区内容，因此任一个存在就拒绝，Git 查询失败也拒绝，不自行清除这些标记。随后保存 Git HEAD、全部 tracked 工作区相对 HEAD 的 binary diff SHA256（关闭 external diff/textconv），以及 `app/`、`packages/`、`runtime/` 下非忽略 untracked 文件的路径和内容摘要。因此同一 HEAD 上改了未提交的生产代码，或新加未跟踪的生产 import，也不能重用旧绿结果。启动前、测试结束后各读一次；源码在执行期间改变则不发布完成记录。收集时再次与当前 checkout 比对；Git 不可读也不推定相同。输出使用仓库外的目录，例如上面的 `/tmp/companion-memory-replay`，避免本次生成文件落入被绑定的生产源目录。
 
 这只是 checkout 源码身份：它不复制生产树，不声称覆盖外部 `DSH_PREFIX` 实际安装内容、依赖缓存、toolchain 或设备状态。fixture catalog 仍独立校验所列合成输入。summary 同时列 `checkout_identity`（当前）与 `tested_checkout_identity`（原运行）；旧报告缺少源码身份或 raw 哈希时按缺证处理，不能在当前 checkout 为它补签成 PASS。
 
 每份 raw 先读成一个字节快照，解析、SHA256 和输出复制都使用这同一份 bytes。缺失报告记录为 null；原运行中缺失/截断的流仍按原 NOT_RUN/FAIL 规则处理，已证明失败和原非零退出码不会变绿。后来丢失或替换了原记录所绑定的 raw 时，收集拒绝把这些混合产物当原执行证据。
 
-发布顺序是：先保留原输入快照，再移除目的目录的旧 completion/summary/results；有效输入先写 `execution_complete: false`，报告、results 和 summary 全部写好后，最后以临时文件 replace 发布 `execution_complete: true` 的 `run-inputs.json`。复制/写入中断只会留下未完成记录，不能搭配旧 raw 冒充新完成运行。同一输出目录只供一个执行或收集过程使用；这不是多目录事务或断电持久化保证。
+有效收集的发布顺序是：先保留原输入和 raw 字节快照，原地收集的全部校验通过后才移除目的目录的旧 completion/summary/results；先写 `execution_complete: false`，报告、results 和 summary 全部写好后，最后以临时文件 replace 发布 `execution_complete: true` 的 `run-inputs.json`。新执行仍在启动子命令前撤销旧完成状态并写未完成记录，最后才发布完成记录。复制/写入中断只会留下未完成记录，不能搭配旧 raw 冒充新完成运行。同一输出目录只供一个执行或收集过程使用；这不是多目录事务或断电持久化保证。
 
 ## 输出怎样读
 
 - `results.jsonl` 固定 15 行，case_id 为 r2-01 至 r2-15，保留 original_ids。每项列实际完整测试名、文件、证据层和限制；未接好的 required_gaps 保持 NOT_RUN。
 - `summary.json` 分开列 case_counts、check_reference_counts 和 unique_test_counts。前者是 15 组；检查引用可跨组重复；独立测试按 suite + 完整名去重，**不是断言数或真实模型调用数**。required_gap_counts 另列。
 - `run-inputs.json` 绑定本次清单、checkout 源码身份、原退出码和 raw 报告哈希；只有最后发布的 `execution_complete: true` 记录可供重收。原始 Dart JSONL、engine XML 和命令日志与结果一起保留；日志不充当 raw 哈希证据。Dart 错误可晚于 testDone，读取全流后再判断，晚失败不能被先前 success 覆盖。
-- cases 本身缺失或无效也会写本次 15 项 NOT_RUN 与预检原因，先清掉旧 summary/results；不会因早期异常留下旧的 PASS 摘要。原始输入已无效时不猜测原编号映射，original_ids 留空。
+- 新执行或收集到另一个输出目录时，cases 本身缺失或无效仍会在目的目录写本次 15 项 NOT_RUN 与预检原因，先清掉旧 summary/results；不会因早期异常留下旧的 PASS 摘要。原始输入已无效时不猜测原编号映射，original_ids 留空。
+- 原地 `--reports` 收集的任何输入校验失败（包括 cases、fixture、checkout、完成记录和 raw 哈希）都直接输出 stdout 的 NOT_RUN 诊断、`output_preserved: true` 并返回 exit 2，不删除或覆盖原 completion、summary、results、raw 或日志，也保留原来缺失的文件状态。保留下来的旧 summary 仅代表原运行，不能当作这次拒绝收集已通过；恢复原输入后仍可重新收集。
 - 同组优先级为 FAIL → NOT_RUN → NEEDS_REVIEW → PASS → NOT_APPLICABLE。缺失、重复名称、隐藏加载测试、skip、未完整结束均不能算执行通过。已证明失败即使后续流截断仍保留 FAIL。
 - `execution_status` 聚合该次已列检查、原子命令退出码以及报告整体失败/完成状态；即使命名检查全绿，子命令非零仍是 FAIL。`acceptance_status` 还保留 unresolved_requirements。一般 targetless 同事项的 BLOCKED_SCOPE，以及尚待单独修复的确定产品缺陷，不因有限离线断言通过而关闭，也不改记“不适用”。
 - exit 1 表示已列断言失败或启动的测试命令非零；exit 2 表示未运行、未完成或缺证；exit 0 只说明已列有限离线执行完成，不代表真实模型、设备、所有产品语义或未解决要求通过。CI 用这个有界执行门槛，完整验收仍看 summary 和独立复核。
@@ -88,12 +89,13 @@ SDK、依赖和字体由维护者现有环境准备。启动前每个 Dart 包�
 
 Dart 3.13.5 的 TestCommand 在测试入口之前调用 NativeAssetsBuilder.ensurePackageConfig，缺上述配置会先触发依赖解析，所以测试内 HttpOverrides 管不到这个阶段。编译、旧依赖解析、build hooks 与 native 资产下载也不在 guard 范围内；CI 准备步骤与费用为零的产品夹具运行分别说明。
 
-本片未运行 Python 脚本/单测、Dart / Flutter 或设备；全部 NOT_RUN。Python 单测只验证报告器不会把 skip、晚失败、缺源或重复计数伪成产品通过；现有两条 CLI 例加强同 HEAD 的 dirty 生产内容、未跟踪生产源、原地收集、解析后 raw 改动、缺失/混入 raw、复制中断和重新执行恢复，0 新增注册。它们的临时 checkout 使用 Git；并不执行 Dart 产品。Node --check 或无DSH_PREFIX的加载结果也不替代完整 engine 运行。
+本片未运行 Python 脚本/单测、Dart / Flutter 或设备；全部 NOT_RUN。Python 单测只验证报告器不会把 skip、晚失败、缺源或重复计数伪成产品通过；原 13 个注册保持，现有两条 CLI 例加强同 HEAD 的 dirty 生产内容、未跟踪生产源、原地收集、解析后 raw 改动、缺失/混入 raw、复制中断和重新执行恢复，并核原地拒绝保留全部原证据、两种真实 index 标记隐藏改动时仍拒绝、恢复 checkout 后原非零退出码的报告仍可重收，0 新增注册或参数展开。它们的临时 checkout 使用 Git；并不执行 Dart 产品。Node --check 或无DSH_PREFIX的加载结果也不替代完整 engine 运行。
 
 ## API 与源码依据
 
 以下是本次使用并已核的官方入口。源码结论不替代目标版本实际运行。
 
+- [Git ls-files](https://git-scm.com/docs/git-ls-files)：`-z` 的 NUL 分隔、`-v` 的 assume-unchanged 小写状态与 skip-worktree 的 `S` 状态。
 - [Dart 3.13.5 HttpClient.connectionFactory](https://api.dart.dev/stable/3.13.5/dart-io/HttpClient/connectionFactory.html)
 - [Dart 3.13.5 Socket.startConnect](https://api.dart.dev/stable/3.13.5/dart-io/Socket/startConnect.html)
 - [Dart 3.13.5 InternetAddress.tryParse](https://api.dart.dev/stable/3.13.5/dart-io/InternetAddress/tryParse.html)

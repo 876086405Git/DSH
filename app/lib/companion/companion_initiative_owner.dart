@@ -118,6 +118,7 @@ class _SignalRequest {
     this.hide,
     this.followupId,
     this.prepare,
+    this.cancelPrepare,
     this.deliver,
     this.retainDelivery,
     this.noticeEventId,
@@ -131,6 +132,7 @@ class _SignalRequest {
   final void Function(String) hide;
   final String? followupId;
   final Future<bool> Function()? prepare;
+  final void Function()? cancelPrepare;
   final Future<bool> Function(CompanionInitiativeDisplay)? deliver;
   final void Function(Future<void>)? retainDelivery;
   final String? noticeEventId, noticePersonId;
@@ -335,6 +337,7 @@ class CompanionInitiative {
     bool nightCareEnabled = false,
     String? followupId,
     Future<bool> Function()? prepare,
+    void Function()? cancelPrepare,
     Future<bool> Function(CompanionInitiativeDisplay)? deliver,
     void Function(Future<void>)? retainDelivery,
     String? noticeEventId,
@@ -361,6 +364,7 @@ class CompanionInitiative {
       hide,
       followupId,
       prepare,
+      cancelPrepare,
       deliver,
       retainDelivery,
       noticeEventId,
@@ -383,9 +387,15 @@ class CompanionInitiative {
   }
 
   void _retireRequest() {
+    final request = _signal;
     _signal = null;
     _signalExpiry?.cancel();
     _signalExpiry = null;
+    try {
+      request?.cancelPrepare?.call();
+    } on Object {
+      // Retirement and the original gate must not depend on optional cleanup.
+    }
   }
 
   bool _requestCurrent(_SignalRequest request) {

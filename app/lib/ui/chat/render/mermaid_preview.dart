@@ -103,6 +103,7 @@ class _MermaidPreviewPageState extends State<MermaidPreviewPage> {
   @override
   void dispose() {
     _guard.dispose();
+    if (!_gone) WebViewGuard.release(_controller);
     super.dispose();
   }
 

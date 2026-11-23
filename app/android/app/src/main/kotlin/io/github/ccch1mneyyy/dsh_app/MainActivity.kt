@@ -1,13 +1,18 @@
 package io.github.ccch1mneyyy.dsh_app
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -17,6 +22,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
+import io.github.ccch1mneyyy.dsh_app.companion.CompanionAssistant
 import io.github.ccch1mneyyy.dsh_app.launch.LaunchScreen
 import io.github.ccch1mneyyy.dsh_app.launch.LaunchThemeSync
 import io.github.ccch1mneyyy.dsh_app.runtime.AndroidBackgroundProtection
@@ -27,6 +33,9 @@ import java.util.TimeZone
 
 class MainActivity : FlutterActivity() {
     private var appChannel: MethodChannel? = null
+    private val assistantMain = Handler(Looper.getMainLooper())
+    private var assistantYield: MethodChannel.Result? = null
+    private val assistantYieldTimeout = Runnable { finishAssistantYield(false) }
 
     /** The selection toolbar's text actions, asked of the engine once (see [CachedTextActions]). */
     private var textActions: CachedTextActions? = null
@@ -90,6 +99,7 @@ class MainActivity : FlutterActivity() {
     override fun onStop() {
         AndroidBackgroundProtection.get(this).setAppVisible(false)
         super.onStop()
+        finishAssistantYield(true)
     }
 
     override fun onResume() {
@@ -163,6 +173,12 @@ class MainActivity : FlutterActivity() {
         super.onPause()
     }
 
+    private fun finishAssistantYield(stopped: Boolean) {
+        assistantMain.removeCallbacks(assistantYieldTimeout)
+        assistantYield?.success(stopped)
+        assistantYield = null
+    }
+
     /** Per activity: the handler acts on this activity, so it goes with it (see [cleanUpFlutterEngine]). */
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -171,6 +187,33 @@ class MainActivity : FlutterActivity() {
         appChannel!!.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getTimeZoneId" -> result.success(TimeZone.getDefault().id)
+                "companionAssistantStatus" -> result.success(mapOf(
+                    "selected" to CompanionAssistant.selected(this),
+                    "sharePage" to CompanionAssistant.sharePage(this),
+                    "calendarAllowed" to (checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED),
+                ))
+                "requestCompanionCalendar" -> {
+                    requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), CALENDAR_PERMISSION_REQUEST)
+                    result.success(null)
+                }
+                "openCompanionPermissions" -> {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+                    result.success(null)
+                }
+                "configureCompanionAssistantPage" -> {
+                    CompanionAssistant.setSharePage(this, call.arguments as Boolean)
+                    result.success(null)
+                }
+                "openCompanionAssistantSettings" -> result.success(CompanionAssistant.openSettings(this))
+                "yieldCompanionAssistant" -> {
+                    if (!inForeground) {
+                        result.success(true)
+                    } else {
+                        assistantYield = result
+                        if (moveTaskToBack(true)) assistantMain.postDelayed(assistantYieldTimeout, 2_000)
+                        else finishAssistantYield(false)
+                    }
+                }
                 "initializePairingScanner" -> {
                     try {
                         io.github.ccch1mneyyy.dsh_app.mlkit.MlKitRuntime.initialize(applicationContext)
@@ -207,6 +250,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        finishAssistantYield(false)
         appChannel?.setMethodCallHandler(null)
         appChannel = null
         textActions = null
@@ -222,6 +266,7 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val ENGINE_ID = "dsh-main"
+        private const val CALENDAR_PERMISSION_REQUEST = 441
 
         /** 设置 › 性能 › 刷新率; the Flutter side owns the stored choice. */
         private var refreshMode = "auto"

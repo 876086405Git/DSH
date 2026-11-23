@@ -26,6 +26,7 @@ import 'code_block.dart';
 import 'markdown_blocks.dart';
 import 'markdown_image.dart';
 import 'markdown_math.dart';
+import 'markdown_prepare.dart';
 import 'markdown_split.dart';
 import 'math_syntax.dart';
 import 'stream_repair.dart';
@@ -584,8 +585,10 @@ class MarkdownBody extends StatefulWidget {
   /// placed. With [repairBareViews] a bare `dsh-ui` JSON block gets its fence
   /// back first (see [fenceBareDshUiViews]).
   @visibleForTesting
-  static String prepareSource(String text, {bool streaming = false, bool repairBareViews = false}) =>
-      _prepareSource(text, streaming: streaming, repairBareViews: repairBareViews);
+  static String prepareSource(String text, {bool streaming = false, bool repairBareViews = false}) {
+    final source = _prepareMarkdown(text, repairBareViews: repairBareViews, streaming: streaming);
+    return streaming ? repairStreamingMarkdown(source, cursor: _cursorSentinel) : source;
+  }
 
   /// Characters a second when the model is slower than this; the reveal goes faster
   /// by itself when it would fall behind. Near a comfortable reading pace, so the text
@@ -595,45 +598,13 @@ class MarkdownBody extends StatefulWidget {
   /// How long the newest words take to fade in.
   static const _revealFade = 0.24;
 
-  /// [text] for the reveal. Only ever appended to while streaming, as the reveal needs
-  /// (a rewrite far from the end would retype the message): a table's header is bolded
-  /// as its delimiter row arrives, right at the end and for good, so its columns don't
-  /// change when the reply finishes. Formulas are left to the library's own hold.
-  static String _prepareRevealed(String text, {required bool repairBareViews}) {
+  /// Shared preparation before tail repair. The reveal uses [streaming] false:
+  /// formulas are left to the library's own hold, while table headers become
+  /// bold as their delimiter arrives, so columns do not change on completion.
+  static String _prepareMarkdown(String text, {required bool repairBareViews, bool streaming = false}) {
     final repaired = repairBareViews ? fenceBareDshUiViews(text) : text;
-    return prepareTables(normalizeMath(repaired));
+    return prepareTables(normalizeMath(repaired, streaming: streaming));
   }
-
-  static String _prepareSource(
-    String text, {
-    bool streaming = false,
-    bool repairBareViews = false,
-    StreamingMarkdownRepair? repair,
-  }) {
-    final repaired = repairBareViews ? fenceBareDshUiViews(text) : text;
-    final source = prepareTables(normalizeMath(repaired, streaming: streaming));
-    if (!streaming) return source;
-    return _withCursor(repair?.repair(source) ?? repairStreamingMarkdown(source));
-  }
-
-  /// [text] with the cursor sentinel where the reader's eye is: at the end
-  /// of the last line, except that a closing fence or a display formula's
-  /// `\]` must stay alone on its line, and a table row takes it inside its
-  /// last cell rather than as a new cell after the pipe.
-  static String _withCursor(String text) {
-    final last = text.substring(text.lastIndexOf('\n') + 1).trim();
-    if (_fenceLine.hasMatch(last) || last.endsWith(r'\]')) {
-      return '$text\n$_cursorSentinel';
-    }
-    if (last.length > 1 && last.startsWith('|') && last.endsWith('|')) {
-      final pipe = text.lastIndexOf('|');
-      return '${text.substring(0, pipe).trimRight()} $_cursorSentinel '
-          '${text.substring(pipe)}';
-    }
-    return '$text$_cursorSentinel';
-  }
-
-  static final _fenceLine = RegExp(r'^(?:>\s*)*(?:`{3,}|~{3,})\s*$');
 
   static InlineSpan _inlineCodeBuilder(BuildContext context, String code, TextStyle style, InlineCodeStyle codeStyle) =>
       CodeTextSpan(
@@ -648,6 +619,7 @@ class MarkdownBody extends StatefulWidget {
 
 class _MarkdownBodyState extends State<MarkdownBody> {
   StreamingMarkdownRepair? _repair;
+  StreamingMarkdownPreparation? _preparation;
 
   // Preparation depends only on text and streaming, not theme, text scale or
   // selection. Keep one result for this mounted body; unrelated stream rows
@@ -655,16 +627,16 @@ class _MarkdownBodyState extends State<MarkdownBody> {
   late String _source = _prepare();
 
   String _prepare() {
-    if (widget.reveal) {
-      return MarkdownBody._prepareRevealed(widget.text, repairBareViews: widget.repairBareViews);
+    final streaming = widget.streaming && !widget.reveal;
+    final repairBareViews = widget.repairBareViews;
+    String prepare(String text) =>
+        MarkdownBody._prepareMarkdown(text, repairBareViews: repairBareViews, streaming: streaming);
+    if (widget.streaming && widget.text.length >= MarkdownBody.blockLength) {
+      _preparation ??= StreamingMarkdownPreparation(prepare);
     }
-    _repair = widget.streaming ? (_repair ?? StreamingMarkdownRepair()) : null;
-    return MarkdownBody._prepareSource(
-      widget.text,
-      streaming: widget.streaming,
-      repairBareViews: widget.repairBareViews,
-      repair: _repair,
-    );
+    final source = _preparation?.prepare(widget.text) ?? prepare(widget.text);
+    _repair = streaming ? (_repair ?? StreamingMarkdownRepair()) : null;
+    return _repair == null ? source : _repair!.repair(source, cursor: _cursorSentinel);
   }
 
   /// 这棵树里有没有 ProviderScope。只在依赖变化时向上找一次 —— 正文随流式
@@ -704,10 +676,12 @@ class _MarkdownBodyState extends State<MarkdownBody> {
   @override
   void didUpdateWidget(MarkdownBody oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text ||
+    final modeChanged =
         oldWidget.streaming != widget.streaming ||
         oldWidget.reveal != widget.reveal ||
-        oldWidget.repairBareViews != widget.repairBareViews) {
+        oldWidget.repairBareViews != widget.repairBareViews;
+    if (modeChanged) _preparation = null;
+    if (oldWidget.text != widget.text || modeChanged) {
       _source = _prepare();
     }
     _blocked = _blocked || _wantsBlocks();
