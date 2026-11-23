@@ -29,10 +29,12 @@ const timeout = () => error('timeout', 'OpenAI authorization timed out. Try sign
 const invalidIdentity = () => error('invalid_identity', 'OpenAI identity could not be verified.')
 const invalidResponse = () => error('invalid_response', 'OpenAI returned an invalid authorization response.')
 const signInRequired = () => error('sign_in_required', 'Sign in with ChatGPT first.')
+const accessRejected = () => error('access_rejected', 'OpenAI did not accept the access token. Sign in with ChatGPT again.')
 const sessionExpired = () => error('session_expired', 'The OpenAI session expired. Sign in with ChatGPT again.')
 const planMissing = () => error('plan_permission_missing', 'This login does not allow direct use of your ChatGPT plan.')
 const storeFailed = () => error('store_failed', 'The OpenAI credential store could not be updated or read.')
 const signOutIncomplete = () => error('sign_out_incomplete', 'Local OpenAI credentials could not be removed. Retry signing out.')
+const revocationUnconfirmed = () => error('revocation_unconfirmed', 'Signed out locally, but OpenAI revocation could not be confirmed. Disconnect the app in ChatGPT Settings.')
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
 const nonEmpty = (value) => typeof value === 'string' && value.trim().length > 0
 const b64url = /^[A-Za-z0-9_-]+$/
@@ -194,6 +196,7 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
   let grant, registration, loading, pendingSave = false, pendingPlanLoss = false
   let tail = Promise.resolve(), signInController, tokenFlight, signingOut, epoch = 0
   let pendingSignOut, jwks, jwksExpiresAt = 0
+  let rejectedAccess, consentRetry = false
 
   // Refresh, authorization and sign-out share one writer. In-flight refresh is
   // allowed to finish rotation so sign-out can revoke the replacement token.
@@ -311,6 +314,7 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
 
   async function authorize(notify, signal, newAccount) {
     checkSignal(signal)
+    if (pendingSignOut) throw signOutIncomplete()
     await waitFor(load(), signal)
     if (newAccount && grant) throw error('sign_out_required', 'Sign out before connecting another ChatGPT account.')
     const hostId = await waitFor(storage(getHostId), signal)
@@ -320,11 +324,16 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
     // Reconnect keeps the issued client and its usage settings. Replace the
     // saved binding only after an explicit switch has verified the new grant.
     let selected = newAccount ? undefined : registration
-    const reconsent = grant !== null && !hasPlanPermission(grant.scopes)
+    const reconnecting = Boolean(selected)
+    const reconsent = reconnecting && (consentRetry || (grant !== null && !hasPlanPermission(grant.scopes)))
     for (let attempt = 0; ; attempt++) {
       const state = randomValue(), nonce = randomValue(), verifier = randomValue()
       const { code, clientId, redirectUri } = await browserCode({
         hostId, selected, state, nonce, verifier, notify, signal, reconsent,
+      }).catch((cause) => {
+        // Only a later user-initiated retry for the verified binding asks again.
+        if (reconnecting && cause.code === 'siwc_access_denied') consentRetry = true
+        throw cause
       })
       let body
       try {
@@ -345,8 +354,9 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
       // it and immediately hides the account, even while this write is pending.
       await storage(() => store.save(next))
       grant = next
+      if (rejectedAccess !== next.accessToken) rejectedAccess = undefined
       registration = registrationOf(next)
-      pendingSave = pendingPlanLoss = false
+      consentRetry = pendingSave = pendingPlanLoss = false
       if (signingOut) throw cancelled()
       return accountStatus(grant)
     }
@@ -390,18 +400,25 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
   async function clear({ signedOut = false } = {}) {
     const lost = grant != null && !signedOut
     grant = null
+    rejectedAccess = undefined
     pendingSave = pendingPlanLoss = false
-    if (lost) onGrantLost()
-    if (!registration) {
-      await storage(() => store.clear())
-      return
-    }
     try {
-      // Atomically drop every token but preserve the verified client binding.
-      await storage(() => store.save({ ...registration, scopes: [] }))
-    } catch {
-      // Losing the reconnect metadata is preferable to retaining credentials.
+      if (registration) {
+        try {
+          // Atomically drop every token but preserve the verified client binding.
+          await storage(() => store.save({ ...registration, scopes: [] }))
+          return
+        } catch {
+          // Losing the reconnect metadata is preferable to retaining credentials.
+        }
+      }
       await storage(() => store.clear())
+    } catch (cause) {
+      if (signedOut) throw cause // signOut retains any unconfirmed revocation.
+      pendingSignOut = {}
+      throw signOutIncomplete()
+    } finally {
+      if (lost) onGrantLost()
     }
   }
 
@@ -412,8 +429,10 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
     if (grant.pendingIdentity || pendingSave) await finishRotation()
     if (signingOut) throw signInRequired()
     if (!hasPlanPermission(grant.scopes)) throw planMissing()
-    if (grant.expiresAt > Date.now() + (grant.refreshToken ? RENEW_BEFORE_MS : 0)) return grant.accessToken
+    const rejected = grant.accessToken === rejectedAccess
+    if (!rejected && grant.expiresAt > Date.now() + (grant.refreshToken ? RENEW_BEFORE_MS : 0)) return grant.accessToken
     if (!grant.refreshToken) {
+      if (rejected) throw accessRejected()
       await clear()
       throw sessionExpired()
     }
@@ -428,6 +447,7 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
     try {
       const next = parseTokenSet(body, previous)
       grant = { ...previous, ...next, idToken: body.id_token ?? previous.idToken, ...(body.id_token && { pendingIdentity: true }) }
+      if (rejectedAccess !== next.accessToken) rejectedAccess = undefined
       pendingSave = true
       pendingPlanLoss = !hasPlanPermission(next.scopes)
     } catch (cause) {
@@ -458,7 +478,7 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
         return
       } catch (cause) {
         if (retry === 2 || (cause.code !== 'siwc_network' && cause.code !== 'siwc_unavailable')) {
-          throw error('revocation_unconfirmed', 'Signed out locally, but OpenAI revocation could not be confirmed. Disconnect the app in ChatGPT Settings.')
+          throw revocationUnconfirmed()
         }
         await delay(250 * 2 ** retry)
       }
@@ -488,7 +508,16 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
       const token = await waitFor(tokenFlight, signal)
       checkSignal(signal)
       if (requestedEpoch !== epoch) throw signInRequired()
+      if (token === rejectedAccess) throw accessRejected()
       return token
+    },
+    replayScope(token) {
+      if (!grant || token !== grant.accessToken || signingOut) return undefined
+      return sha256(JSON.stringify([grant.clientId, grant.subject])).toString('base64url')
+    },
+    rejectAccess(token) {
+      // A response to an older request must not discredit a replacement token.
+      if (grant && token === grant.accessToken) rejectedAccess = token
     },
     async status() {
       if (pendingSignOut) return { ...accountStatus(null, registration), signOutPending: true }
@@ -500,9 +529,13 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
       if (signingOut) return signingOut
       epoch++
       signingOut = serialize(async () => {
-        let revocation = pendingSignOut?.revocation
+        let revocation = pendingSignOut?.revocation, unreadable = false
         try {
-          await load()
+          try { await load() } catch (cause) {
+            if (cause.code !== 'siwc_store_failed') throw cause
+            unreadable = true
+            throw revocationUnconfirmed()
+          }
           if (grant?.refreshToken) revocation = { clientId: grant.clientId, refreshToken: grant.refreshToken }
           if (revocation) {
             await revoke(revocation)
@@ -514,6 +547,7 @@ export function createSiwcOAuth({ fetch = globalThis.fetch, store, getHostId, on
           } catch {
             // Keep only an unconfirmed revocation for retry, never a grant
             // capable of inference. Suspend sign-ins until local cleanup works.
+            if (unreadable) grant = undefined // Retry reading once the vault recovers.
             pendingSignOut = { revocation }
             throw signOutIncomplete()
           }

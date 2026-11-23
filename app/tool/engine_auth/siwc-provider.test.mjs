@@ -56,7 +56,7 @@ function harness(handler, { signedIn = true, token = async () => fakeToken } = {
   let adapter
   const routes = []
   const requests = []
-  const oauth = { status: () => ({ signedIn }), token }
+  const oauth = { status: () => ({ signedIn }), token, rejectAccess() {}, replayScope: () => 'mock-account-registration' }
   const llm = {
     registerAdapter(ids, instance) {
       routes.push(ids)
@@ -99,10 +99,12 @@ test('visible models use catalog order and display names without invented capabi
   oauth.status = () => ({ signedIn: true, planEnabled: true })
   lifecycle.invalidate()
   assert.deepEqual(await adapter.listModels(), [
-    { provider, id: model, name: 'Mock Text', inputModalities: ['text'] },
+    { provider, id: model, name: 'Mock Text', inputModalities: ['text'], context: { contextWindow: 500_000 } },
     { provider, id: 'aaa', name: 'Another', inputModalities: ['text'] },
   ])
-  assert.deepEqual(await adapter.resolveModel(provider, model), { provider, id: model, name: 'Mock Text', inputModalities: ['text'] })
+  assert.deepEqual(await adapter.resolveModel(provider, model), {
+    provider, id: model, name: 'Mock Text', inputModalities: ['text'], context: { contextWindow: 500_000 },
+  })
   oauth.status = () => ({ signedIn: false })
   lifecycle.invalidate()
   assert.equal((await adapter.resolveModel(provider, model)).name, model)
@@ -110,6 +112,47 @@ test('visible models use catalog order and display names without invented capabi
   lifecycle.dispose()
   lifecycle.dispose()
   assert.deepEqual(routes, [[provider], [provider], [provider], []])
+})
+
+test('model resolution and inference use only the reasoning levels advertised by the account', async () => {
+  const rows = [
+    { slug: model, visibility: 'list', supported_reasoning_levels: [
+      { effort: 'medium', description: 'Balanced' }, { effort: 'xhigh' },
+      { effort: 'xhigh', description: 'Duplicate' }, { effort: '!' }, null,
+    ], default_reasoning_level: 'xhigh' },
+    { slug: 'another', visibility: 'list', supported_reasoning_levels: [ { effort: 'low' } ], default_reasoning_level: 'high' },
+  ]
+  const { adapter, requests } = harness((url) => url.endsWith('/models')
+    ? Response.json({ models: rows })
+    : sse(started, delta, ended, complete))
+  const info = await adapter.resolveModel(provider, model)
+  assert.deepEqual(info.reasoning, {
+    efforts: [{ id: 'medium', name: 'medium', description: 'Balanced' }, { id: 'xhigh', name: 'xhigh' }],
+    defaultEffort: 'xhigh',
+  })
+  assert.deepEqual((await adapter.resolveModel(provider, 'another')).reasoning, { efforts: [{ id: 'low', name: 'low' }] })
+  await collect(adapter.stream({ ...options, reasoningEffort: 'medium' }))
+  assert.deepEqual(requests.map(({ url }) => url), [base + '/models', base + '/responses'])
+  assert.deepEqual(JSON.parse(requests[1].body).reasoning, { effort: 'medium' })
+})
+
+test('a broken model list does not stop an unconfigured saved chat', async (t) => {
+  for (const [kind, catalogResponse, code] of [
+    ['unavailable', () => new Response(null, { status: 503 }), 'SIWC_HTTP_ERROR'],
+    ['wrong shape', () => Response.json({ data: [] }), 'INVALID_CATALOG'],
+    ['not JSON', () => new Response('<html></html>'), 'INVALID_CATALOG'],
+  ]) {
+    await t.test(kind, async () => {
+      const { adapter, requests } = harness((url) => url.endsWith('/models')
+        ? catalogResponse()
+        : sse(started, delta, ended, complete))
+      assert.deepEqual(await adapter.resolveModel(provider, model), { provider, id: model, name: model, inputModalities: ['text'] })
+      const chunks = await collect(adapter.stream(options))
+      assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
+      assert.equal(JSON.parse(requests[1].body).reasoning, undefined)
+      await assert.rejects(adapter.listModels(), { code })
+    })
+  }
 })
 
 test('model catalog timeout aborts fetch and both success and error bodies', { timeout: 2000 }, async (t) => {
@@ -204,8 +247,48 @@ test('stateless text history and DSH stream blocks, usage and stop', async () =>
   ])
 })
 
+test('valid Responses streams need a body and a completed event, not a Content-Type header', async (t) => {
+  const body = (...events) => new TextEncoder().encode(events.map(frame).join(''))
+  for (const contentType of [undefined, 'Text/Event-Stream; charset=utf-8']) {
+    await t.test(contentType ?? 'missing header', async () => {
+      const response = new Response(body(started, delta, ended, complete), {
+        headers: contentType ? { 'content-type': contentType } : {},
+      })
+      if (!contentType) assert.equal(response.headers.get('content-type'), null)
+      const { adapter } = harness(() => response)
+      const chunks = await collect(adapter.stream(options))
+      assert.ok(chunks.some((chunk) => chunk.type === 'text-delta' && chunk.text === 'Hello!'))
+      assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
+    })
+  }
+  const headerlessIncomplete = harness(() => new Response(body(started, delta, ended)))
+  await assert.rejects(collect(headerlessIncomplete.adapter.stream(options)), { code: 'STREAM_CLOSED' })
+  for (const response of [Response.json({ ok: true }), new Response(null)]) {
+    const { adapter } = harness(() => response)
+    await assert.rejects(collect(adapter.stream(options)), { code: 'MALFORMED_RESPONSE' })
+  }
+})
+
+test('a completed reply does not wait for a stalled or failing stream cancel', { timeout: 2000 }, async (t) => {
+  for (const [kind, cancel] of [
+    ['stalled', () => new Promise(() => {})],
+    ['failed', () => Promise.reject(new Error('mock cleanup failure'))],
+  ]) {
+    await t.test(kind, async () => {
+      const { adapter } = harness(() => new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode([started, delta, ended, complete].map(frame).join('')))
+        },
+        cancel,
+      })))
+      const chunks = await collect(adapter.stream(options))
+      assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
+    })
+  }
+})
+
 test('completed text without a usage object still finishes successfully', async () => {
-  const terminal = { type: 'response.completed', response: { status: 'completed', output: [ended.item] } }
+  const terminal = { type: 'response.completed', response: { output: [ended.item] } }
   const { adapter } = harness(() => sse(started, delta, ended, terminal))
   const chunks = await collect(adapter.stream(options))
   assert.deepEqual(chunks.slice(-3), [
@@ -213,6 +296,18 @@ test('completed text without a usage object still finishes successfully', async 
     { type: 'usage', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
     { type: 'finish', reason: { kind: 'stop' } },
   ])
+})
+
+test('a completed event still rejects a missing response or an explicit non-completed status', async () => {
+  for (const response of [undefined, null, [], {}, { status: 'failed' }, { status: 'incomplete' }]) {
+    const { adapter } = harness(() => sse({ type: 'response.completed', response }))
+    await assert.rejects(collect(adapter.stream(options)), { code: 'MALFORMED_RESPONSE' })
+  }
+})
+
+test('a successful terminal event without streamed output is not a completed reply', async () => {
+  const { adapter } = harness(() => sse(complete))
+  await assert.rejects(collect(adapter.stream(options)), { code: 'EMPTY_RESPONSE' })
 })
 
 test('declares a local function and replays its matching call and result', async () => {
@@ -241,6 +336,39 @@ test('declares a local function and replays its matching call and result', async
     { type: 'function_call', call_id: 'call_1', name: 'echo', arguments: '{"value":7}' },
     { type: 'function_call_output', call_id: 'call_1', output: '7' },
   ])
+})
+
+test('tool continuation replays opaque reasoning and phase only for the same account and model', async () => {
+  const reasoning = { type: 'reasoning', id: 'rs_mock', summary: [{ type: 'summary_text', text: 'do not persist here' }] }
+  const item = (event, output_index) => ({ ...event, output_index })
+  const terminal = { ...complete, response: {
+    ...complete.response, output: [{ ...reasoning, encrypted_content: 'mock-encrypted-reasoning' }],
+  } }
+  const { adapter, requests, oauth } = harness(() => requests.length > 1 ? sse(started, delta, ended, complete) : sse(
+    { type: 'response.output_item.done', output_index: 0, item: reasoning },
+    item(started, 1), item(delta, 1), { ...item(ended, 1), item: { ...ended.item, phase: 'commentary' } },
+    item(toolStart, 2), item(argDelta, 2), item(toolEnd, 2), terminal,
+  ))
+  const chunks = await collect(adapter.stream(options))
+  const { replayState } = chunks.at(-1)
+  assert.equal(replayState.blocks[0].encrypted_content, 'mock-encrypted-reasoning')
+  assert.ok(!JSON.stringify(replayState).includes('do not persist here'))
+  const content = chunks.filter(({ type }) => type === 'block-end').map(({ block }) => block)
+  const messages = [
+    ...options.messages, { role: 'assistant', content, source: { provider, model, replayState } },
+    { ...message('tool', '7'), toolCallId: 'call_1' },
+  ]
+  await collect(adapter.stream({ ...options, messages }))
+  const input = JSON.parse(requests[1].body).input
+  assert.deepEqual(input.map(({ type }) => type), [undefined, 'reasoning', 'message', 'function_call', 'function_call_output'])
+  assert.equal(input[2].phase, 'commentary')
+  assert.equal(input[3].call_id, input[4].call_id)
+  await collect(adapter.stream({ ...options, model: 'different-model', messages }))
+  oauth.replayScope = () => 'another-registration'
+  await collect(adapter.stream({ ...options, messages }))
+  for (const request of requests.slice(2)) {
+    assert.ok(!JSON.parse(request.body).input.some((entry) => entry.type === 'reasoning' || entry.phase))
+  }
 })
 
 test('failures after stream start are not treated as complete or retried', async (t) => {
@@ -287,6 +415,34 @@ test('an admission error keeps status and request ID without exposing the token'
     return true
   })
   assert.equal(requests.length, 1)
+})
+
+test('OpenAI errors reach the engine as recoverable auth, context and rate-limit categories', async () => {
+  const contextError = { code: 'context_length_exceeded' }
+  for (const [response, code] of [
+    [Response.json({ error: contextError }, { status: 400 }), 'CONTEXT_WINDOW_EXCEEDED'],
+    [sse({ type: 'response.failed', response: { error: contextError } }), 'CONTEXT_WINDOW_EXCEEDED'],
+    [Response.json({ error: { code: 'invalid_token' } }, { status: 401 }), 'SIWC_SIGN_IN_REQUIRED'],
+    [Response.json({ error: { code: 'rate_limit_exceeded' } }, { status: 429 }), 'RATE_LIMIT'],
+  ]) {
+    const { adapter } = harness(() => response)
+    await assert.rejects(collect(adapter.stream(options)), { code })
+  }
+})
+
+test('an invalid signed identity marks the current token for renewal without retrying inference', async () => {
+  for (const response of [
+    Response.json({ error: { code: 'subscription_sharing_invalid_user' } }, { status: 401 }),
+    Response.json({ error: { code: 'subscription_sharing_invalid_user' } }, { status: 403 }),
+    sse({ type: 'response.failed', response: { error: { code: 'subscription_sharing_invalid_user' } } }),
+  ]) {
+    const { adapter, oauth, requests } = harness(() => response)
+    const rejected = []
+    oauth.rejectAccess = (token) => rejected.push(token)
+    await assert.rejects(collect(adapter.stream(options)), { code: 'SIWC_SIGN_IN_REQUIRED' })
+    assert.deepEqual(rejected, [fakeToken])
+    assert.equal(requests.length, 1)
+  }
 })
 
 test('caller abort and account replacement cancel a pending SSE body', { timeout: 2000 }, async (t) => {

@@ -406,7 +406,10 @@ export class AuthBridge {
     }
     const siwc = this.#siwc()
     if (siwc) {
-      const status = await siwc.oauth.status().catch(() => ({ signedIn: false }))
+      const status = await siwc.oauth.status().catch((error) => ({
+        signedIn: false,
+        signOutPending: error?.code === 'siwc_store_failed',
+      }))
       const account = status.account?.email
       providers.push({
         id: SIWC_PROVIDER,

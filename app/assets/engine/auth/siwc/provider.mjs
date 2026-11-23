@@ -13,7 +13,7 @@ const hostRequire = createRequire(testPrefix
 const llmPackage = pathToFileURL(hostRequire.resolve('@deepseek-ai/dsh-llm/package.json'))
 const piAi = new URL('../../@earendil-works/pi-ai/dist/', llmPackage)
 const [
-  { LlmAdapter, LlmError, attributionHeaders, resolveRetryPolicy },
+  { CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, LlmAdapter, LlmError, attributionHeaders, resolveRetryPolicy },
   { convertResponsesMessages, convertResponsesTools, processResponsesStream },
   { AssistantMessageEventStream },
 ] = await Promise.all([
@@ -30,7 +30,7 @@ const API = 'openai-responses'
 const MODEL_CATALOG_TIMEOUT_MS = 5_000
 const RETRY_POLICY = resolveRetryPolicy({ mode: 'normal', maxRetries: 0 }, PROVIDER)
 const ITEM_TYPES = new Set(['message', 'reasoning', 'function_call'])
-const LOGIN_ERRORS = new Set(['siwc_sign_in_required', 'siwc_session_expired', 'siwc_plan_permission_missing'])
+const LOGIN_ERRORS = new Set(['siwc_sign_in_required', 'siwc_session_expired', 'siwc_plan_permission_missing', 'siwc_access_rejected'])
 
 function argumentsObject(raw) {
   try {
@@ -42,15 +42,25 @@ function argumentsObject(raw) {
   throw new LlmError('A local function call has invalid JSON arguments.', 'INVALID_REQUEST')
 }
 
-function piMessages(messages) {
+function piMessages(messages, model, scope) {
   return messages.map(({ role, content, source, toolCallId, isError }) => {
-    const blocks = content.flatMap((block) => {
+    const replay = source?.replayState
+    const sameGrant = scope && source?.provider === PROVIDER && source.model === model.id &&
+      replay?.response?.version === 1 && replay.response.scope === scope
+    const blocks = content.flatMap((block, index) => {
       switch (block.type) {
-        case 'text': return [block]
+        case 'text': {
+          const phase = sameGrant && replay.blocks?.[index]
+          return [isMessagePhase(phase) ? { ...block, textSignature: JSON.stringify(phase) } : block]
+        }
         case 'tool-call': return [{
           type: 'toolCall', id: block.id, name: block.name, arguments: argumentsObject(block.arguments),
         }]
-        case 'reasoning':
+        case 'reasoning': {
+          const item = sameGrant && replay.blocks?.[index]
+          const signature = encryptedReasoning(item)
+          return signature ? [{ type: 'thinking', thinking: '', thinkingSignature: JSON.stringify(signature) }] : []
+        }
         case 'tool-addition':
         case 'tool-removal': return []
         default: throw new LlmError('This SIWC adapter accepts text, not attachments.', 'INVALID_REQUEST')
@@ -64,8 +74,8 @@ function piMessages(messages) {
   })
 }
 
-function responsesBody(model, options) {
-  const input = convertResponsesMessages(model, { messages: piMessages(options.messages) }, new Set([PROVIDER]), {
+function responsesBody(model, options, scope) {
+  const input = convertResponsesMessages(model, { messages: piMessages(options.messages, model, scope) }, new Set([PROVIDER]), {
     supportsMidConvoSystemMessages: true,
   }).map((item) => {
     // Developer instructions only; no server-stored output item references.
@@ -82,6 +92,7 @@ function responsesBody(model, options) {
   return {
     model: model.id, input, store: false, stream: true,
     ...(options.system ? { instructions: options.system } : {}),
+    ...(options.reasoningEffort === undefined ? {} : { reasoning: { effort: options.reasoningEffort } }),
   }
 }
 
@@ -89,45 +100,110 @@ function identifier(value) {
   return typeof value === 'string' && /^[a-zA-Z0-9_.-]{1,128}$/.test(value) ? value : undefined
 }
 
+function encryptedReasoning(item) {
+  if (item?.type !== 'reasoning' || !identifier(item.id) || typeof item.encrypted_content !== 'string' || !item.encrypted_content) return undefined
+  return { type: 'reasoning', id: item.id, summary: [], encrypted_content: item.encrypted_content }
+}
+
+function isMessagePhase(value) {
+  return !!identifier(value?.id) && (value.phase === 'commentary' || value.phase === 'final_answer')
+}
+
+function responseReplay(content, scope) {
+  if (!scope) return undefined
+  const blocks = content.map((block) => {
+    if (block.type === 'thinking' && block.thinkingSignature) {
+      return encryptedReasoning(JSON.parse(block.thinkingSignature)) ?? null
+    }
+    if (block.type === 'text' && block.textSignature) {
+      const phase = JSON.parse(block.textSignature)
+      if (isMessagePhase(phase)) return { v: 1, id: phase.id, phase: phase.phase }
+    }
+    return null
+  })
+  if (blocks.some(Boolean)) return { response: { version: 1, scope }, blocks }
+}
+
+function reasoningProfile(row) {
+  if (!Array.isArray(row.supported_reasoning_levels)) return undefined
+  const efforts = new Map()
+  for (const level of row.supported_reasoning_levels) {
+    const id = identifier(level?.effort)
+    if (!id || efforts.has(id)) continue
+    const description = typeof level.description === 'string' && level.description.trim()
+    efforts.set(id, { id, name: id, ...(description ? { description } : {}) })
+  }
+  if (!efforts.size) return undefined
+  const defaultEffort = row.default_reasoning_level
+  return { efforts: [...efforts.values()], ...(efforts.has(defaultEffort) ? { defaultEffort } : {}) }
+}
+
 function responseError(response, payload, fallback, { code, status } = {}) {
-  const errorCode = identifier(payload?.code) ?? code ?? 'SIWC_API_ERROR'
+  const upstreamCode = identifier(payload?.code)
+  const errorCode = status === 401 || upstreamCode === 'subscription_sharing_invalid_user' ? 'SIWC_SIGN_IN_REQUIRED'
+    : upstreamCode === 'context_length_exceeded' ? CONTEXT_WINDOW_EXCEEDED_CODE
+    : upstreamCode === 'rate_limit_exceeded' || (status === 429 && !upstreamCode) ? 'RATE_LIMIT'
+    : upstreamCode ?? code ?? 'SIWC_API_ERROR'
   const param = identifier(payload?.param)
   const requestId = identifier(response.headers.get('x-request-id'))
   const help = errorCode === 'subscription_sharing_usage_limit_exceeded' ? 'https://chatgpt.com/settings/usage' : undefined
   // Never forward upstream message/detail; either may quote request content or credentials.
   return new LlmError(
-    [fallback, errorCode, param && 'parameter: ' + param, help].filter(Boolean).join(': '),
+    [fallback, upstreamCode ?? errorCode, param && 'parameter: ' + param, help].filter(Boolean).join(': '),
     errorCode, { status, requestId },
   )
 }
 
-async function* responsesEvents(response, request) {
-  for await (const sse of _iterSSEMessages(response, request)) {
-    if (sse.data === '[DONE]') break
-    let event
-    try {
-      event = JSON.parse(sse.data)
-    } catch {
-      throw new LlmError('Malformed OpenAI Responses event.', 'MALFORMED_RESPONSE')
-    }
-    const type = event?.type ?? sse.event
-    if (type === 'response.failed' || type === 'error' || sse.event === 'error') {
-      throw responseError(response, event?.response?.error ?? event?.error ?? event, 'OpenAI Responses failed')
-    }
-    if (type === 'response.incomplete' || type === 'response.cancelled') {
-      const reason = identifier(event?.response?.incomplete_details?.reason)
-      throw new LlmError(reason ? 'OpenAI response incomplete: ' + reason : 'OpenAI response did not complete.', 'SIWC_INCOMPLETE')
-    }
-    if (type === 'response.output_item.added' || type === 'response.output_item.done') {
-      if (!ITEM_TYPES.has(event?.item?.type)) throw new LlmError('Unsupported OpenAI Responses output item.', 'MALFORMED_RESPONSE')
-    }
-    if (type === 'response.completed' && event.response?.status !== 'completed') {
+function readEvent(response, sse) {
+  let event
+  try {
+    event = JSON.parse(sse.data)
+  } catch {
+    throw new LlmError('Malformed OpenAI Responses event.', 'MALFORMED_RESPONSE')
+  }
+  const type = event?.type ?? sse.event
+  if (type === 'response.failed' || type === 'error' || sse.event === 'error') {
+    throw responseError(response, event?.response?.error ?? event?.error ?? event, 'OpenAI Responses failed')
+  }
+  if (type === 'response.incomplete' || type === 'response.cancelled') {
+    const reason = identifier(event?.response?.incomplete_details?.reason)
+    throw new LlmError(reason ? 'OpenAI response incomplete: ' + reason : 'OpenAI response did not complete.', 'SIWC_INCOMPLETE')
+  }
+  if ((type === 'response.output_item.added' || type === 'response.output_item.done') && !ITEM_TYPES.has(event?.item?.type)) {
+    throw new LlmError('Unsupported OpenAI Responses output item.', 'MALFORMED_RESPONSE')
+  }
+  if (type === 'response.completed') {
+    const completed = event?.response
+    if (!completed || typeof completed !== 'object' || Array.isArray(completed) ||
+        (completed.status === undefined ? !Array.isArray(completed.output) : completed.status !== 'completed')) {
       throw new LlmError('Invalid OpenAI response terminal status.', 'MALFORMED_RESPONSE')
     }
-    yield { ...event, type }
-    if (type === 'response.completed') return
   }
-  request.signal.throwIfAborted()
+  return { ...event, type }
+}
+
+async function* responsesEvents(response, requestSignal) {
+  const reader = new AbortController()
+  const signal = AbortSignal.any([requestSignal, reader.signal])
+  for await (const sse of _iterSSEMessages(response, { signal, abort: () => reader.abort() })) {
+    if (sse.data === '[DONE]') {
+      reader.abort()
+      break
+    }
+    let event
+    try {
+      event = readEvent(response, sse)
+    } catch (error) {
+      reader.abort()
+      throw error
+    }
+    const completed = event.type === 'response.completed'
+    // A settled response must not wait for the remote stream's cancel/close handshake.
+    if (completed) reader.abort()
+    yield event
+    if (completed) return
+  }
+  requestSignal.throwIfAborted()
   throw new LlmError('OpenAI Responses stream ended without response.completed.', 'STREAM_CLOSED')
 }
 
@@ -141,7 +217,7 @@ async function* decodeResponse(response, request, model) {
     },
   }
   let failure
-  const decoded = processResponsesStream(responsesEvents(response, request), output, events, model)
+  const decoded = processResponsesStream(responsesEvents(response, request.signal), output, events, model)
     .catch((error) => { failure = error })
     .finally(() => events.end(output))
   const tools = []
@@ -173,6 +249,7 @@ async function* decodeResponse(response, request, model) {
   await decoded
   request.signal.throwIfAborted()
   if (failure) throw failure
+  if (!output.content.length) throw new LlmError('OpenAI completed without any output.', EMPTY_RESPONSE_CODE)
   // An item-level done event is not enough to dispatch a local tool.
   for (const tool of tools) {
     request.signal.throwIfAborted()
@@ -187,13 +264,14 @@ async function* decodeResponse(response, request, model) {
     ...(reasoning ? { reasoningTokens: reasoning } : {}),
   } }
   request.signal.throwIfAborted()
-  yield { type: 'finish', reason: { kind: tools.length ? 'tool-calls' : 'stop' } }
+  const replayState = responseReplay(output.content, request.scope)
+  yield { type: 'finish', reason: { kind: tools.length ? 'tool-calls' : 'stop' }, ...(replayState ? { replayState } : {}) }
 }
 
 export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
   let account = new AbortController()
   let catalog = new AbortController()
-  let names = new Map()
+  let catalogModels
   let disposed = false
 
   async function request(path, signal, body) {
@@ -212,6 +290,7 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
     if (typeof token !== 'string' || !token || /\s/.test(token) || token.startsWith('sk-')) {
       throw new LlmError('Sign in with ChatGPT to use this provider.', 'SIWC_SIGN_IN_REQUIRED')
     }
+    const scope = body ? oauth.replayScope(token) : undefined
     const response = await fetch(BASE_URL + path, {
       method: body ? 'POST' : 'GET', signal, redirect: 'error',
       headers: {
@@ -220,40 +299,58 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
         Accept: body ? 'text/event-stream' : 'application/json',
         ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      ...(body ? { body: JSON.stringify(body(scope)) } : {}),
     })
     if (!response.ok) {
+      if (response.status === 401) oauth.rejectAccess(token)
       const payload = await response.json().catch(() => null)
       signal.throwIfAborted()
+      if (response.status !== 401 && payload?.error?.code === 'subscription_sharing_invalid_user') oauth.rejectAccess(token)
       throw responseError(response, payload?.error, 'OpenAI HTTP ' + response.status, {
-        code: response.status === 401 ? 'SIWC_SIGN_IN_REQUIRED' : 'SIWC_HTTP_ERROR', status: response.status,
+        code: 'SIWC_HTTP_ERROR', status: response.status,
       })
     }
-    return response
+    return { response, token, scope }
   }
 
   class SiwcAdapter extends LlmAdapter {
     providerInfo() { return { id: PROVIDER, name: 'OpenAI (Sign in with ChatGPT)' } }
     providerRetryPolicy() { return RETRY_POLICY }
 
-    async listModels() {
+    async listModels(_provider, callerSignal) {
       const catalogSignal = catalog.signal
+      callerSignal?.throwIfAborted()
       const status = await oauth.status()
+      callerSignal?.throwIfAborted()
       if (catalogSignal.aborted || !status.signedIn || status.planEnabled === false) return []
       const deadline = AbortSignal.timeout(MODEL_CATALOG_TIMEOUT_MS)
-      const signal = AbortSignal.any([catalogSignal, deadline])
+      const signal = AbortSignal.any([catalogSignal, deadline, ...(callerSignal ? [callerSignal] : [])])
       try {
-        const response = await request('/models', signal)
-        const { models } = await response.json()
+        const { response } = await request('/models', signal)
+        let result
+        try {
+          result = await response.json()
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) throw error
+        }
         signal.throwIfAborted()
+        const models = result?.models
         if (!Array.isArray(models)) throw new LlmError('Invalid OpenAI model catalog.', 'INVALID_CATALOG')
         const listed = new Map()
         for (const row of models) {
           if (row?.visibility !== 'list' || typeof row.slug !== 'string' || !row.slug.trim() || listed.has(row.slug)) continue
-          listed.set(row.slug, typeof row.display_name === 'string' && row.display_name.trim() ? row.display_name : row.slug)
+          const id = row.slug
+          const name = typeof row.display_name === 'string' && row.display_name.trim() ? row.display_name : id
+          const reasoning = reasoningProfile(row)
+          const contextWindow = row.context_window
+          listed.set(id, {
+            provider: PROVIDER, id, name, inputModalities: ['text'],
+            ...(reasoning ? { reasoning } : {}),
+            ...(Number.isSafeInteger(contextWindow) && contextWindow > 0 ? { context: { contextWindow } } : {}),
+          })
         }
-        names = listed
-        return [...listed].map(([id, name]) => ({ provider: PROVIDER, id, name, inputModalities: ['text'] }))
+        catalogModels = listed
+        return [...listed.values()]
       } catch (error) {
         if (deadline.aborted && signal.reason === deadline.reason) {
           throw new LlmError('OpenAI model catalog request timed out.', 'TIMEOUT')
@@ -265,7 +362,17 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
 
     async resolveModel(provider, id, signal) {
       signal?.throwIfAborted()
-      return { provider, id, name: names.get(id) ?? id, inputModalities: ['text'] }
+      if (!catalogModels) {
+        try {
+          await this.listModels(provider, signal)
+        } catch (error) {
+          signal?.throwIfAborted()
+          // A temporarily unavailable catalog must not prevent using a saved model without an explicit effort.
+          if (!(error instanceof TypeError) && error?.code !== 'TIMEOUT' && error?.code !== 'INVALID_CATALOG' &&
+              !(error?.failure?.status >= 500)) throw error
+        }
+      }
+      return catalogModels?.get(id) ?? { provider, id, name: id, inputModalities: ['text'] }
     }
 
     async *stream(options) {
@@ -274,15 +381,20 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
       // Only the fields used by pi-ai's conversion and decoding, not model limits or prices.
       const model = { id: options.model, provider: PROVIDER, api: API, input: ['text'],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }
+      let accessToken
       try {
         signal.throwIfAborted()
-        const response = await request('/responses', signal, responsesBody(model, options))
-        if (!response.headers.get('content-type')?.startsWith('text/event-stream') || !response.body) {
+        const { response, token, scope } = await request('/responses', signal, (scope) => responsesBody(model, options, scope))
+        accessToken = token
+        const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+        // The direct subscription route can omit this header on otherwise valid SSE.
+        if (!response.body || (contentType && contentType !== 'text/event-stream')) {
           throw new LlmError('Expected an OpenAI Responses event stream.', 'MALFORMED_RESPONSE')
         }
-        yield* decodeResponse(response, { signal, abort: () => transport.abort() }, model)
+        yield* decodeResponse(response, { signal, scope }, model)
       } catch (error) {
         if (signal.aborted) throw new LlmError('OpenAI request cancelled.', 'ABORTED')
+        if (accessToken && error?.code === 'SIWC_SIGN_IN_REQUIRED') oauth.rejectAccess(accessToken)
         if (error instanceof LlmError) throw error
         // Avoid SDK or network error text that might embed a credential.
         throw new LlmError('OpenAI request could not be completed.', 'TRANSPORT')
@@ -299,7 +411,7 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
       disposed = true
       catalog.abort()
       account.abort()
-      names.clear()
+      catalogModels = undefined
       unregister()
     },
     invalidate({ stopRequests = true } = {}) {
@@ -310,7 +422,7 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
         account.abort()
         account = new AbortController()
       }
-      names.clear()
+      catalogModels = undefined
       unregister.replace([PROVIDER])
     },
   }

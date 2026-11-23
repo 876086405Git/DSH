@@ -525,6 +525,15 @@ test('official OpenAI is published only with its own adapter and preserves the o
   assert.doesNotMatch(logs.join(' '), /private-test-state|private-subject|private-upstream-error/)
 })
 
+test('an unreadable OpenAI vault exposes the existing explicit sign-out recovery', async () => {
+  const { bridge } = setup({ siwc: () => ({
+    oauth: { status: async () => { throw Object.assign(new Error('private vault detail'), { code: 'siwc_store_failed' }) } },
+  }) })
+  assert.deepEqual((await bridge.list()).providers.at(-1), {
+    id: 'openai-siwc', signedIn: false, planEnabled: false, signOutPending: true,
+  })
+})
+
 test('only an explicit OpenAI login requests new account registration', async () => {
   const attempts = []
   const { bridge } = setup({ siwc: () => ({
