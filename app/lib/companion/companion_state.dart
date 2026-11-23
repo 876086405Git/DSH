@@ -69,6 +69,7 @@ String _hostKey(HostRef host) => '${host.kind.name}:${host.id}';
 class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
   final _loaded = Completer<void>();
   int _ownershipEpoch = 0;
+  int _bindingsEpoch = 0;
 
   @override
   Map<String, CompanionBinding> build() {
@@ -83,11 +84,12 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
   }
 
   Future<void> _load() async {
-    final epoch = _ownershipEpoch;
+    // Reconnecting does not invalidate the saved bindings of every host.
+    final epoch = _bindingsEpoch;
     final prefs = await SharedPreferences.getInstance();
     try {
       final raw = prefs.getString(_sessionsKey);
-      if (raw != null && ref.mounted && epoch == _ownershipEpoch) {
+      if (raw != null && ref.mounted && epoch == _bindingsEpoch) {
         state = {
           for (final MapEntry(:key, :value) in (jsonDecode(raw) as Map<String, Object?>).entries)
             key: CompanionBinding.fromJson(value! as Map<String, Object?>),
@@ -183,6 +185,7 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
   /// Starts over on the active host: the next message opens a new conversation.
   Future<void> forget() async {
     _ownershipEpoch++;
+    _bindingsEpoch++;
     state = {...state}..remove(_hostKey(ref.read(activeHostProvider)));
     await _save();
   }
@@ -191,6 +194,7 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
   /// The old transcripts stay visible on their hosts, but are never continued.
   Future<void> forgetAll() async {
     _ownershipEpoch++;
+    _bindingsEpoch++;
     state = const {};
     await _save();
   }

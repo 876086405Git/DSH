@@ -203,13 +203,26 @@ void main() {
   });
 
   test('a startup intent does not move to B while preferences load', () async {
+    SharedPreferences.setMockInitialValues({
+      'companion_sessions': jsonEncode({
+        'local:local': {'id': 'a-existing', 'full': true},
+        '${_Room.bHost.kind.name}:${_Room.bHost.id}': {'id': 'b-existing', 'full': true},
+      }),
+    });
     final room = _Room();
     final pending = _outcome(room.sessions.ensure());
     room.host.change(_Room.bHost);
     final result = await pending;
     expect(room.b.argsOf('session/create'), isEmpty);
     expect(result, isA<DshClosedException>());
-    expect(room.sessions.of(_Room.bHost), isNull);
+    expect(room.sessions.of(HostRef.local)?.sessionId, 'a-existing');
+    expect(room.sessions.of(_Room.bHost)?.sessionId, 'b-existing');
+    expect((await room.sessions.ensure()).sessionId, 'b-existing');
+    expect(room.b.calls.map((call) => call.$1), ['session/projections']);
+    room.host.change(HostRef.local);
+    await _flush();
+    expect((await room.sessions.ensure()).sessionId, 'a-existing');
+    expect(room.a.calls.map((call) => call.$1), ['session/projections']);
   });
 
   test('a missing-session reply from A cannot create on B or bind its id to A', () async {
