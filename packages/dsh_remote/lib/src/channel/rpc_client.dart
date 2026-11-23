@@ -49,6 +49,7 @@ class _Pending {
   final String method;
   final Completer<Object?> completer;
   final Timer timer;
+  bool expired = false;
 }
 
 /// Request/response correlation by message id, events fan-out, deadlines.
@@ -108,9 +109,10 @@ class RemoteRpcClient {
         isLocal: true,
       ),
     );
-    // A reply that arrived before the deadline may still be queued behind a
-    // background decode; let it be dispatched first.
+    // An expired request never starts sending, but a reply that arrived
+    // before the deadline may still be queued behind a background decode.
     final timer = Timer(deadline, () {
+      _pending[request.id]?.expired = true;
       final tail = _receiveTail;
       if (tail == null) {
         expire();
@@ -131,7 +133,7 @@ class RemoteRpcClient {
     // when the send never completes.
     // An earlier send can keep this request queued beyond its deadline.
     // Retire it before encoding its first Noise fragment, never between them.
-    _channel.send(encoded, canSend: () => _pending.containsKey(request.id)).catchError((Object error) {
+    _channel.send(encoded, canSend: () => _pending[request.id]?.expired == false).catchError((Object error) {
       _reject(
         request.id,
         error is SecureChannelException && error.code == 'FRAME_TOO_LARGE'
