@@ -137,7 +137,8 @@ internal fun Context.dpf(v: Float): Float = TypedValue.applyDimension(TypedValue
  * filled: Phosphor-like, the weight of the app's own icons.
  */
 internal enum class Glyph(val filled: Boolean) {
-    PAUSE(true), PLAY(true), STOP(true), CHEVRON(false), LOCK(false), SEND(false), BALL(false), BACK(false), SPARK(true);
+    PAUSE(true), PLAY(true), STOP(true), CHEVRON(false), LOCK(false), SEND(false), BALL(false), BACK(false), SPARK(true),
+    MINIMIZE(false);
 
     fun path(): Path = Path().apply {
         when (this@Glyph) {
@@ -171,6 +172,8 @@ internal enum class Glyph(val filled: Boolean) {
                 moveTo(6.5f, 11f); lineTo(12f, 5.5f); lineTo(17.5f, 11f)
             }
             BALL -> addCircle(12f, 12f, 6.5f, Path.Direction.CW)
+            // 最小化: a short bar low in the square, the window's own minimise sign.
+            MINIMIZE -> { moveTo(7f, 15f); lineTo(17f, 15f) }
             BACK -> {
                 // 回到 DSH Go: a U-turn arrow back to the upper left (Phosphor's ArrowUUpLeft).
                 moveTo(7.5f, 12.75f); lineTo(3.5f, 8.75f); lineTo(7.5f, 4.75f)

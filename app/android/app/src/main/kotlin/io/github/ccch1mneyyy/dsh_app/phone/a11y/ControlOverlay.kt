@@ -572,7 +572,8 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     private fun syncPreview() {
         val p = pill
         val control = PhoneControl.peek()
-        val toScreen = screen?.attached == true && !captureHidden
+        // A minimised window shows no picture: no frames are taken for it.
+        val toScreen = screen?.let { it.attached && !it.isMinimized } == true && !captureHidden
         val taskId = if (!destroying && p != null && toScreen) control?.liveTask()?.id else null
         if (taskId == previewTaskId && toScreen == previewToScreen && (taskId == null || previewPill === p)) return
         clearPreview()
@@ -657,12 +658,14 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
             pause = s(R.string.overlay_pause_description), resume = s(R.string.overlay_resume_description),
             stop = s(R.string.overlay_stop_description), back = s(R.string.overlay_back_description),
             view = s(R.string.overlay_screen_view), separator = s(R.string.overlay_meta_separator),
+            minimize = s(R.string.overlay_screen_minimize), restore = s(R.string.overlay_screen_restore),
         )
         return OverlayScreen(service, wm, islandColors(), strings, ::safeArea, object : OverlayScreen.Actions {
             override fun touched() = onPillTouched()
             override fun pause() = togglePause()
             override fun stop() = stopFromPill()
             override fun back() = backToApp()
+            override fun minimized(min: Boolean) = syncPreview()
         })
     }
 
