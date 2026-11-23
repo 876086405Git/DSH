@@ -795,7 +795,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   static bool _draftHasWords(List<ChatItem> items) {
     for (var i = items.length - 1; i >= 0; i--) {
       switch (items[i]) {
-        case AssistantChatItem(seq: null, :final text) when text.trim().isNotEmpty:
+        case AssistantChatItem(seq: null, :final text) when text.trimLeft().isNotEmpty:
           return true;
         case AssistantChatItem(seq: null) || ToolChatItem(seq: null):
           continue;
@@ -1144,7 +1144,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   /// 它们自带上下 4 的留白,彼此之间不再加间距(图形块之间正好 8)。
   static bool _isProcess(ChatRow? row) => switch (row) {
     ToolCallRow() || ToolGroupRow() || CommandNoticeRow() => true,
-    AssistantRow(:final item) => item.text.trim().isEmpty && (item.reasoning.trim().isNotEmpty || item.streaming),
+    AssistantRow(:final item) => item.text.trimLeft().isEmpty && (item.reasoning.trim().isNotEmpty || item.streaming),
     NoticeRowData(:final item) => item.kind != 'error',
     _ => false,
   };
