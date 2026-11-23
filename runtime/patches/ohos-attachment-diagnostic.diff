@@ -8,8 +8,8 @@
 +import { AttachmentError, requestImageDimensions } from "@deepseek-ai/dsh-attachment";
  import z from "@deepseek-ai/schemastery";
  import { credentialKey, credentialKeyId, credentialKeyScope, credentialRef, isCredentialKeySegment, isCredentialRefName } from "@deepseek-ai/dsh-credentials";
- import { builtinModels, builtinProviders, getAllBuiltinModels, getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
-@@ -2061,6 +2061,9 @@
+ import { createModels } from "@earendil-works/pi-ai/models";
+@@ -2195,6 +2195,9 @@
  			} catch (error) {
  				if (timeoutOf(watchdog.signal, "LLM_STREAM_IDLE_TIMEOUT") !== void 0) throw new LlmError(`pi-ai stream idle timeout after ${streamIdleTimeoutMs}ms`, "TIMEOUT", { cause: error });
  				if (options.signal?.aborted) throw new LlmError("pi-ai request aborted by caller", "ABORTED", { cause: error });

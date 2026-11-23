@@ -1,10 +1,11 @@
-# OH：直接创建空 pi-ai 模型集合
+# Android 与 OHOS：直接创建空 pi-ai 模型集合
 
-`ohos-piai-empty-models.diff` 只作用于 OH 目标的
+`ohos-piai-empty-models.diff` 位于公共链，由 Android 与 OHOS 目标选择，作用于
 `@deepseek-ai/dsh-llm-pi-ai/lib/index.js`。它使用已有公开窄入口
 `@earendil-works/pi-ai/models.createModels`，替代原来先调用
 `builtinModels(options)`、再 `clearProviders()` 的私有 helper。
-依赖和完整目录的静态导入均保留，Android target 不选择这条差分。
+依赖和完整目录的静态导入均保留。文件名保留原有 OHOS 前缀；目标归属以
+`pins.json` 的 `targetSets` 为准。
 
 ## 为什么需要这项变化
 
@@ -48,7 +49,7 @@ DSH_PREFIX=/absolute/verified-oh-prefix node --import ./runtime/tests/ohos/piai-
 DSH_PREFIX=/absolute/verified-oh-prefix node --jitless --import ./runtime/tests/ohos/piai-empty-models-network.mjs --test --test-reporter=tap runtime/tests/ohos/piai-empty-models.test.mjs
 ```
 
-独立 a836 版本只增加一个 OH recipe 项；累计合并应保留已存在的其他
-OH 项和全部公共项，再接上这一差分及对应 pin。35eedc 主线的公共
+独立 a836 版本当时只增加一个 OH recipe 项；现在将本项移至公共链末，
+OH 专用覆片在完整公共链之后接续，并同步重接诊断覆片的 pin。35eedc 主线的公共
 `piai-overflow-output-limit.diff` 修改依赖 `pi-ai/dist/utils/overflow.js`；
 本项不能覆盖该差分，也不能把仅适配器同哈希称为整个主线依赖已验证。

@@ -223,6 +223,7 @@ office-converter-lazy.diff
 input-recovery.diff
 ohos-client-hmr-idle.diff
 ohos-skill-root-events.diff
+ohos-piai-empty-models.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
@@ -257,7 +258,6 @@ ohos-mcp-command-router.diff
 ohos-workspace-grant-paths.diff
 ohos-workspace-edit.diff
 ohos-image-codec.diff
-ohos-piai-empty-models.diff
 ohos-mcp-start-close.diff
 ohos-jobs-active.diff
 ohos-piai-text-preabort.diff
