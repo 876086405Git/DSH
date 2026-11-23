@@ -193,6 +193,7 @@ bool drawPlasticCap(
   Material mat,
   PlasticState st,
   FurStyle? furStyle,
+  void Function(Float32List, Frame) fillPlastic,
 ) {
   final bakery = BotAvatarBakery.instance;
   final n = formTier(rig.dev);
@@ -234,7 +235,7 @@ bool drawPlasticCap(
     if (fabric) {
       buildFabricMatcap(st._mc, linearColor(base), f, mat);
     } else {
-      buildMatcap(st._mc, linearColor(base), f, mat);
+      fillPlastic(st._mc, f);
     }
     /* a still frame shows the new light at once: no frames follow to fade */
     if (st._version == 0 || rig.still) {
