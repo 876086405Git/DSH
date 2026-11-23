@@ -32,7 +32,7 @@ class CompanionAlwaysOnService : Service() {
         // can run an FGS without POST_NOTIFICATIONS; do not mistake that for
         // permission to show a reply surface, or request permission on restore.
         if (!CompanionAlwaysOnState.read(this).enabled || !CompanionConversationNotification.available(this)) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
+            // onDestroy's clear keeps a task reminder that shares this display.
             stopSelf()
             return START_NOT_STICKY
         }
@@ -57,7 +57,6 @@ class CompanionAlwaysOnService : Service() {
         } catch (error: Throwable) {
             running = false
             CompanionAlwaysOnPlugin.failure = error.javaClass.simpleName
-            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
         // No input Intent is redelivered. A killed/unknown turn is never auto-submitted again.
@@ -66,13 +65,13 @@ class CompanionAlwaysOnService : Service() {
 
     /** The conversation notification, or a plain one when it can't be built. */
     private fun startForegroundSafely(): Boolean {
-        val notification = try {
-            CompanionConversationNotification.build(this)
-        } catch (error: Throwable) {
-            CompanionAlwaysOnPlugin.failure = error.javaClass.simpleName
-            CompanionConversationNotification.fallback(this)
-        }
         return try {
+            val notification = try {
+                CompanionConversationNotification.build(this)
+            } catch (error: Throwable) {
+                CompanionAlwaysOnPlugin.failure = error.javaClass.simpleName
+                CompanionConversationNotification.fallback(this)
+            }
             if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(CompanionConversationNotification.ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             } else {
