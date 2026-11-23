@@ -30,3 +30,24 @@ test('readOnly normalizes retired bundles in memory; default loader retains lega
  const loaded=loadProfileDirectory('dsh',f.profile.dir,f.profile.installAnchor,{readOnly:true});assert.equal(loaded.layers.length,0);assert.equal(f.read(),before);
  loadProfileDirectory('dsh',f.profile.dir,f.profile.installAnchor);assert.notEqual(f.read(),before);assert.deepEqual(JSON.parse(f.read()).dsh.profile.bundles,[]);
 });
+
+test('配置行按需克隆显式空对象，缺省的两列各自独立', t => {
+  const f = fixture(t, { profileRows: [{ insert: [
+    { id: 'missing', name: 'sample' },
+    { id: 'nil', name: 'sample', config: null },
+    { id: 'explicit', name: 'sample', config: {} },
+  ] }] });
+  f.editor.entries = () => ['missing', 'nil', 'explicit'].map(id => ({ options: { id } }));
+  const clone = globalThis.structuredClone;
+  let emptyClones = 0;
+  t.mock.method(globalThis, 'structuredClone', function (value, ...rest) {
+    if (value != null && Object.getPrototypeOf(value) === Object.prototype && !Reflect.ownKeys(value).length) emptyClones++;
+    return clone.call(this, value, ...rest);
+  });
+  const rows = f.editor.configuration();
+  assert.equal(emptyClones, 1, '只有显式提供的空 config 进入深克隆');
+  const columns = rows.flatMap(row => [row.inherited, row.override]);
+  assert.equal(new Set(columns).size, 6);
+  columns[0].changed = true;
+  for (const other of columns.slice(1)) assert.deepEqual(other, {});
+});

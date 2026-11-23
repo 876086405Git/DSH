@@ -1,0 +1,11 @@
+--- a/node_modules/@deepseek-ai/dsh-config-editor/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-config-editor/lib/index.js
+@@ -13,1 +13,2 @@
+-/** Persist complete raw configs and apply them through the normal Loader path. */
++const cloneConfig = (value) => (value === null || value === void 0) ? {} : structuredClone(value);
++/** Persist complete raw configs and apply them through the normal Loader path. */
+@@ -50,2 +51,2 @@
+-			inherited: overridden.has(entry.options.id) ? this.inherited(entry, loaded) : structuredClone(composed.get(entry.options.id)?.config ?? {}),
+-			override: structuredClone(loaded.patches.findLast((row) => row.id === entry.options.id && row.config !== void 0)?.config ?? {})
++			inherited: overridden.has(entry.options.id) ? this.inherited(entry, loaded) : cloneConfig(composed.get(entry.options.id)?.config),
++			override: cloneConfig(loaded.patches.findLast((row) => row.id === entry.options.id && row.config !== void 0)?.config)

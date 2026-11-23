@@ -173,6 +173,7 @@ web-search-key-write-result.diff
 deepseek-attachment-error.diff
 fork-default-effort.diff
 config-editor-lock-order.diff
+config-editor-empty-layer-copy.diff
 piai-overflow-output-limit.diff
 schedule-authorization-availability.diff
 deepseek-refusal.diff
