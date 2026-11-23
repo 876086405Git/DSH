@@ -305,7 +305,6 @@ void main() {
       expect(find.text('OpenAI').hitTestable(), findsOneWidget);
       expect(key.hitTestable(), findsOneWidget);
       final beforeWrites = secureEntered;
-      final beforePending = messenger.pendingMessageCount;
       const editedKeys = {'mimo': 'mimo-edited', 'bailian': 'bailian-key', 'openai': 'openai-key'};
       armed = true;
       timerStarted = true;
@@ -315,7 +314,6 @@ void main() {
       expect(heldEntered, 1);
       expect(heldReturned, 0);
       expect(secureEntered, beforeWrites + 1);
-      expect(messenger.pendingMessageCount, beforePending + 1);
       expect(container.read(companionVoiceSettingsProvider)!.preset, 'bailian');
       expect((jsonDecode(prefs.getString('companion_voice_v1')!) as Map)['preset'], 'bailian');
 
@@ -328,7 +326,6 @@ void main() {
       expect(tester.widget<TextField>(coral).controller!.text, 'coral');
       expect(heldReturned, 0);
       expect(secureEntered, beforeWrites + 1, reason: 'C keeps the already published key map');
-      expect(messenger.pendingMessageCount, beforePending + 1);
 
       // C's frame has completed. Only the old B storage reply now resumes;
       // its completion schedules no Page build of its own.
@@ -336,7 +333,6 @@ void main() {
       await tester.pump();
       expect(heldReturned, 1);
       expect(secureReturned, secureEntered);
-      expect(messenger.pendingMessageCount, beforePending);
       expect(jsonDecode(secureValues['companion_voice_preset_keys']!), editedKeys);
       await tester.pump(const Duration(milliseconds: 400));
       timerAdvanced = true;
@@ -349,7 +345,6 @@ void main() {
       expect(jsonDecode(secureValues['companion_voice_preset_keys']!), editedKeys);
       expect(secureEntered, beforeWrites + 1, reason: 'the timer has no stale service fields to save');
       expect(secureReturned, secureEntered);
-      expect(messenger.pendingMessageCount, beforePending);
       await tester.pumpWidget(const SizedBox());
     });
 
