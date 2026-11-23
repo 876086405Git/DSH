@@ -122,8 +122,26 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   /// and the page comes in without its staggered rise.
   bool _still = false;
 
-  /// Audio levels keep changing after the words have settled.
-  ({String source, String words})? _captionCache;
+  /// What [build] shows of the call. Not the audio levels: the light reads those
+  /// itself each frame, so they alone (some 25 updates a second) leave the page as it is.
+  Object _shows() => (
+    _call.phase,
+    _call.ended,
+    _call.muted,
+    _call.speaker,
+    _call.heard,
+    _call.caption,
+    _call.error,
+    _call.turns.isEmpty,
+    _call.ended == CallEnd.noRecognizer && ref.read(accountProvider).signedIn,
+    switch (widget.conversation) {
+      final ChatCallConversation chat => chat.sessionId,
+      _ => null,
+    },
+  );
+
+  /// [_shows] as of the last build.
+  Object? _built;
 
   @override
   void initState() {
@@ -282,7 +300,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
         },
       );
     }
-    setState(() {});
+    if (_shows() != _built) setState(() {});
   }
 
   /// A new phase: a touch under the finger, and her mood when she is there.
@@ -481,16 +499,9 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     unawaited(showCallTranscript(context, _call));
   }
 
-  String _captionText(String source) {
-    final cached = _captionCache;
-    if (cached != null && cached.source == source) return cached.words;
-    final words = speakable(source).replaceAll('\n', ' ');
-    _captionCache = (source: source, words: words);
-    return words;
-  }
-
   @override
   Widget build(BuildContext context) {
+    _built = _shows();
     final l10n = context.l10n;
     final theme = Theme.of(context);
     _still = AppMotion.reduced(context);
@@ -519,7 +530,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     final hearing = _call.phase == CallPhase.hearing;
     final heard = ended ? '' : _call.heard;
     // While the person speaks, her last words step aside for theirs.
-    final reply = hearing ? '' : _captionText(_call.caption);
+    final reply = hearing ? '' : speakable(_call.caption).replaceAll('\n', ' ');
     final failing = ended ? null : error;
     // Light or dark as the theme is; a picture or her behind always reads as dark.
     final dark = theme.brightness == Brightness.dark || image != null || her;

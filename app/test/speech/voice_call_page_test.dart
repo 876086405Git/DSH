@@ -106,10 +106,23 @@ void main() {
     }
     // The caption follows her voice: nothing before it plays, all of it once played.
     expect(tester.widget<RevealText>(find.byType(RevealText)).text, isEmpty);
+    // The microphone's levels alone leave the page as it was built: the light reads them itself.
+    final status = tester.widget<CallStatus>(find.byType(CallStatus));
+    for (final level in [0.1, 0.3, 0.6]) {
+      audio.emit(MicLevel(level));
+      await tester.pump(const Duration(milliseconds: 40));
+    }
+    expect(tester.widget<CallStatus>(find.byType(CallStatus)), same(status));
     final id = RegExp(r'^open:(\S+):call=true$').firstMatch(audio.calls.lastWhere((c) => c.startsWith('open:')))![1]!;
     audio
       ..emit(PlayEvent(id, PlayPhase.start))
       ..emit(PlayEvent(id, PlayPhase.done));
+    // However long the wait for her voice, her words come in from the first letter.
+    final words = find.descendant(of: find.byKey(const ValueKey('call-reply')), matching: find.byType(CaptionWindow));
+    for (var i = 0; i < 20 && words.evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(tester.widget<CaptionWindow>(words).span.toPlainText(), '北');
     for (var i = 0; i < 30; i++) {
       await tester.pump(const Duration(milliseconds: 60));
     }

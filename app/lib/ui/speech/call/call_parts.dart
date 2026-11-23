@@ -287,8 +287,16 @@ class _CallTimerState extends State<CallTimer> with SingleTickerProviderStateMix
   @override
   void initState() {
     super.initState();
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && widget.live) setState(() {});
+    _next();
+  }
+
+  /// The next second on the clock, as it turns.
+  void _next() {
+    _tick?.cancel();
+    _tick = Timer(Duration(milliseconds: 1000 - _elapsed().inMilliseconds % 1000), () {
+      if (!mounted) return;
+      if (widget.live) setState(() {});
+      _next();
     });
   }
 
@@ -296,6 +304,7 @@ class _CallTimerState extends State<CallTimer> with SingleTickerProviderStateMix
   void didUpdateWidget(CallTimer old) {
     super.didUpdateWidget(old);
     if (old.live && !widget.live) _frozen = _elapsed();
+    if (widget.since != old.since) _next();
   }
 
   Duration _elapsed() => widget.since == null ? Duration.zero : DateTime.now().difference(widget.since!);
@@ -461,8 +470,9 @@ class _RevealTextState extends State<RevealText> with SingleTickerProviderStateM
   static const _tail = 8;
 
   /// Where the reveal is headed: the end, its newest characters still coming
-  /// in; once [RevealText.done], past it, so they come in whole.
-  double get _target => widget.text.length + (widget.done ? _tail.toDouble() : 0.0);
+  /// in; once [RevealText.done], past it, so they come in whole. Nothing to
+  /// reveal holds it at the start, for the words that come next.
+  double get _target => widget.text.isEmpty ? 0 : widget.text.length + (widget.done ? _tail.toDouble() : 0.0);
 
   @override
   void didUpdateWidget(RevealText old) {
