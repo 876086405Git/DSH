@@ -452,9 +452,6 @@ class _TransferRpc implements RemoteRpcClient {
   bool get isClosed => _closed;
 
   @override
-  bool get isChannelClosed => isClosed;
-
-  @override
   Future<Object?> call(String method, Object? params, {Duration? timeout}) async {
     final map = params! as Map<String, Object?>;
     calls.add((method, map));

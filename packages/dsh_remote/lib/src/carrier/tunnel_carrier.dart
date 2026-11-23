@@ -170,7 +170,7 @@ class RemoteHostSession {
   bool get supportsTransfer => capabilities.contains('harness.remote.transfer.v1');
   bool get supportsStreamTransfer => capabilities.contains('harness.remote.stream.transfer.v1');
 
-  bool get isClosed => rpc.isClosed || rpc.isChannelClosed;
+  bool get isClosed => rpc.isClosed;
 
   Future<void> close() => rpc.close();
 }
@@ -603,7 +603,8 @@ class RemoteTunnelCarrier extends DshCarrier implements WorkspaceUploadCarrier {
         }
         out.add(bytes);
       }
-      final decoded = await decodeRemoteBytes(out.takeBytes(), _decodeTransferResult);
+      final text = utf8.decode(out.takeBytes());
+      final decoded = tryDecodeJson(text);
       if (decoded == null) throw DshProtocolException('$endpoint: remote transfer is not JSON');
       return decoded;
     } finally {
@@ -886,7 +887,7 @@ class _TunnelLink implements DshMuxLink {
         }
         out.add(decoded);
       }
-      final frame = await decodeRemoteBytes(out.takeBytes(), _decodeTransferFrame);
+      final frame = asMap(jsonDecode(utf8.decode(out.takeBytes())));
       if (frame == null ||
           frame['streamId'] != streamId ||
           frame['hasValue'] != true ||
@@ -1020,7 +1021,3 @@ class _TunnelLink implements DshMuxLink {
     await closing;
   }
 }
-
-Object? _decodeTransferResult(Uint8List bytes) => tryDecodeJson(utf8.decode(bytes));
-
-JsonMap? _decodeTransferFrame(Uint8List bytes) => asMap(jsonDecode(utf8.decode(bytes)));

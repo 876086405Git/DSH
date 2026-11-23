@@ -49,14 +49,13 @@ class _Pending {
   final String method;
   final Completer<Object?> completer;
   final Timer timer;
-  bool expired = false;
 }
 
 /// Request/response correlation by message id, events fan-out, deadlines.
 /// Every request gets exactly one outcome; late responses are dropped.
 class RemoteRpcClient {
   RemoteRpcClient(this._channel, {this.defaultTimeout = const Duration(seconds: 35)}) {
-    _channel.listen(onMessage: _onMessage, onClosed: _onChannelClosed);
+    _channel.listen(onMessage: _onMessage, onClosed: _onClosed);
   }
 
   final SecureChannel _channel;
@@ -64,7 +63,6 @@ class RemoteRpcClient {
   final Map<String, _Pending> _pending = {};
   final StreamController<RemoteEvent> _events = StreamController.broadcast(sync: true);
   final Completer<SecureChannelClosed> _done = Completer();
-  Future<void>? _receiveTail;
   int _eventDispatchDepth = 0;
   final Stopwatch _sinceInbound = Stopwatch()..start();
 
@@ -76,10 +74,6 @@ class RemoteRpcClient {
   Future<SecureChannelClosed> get done => _done.future;
 
   bool get isClosed => _done.isCompleted;
-
-  /// The channel closes at peer EOF while replies received before it may
-  /// still be draining; no new call can be sent from then on.
-  bool get isChannelClosed => _channel.isClosed;
 
   SecureChannel get channel => _channel;
 
@@ -100,25 +94,16 @@ class RemoteRpcClient {
     final request = RemoteMessage.rpcRequest(method, params);
     final completer = Completer<Object?>();
     final deadline = timeout ?? defaultTimeout;
-    void expire() => _reject(
-      request.id,
-      RemoteRpcException(
-        'RPC_TIMEOUT',
-        'RPC $method timed out after ${deadline.inMilliseconds} ms.',
-        retryable: true,
-        isLocal: true,
-      ),
-    );
-    // An expired request never starts sending, but a reply that arrived
-    // before the deadline may still be queued behind a background decode.
     final timer = Timer(deadline, () {
-      _pending[request.id]?.expired = true;
-      final tail = _receiveTail;
-      if (tail == null) {
-        expire();
-      } else {
-        tail.then((_) => expire());
-      }
+      _reject(
+        request.id,
+        RemoteRpcException(
+          'RPC_TIMEOUT',
+          'RPC $method timed out after ${deadline.inMilliseconds} ms.',
+          retryable: true,
+          isLocal: true,
+        ),
+      );
     });
     _pending[request.id] = _Pending(method, completer, timer);
     final Uint8List encoded;
@@ -133,7 +118,7 @@ class RemoteRpcClient {
     // when the send never completes.
     // An earlier send can keep this request queued beyond its deadline.
     // Retire it before encoding its first Noise fragment, never between them.
-    _channel.send(encoded, canSend: () => _pending[request.id]?.expired == false).catchError((Object error) {
+    _channel.send(encoded, canSend: () => _pending.containsKey(request.id)).catchError((Object error) {
       _reject(
         request.id,
         error is SecureChannelException && error.code == 'FRAME_TOO_LARGE'
@@ -146,40 +131,16 @@ class RemoteRpcClient {
 
   void _onMessage(Uint8List bytes) {
     _sinceInbound.reset();
-    // Once a large message is decoding off-isolate, later ones queue behind
-    // it so dispatch keeps wire order; an idle client stays synchronous.
-    final tail = _receiveTail;
-    final work = tail == null ? _read(bytes) : tail.then((_) => _read(bytes));
-    if (work == null) return;
-    _receiveTail = work;
-    work.then((_) {
-      if (identical(_receiveTail, work)) _receiveTail = null;
-    });
-  }
-
-  Future<void>? _read(Uint8List bytes) {
-    if (isClosed) return null;
-    final FutureOr<RemoteMessage> decoded;
+    final RemoteMessage message;
     try {
-      decoded = decodeRemoteBytes(bytes, RemoteMessage.decode);
+      message = RemoteMessage.decode(bytes);
     } on Object catch (error) {
-      _invalidMessage(error);
-      return null;
+      // Fail closed on malformed plaintext.
+      final reason = SecureChannelClosed('SECURE_CHANNEL_FAILED', 'Invalid Remote message: $error');
+      unawaited(_channel.close(reason: reason));
+      _onClosed(reason);
+      return;
     }
-    if (decoded is Future<RemoteMessage>) return decoded.then(_dispatch, onError: _invalidMessage);
-    _dispatch(decoded);
-    return null;
-  }
-
-  void _invalidMessage(Object error) {
-    if (isClosed) return;
-    final reason = SecureChannelClosed('SECURE_CHANNEL_FAILED', 'Invalid Remote message: $error');
-    unawaited(_channel.close(reason: reason));
-    _onClosed(reason);
-  }
-
-  void _dispatch(RemoteMessage message) {
-    if (isClosed) return;
     switch (message.type) {
       case 'rpc.response':
         final payload = asMap(message.payload);
@@ -223,17 +184,6 @@ class RemoteRpcClient {
   void _reject(String requestId, RemoteRpcException error) {
     final pending = _take(requestId);
     if (pending != null && !pending.completer.isCompleted) pending.completer.completeError(error);
-  }
-
-  void _onChannelClosed(SecureChannelClosed reason) {
-    // Peer EOF follows every complete plaintext already received. An explicit
-    // local close still cancels outstanding work immediately.
-    final tail = _receiveTail;
-    if (tail == null || reason.code == 'CLIENT_CLOSED') {
-      _onClosed(reason);
-    } else {
-      tail.then((_) => _onClosed(reason));
-    }
   }
 
   void _onClosed(SecureChannelClosed reason) {
