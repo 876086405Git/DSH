@@ -136,6 +136,22 @@ class CompanionAgentResident {
   String? get characterId => active ? _visit.characterId : null;
   bool get ownsCurrentRun => active && identical(_visit.runOrigin, _ui) && identical(_visit.run, _visit.agent._run);
 
+  /// Only this signal's actual model request may survive its own busy view.
+  String? get preparingSignalId {
+    if (!active) return null;
+    final preparation = _visit.signalPreparation;
+    final agent = _visit.agent;
+    if (preparation == null ||
+        !identical(agent._asideRequest, preparation.request) ||
+        agent._asideGeneration != preparation.generation ||
+        !identical(preparation.recipient, _ui) ||
+        !identical(_visit.initiativeUi, _ui) ||
+        agent._run?.running == true) {
+      return null;
+    }
+    return preparation.signalId;
+  }
+
   /// The floating composer reads the same role/cutoff-filtered transcript.
   /// It keeps no second message list or cold replay queue.
   List<MemoryRow> get recentMessages {
@@ -236,6 +252,8 @@ class _CompanionAgentVisit {
   CompanionAgentMemoryTools? retryTools;
   CompanionAgentPhoneTools? activePhoneTools;
   CompanionResidentSignals? residentSignals;
+  ({String signalId, CompanionAgentModelRequest request, int generation, CompanionAgentRoomUi recipient})?
+  signalPreparation;
   _CompanionAgentRun? run;
   Timer? quietTimer;
   Timer? idleTimer;
@@ -1217,8 +1235,11 @@ class _CompanionAgentVisit {
     final target = residentUi;
     final owner = memory;
     if (target == null || owner == null || !active || !identical(initiativeUi, target)) return;
-    if (target is! CompanionAgentNotificationUi) return;
-    final notify = target as CompanionAgentNotificationUi;
+    final notify = switch (target) {
+      final CompanionAgentNotificationUi notify => notify,
+      _ => null,
+    };
+    if (notify == null) return;
     final view = target.initiativeView;
     final candidate = CompanionInitiativeSignal(
       id: speech.id,
@@ -1227,19 +1248,48 @@ class _CompanionAgentVisit {
       nightKey: speech.nightKey,
     );
     final visitCurrent = captureCurrent();
+    var retired = false;
+    CompanionAgentModelRequest? preparation;
+    String? line;
     bool current() =>
-        visitCurrent() && identical(residentUi, target) && identical(initiativeUi, target) && signalCurrent();
+        !retired &&
+        visitCurrent() &&
+        identical(residentUi, target) &&
+        identical(initiativeUi, target) &&
+        signalCurrent();
     initiative.requestSignal(
       target.initiativeRoom,
       view,
       candidate,
       isCurrent: current,
+      prepare: () async {
+        line = await agent._prepareResidentSignal(
+          phase: speech.slot.signal.payload['phase']! as String,
+          signalId: candidate.id,
+          recipient: target,
+          isCurrentSignal: current,
+          onRequest: (request) => preparation = request,
+        );
+        return line != null;
+      },
+      cancelPrepare: () {
+        retired = true;
+        final request = preparation;
+        if (request == null) return;
+        if (identical(signalPreparation?.request, request)) signalPreparation = null;
+        if (request.settled.isCompleted) return;
+        try {
+          request.client?.close();
+        } finally {
+          unawaited(request.drain().catchError((Object _) {}));
+        }
+      },
       present: (_) => false,
       hide: (_) {},
       nightCareEnabled: speech.nightCare,
       deliver: (_) async {
-        if (!current()) return false;
-        return notify.deliverFollowup(id: 'task:${speech.slot.signal.id}', text: speech.text);
+        if (!current() || line == null) return false;
+        return notify.deliverFollowup(id: 'task:${speech.slot.signal.id}', text: line!);
       },
       retainDelivery: owner.retainReceipt,
     );

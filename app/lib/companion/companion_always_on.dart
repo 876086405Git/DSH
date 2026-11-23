@@ -381,7 +381,7 @@ class _ResidentUi
   CompanionInitiativeView get initiativeView => CompanionInitiativeView(
     visible: false,
     resumed: false,
-    blocked: owner.agent.running,
+    blocked: owner.agent.running && owner._resident?.preparingSignalId == null,
     accessible: false,
     enabled: owner.active && owner.ref.read(companionInitiativeEnabledProvider) == true,
     notificationAvailable: owner.active && owner._status.notificationAvailable,
@@ -412,11 +412,13 @@ class _ResidentUi
   @override
   void hideFollowup(String ticketId) {}
   @override
-  bool canPresent(CompanionInitiativeTicket ticket) =>
-      ticket.kind == CompanionPromptKind.signal &&
-      owner.active &&
-      owner._status.notificationAvailable &&
-      !owner.agent.running;
+  bool canPresent(CompanionInitiativeTicket ticket) {
+    final preparing = owner._resident?.preparingSignalId;
+    return ticket.kind == CompanionPromptKind.signal &&
+        owner.active &&
+        owner._status.notificationAvailable &&
+        (!owner.agent.running || (preparing != null && ticket.signalId == preparing));
+  }
   @override
   void show(CompanionInitiativeDisplay display) {}
   @override
