@@ -1,7 +1,7 @@
-/// One phone-owned auxiliary attempt: full-mode text or an explicitly selected
-/// optional screen-image route. Both use the captured existing provider.
+/// One phone-owned auxiliary attempt: full-mode text, a completed Agent message,
+/// or an explicitly selected optional screen-image route.
 /// This uses the existing authenticated HTTP connection, never Session RPC,
-/// tools, mux recovery, a provider fallback, or an automatic retry.
+/// Host tool execution, mux recovery, a provider fallback, or an automatic retry.
 library;
 
 import 'dart:convert';
@@ -32,6 +32,7 @@ class CompanionAuxiliaryCapability {
     required this.physicalDispatch,
     required this.rawUsage,
     required this.maxPhysicalRequests,
+    this.agentSupported = false,
   }) : _owner = owner;
 
   final DshClient _owner;
@@ -46,6 +47,10 @@ class CompanionAuxiliaryCapability {
   final String? physicalDispatch;
   final String? rawUsage;
   final int? maxPhysicalRequests;
+
+  /// The Host can return complete tool calls for execution by the phone.
+  /// Older Hosts retain their text-only capability and default to false.
+  final bool agentSupported;
 }
 
 /// One explicitly selected image route. It belongs to this client and bridge,
@@ -131,6 +136,33 @@ class CompanionAuxiliaryResult {
   final Map<String, Object?> usage;
 }
 
+/// A completed Host model message, separately from its physical receipt.
+/// Failure, truncation or cancellation can retain a receipt without granting
+/// an executable message. Thinking and replay metadata never enter [text].
+class DshCompanionAgentResult extends CompanionAuxiliaryResult {
+  DshCompanionAgentResult._(CompanionAuxiliaryResult receipt, {required Map<String, Object?>? message})
+    : message = message,
+      super._(
+        text: message == null
+            ? receipt.text
+            : (message['content']! as List<Map<String, Object?>>)
+                  .where((block) => block['type'] == 'text')
+                  .map((block) => block['text'] as String)
+                  .join(''),
+        terminal: receipt.terminal,
+        complete: receipt.complete,
+        dispatched: receipt.dispatched,
+        hostDispatchAtMs: receipt.hostDispatchAtMs,
+        httpStatus: receipt.httpStatus,
+        errorCode: receipt.errorCode,
+        usage: receipt.usage,
+      );
+
+  /// Anthropic-shaped content and stopReason with the actual Host source.
+  /// This becomes non-null only after the matching successful finish settles.
+  final Map<String, Object?>? message;
+}
+
 /// An exchange failure, as distinct from a complete but invalid model answer.
 /// A broken pipe, a missing finish, an old bridge generation and a repeated ID
 /// cannot establish [notSent]. No exception message contains prompt text.
@@ -177,6 +209,14 @@ extension CompanionAuxiliaryApi on DshClient {
     // an error from an existing route, not an older Host without the route.
     if (response.statusCode == 404 && (discoveryCode == null || discoveryCode == 'companion/not-found')) return null;
     if (response.statusCode != 200) {
+      if (discoveryCode is String) {
+        throw CompanionAuxiliaryFailure(
+          code: discoveryCode,
+          terminal: 'preflight_error',
+          notSent: true,
+          httpStatus: response.statusCode,
+        );
+      }
       throw DshHttpException(response.statusCode, 'Auxiliary capability request failed');
     }
     if (map == null ||
@@ -189,6 +229,11 @@ extension CompanionAuxiliaryApi on DshClient {
     }
     final supported = map['supported'] as bool;
     final detail = _map(map['capability']);
+    final agent = _map(map['agent']);
+    if (map['agent'] != null &&
+        (agent == null || agent['v'] != 1 || agent['tools'] != 'return-only' || agent['streaming'] != true)) {
+      throw const DshProtocolException('invalid companion Agent capability');
+    }
     if (supported &&
         (detail == null ||
             detail['noTools'] != true ||
@@ -209,6 +254,7 @@ extension CompanionAuxiliaryApi on DshClient {
       physicalDispatch: supported ? detail!['physicalDispatch'] as String : null,
       rawUsage: supported ? detail!['rawUsage'] as String : null,
       maxPhysicalRequests: supported ? detail!['maxPhysicalRequests'] as int? : null,
+      agentSupported: supported && agent != null,
     );
   }
 
@@ -345,6 +391,84 @@ extension CompanionAuxiliaryApi on DshClient {
     );
   }
 
+  /// One model round on the full companion Session's captured Host selection.
+  /// Tools are returned to the phone, never executed by this endpoint. Text
+  /// deltas are immediate; a message is released only after its finish receipt.
+  Future<DshCompanionAgentResult> callCompanionAgent(
+    CompanionAuxiliaryCapability host, {
+    required String requestId,
+    required String system,
+    required List<Map<String, Object?>> messages,
+    required List<Map<String, Object?>> tools,
+    required int maxTokens,
+    required DshHttpAbort abort,
+    required void Function() onDispatchUncertain,
+    required void Function() onSent,
+    required void Function(Map<String, Object?> usage) onUsage,
+    required void Function(String text) onText,
+    Duration headerTimeout = const Duration(seconds: 10),
+    Duration idleTimeout = const Duration(seconds: 100),
+  }) async {
+    final transport = carrier;
+    if (!identical(host._owner, this) || transport is! DshHttpCarrier || !host.agentSupported) {
+      throw const CompanionAuxiliaryFailure(code: 'route-unavailable', terminal: 'preflight_error', notSent: true);
+    }
+    if (!_id(requestId) ||
+        !_text(system) ||
+        !_agentMessages(messages) ||
+        !_agentTools(tools) ||
+        maxTokens < 1 ||
+        maxTokens > 4000 ||
+        headerTimeout <= Duration.zero ||
+        idleTimeout <= Duration.zero) {
+      throw const CompanionAuxiliaryFailure(code: 'invalid-request', terminal: 'preflight_error', notSent: true);
+    }
+    // Capture exactly the JSON body that is bounded and handed off below.
+    // Caller-owned nested input maps must not change during the HTTP await.
+    final Map<String, Object?> body;
+    try {
+      body = _map(
+        jsonDecode(
+          jsonEncode({
+            'v': 1,
+            'instanceId': host.instanceId,
+            'requestId': requestId,
+            'sessionId': host.sessionId,
+            'provider': host.provider,
+            'model': host.model,
+            'kind': 'agent',
+            'system': system,
+            'messages': messages,
+            'tools': tools,
+            'maxTokens': maxTokens,
+          }),
+        ),
+      )!;
+    } on JsonUnsupportedObjectError {
+      throw const CompanionAuxiliaryFailure(code: 'invalid-request', terminal: 'preflight_error', notSent: true);
+    }
+    final receipt = _AgentReceipt(host.instanceId, host.provider, host.model, requestId, onSent, abort, onText);
+    final result = await _postAuxiliary(
+      transport,
+      body: body,
+      instanceId: host.instanceId,
+      provider: host.provider,
+      model: host.model,
+      requestId: requestId,
+      abort: abort,
+      onDispatchUncertain: onDispatchUncertain,
+      onSent: onSent,
+      onUsage: onUsage,
+      headerTimeout: headerTimeout,
+      idleTimeout: idleTimeout,
+      maxRequestBytes: _maxInputBytes,
+      path: _path,
+      observation: receipt,
+    );
+    // onSent/onUsage can retire the owner while the final receipt settles.
+    return DshCompanionAgentResult._(result, message: abort.isAborted ? null : receipt.message);
+  }
+
   /// One image attempt on the captured route. Failure, cancellation or unknown
   /// dispatch never starts another text request; the same receipt still settles.
   Future<CompanionAuxiliaryResult> callCompanionScreen(
@@ -422,6 +546,7 @@ Future<CompanionAuxiliaryResult> _postAuxiliary(
   required Duration idleTimeout,
   required int maxRequestBytes,
   required String path,
+  _Receipt? observation,
 }) async {
   if (utf8.encode(jsonEncode(body)).length > maxRequestBytes) {
     throw const CompanionAuxiliaryFailure(code: 'request-limit', terminal: 'preflight_error', notSent: true);
@@ -432,7 +557,7 @@ Future<CompanionAuxiliaryResult> _postAuxiliary(
   // The durable phone write must complete before this exact HTTP handoff.
   // Callback exceptions propagate; they must prevent the POST.
   onDispatchUncertain();
-  final receipt = _Receipt(instanceId, provider, model, requestId, onSent);
+  final receipt = observation ?? _Receipt(instanceId, provider, model, requestId, onSent);
   DshHttpStreamResponse? response;
   var terminal = 'incomplete';
   try {
@@ -645,6 +770,131 @@ class _Receipt {
       },
     };
   }
+}
+
+class _AgentReceipt extends _Receipt {
+  _AgentReceipt(super.instanceId, super.provider, super.model, super.requestId, super.onSent, this.abort, this.onText);
+
+  final DshHttpAbort abort;
+  final void Function(String) onText;
+  Map<String, Object?>? message, _pendingMessage;
+  var _messageSeen = false;
+  var _invalidMessage = false;
+
+  @override
+  CompanionAuxiliaryResult? add(Map<String, Object?> frame) {
+    // Validate the same accepted/request/route identity and settle usage first.
+    final result = super.add(frame);
+    if (frame['type'] == 'text') {
+      if (!abort.isAborted) onText(frame['text'] as String);
+    } else if (frame['type'] == 'message') {
+      if (_messageSeen) _invalidMessage = true;
+      _messageSeen = true;
+      _pendingMessage = _agentMessage(frame['message'], provider, model);
+      if (_pendingMessage == null) _invalidMessage = true;
+      // Keep reading the actual final usage even when the message is invalid.
+    }
+    if (result != null && result.complete && const {'complete', 'tool-calls'}.contains(result.terminal)) {
+      final candidate = _pendingMessage;
+      if (_invalidMessage ||
+          candidate == null ||
+          result.errorCode != null ||
+          result.dispatched == false ||
+          (result.httpStatus != null && (result.httpStatus! < 200 || result.httpStatus! >= 300))) {
+        _protocol();
+      }
+      final content = candidate['content']! as List<Map<String, Object?>>;
+      final hasCalls = content.any((block) => block['type'] == 'tool_use');
+      if ((result.terminal == 'tool-calls') != hasCalls ||
+          candidate['stopReason'] != (hasCalls ? 'tool_use' : 'end_turn')) {
+        _protocol();
+      }
+      message = candidate;
+    }
+    return result;
+  }
+}
+
+bool _agentSource(Object? value) {
+  final source = _map(value);
+  return source != null && source['kind'] == 'model' && _id(source['provider']) && _id(source['model']);
+}
+
+bool _agentBlocks(Object? value, String role) {
+  if (value is! List) return false;
+  final ids = <String>{};
+  for (final raw in value) {
+    final block = _map(raw);
+    if (block == null) return false;
+    switch (block['type']) {
+      case 'text':
+        if (block['text'] is! String) return false;
+      case 'thinking':
+        if (role != 'assistant' || block['thinking'] is! String) return false;
+      case 'tool_use':
+        if (role != 'assistant' ||
+            !_id(block['id']) ||
+            !_id(block['name']) ||
+            _map(block['input']) == null ||
+            !ids.add(block['id'] as String)) {
+          return false;
+        }
+      case 'tool_result':
+        final content = block['content'];
+        if (role != 'user' ||
+            !_id(block['tool_use_id']) ||
+            (block.containsKey('is_error') && block['is_error'] is! bool) ||
+            !(content is String ||
+                content is List &&
+                    content.every((part) => _map(part)?['type'] == 'text' && _map(part)?['text'] is String))) {
+          return false;
+        }
+      default:
+        return false;
+    }
+  }
+  return true;
+}
+
+bool _agentMessages(List<Map<String, Object?>> messages) =>
+    messages.isNotEmpty &&
+    messages.every((message) {
+      final role = message['role'];
+      if (role is! String || !const {'user', 'assistant'}.contains(role)) return false;
+      final content = message['content'];
+      if (content is! String && !_agentBlocks(content, role)) return false;
+      return !message.containsKey('source') || role == 'assistant' && _agentSource(message['source']);
+    });
+
+bool _agentTools(List<Map<String, Object?>> tools) {
+  final names = <String>{};
+  return tools.every(
+    (tool) =>
+        _id(tool['name']) &&
+        names.add(tool['name'] as String) &&
+        _map(tool['input_schema']) != null &&
+        (!tool.containsKey('description') || tool['description'] is String),
+  );
+}
+
+Map<String, Object?>? _agentMessage(Object? value, String provider, String model) {
+  final message = _map(value);
+  if (message == null ||
+      !_agentSource(message['source']) ||
+      !const {'end_turn', 'tool_use'}.contains(message['stopReason']) ||
+      !_agentBlocks(message['content'], 'assistant') ||
+      utf8.encode(jsonEncode(message)).length > _maxInputBytes) {
+    return null;
+  }
+  final source = _map(message['source'])!;
+  if (source['provider'] != provider || source['model'] != model) return null;
+  return Map<String, Object?>.unmodifiable({
+    'content': List<Map<String, Object?>>.unmodifiable([
+      for (final block in message['content'] as List) Map<String, Object?>.unmodifiable(_map(block)!),
+    ]),
+    'stopReason': message['stopReason'],
+    'source': Map<String, Object?>.unmodifiable(source),
+  });
 }
 
 Future<Uint8List> _boundedBytes(Stream<Uint8List> body, int limit) async {

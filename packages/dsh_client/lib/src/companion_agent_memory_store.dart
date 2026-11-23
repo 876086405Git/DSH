@@ -274,7 +274,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
   MemorySelection _agentRecallSelection(Row turn, MemoryRow input, List<String>? rankedIds) {
     final query = _agentText(input, 'query');
     final candidates = memoryRetrievalCandidates(characterId: turn['character_id'] as String?, input: query);
-    final explicit = explicitMemoryTopics(query, candidates);
+    final explicit = <String>{
+      for (final card in candidates)
+        if (card['topic_mode'] == 'never') card['topic_id']! as String,
+    };
     final revision = archive['control_revision']! as int;
     return rankedIds == null
         ? selectMemoryContext(
@@ -674,7 +677,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     _agentValidateReferencePlan({for (final write in writes) write.id: write.references}, deleted);
     // Every ID/revision, retained nonempty body, reference and shared budget
     // above is settled before the first card is touched.
-    _deleteCards(deleted);
+    _deleteCards(
+      deleted,
+      retainTopics: writes.map((write) => write.controlledTopic).whereType<String>().toSet(),
+    );
     for (final id in sourceOnly) {
       for (final group in withdrawnGroups[id] ?? const <String>{}) {
         _withdrawSourceGroup(id, group);
@@ -961,22 +967,8 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       }
       eventTime = Map<String, Object?>.from(input['event_time'] as MemoryRow);
     }
-    final controlled = previous == null
-        ? _controlledTopics(
-            // A full source can contain several independent facts. Only this card's
-            // wording may match a saved control, not another clause in that source.
-            {'text': text, 'evidence': const <MemoryRow>[]},
-            controls: [
-              for (final row in _db.select(
-                "SELECT id,control_anchors FROM memory_topics WHERE character_id IS ? AND mode IN ('less','never')",
-                [character],
-              ))
-                {
-                  'topic_id': row['id'],
-                  'anchors': (jsonDecode(row['control_anchors'] as String) as List).cast<String>(),
-                },
-            ],
-          )
+    final controlled = previous == null || previous['text'] != text
+        ? _bodyControlledTopics(text, characterId: character)
         : const <String>[];
     if (controlled.length > 1) throw const _AgentMemoryRejected('ambiguous_controlled_topic');
     var keywords = _agentKeywords(input, text);
@@ -1052,7 +1044,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       // cleanup origins follow another member's planned final revision.
       final ready = remaining.values.firstWhere((write) => !write.references.keys.any(remaining.containsKey));
       final previous = ready.previous;
-      final topic = previous?['topic_id'] as String? ?? ready.controlledTopic ?? _createId();
+      final topic = ready.controlledTopic ?? (previous?['topic_id'] as String?) ?? _createId();
       if (previous == null) {
         if (ready.controlledTopic == null) {
           _db.execute('INSERT INTO memory_topics(id,character_id) VALUES(?,?)', [topic, ready.characterId]);
@@ -1085,11 +1077,12 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       } else {
         _db.execute(
           '''
-          UPDATE memory_cards SET row_rev=row_rev+1,kind=?,text=?,keywords=?,scope='real',eligible=1,status='current',
+          UPDATE memory_cards SET row_rev=row_rev+1,topic_id=?,kind=?,text=?,keywords=?,scope='real',eligible=1,status='current',
             manual=0,current_basis_seq=?,source_at_ms=?,event_time=?,followup=NULL,plan_state=NULL,expires_at_ms=NULL,
             maintenance_row_rev=0,updated_at_ms=?,cleanup_history_complete=? WHERE id=?
         ''',
           [
+            topic,
             ready.kind,
             ready.text,
             jsonEncode(ready.keywords),
@@ -1194,11 +1187,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       for (final row in mergedRows)
         _db.select('SELECT id,mode FROM memory_topics WHERE id=?', [row['topic_id']]).single,
     ];
-    final topic = mergedTopics.firstWhere(
+    var topic = mergedTopics.firstWhere(
       (topic) => topic['mode'] == 'never',
       orElse: () => mergedTopics.firstWhere((topic) => topic['mode'] == 'less', orElse: () => mergedTopics.first),
     );
-    final quiet = topic['mode'] != 'normal';
     final basis = mergedRows.map((row) => row['current_basis_seq'] as int? ?? 0).reduce(math.max);
     final sourceAt = mergedRows.map((row) => row['source_at_ms'] as int).reduce(math.max);
     final writes = {
@@ -1227,6 +1219,15 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     final referencePlan = {targetId: targetRefs, for (final write in writes.values) write.id: write.references};
     _agentValidateReferencePlan(referencePlan, fromIds);
     final text = input['text'] == null ? target['text'] as String : _agentText(input, 'text');
+    if (text != target['text']) {
+      final controlled = _bodyControlledTopics(text, characterId: target['character_id'] as String?);
+      final participants = mergedTopics.map((row) => row['id']).toSet();
+      if (controlled.any((id) => !participants.contains(id))) {
+        if (controlled.length > 1) throw const _AgentMemoryRejected('ambiguous_controlled_topic');
+        topic = _db.select('SELECT id,mode FROM memory_topics WHERE id=?', [controlled.single]).single;
+      }
+    }
+    final quiet = topic['mode'] != 'normal';
     final words = input['keywords'] == null
         ? <String>{for (final row in mergedRows) ...(jsonDecode(row['keywords'] as String) as List).cast<String>()}
               .toList()

@@ -180,13 +180,12 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
   /// fields show what this one has.
   Future<void> _choosePreset(CompanionVoiceSettings s, String id) async {
     final merged = _fromFields(s);
-    _seen = merged;
     final next = merged.copyWith(preset: id);
+    _seen = next;
     _presetKey.text = next.presetKey;
     _presetVoice.text = next.presetVoice;
     setState(() => _preview = null);
     await _store.update(next);
-    _seen = next;
   }
 
   /// Size and, for WAV, length of the kept recording, for its row.
@@ -210,7 +209,7 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
     if (mounted) setState(() => _recording = text);
   }
 
-  Future<void> _pickRecording(CompanionVoiceSettings s) async {
+  Future<void> _pickRecording() async {
     final l10n = context.l10n;
     setState(() {
       _picking = true;
@@ -224,7 +223,7 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
       final folder = await ref.read(companionVoiceSampleFolderProvider)();
       final file = await companionKeepRecording(bytes, folder);
       if (!mounted) return;
-      await _set(s.copyWith(cloneOn: true, cloneSample: file.path));
+      await _set(ref.read(companionVoiceSettingsProvider)!.copyWith(cloneSample: file.path));
       await _describe(file.path);
       if (mounted) setState(() => _preview = null);
     } on CompanionVoiceError catch (error) {
@@ -487,7 +486,7 @@ class _CompanionVoicePageState extends ConsumerState<CompanionVoicePage> {
                           ),
                           const SizedBox(width: 12),
                           FilledButton.tonal(
-                            onPressed: _picking ? null : () => unawaited(_pickRecording(s)),
+                            onPressed: _picking ? null : () => unawaited(_pickRecording()),
                             child: Text(s.cloneSample.isEmpty ? l10n.companionClonePick : l10n.companionCloneReplace),
                           ),
                         ],

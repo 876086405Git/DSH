@@ -1,6 +1,7 @@
 // Phone-owned memory and recall cleanup through the real Page, in full mode.
-// Bridge responses, Session creation and the model's HTTP answer are doubles;
-// the phone model loop, its SSE reader and receipt journal are production code.
+// Bridge responses, Session creation and the model's HTTP answer (relayed by a
+// test Host, ADD67) are doubles; the phone tool loop, its Host reader and
+// receipt journal are production code.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -25,6 +26,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/companion_notes_peer.dart' show NotesPeer, hostAgentPath;
 import 'companion_test_settle.dart';
 
 const _store = '33333333-3333-4333-8333-333333333333';
@@ -42,6 +44,10 @@ class _Bridge extends DshConnection {
   final prepared = <Map<String, Object?>>[];
   final revokes = <Map<String, Object?>>[];
   final binds = <Map<String, Object?>>[];
+
+  /// The full room's model route (ADD67): the room asks this Host, which
+  /// relays to the scripted model below.
+  NotesPeer? host;
 
   DshHttpResponse json(Object value, {int status = 200}) =>
       DshHttpResponse(status, 'application/json', Uint8List.fromList(utf8.encode(jsonEncode(value))));
@@ -72,6 +78,16 @@ class _Bridge extends DshConnection {
     bool followRedirects = true,
     int? maxResponseBytes,
   }) async {
+    if (path == hostAgentPath && host != null) {
+      return host!.connection.get(
+        path,
+        query: query,
+        headers: headers,
+        timeout: timeout,
+        followRedirects: followRedirects,
+        maxResponseBytes: maxResponseBytes,
+      );
+    }
     if (path.endsWith('/memories')) {
       return json({'v': 1, 'storeId': _store, 'revision': 0, 'memoryRevision': 0, 'memories': []});
     }
@@ -101,6 +117,21 @@ class _Bridge extends DshConnection {
       'state': {'valence': 0.25, 'energy': 0.75, 'closeness': 0, 'activity': 'idle'},
     });
   }
+
+  @override
+  Future<DshHttpStreamResponse> postJsonStream(
+    String path,
+    Object? body, {
+    required DshHttpAbort abort,
+    Duration? headerTimeout,
+    Duration? idleTimeout = const Duration(seconds: 20),
+  }) => host!.connection.postJsonStream(
+    path,
+    body,
+    abort: abort,
+    headerTimeout: headerTimeout,
+    idleTimeout: idleTimeout,
+  );
 
   @override
   Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
@@ -330,7 +361,7 @@ class _Room {
   late CompanionMemoryOwner memory;
   CompanionStageEvents? events;
 
-  /// The room's chat is the phone model loop in full mode too.
+  /// The room's chat model, asked through the Host in full mode (ADD67).
   final asked = <Map<String, Object?>>[];
   String reply = '嗯，我在。';
 
@@ -352,7 +383,27 @@ class _Room {
     }
   }
 
+  http.Client model() => MockClient.streaming((request, body) async {
+    final sent = jsonDecode(await body.bytesToString()) as Map<String, Object?>;
+    asked.add(sent);
+    beforeModel?.call(sent);
+    final failure = failNext;
+    failNext = null;
+    if (failure == 'network') throw http.ClientException('fixture offline');
+    if (failure != null) return http.StreamedResponse(Stream.value(utf8.encode('{}')), int.parse(failure));
+    return http.StreamedResponse(
+      Stream.value(utf8.encode(_reply(reply))),
+      200,
+      headers: {'content-type': 'text/event-stream; charset=utf-8'},
+    );
+  });
+
   Future<void> open(WidgetTester tester) async {
+    // A valid old Host has the text route but no agent turn.
+    bridge.host = (await tester.runAsync(NotesPeer.open))!;
+    bridge.host!.hostModel
+      ..model = model
+      ..agent = bridge.phoneMemory;
     tester.view.physicalSize = const Size(1080, 3200);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
@@ -367,22 +418,7 @@ class _Room {
           activeConnectionProvider.overrideWithValue(AsyncData(HostConnection(client: client, isLocal: true))),
           companionSessionsProvider.overrideWith(() => sessions),
           settingsProvider.overrideWith(_Settings.new),
-          companionLightClientProvider.overrideWithValue(
-            () => MockClient.streaming((request, body) async {
-              final sent = jsonDecode(await body.bytesToString()) as Map<String, Object?>;
-              asked.add(sent);
-              beforeModel?.call(sent);
-              final failure = failNext;
-              failNext = null;
-              if (failure == 'network') throw http.ClientException('fixture offline');
-              if (failure != null) return http.StreamedResponse(Stream.value(utf8.encode('{}')), int.parse(failure));
-              return http.StreamedResponse(
-                Stream.value(utf8.encode(_reply(reply))),
-                200,
-                headers: {'content-type': 'text/event-stream; charset=utf-8'},
-              );
-            }),
-          ),
+          companionLightClientProvider.overrideWithValue(model),
         ],
         child: MaterialApp(
           theme: buildDarkTheme(),
@@ -425,6 +461,7 @@ class _Room {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 10));
     await settleMixed(tester, client.closeAll());
+    await tester.runAsync(bridge.host!.close);
   }
 }
 
@@ -506,11 +543,15 @@ void main() {
     final room = _Room(root)..bridge.chatUsage = true;
     await room.open(tester);
     var observed = false;
-    room.beforeModel = (_) {
+    room.beforeModel = (sent) {
       final receipt = room.memory.store.requests().single;
       expect(receipt['category'], 'chat');
       expect(receipt['provider'], 'deepseek');
-      expect(receipt['sent_at_ms'], isNotNull);
+      expect(receipt['model'], 'deepseek-flash');
+      expect(sent['model'], receipt['model']);
+      // Through the Host (ADD67) the phone records the handoff before its POST;
+      // the Host's own dispatch receipt then marks it sent.
+      expect(receipt['uncertain_at_ms'], isNotNull);
       expect(receipt['raw_usage'], isNull, reason: 'nothing has come back yet');
       observed = true;
     };
@@ -519,6 +560,7 @@ void main() {
       expect(observed, isTrue);
       expect(room.asked, hasLength(1));
       final receipt = room.memory.store.requests().single;
+      expect(receipt['sent_at_ms'], isNotNull);
       expect(receipt['state'], 'finished');
       expect(receipt['terminal'], 'complete');
       expect(room.memory.store.hostChatDeliveries(), isEmpty);

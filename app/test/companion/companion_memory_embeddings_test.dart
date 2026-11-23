@@ -2,6 +2,7 @@
 // platform boundary returns explicit synthetic unit vectors; this is not a
 // tokenizer, ONNX, semantic-quality, or device-performance test.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dsh_client/dsh_client.dart';
@@ -10,6 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'package:dsh_app/companion/companion_memory_embeddings.dart';
+import 'package:dsh_app/companion/companion_local.dart';
+import 'package:dsh_app/companion/companion_memory.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +22,7 @@ void main() {
   late Database database;
   late CompanionMemoryStore store;
   late CompanionMemoryEmbeddings embeddings;
+  CompanionMemoryOwner? owner;
   late Future<Object?> Function(MethodCall) native;
   late Completer<void> unloaded;
   late List<MethodCall> calls;
@@ -66,6 +70,7 @@ void main() {
 
   setUp(() async {
     nextId = 0;
+    owner = null;
     directory = await Directory.systemTemp.createTemp('companion-embedding-');
     database = sqlite3.open('${directory.path}/memory.sqlite');
     store = CompanionMemoryStore(database, nowMilliseconds: () => now, createId: id);
@@ -84,10 +89,15 @@ void main() {
   });
 
   tearDown(() async {
-    embeddings.dispose();
+    final memory = owner;
+    if (memory == null) {
+      embeddings.dispose();
+    } else {
+      memory.dispose();
+    }
     await unloaded.future;
     messenger.setMockMethodCallHandler(channel, null);
-    store.close();
+    if (memory == null) store.close();
     await directory.delete(recursive: true);
   });
 
@@ -145,6 +155,134 @@ void main() {
       realityKnown: true,
     );
     expect(database.select('SELECT card_id FROM memory_embeddings').map((row) => row['card_id']), [own['id']]);
+
+    // A fixed impression can identify the topic of an ordinary card whose
+    // own keywords differ. Preserve that full-domain permission through the
+    // real encoder, Owner selector and the public SDK recall transaction.
+    final c = store.ensureCompanionCharacter(sourceKey: 'test:character-c')['id']! as String;
+    final currentCommon = store.cards().singleWhere((row) => row['id'] == common['id']);
+    final quietSource = store.submitMessage(
+      id: id(), sessionId: 'light:embedding-test', characterId: c,
+      text: '那条共同事实暂时不主动聊。', saidAtUtc: now, offsetMinutes: 0,
+    );
+    final quietTurn = store.beginAgentTurn(
+      messageId: quietSource['id']! as String,
+      expectedSourceRev: quietSource['source_rev']! as int,
+      shownCardRevisions: {currentCommon['id']! as String: currentCommon['row_rev']! as int},
+    )['id']! as String;
+    expect(store.applyAgentMemoryTool(
+      turnId: quietTurn, callId: 'quiet-common', toolName: 'quiet',
+      input: {'card': currentCommon['id'], 'mode': 'never'},
+    ).applied, isTrue);
+    store.closeAgentTurn(quietTurn);
+    final impressionSource = store.submitMessage(
+      id: id(), sessionId: 'light:embedding-test', characterId: c,
+      text: '我和你聊咖啡的时候很放松。', saidAtUtc: now, offsetMinutes: 0,
+    );
+    final impressionTurn = store.beginAgentTurn(
+      messageId: impressionSource['id']! as String,
+      expectedSourceRev: impressionSource['source_rev']! as int,
+      shownCardRevisions: const {},
+    )['id']! as String;
+    final impression = store.applyAgentMemoryTool(
+      turnId: impressionTurn, callId: 'fixed-coffee', toolName: 'impression',
+      input: {'text': '聊咖啡时彼此很放松。', 'keywords': ['咖啡']},
+    );
+    expect(impression.applied, isTrue);
+    expect(store.applyAgentMemoryTool(
+      turnId: impressionTurn, callId: 'quiet-coffee', toolName: 'quiet',
+      input: {'card': impression.targetId, 'mode': 'never'},
+    ).applied, isTrue);
+    store.closeAgentTurn(impressionTurn);
+    final walkSource = store.submitMessage(
+      id: id(), sessionId: 'light:embedding-test', characterId: c,
+      text: '我们聊过咖啡，也一起散步。', saidAtUtc: now, offsetMinutes: 0,
+    );
+    final walkTurn = store.beginAgentTurn(
+      messageId: walkSource['id']! as String,
+      expectedSourceRev: walkSource['source_rev']! as int,
+      shownCardRevisions: const {},
+    )['id']! as String;
+    final walk = store.applyAgentMemoryTool(
+      turnId: walkTurn, callId: 'ordinary-walk', toolName: 'remember',
+      input: {'collection': 'our_story', 'text': '我们聊过咖啡，也一起散步。', 'keywords': ['散步']},
+    );
+    expect(walk.applied, isTrue);
+    store.closeAgentTurn(walkTurn);
+    final fixedCard = store.cards().singleWhere((row) => row['id'] == impression.targetId);
+    final ordinaryCard = store.cards().singleWhere((row) => row['id'] == walk.targetId);
+    expect(fixedCard['layer'], 'impression');
+    expect(ordinaryCard['layer'], 'card');
+    expect(ordinaryCard['keywords'], ['散步']);
+    expect(ordinaryCard['topic_id'], fixedCard['topic_id']);
+    expect(ordinaryCard['topic_mode'], 'never');
+    expect(store.memoryRetrievalCandidates(characterId: c, input: '聊聊咖啡').map((row) => row['id']), [walk.targetId]);
+    final cardsBeforeInvitation = store.cards();
+    final controlsBeforeInvitation = store.topicControls();
+    final archiveBeforeInvitation = store.archive;
+    final encodedBeforeInvitation = encoded.length;
+    expect(await embeddings.rank(store: store, characterId: c, query: '聊聊咖啡', isCurrent: () => true), isEmpty);
+    expect(encoded.skip(encodedBeforeInvitation), isEmpty);
+    // Different strings are a service-level contract; the real chat Agent
+    // supplies the same user source to query and explicitUserInput.
+    final invited = await embeddings.rank(
+      store: store, characterId: c, query: '咖啡', explicitInput: '聊聊咖啡', isCurrent: () => true,
+    );
+    expect(invited!.map((row) => row['id']), [walk.targetId]);
+    expect(encoded.skip(encodedBeforeInvitation), contains(ordinaryCard['text']));
+    expect(encoded.skip(encodedBeforeInvitation), isNot(contains(fixedCard['text'])));
+    final memory = CompanionMemoryOwner(
+      store, CompanionLocal.at(directory, nowMilliseconds: () => now),
+      nowMilliseconds: () => now, embeddings: embeddings,
+    );
+    owner = memory;
+    final selected = await memory.selectForAgent(
+      '聊聊咖啡', characterId: c, offsetMinutes: 0,
+      explicitUserInput: '聊聊咖啡', isCurrent: () => true,
+    );
+    expect(selected.ids, [impression.targetId, walk.targetId]);
+    expect((jsonDecode(selected.block) as Map)['items'], contains(containsPair('id', walk.targetId)));
+    final uninvited = await memory.selectForAgent(
+      '聊聊咖啡', characterId: c, offsetMinutes: 0, isCurrent: () => true,
+    );
+    expect(uninvited.ids, isEmpty);
+    expect(store.cards(), cardsBeforeInvitation);
+    expect(store.topicControls(), controlsBeforeInvitation);
+    expect(store.archive, archiveBeforeInvitation);
+
+    final recallSource = store.submitMessage(
+      id: id(), sessionId: 'light:embedding-test', characterId: c,
+      text: '今天先随便聊几句。', saidAtUtc: now, offsetMinutes: 0,
+    );
+    final recallTurn = store.beginAgentTurn(
+      messageId: recallSource['id']! as String,
+      expectedSourceRev: recallSource['source_rev']! as int,
+      shownCardRevisions: const {},
+    )['id']! as String;
+    final actualRankedIds = await memory.recallIds(
+      '聊聊咖啡', characterId: c, isCurrent: () => store.isAgentTurnCurrent(recallTurn),
+    );
+    expect(actualRankedIds, [walk.targetId]);
+    final recalled = store.applyAgentMemoryTool(
+      turnId: recallTurn, callId: 'ranked-coffee', toolName: 'recall',
+      input: {'query': '聊聊咖啡'}, rankedRecallIds: actualRankedIds,
+    );
+    expect(recalled.applied, isTrue);
+    expect(recalled.recallSelection!.ids, [walk.targetId]);
+    expect(store.beginAgentTurn(
+      messageId: recallSource['id']! as String,
+      expectedSourceRev: recallSource['source_rev']! as int,
+      shownCardRevisions: const {},
+    )['shown_cards'], {walk.targetId!: ordinaryCard['row_rev']});
+    final replayed = store.applyAgentMemoryTool(
+      turnId: recallTurn, callId: 'ranked-coffee', toolName: 'recall',
+      input: {'query': '聊聊咖啡'}, rankedRecallIds: actualRankedIds,
+    );
+    expect(replayed.replayed, isTrue);
+    expect(replayed.recallSelection!.ids, [walk.targetId]);
+    expect(store.cards(), cardsBeforeInvitation);
+    expect(store.topicControls(), controlsBeforeInvitation);
+    store.closeAgentTurn(recallTurn);
   });
 
   test('control change during query inference retires the result and stale cache writes lose CAS', () async {

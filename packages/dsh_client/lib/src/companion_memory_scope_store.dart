@@ -99,9 +99,10 @@ extension CompanionMemoryScopeStore on CompanionMemoryStore {
     required String? characterId,
     required String fromDay,
     required String beforeDay,
+    String? explicitUserInput,
   }) {
     _checkMemoryCharacter(characterId);
-    return [
+    final fixed = [
       for (final card in _memoryDomainCards(
         characterId,
         where:
@@ -110,6 +111,19 @@ extension CompanionMemoryScopeStore on CompanionMemoryStore {
         args: [characterId, fromDay, beforeDay],
       ))
         if (_memoryReferencesCurrent(card['id'] as String)) card,
+    ];
+    var explicit = const <String>{};
+    if (explicitUserInput != null &&
+        explicitUserInput.trim().isNotEmpty &&
+        fixed.any((card) => card['topic_mode'] == 'never')) {
+      // A card outside these fixed layers can make the target ambiguous, or
+      // identify the same topic with a different keyword. Use the whole domain.
+      explicit = explicitMemoryTopics(explicitUserInput, _memoryDomainCards(characterId));
+    }
+    final at = _checkedNow();
+    return [
+      for (final card in fixed)
+        if (isMemoryContextEligible(card, nowMs: at, explicitTopicIds: explicit)) card,
     ];
   }
 

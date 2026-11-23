@@ -9,6 +9,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/companion/companion_agent.dart';
 import 'package:dsh_app/companion/companion_initiative.dart';
 import 'package:dsh_app/companion/companion_initiative_owner.dart';
@@ -112,6 +113,20 @@ class _Host extends ActiveHostController {
   HostRef build() => HostRef.local;
 }
 
+/// A room whose model rounds go to the phone's own key (these tests watch
+/// that client), not through the Host, which a full room now asks first.
+class _LightMode extends CompanionModeSetting {
+  @override
+  CompanionMode? build() => CompanionMode.light;
+}
+
+/// The phone's own runtime, already loaded: a full-mode model round reads the
+/// live connection, which would otherwise start the native runtime's events.
+class _Runtime extends LocalRuntimeController {
+  @override
+  LocalRuntimeState build() => const LocalRuntimeState(loaded: true);
+}
+
 class _Source extends DshAlertSource {
   _Source(super.client);
   String reason = 'completed';
@@ -192,10 +207,12 @@ class _Room {
       ProviderScope(
         overrides: [
           activeHostProvider.overrideWith(_Host.new),
+          localRuntimeProvider.overrideWith(_Runtime.new),
           activeConnectionProvider.overrideWithValue(AsyncData(connection)),
           companionInitiativeClockProvider.overrideWithValue(clock),
           initiativeMemory(clock),
           if (modelClient != null) ...[
+            companionModeProvider.overrideWith(_LightMode.new),
             settingsProvider.overrideWith(_ModelSettings.new),
             companionLightClientProvider.overrideWithValue(() => modelClient!),
           ],
