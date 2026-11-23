@@ -749,6 +749,9 @@ class _MarkdownBodyState extends State<MarkdownBody> {
         } else {
           _built.add(built);
         }
+      } else if (!identical(built.text, text)) {
+        // Keep the widget, and recognize the splitter's current string next time.
+        _built[i] = (text: text, live: live, widget: built.widget);
       }
       children.add(built.widget);
     }
