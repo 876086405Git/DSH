@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -594,9 +595,11 @@ class DshClient {
       }
     }
     final value = asMapOrEmpty(response);
+    final attachment = ImageAttachment.fromJson(value['attachment']);
+    final data = asString(value['data']) ?? '';
     return (
-      attachment: ImageAttachment.fromJson(value['attachment']),
-      bytes: base64Decode(asString(value['data']) ?? ''),
+      attachment: attachment,
+      bytes: data.length > 256 * 1024 ? await _decodeLargeAttachment(data) : base64Decode(data),
     );
   }
 
@@ -1356,3 +1359,5 @@ class _SessionWatch {
     return out.reversed.toList();
   }
 }
+
+Future<Uint8List> _decodeLargeAttachment(String data) => Isolate.run(() => base64Decode(data));
