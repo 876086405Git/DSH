@@ -66,6 +66,24 @@ void main() {
     expect(debugToolSummaryCaches, after);
   });
 
+  test('whole-session changes keep only the latest result, outside the turn cache', () {
+    ToolChatItem edit(String id) => tool(id, 'edit', {'file_path': 'f', 'old_string': id, 'new_string': '$id!'});
+    final a = edit('session-a');
+    final b = edit('session-b');
+    final before = debugToolSummaryCaches.turns;
+    final first = sessionChangesOf([a]);
+    expect(sessionChangesOf([a]), same(first));
+    final both = sessionChangesOf([a, b]);
+    expect(both.single.lastCallId, 'session-b');
+    expect(sessionChangesOf([a]), isNot(same(first)));
+    expect(debugToolSummaryCaches.turns, before);
+    final latest = sessionChangesOf([a, b]);
+    expect(sessionChangesOf([a, b]), same(latest));
+    forgetToolSummaries({b.callId});
+    expect(sessionChangesOf([a, b]), isNot(same(latest)));
+    forgetToolSummaries({a.callId, b.callId});
+  });
+
   group('captured DSH turns', () {
     test('approval turn: one command, no file changes', () {
       final t = _load('$_clientFixtures/follow_approval_with_resync.jsonl');
