@@ -72,6 +72,7 @@ enum SettingsPageId {
   phoneAlwaysAllow,
   phoneAndroidShell,
   phoneDnd,
+  phoneSkills,
   phoneUnlocks,
   systemActions,
   linuxEnvironment,
@@ -469,6 +470,13 @@ final _pages = <SettingsPageMeta>[
     title: (l) => l.phoneDndTitle,
     parent: SettingsPageId.phone,
     keywords: (l) => l.searchKwDnd,
+    condition: SpotCondition.phoneControlOn,
+  ),
+  SettingsPageMeta(
+    SettingsPageId.phoneSkills,
+    title: (l) => l.phoneSkillsTitle,
+    parent: SettingsPageId.phone,
+    keywords: (l) => l.searchKwPhoneSkills,
     condition: SpotCondition.phoneControlOn,
   ),
   SettingsPageMeta(

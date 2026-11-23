@@ -4296,6 +4296,45 @@
       }
     }
   },
+  "companionNotices": "她会留意你的通知",
+  "companionNoticesHint": "你选的 App 来了通知，她看一眼，值得说的才开口",
+  "companionNoticesNeedsAccess": "还差一步：允许 DSH Go 读取通知",
+  "companionNoticesAllow": "去授权",
+  "companionNoticesApps": "她看哪些 App",
+  "companionNoticesAppsEmpty": "开启后收到过通知的 App 会出现在这里",
+  "companionNoticesAppCount": "7 天内 {count} 条",
+  "@companionNoticesAppCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "companionNoticesQuiet": "最近没来过通知",
+  "companionNoticesToday": "今天收到 {received} 条 · 她说了 {said} 次",
+  "@companionNoticesToday": {
+    "placeholders": {
+      "received": {
+        "type": "int"
+      },
+      "said": {
+        "type": "int"
+      }
+    }
+  },
+  "companionNoticesFooter": "通知会发给你给她配置的模型（现在是 DeepSeek），只发你选的 App 的。原文不存，只存她记下的那几句近况，在记忆页能看到、能删；本机另外只留条数、用量和防重复用的标记。锁屏时她不看。",
+  "companionNoticesFailed": "没改成，再试一次",
+  "companionNoticeLevelOff": "不看",
+  "companionNoticeLevelOffHint": "这个 App 的通知她不读",
+  "companionNoticeLevelGlance": "看一眼",
+  "companionNoticeLevelGlanceHint": "只用来决定要不要告诉你，看完就忘",
+  "companionNoticeLevelRemember": "会记住",
+  "companionNoticeLevelRememberHint": "值得记的近况，她会记下来",
+  "companionMemoryAll": "全部",
+  "companionMemoryFromNotices": "从通知看到的",
+  "companionMemoryNoticesClear": "全部清掉",
+  "companionMemoryNoticesClearTitle": "让她忘掉通知里看到的事？",
+  "companionMemoryNoticesClearBody": "她从通知里记下的近况都会删掉，同样的事以后也不再记。",
   "automaticDiagnosticsRecover": "恢复本地记录",
   "automaticDiagnosticsRecoverHint": "仅在本机恢复分析记录，跳过已留存故障，不重新发送旧请求。",
   "automaticDiagnosticsTitle": "自动故障分析",
@@ -8292,53 +8331,136 @@
   "phoneKeepWaitingNetwork": "等连上 Wi‑Fi 后再连",
   "phoneKeepNotPaired": "还没有配对，请先完成无线调试配对",
   "phoneKeepFailed": "没连上；下次打开 App 或开始操控时再试",
-  "phoneSkillSectionTitle": "成功任务与技能",
-  "phoneSkillAskAfterSuccess": "任务成功后询问是否存成技能",
-  "phoneSkillAskAfterSuccessHint": "默认关闭。此页可见时，新完成的任务会询问一次；也可随时手动选择。",
-  "phoneSkillTask": "任务 {taskId} · {steps} 步",
-  "@phoneSkillTask": {
+  "phoneSkillsTitle": "手机技能",
+  "phoneSkillsSummaryNone": "做过的事会在这里变成技能",
+  "phoneSkillsSummary": "已学会 {count} 项",
+  "@phoneSkillsSummary": {
     "placeholders": {
-      "taskId": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "phoneSkillsSummaryDrafts": "已学会 {count} 项 · {drafts} 份待确认",
+  "@phoneSkillsSummaryDrafts": {
+    "placeholders": {
+      "count": {
         "type": "int"
       },
-      "steps": {
+      "drafts": {
         "type": "int"
       }
     }
   },
-  "phoneSkillCandidateHint": "请先核对实际结果；工具返回成功不等于目标已经完成。",
-  "phoneSkillSaveAction": "存成技能",
-  "phoneSkillConfirmGoal": "这次任务达到了目标吗？",
-  "phoneSkillConfirmGoalBody": "请核对实际结果。确认后才会起草，保存前仍可查看和编辑。",
-  "phoneSkillGoalDone": "目标已完成，查看草稿",
-  "phoneSkillPrivacyHint": "草稿只在本机处理。不要填写密码、密钥或验证码。本阶段自由文字会替换成参数，删除和重排步骤会保留；以最终预览为准。",
-  "phoneSkillGoal": "目标",
-  "phoneSkillPrerequisites": "前提（应用、版本、登录态）",
-  "phoneSkillStep": "原步骤 {number}",
-  "@phoneSkillStep": {
+  "phoneSkillsLearn": "从做过的事里学",
+  "phoneSkillsLearnHint": "手机操控办成的事会起草成技能，你收下才会用",
+  "phoneSkillsLearnOffHint": "关着时不再起草新技能，已收下的照常用",
+  "phoneSkillsTabMine": "我的技能",
+  "phoneSkillsTabDrafts": "待确认 {count}",
+  "@phoneSkillsTabDrafts": {
     "placeholders": {
-      "number": {
+      "count": {
         "type": "int"
       }
     }
   },
-  "phoneSkillCheckpoint": "这一步之后应看到什么",
-  "phoneSkillMoveUp": "上移一步",
-  "phoneSkillMoveDown": "下移一步",
-  "phoneSkillUpdatePreview": "更新脱敏预览",
-  "phoneSkillPreviewTitle": "将保存的完整内容",
-  "phoneSkillParameterizedHint": "自由文字已替换成参数；使用技能时需要补充并重新核对。",
-  "phoneSkillFinalConfirmation": "我已核对当前完整预览，同意保存这一版本。",
-  "phoneSkillSavedBody": "文件已写入本机技能目录。尚未核实引擎技能列表是否已刷新；可在技能页检查。",
-  "phoneSkillWriting": "正在写入技能",
-  "phoneSkillCannotCancel": "写入可能已进入提交阶段，无法保证撤回。关闭只关闭此页；已经提交的文件仍会保存。",
-  "phoneSkillKeepWaiting": "继续查看",
-  "phoneSkillCheckWrite": "检查写入结果",
-  "phoneSkillStale": "这份草稿已失效。请关闭后重新选择任务。",
-  "phoneSkillSensitive": "编辑中包含敏感内容，请移除后再更新预览。",
-  "phoneSkillInvalid": "编辑内容或步骤顺序不符合限制。请减少文字，至少保留一个步骤。",
-  "phoneSkillWriteFailed": "未能写入。请核对本机运行环境和存储；修改并更新预览后才能再次确认保存。",
-  "phoneSkillUnavailable": "当前无法处理技能草稿。请检查本机引擎状态后重试。",
+  "phoneSkillsTabDraftsNone": "待确认",
+  "phoneSkillsEmpty": "还没有学会的技能。手机操控办成一件事后，DSH 会起草一份，等你收下。",
+  "phoneSkillsDraftsEmpty": "没有要确认的草稿",
+  "phoneSkillsFootnote": "技能是给 DSH 看的做事说明：下次做同类的事，它会先读一遍再动手。用得越多，它越熟练。",
+  "phoneSkillStateActive": "常用 · 用了 {uses} 次",
+  "@phoneSkillStateActive": {
+    "placeholders": {
+      "uses": {
+        "type": "int"
+      }
+    }
+  },
+  "phoneSkillStateTrial": "试用中 · 还没用它办成过事",
+  "phoneSkillStateSuspended": "已停用",
+  "phoneSkillSourceWritten": "你让 DSH 写的",
+  "phoneSkillUse": "使用这项技能",
+  "phoneSkillLearnedTitle": "DSH 学会了一个新做法",
+  "phoneSkillUpdateTitle": "DSH 想改进「{name}」",
+  "@phoneSkillUpdateTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneSkillAccept": "收下",
+  "phoneSkillAcceptUpdate": "收下这次修改",
+  "phoneSkillEditDraft": "改一改",
+  "phoneSkillDiscard": "不要",
+  "phoneSkillDiscarded": "没有存这份草稿",
+  "phoneSkillAccepted": "已收下「{name}」，先试用",
+  "@phoneSkillAccepted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneSkillOpenSource": "看那次对话",
+  "phoneSkillLegacyTitle": "早期存下的",
+  "phoneSkillLegacyHint": "旧版存下的模板，DSH 不会用它们，可以删掉",
+  "phoneSkillDelete": "删除技能",
+  "phoneSkillDeleteTitle": "删除「{name}」？",
+  "@phoneSkillDeleteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneSkillDeleteBody": "删了以后 DSH 不再用它做事。",
+  "phoneSkillRestore": "恢复上一版",
+  "phoneSkillRestored": "已恢复上一版",
+  "phoneSkillUseInChat": "在对话里用",
+  "phoneSkillSaved": "已保存",
+  "phoneSkillSectionEntry": "入口",
+  "phoneSkillSectionSteps": "步骤",
+  "phoneSkillSectionPitfalls": "容易出错的地方",
+  "phoneSkillSectionSuccess": "怎样算办成",
+  "phoneSkillSectionHandoff": "什么时候停下交给你",
+  "phoneSkillFieldName": "名字",
+  "phoneSkillFieldDescription": "做什么",
+  "phoneSkillFieldWhen": "什么时候用",
+  "phoneSkillEditHint": "具体的人名、号码、内容写成 <参数>，DSH 做事时会按这次的要求填进去。",
+  "phoneSkillRecent": "最近几次",
+  "phoneSkillRecentNone": "还没用过",
+  "phoneSkillErrorChanged": "这项技能在你改的时候变了，这次修改没有覆盖它。回去重新看看。",
+  "phoneSkillErrorInvalid": "有一节是空的或格式不对，每一节都写上内容再存。",
+  "phoneSkillErrorSensitive": "里面有密码、验证码这类内容，去掉再存。",
+  "phoneSkillErrorUnavailable": "手机技能暂时用不了，稍后再试。",
+  "phoneSkillPromoted": "「{name}」用它办成了事，转为常用",
+  "@phoneSkillPromoted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneSkillSuspended": "「{name}」最近不灵，先停用了",
+  "@phoneSkillSuspended": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneSkillTurnOn": "恢复",
+  "phoneSkillApps": "用在 {apps}",
+  "@phoneSkillApps": {
+    "placeholders": {
+      "apps": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneSkillUndo": "撤销",
+  "searchKwPhoneSkills": "技能、学会、熟练、沉淀、存成技能、做法",
   "phoneModeTitle": "选择确认方式",
   "phoneModeMessage": "随时可在设置里更改",
   "phoneModeAsk": "关键步骤先问我",

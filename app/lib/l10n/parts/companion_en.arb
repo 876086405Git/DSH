@@ -1039,5 +1039,44 @@
         "type": "String"
       }
     }
-  }
+  },
+  "companionNotices": "She keeps an eye on your notifications",
+  "companionNoticesHint": "When an app you pick gets a notification, she takes a look and only speaks up if it matters",
+  "companionNoticesNeedsAccess": "One more step: let DSH Go read notifications",
+  "companionNoticesAllow": "Allow",
+  "companionNoticesApps": "Apps she looks at",
+  "companionNoticesAppsEmpty": "Once this is on, apps that send you notifications show up here",
+  "companionNoticesAppCount": "{count, plural, =1{1 in the last 7 days} other{{count} in the last 7 days}}",
+  "@companionNoticesAppCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "companionNoticesQuiet": "No notifications lately",
+  "companionNoticesToday": "{received} came in today · she spoke up {said, plural, =1{once} other{{said} times}}",
+  "@companionNoticesToday": {
+    "placeholders": {
+      "received": {
+        "type": "int"
+      },
+      "said": {
+        "type": "int"
+      }
+    }
+  },
+  "companionNoticesFooter": "Notifications go to the model you set up for her (DeepSeek for now), and only from the apps you pick. The text itself isn't kept, only the few notes she makes, which you can see and delete on the memory page; this phone also keeps counts, usage and markers that stop repeats. She doesn't look while the phone is locked.",
+  "companionNoticesFailed": "That didn't go through; try again",
+  "companionNoticeLevelOff": "Off",
+  "companionNoticeLevelOffHint": "She doesn't read this app's notifications",
+  "companionNoticeLevelGlance": "Glance",
+  "companionNoticeLevelGlanceHint": "Only to decide whether to tell you; forgotten right after",
+  "companionNoticeLevelRemember": "Remember",
+  "companionNoticeLevelRememberHint": "News worth keeping, she notes down",
+  "companionMemoryAll": "All",
+  "companionMemoryFromNotices": "From notifications",
+  "companionMemoryNoticesClear": "Clear all",
+  "companionMemoryNoticesClearTitle": "Forget what she saw in notifications?",
+  "companionMemoryNoticesClearBody": "Every note she made from notifications is deleted, and the same things won't be noted again."
 }

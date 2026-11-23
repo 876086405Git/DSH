@@ -253,7 +253,7 @@ class PetOverlayChannel {
             'text': text,
             'emotion': emotion,
             'speaking': speaking,
-            if (noticeEpoch != null) 'noticeEpoch': noticeEpoch,
+            'noticeEpoch': ?noticeEpoch,
           }) ??
           false;
     } on MissingPluginException {

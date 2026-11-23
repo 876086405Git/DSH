@@ -1622,6 +1622,22 @@ class PhoneChannel {
   /// Whether this phone has its own island the task can show in (HyperOS 超级岛,
   /// ColorOS 流体云, MagicOS): `vendor`; and whether it does now (`shows`: the
   /// live activity is on and the system promotes it). False without the native side.
+  /// Installed apps' names and icons (PNG) by package; apps not installed are left out.
+  Future<Map<String, ({String label, Uint8List icon})>> appInfo(List<String> packages) async {
+    if (packages.isEmpty) return const {};
+    try {
+      final map = await _methods.invokeMapMethod<String, Object?>('appInfo', {'packages': packages});
+      return {
+        for (final MapEntry(:key, :value) in (map ?? const {}).entries)
+          if (value case {'label': final String label, 'icon': final Uint8List icon}) key: (label: label, icon: icon),
+      };
+    } on MissingPluginException {
+      return const {};
+    } on PlatformException {
+      return const {};
+    }
+  }
+
   Future<({bool vendor, bool shows})> systemIsland() async {
     try {
       final map = await _methods.invokeMapMethod<Object?, Object?>('systemIsland');

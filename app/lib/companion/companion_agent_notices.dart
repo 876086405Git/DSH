@@ -76,9 +76,9 @@ class _VisitNotices {
         profile: () {
           final persona = visit.ref.read(companionPersonaProvider);
           return CompanionContextProfile(
-            persona: persona.custom ?? '',
+            persona: persona.custom,
             name: visit.ref.read(companionNameProvider) ?? visit.character.name ?? '',
-            callMe: persona.callMe ?? '',
+            callMe: persona.callMe,
             moves: visit.moves.rules() ?? '',
           );
         },
@@ -177,7 +177,9 @@ class _VisitNotices {
     } else {
       pending.removeWhere((p) => p.decision.eventId == decision.eventId);
       pending.add(item);
-      while (pending.length > 200) pending.removeAt(0);
+      while (pending.length > 200) {
+        pending.removeAt(0);
+      }
       offer();
     }
   }

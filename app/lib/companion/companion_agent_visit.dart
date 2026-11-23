@@ -135,8 +135,9 @@ class CompanionAgentResident {
 
   Future<bool> deliverReply(String replyId, String text, Future<bool> Function(int? noticeEpoch) deliver) {
     final run = _visit.run;
-    if (!active || run == null || !identical(run, _visit.agent._run) || run.replyId != replyId)
+    if (!active || run == null || !identical(run, _visit.agent._run) || run.replyId != replyId) {
       return Future.value(false);
+    }
     final notices = _visit.notices;
     if (notices != null) return notices.deliverReply(run, text, deliver);
     return run.externalNoticeContent ? Future.value(false) : deliver(null);

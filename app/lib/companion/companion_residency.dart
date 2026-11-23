@@ -144,7 +144,7 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
             'id': id,
             'user': user,
             'quiet': quiet,
-            if (noticeEpoch != null) 'noticeEpoch': noticeEpoch,
+            'noticeEpoch': ?noticeEpoch,
           }) ??
           false;
     } on MissingPluginException {
@@ -172,7 +172,7 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
             'id': id,
             'user': false,
             'quiet': false,
-            if (noticeEpoch != null) 'noticeEpoch': noticeEpoch,
+            'noticeEpoch': ?noticeEpoch,
           }) ??
           false;
     } on MissingPluginException {

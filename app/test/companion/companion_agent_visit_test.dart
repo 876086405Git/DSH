@@ -531,7 +531,7 @@ void main() {
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     final approvals = <MethodCall>[];
     messenger.setMockMethodCallHandler(phone, (call) async {
-      if (call.method == 'companionPhoneTools')
+      if (call.method == 'companionPhoneTools') {
         return [
           {
             'name': 'status',
@@ -539,6 +539,7 @@ void main() {
             'inputSchema': {'type': 'object'},
           },
         ];
+      }
       if (call.method == 'companionPhoneBegin') {
         approvals.add(call);
         return {'decision': 'denied'};

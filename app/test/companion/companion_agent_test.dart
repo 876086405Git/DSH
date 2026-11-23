@@ -229,18 +229,20 @@ void main() {
             final events = <Map<String, Object?>>[];
             if (requests.length == 1) {
               var idx = 0;
-              if (route == 'recall')
+              if (route == 'recall') {
                 events.addAll(
                   _call(idx++, 'read', [
                     jsonEncode({'query': summary}),
                   ], name: 'recall'),
                 );
-              if (route == 'related')
+              }
+              if (route == 'related') {
                 events.addAll(
                   _call(idx++, 'read', [
                     jsonEncode({'card': card['id']}),
                   ], name: 'related'),
                 );
+              }
               events.addAll(
                 _call(idx++, 'new-card', [
                   jsonEncode({'text': '越界推断'}),

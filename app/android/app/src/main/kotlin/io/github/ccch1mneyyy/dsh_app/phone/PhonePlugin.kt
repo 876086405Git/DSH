@@ -353,6 +353,8 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
             "setOverlayPrefs" -> result.success(OverlayPrefs.write(appContext, call.arguments as? Map<*, *>).toMap())
             // Whether the phone has its own island for the task (「用系统灵动岛显示」 shows only then). Off the main thread: a binder call on HyperOS.
             "systemIsland" -> async(result) { LiveActivity.islandSupport(appContext) }
+            // {packages}: each installed app's name and icon (PNG, 96 px, unmasked) for the skills page; missing apps are left out.
+            "appInfo" -> async(result) { PhoneAppInfo.read(appContext, call.argument<List<String>>("packages").orEmpty()) }
             // {sessionId, text}: what DSH last said in the conversation driving the phone, for the island's card; null text forgets it.
             "setPhoneThought" -> {
                 val session = call.argument<String>("sessionId")?.takeIf { it.length in 1..200 }
