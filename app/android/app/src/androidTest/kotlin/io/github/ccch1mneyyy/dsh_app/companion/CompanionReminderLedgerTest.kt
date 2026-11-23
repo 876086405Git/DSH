@@ -7,6 +7,8 @@ import android.database.sqlite.SQLiteException
 import android.test.AndroidTestCase
 import java.io.Closeable
 import java.io.File
+import java.io.RandomAccessFile
+import java.nio.channels.OverlappingFileLockException
 import java.time.Instant
 import java.util.TimeZone
 import java.util.UUID
@@ -51,6 +53,33 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         assertEquals(1L, f.count("event_kind='active_observed'"))
         assertEquals(1L, f.count("step_key='notification' AND event_kind='returned'"))
         assertEquals(listOf(ReminderKey("t", 1)), f.effects.notified)
+
+        // The real display read/render and its final platform-call boundary
+        // share one lock. This callback observes that boundary; it does not
+        // post a notification or simulate a second Android process.
+        val displayLock = File(f.isolated.noBackupFilesDir, "companion-resident/display.lock")
+        check(displayLock.parentFile!!.mkdirs() || displayLock.parentFile!!.isDirectory)
+        RandomAccessFile(displayLock, "rw").use { probe ->
+            var submitted = 0
+            CompanionConversationNotification.startForeground(f.isolated) {
+                submitted++
+                var held = false
+                val unexpected = try {
+                    probe.channel.tryLock()
+                } catch (_: OverlappingFileLockException) {
+                    held = true
+                    null
+                }
+                unexpected?.release()
+                assertTrue("The display lock must remain held through the foreground submission", held)
+            }
+            assertEquals(1, submitted)
+            val released = probe.channel.tryLock()
+            assertNotNull("The display lock must be released after submission returns", released)
+            released?.release()
+            // Keep this probe open throughout the production lock: closing a
+            // second channel early can release process locks on some systems.
+        }
     }
 
     fun testFailedClaimTransactionsCannotCallRegisterOrNotify() {
@@ -316,7 +345,10 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
 
     private class Fixture(context: Context) : Closeable {
         val directory = File(context.cacheDir, "companion-ledger-test-${UUID.randomUUID()}").apply { check(mkdirs()) }
-        private val isolated = object : ContextWrapper(context) { override fun getFilesDir() = directory }
+        val isolated = object : ContextWrapper(context) {
+            override fun getFilesDir() = directory
+            override fun getNoBackupFilesDir() = directory
+        }
         val sql: SQLiteDatabase
         var ledger: CompanionReminderLedger
         val effects = Effects()

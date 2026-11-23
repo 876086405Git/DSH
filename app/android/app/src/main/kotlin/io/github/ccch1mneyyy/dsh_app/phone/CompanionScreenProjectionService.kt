@@ -149,11 +149,12 @@ class CompanionScreenProjectionService : Service() {
         }
         instance = this
         try {
-            val notification = CompanionConversationNotification.build(this)
-            if (Build.VERSION.SDK_INT >= 29) {
-                startForeground(CompanionConversationNotification.ID, notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
-            } else startForeground(CompanionConversationNotification.ID, notification)
+            CompanionConversationNotification.startForeground(this) { notification ->
+                if (Build.VERSION.SDK_INT >= 29) {
+                    startForeground(CompanionConversationNotification.ID, notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+                } else startForeground(CompanionConversationNotification.ID, notification)
+            }
             foreground = true
             val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
             if (Build.VERSION.SDK_INT >= 33) registerReceiver(screenOff, filter, RECEIVER_NOT_EXPORTED)

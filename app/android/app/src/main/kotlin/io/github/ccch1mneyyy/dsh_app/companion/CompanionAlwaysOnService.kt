@@ -66,21 +66,25 @@ class CompanionAlwaysOnService : Service() {
     /** The conversation notification, or a plain one when it can't be built. */
     private fun startForegroundSafely(): Boolean {
         return try {
-            val notification = try {
-                CompanionConversationNotification.build(this)
+            try {
+                // Posted under the display lock, so a reminder can't slip in between.
+                CompanionConversationNotification.startForeground(this, ::startAsForeground)
             } catch (error: Throwable) {
                 CompanionAlwaysOnPlugin.failure = error.javaClass.simpleName
-                CompanionConversationNotification.fallback(this)
-            }
-            if (Build.VERSION.SDK_INT >= 34) {
-                startForeground(CompanionConversationNotification.ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-            } else {
-                startForeground(CompanionConversationNotification.ID, notification)
+                startAsForeground(CompanionConversationNotification.fallback(this))
             }
             true
         } catch (error: Throwable) {
             CompanionAlwaysOnPlugin.failure = error.javaClass.simpleName
             false
+        }
+    }
+
+    private fun startAsForeground(notification: android.app.Notification) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(CompanionConversationNotification.ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(CompanionConversationNotification.ID, notification)
         }
     }
 
