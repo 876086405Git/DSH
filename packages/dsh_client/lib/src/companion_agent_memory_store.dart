@@ -481,6 +481,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     MemoryRow input, {
     required bool forgetting,
   }) {
+    if (forgetting && input['deleteChat'] != null && input['deleteChat'] is! bool) {
+      throw const _AgentMemoryRejected('invalid_delete_chat');
+    }
+    final deleteChat = forgetting && input['deleteChat'] == true;
     final raw = input['changes'];
     final List<MemoryRow> changes;
     if (raw == null) {
@@ -509,9 +513,89 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       }
     }
     final affected = _agentEffectSet(turn, originals.keys.toSet());
+    final requiredEffects = {...affected};
+    final erasedSources = <String>{};
+    final rawMessages = <Row>[];
+    final rawAffected = <String>{};
+    final withdrawnGroups = <String, Set<String>>{};
+    if (deleteChat) {
+      final primaryId = _agentText(input, 'card');
+      if (!deleted.contains(primaryId)) throw const _AgentMemoryRejected('invalid_raw_target');
+      final ownRole = originals[primaryId]!['character_id'];
+      // Keep an actually granted stale primary in the snapshot. Other deleted
+      // changes are effects, not permission to erase their independent originals.
+      final domain = _memoryDomainCards(turn['character_id'] as String?);
+      final removal = _planFactRelations(
+        {primaryId},
+        deleteChat: true,
+        domainSnapshot: ownRole == null ? domain : domain.where((card) => card['character_id'] == ownRole).toList(),
+      );
+      requiredEffects.addAll(removal.cards);
+      erasedSources.addAll(removal.rawSources);
+      // The current chat source owns this turn/call through ON DELETE CASCADE.
+      // Maintenance has no source FK; it keeps its existing claim/current gates.
+      if (turn['origin_kind'] == 'chat' && erasedSources.contains(turn['source_message_id'])) {
+        throw const _AgentMemoryRejected('current_source');
+      }
+      for (final sourceId in erasedSources) {
+        rawMessages.addAll(_db.select('SELECT * FROM memory_messages WHERE id=?', [sourceId]));
+        rawAffected.addAll(
+          _db
+              .select('SELECT card_id FROM memory_card_cleanup_sources WHERE message_id=?', [sourceId])
+              .map((row) => row['card_id'] as String),
+        );
+        // Deleting a message removes every revision's proof rows. Capture whole
+        // AND groups, including cards outside the current role, before any write.
+        for (final group in _db.select(
+          'SELECT DISTINCT card_id,support_group FROM memory_card_sources WHERE message_id=?',
+          [sourceId],
+        )) {
+          final id = group['card_id'] as String;
+          rawAffected.add(id);
+          (withdrawnGroups[id] ??= {}).add(group['support_group'] as String);
+        }
+      }
+      for (final id in rawAffected) {
+        // Per-root subtraction keeps A -> B required even when both cards have
+        // raw effects. Such a dependency needs an explicit rewrite or deletion.
+        requiredEffects.addAll(_agentEffectSet(turn, {id}).difference({id}));
+      }
+      affected.addAll({...rawAffected, ...requiredEffects});
+    }
     _agentBudget(turn, affected);
-    if (!originals.keys.toSet().containsAll(affected)) {
+    if (!originals.keys.toSet().containsAll(requiredEffects)) {
       throw const _AgentMemoryRejected('incomplete_effect_set');
+    }
+    final sourceOnly = rawAffected.difference(originals.keys.toSet());
+    final refreshedRevisions = <String, int>{};
+    final refreshedValues = <String, ({int basis, int sourceAt})>{};
+    for (final id in sourceOnly) {
+      final card = _db.select('SELECT * FROM memory_cards WHERE id=?', [id]).single;
+      final withdrawn = withdrawnGroups[id] ?? const <String>{};
+      final sources = _db
+          .select(
+            '''
+            SELECT s.support_group,m.first_seq,COALESCE(m.edited_at_utc,m.said_at_utc) AS at
+            FROM memory_card_sources s JOIN memory_messages m ON m.id=s.message_id AND m.source_rev=s.source_rev
+            WHERE s.card_id=?
+          ''',
+            [id],
+          )
+          .where((source) => !withdrawn.contains(source['support_group']))
+          .toList();
+      final manual = card['manual'] == 1;
+      if (!manual && sources.isEmpty) throw const _AgentMemoryRejected('incomplete_effect_set');
+      // Preview exactly _refreshSources: manual/control basis is preserved;
+      // other supported cards take the remaining proof maxima, not today's text.
+      refreshedRevisions[id] = (card['row_rev'] as int) + 1;
+      refreshedValues[id] = (
+        basis: manual || const ['cancelled', 'postponed'].contains(card['plan_state'])
+            ? card['current_basis_seq'] as int? ?? 0
+            : sources.map((source) => source['first_seq'] as int).reduce(math.max),
+        sourceAt: manual
+            ? card['source_at_ms'] as int
+            : sources.map((source) => source['at'] as int).reduce(math.max),
+      );
     }
     final planned = {for (final id in revised.keys) id: (originals[id]!['row_rev'] as int) + 1};
     final prepared = <String, _AgentEntryWrite>{};
@@ -532,9 +616,11 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         planned,
         deleted,
         preserveProof: deleted.isNotEmpty && raw != null,
+        erasedSources: erasedSources,
+        refreshedRevisions: refreshedRevisions,
         plannedReference: (reference) {
           final parent = prepare(reference);
-          return parent == null ? null : (basis: parent.basis, sourceAt: parent.sourceAt);
+          return parent == null ? refreshedValues[reference] : (basis: parent.basis, sourceAt: parent.sourceAt);
         },
       );
       preparing.remove(id);
@@ -546,13 +632,31 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     // Every ID/revision, retained nonempty body, reference and shared budget
     // above is settled before the first card is touched.
     _deleteCards(deleted);
+    for (final id in sourceOnly) {
+      for (final group in withdrawnGroups[id] ?? const <String>{}) {
+        _withdrawSourceGroup(id, group);
+      }
+      for (final sourceId in erasedSources) {
+        _db.execute('DELETE FROM memory_card_cleanup_sources WHERE card_id=? AND message_id=?', [id, sourceId]);
+      }
+    }
+    _refreshSources(sourceOnly, eraseUnsupported: true);
     _agentApplyEntries(writes);
+    // All surviving proof/cleanup links to these originals are now gone. The
+    // existing erase primitive cannot bump a prepared parent's revision again.
+    for (final message in rawMessages) {
+      _eraseMessage(message);
+    }
     for (final id in revised.keys) {
       _closeAgentFollowups(id, 'revised');
     }
     _bumpMemory();
     _bumpControl(historyAfterSeq: deleted.isEmpty ? null : _sequence());
-    return (changed: affected, target: originals.keys.first, forgotten: deleted.isNotEmpty);
+    return (
+      changed: affected,
+      target: deleteChat ? input['card'] as String : originals.keys.first,
+      forgotten: deleted.isNotEmpty,
+    );
   }
 
   Set<String> _agentEffectSet(Row turn, Set<String> roots) {
@@ -644,6 +748,8 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     Map<String, int> planned,
     Set<String> deleted, {
     bool preserveProof = false,
+    Set<String> erasedSources = const {},
+    Map<String, int> refreshedRevisions = const {},
     ({int basis, int sourceAt})? Function(String)? plannedReference,
   }) {
     final text = _agentText(input, 'text');
@@ -686,7 +792,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           (!planned.containsKey(reference) && !_memoryReferencesCurrent(reference))) {
         throw const _AgentMemoryRejected('reference_not_current');
       }
-      references[reference] = planned[reference] ?? card['row_rev'] as int;
+      references[reference] = planned[reference] ?? refreshedRevisions[reference] ?? card['row_rev'] as int;
       cleanup = cleanup && card['cleanup_history_complete'] == 1;
       final preparedReference = plannedReference?.call(reference);
       basis = math.max(basis, preparedReference?.basis ?? card['current_basis_seq'] as int? ?? 0);
@@ -706,6 +812,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
               : <String>[]
         : (rawSources as List).cast<String>();
     for (final sourceId in wanted.toSet()) {
+      if (erasedSources.contains(sourceId)) throw const _AgentMemoryRejected('source_not_in_turn');
       final matches = available.where((row) => row['id'] == sourceId);
       if (matches.length != 1) throw const _AgentMemoryRejected('source_not_in_turn');
       final source = matches.single;
@@ -730,7 +837,12 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       // Only this already-read card's current proofs are retained. Keep each
       // AND group and each OR alternative; the control utterance is not Y's
       // evidence. No old source body is returned to the model by this path.
+      final withdrawnSources = <String>{};
       for (final group in _supportGroups(_card(retained)).values) {
+        if (group.any((proof) => erasedSources.contains(proof['message_id']))) {
+          withdrawnSources.addAll(group.map((proof) => proof['message_id'] as String));
+          continue;
+        }
         for (final proof in group) {
           final actual = _db.select('SELECT * FROM memory_messages WHERE id=? AND source_rev=? AND scope=?', [
             proof['message_id'],
@@ -743,6 +855,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
               (private && actual.single['character_id'] != character)) {
             throw const _AgentMemoryRejected('retained_proof_not_current');
           }
+          if (erasedSources.isNotEmpty) {
+            basis = math.max(basis, actual.single['first_seq'] as int);
+            sourceAt = math.max(sourceAt, (actual.single['edited_at_utc'] ?? actual.single['said_at_utc']) as int);
+          }
         }
         proofGroups.add([for (final proof in group) Map<String, Object?>.from(proof)]);
       }
@@ -751,11 +867,14 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           'SELECT message_id,proof_withdrawn FROM memory_card_cleanup_sources WHERE card_id=?',
           [id],
         ))
-          Map<String, Object?>.from(row),
+          if (!erasedSources.contains(row['message_id']))
+            {...row, if (withdrawnSources.contains(row['message_id'])) 'proof_withdrawn': 1},
       ]);
       cleanup = cleanup && retained['cleanup_history_complete'] == 1;
-      basis = math.max(basis, retained['current_basis_seq'] as int? ?? 0);
-      sourceAt = math.max(sourceAt, retained['source_at_ms'] as int);
+      if (erasedSources.isEmpty) {
+        basis = math.max(basis, retained['current_basis_seq'] as int? ?? 0);
+        sourceAt = math.max(sourceAt, retained['source_at_ms'] as int);
+      }
     }
     if (proofGroups.isEmpty && references.isEmpty) throw const _AgentMemoryRejected('source_not_in_turn');
     if (previous != null &&

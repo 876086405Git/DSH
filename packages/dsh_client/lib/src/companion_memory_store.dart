@@ -1272,6 +1272,10 @@ class CompanionMemoryStore {
     // Decide the complete deletion before any write, including cards that
     // lose their last proof through an explicitly selected raw-message deletion.
     final snapshot = domainSnapshot ?? cards(includeInactive: true);
+    // Losing a proof may remove another fact, but does not authorize forgetting
+    // that fact's independent originals. Keep semantic targets separate from
+    // those source-removal effects, using the unchanged literal-only plan.
+    final literalTargets = deleteChat ? _planFactRelations(roots, domainSnapshot: snapshot).cards : null;
     final groups = {for (final card in snapshot) card['id'] as String: _supportGroups(card)};
     final ending = RegExp(r'[。.!！?？]+$');
     final clauseBreak = RegExp(r'[，,。.;；\r\n]+');
@@ -1301,7 +1305,7 @@ class CompanionMemoryStore {
     var expanded = true;
     while (expanded) {
       final before = deleting.length + rawSources.length;
-      final known = snapshot.where((card) => deleting.contains(card['id'])).toList();
+      final known = snapshot.where((card) => (literalTargets ?? deleting).contains(card['id'])).toList();
       for (final card in snapshot) {
         if (card['scope'] != 'real' || deleting.contains(card['id'])) {
           continue;

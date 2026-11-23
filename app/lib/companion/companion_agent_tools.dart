@@ -146,7 +146,7 @@ class CompanionAgentMemoryTools {
   static const _maintenanceDescriptions = <String, String>{
     'remember':
         'Save or update a fact, preference or episode. about_you is shared; our_story belongs to this character.',
-    'forget': 'Forget a card or complete changes group. Preserve independent clauses; original chat stays. Report successful deletion.',
+    'forget': 'Forget a card or complete changes group. Preserve independent clauses. Original chat stays unless explicitly requested: deleteChat=true uses top-level card as the single original-source target; when changes is supplied it must forget that card. Report successful deletion.',
     'revise': 'Correct a card or complete changes group. Keep its ID and preserve independent clauses.',
     'related': 'Read and grant same-source candidates and required effects for a card; without card, return only stale cleanup IDs.',
     'merge': 'Merge proven duplicate facts or people into card, preserving proofs and consumed followups. Include required dependency updates.',
@@ -339,11 +339,12 @@ class CompanionAgentMemoryTools {
     ),
     CompanionAgentTool(
       name: 'forget',
-      description: 'First use related to inspect same-source candidates: sharing a source does not mean the same fact. Forget the intended entries atomically; changes must explicitly include all true literal/reference dependencies and preserve independent facts by nonempty rewrites. Original chat stays. Tell the user when deletion succeeds.',
+      description: 'First use related to inspect same-source candidates: sharing a source does not mean the same fact. Forget the intended entries atomically; changes must explicitly include all true literal/reference dependencies and preserve independent facts by nonempty rewrites. Original chat stays unless the user explicitly asks to delete it too: set deleteChat=true and supply top-level card as the single original-source target, also forgotten in changes if present. Other changes are not additional original-source targets. All affected entries must be granted and fit the shared budget. Tell the user when deletion succeeds.',
       inputSchema: {
         'type': 'object',
         'properties': {
           'card': _card,
+          'deleteChat': {'type': 'boolean', 'default': false},
           'changes': {'type': 'array', 'minItems': 1, 'items': _change},
         },
         'anyOf': [

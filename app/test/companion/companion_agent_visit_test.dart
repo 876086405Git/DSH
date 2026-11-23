@@ -874,7 +874,7 @@ void main() {
     const id = '11111111-1111-4111-8111-111111111111';
     const oldText = '凭证的旧私密正文：BLUE-ORIGINAL。';
     const newText = '凭证的改后私密正文：GREEN-REVISED。';
-    final visit = await _Visit.open([
+    final replies = [
       _message(
         calls: [
           ('private-recall', 'recall', {'query': '凭证'}),
@@ -899,7 +899,8 @@ void main() {
         ],
       ),
       _message(words: '已经处理好了。'),
-    ]);
+    ];
+    final visit = await _Visit.open(replies);
     try {
       visit.memory.store.saveManual(
         const CompanionMemory(id: id, text: oldText, keywords: ['凭证']),
@@ -935,6 +936,113 @@ void main() {
             expect(block['input'], {'_retired_after_memory_change': true});
           }
         }
+      }
+
+      // An unrelated source/card stays independent. The deleted source below
+      // is created by a real attachment submission and paid HTTP tool loop.
+      final store = visit.memory.store;
+      final originalSource = visit.userSource;
+      const keptText = '我收藏明信片。';
+      final keptSource = store.submitMessage(
+        id: 'raw-kept-postcards',
+        sessionId: originalSource['session_id']! as String,
+        characterId: originalSource['character_id'] as String?,
+        text: keptText,
+        saidAtUtc: _now,
+        offsetMinutes: originalSource['offset_minutes']! as int,
+      );
+      final keptTurn = store.beginAgentTurn(
+        messageId: keptSource['id']! as String,
+        expectedSourceRev: keptSource['source_rev']! as int,
+        shownCardRevisions: const {},
+      )['id']! as String;
+      final kept = store.applyAgentMemoryTool(
+        turnId: keptTurn,
+        callId: 'raw-keep',
+        toolName: 'remember',
+        input: {'text': keptText, 'keywords': ['明信片']},
+      );
+      expect(kept.applied, isTrue);
+      store.closeAgentTurn(keptTurn);
+      final keptCard = store.cards().singleWhere((card) => card['id'] == kept.targetId);
+      visit.memory.changed();
+
+      const rawText = '我住海棠路二十号。';
+      replies.addAll([
+        _message(calls: [('raw-remember', 'remember', {'text': rawText, 'keywords': ['海棠路']})]),
+        _message(words: '这条住址已记下。'),
+      ]);
+      await visit.attachment.submit(rawText);
+      expect(visit.attachment.error, isNull);
+      expect(visit.requests, hasLength(6));
+      final rawSource = store.messages().singleWhere((row) => row['id'] == visit.agent.sourceId);
+      expect(rawSource['text'], rawText);
+      expect(rawSource['session_id'], originalSource['session_id']);
+      expect(rawSource['character_id'], originalSource['character_id']);
+      final rawCard = store.cards().singleWhere((card) => card['text'] == rawText);
+      expect((rawCard['evidence'] as List).single, containsPair('message_id', rawSource['id']));
+      expect(jsonEncode(visit.requests[4]), contains(rawText));
+      final paid = {for (final row in store.requests()) row['id']! as String: row};
+      expect(paid, hasLength(6));
+      for (final row in paid.values) {
+        expect(row['sent_at_ms'], isNotNull);
+        expect(row['state'], 'finished');
+        expect(row['terminal'], 'complete');
+        expect(row['input_uncached'], 12);
+        expect(row['output_tokens'], 8);
+        expect(row['raw_usage'], containsPair('http_status', 200));
+      }
+
+      replies.addAll([
+        _message(calls: [('raw-forget', 'forget', {'card': rawCard['id'], 'deleteChat': true})]),
+        _message(words: '这条住址和原话都已删除。'),
+      ]);
+      await visit.attachment.submit('忘掉海棠路这条住址，连原话也删。');
+      expect(visit.attachment.error, isNull);
+      expect(visit.requests, hasLength(8));
+      final beforeDelete = jsonEncode(visit.requests[6]);
+      expect(beforeDelete, contains(rawText));
+      expect(beforeDelete, contains(rawCard['id']! as String));
+      final forgetDefinition = (visit.requests[6]['tools']! as List).cast<Map>().singleWhere((tool) => tool['name'] == 'forget');
+      final properties = (forgetDefinition['input_schema']! as Map)['properties']! as Map;
+      expect(properties['deleteChat'], containsPair('type', 'boolean'));
+      expect(jsonEncode(visit.requests[7]), isNot(contains(rawText)));
+      final rawResults = <Map>[
+        for (final message in (visit.requests[7]['messages']! as List).cast<Map>())
+          if (message['role'] == 'user' && message['content'] is List)
+            for (final row in (message['content']! as List).cast<Map>())
+              if (row['type'] == 'tool_result') row,
+      ];
+      expect(rawResults.single['tool_use_id'], 'raw-forget');
+      expect(jsonDecode(rawResults.single['content']! as String), containsPair('applied', true));
+      expect(store.messages().any((row) => row['id'] == rawSource['id']), isFalse);
+      expect(store.cards().any((card) => card['id'] == rawCard['id']), isFalse);
+      final retainedSource = store.messages().singleWhere((row) => row['id'] == keptSource['id']);
+      expect(retainedSource['text'], keptText);
+      expect(retainedSource['source_rev'], keptSource['source_rev']);
+      expect(store.cards().singleWhere((card) => card['id'] == kept.targetId), keptCard);
+
+      // Deleting raw text does not refund or erase the actual prior requests.
+      // Match IDs: this fixture's equal timestamps do not define HTTP order.
+      final after = {for (final row in store.requests()) row['id']! as String: row};
+      expect(after, hasLength(8));
+      for (final entry in paid.entries) {
+        expect(after[entry.key], entry.value);
+      }
+      final newRequests = after.entries.where((entry) => !paid.containsKey(entry.key)).map((entry) => entry.value).toList();
+      expect(newRequests, hasLength(2));
+      for (final row in newRequests) {
+        expect(row['origin'], 'local');
+        expect(row['category'], 'chat');
+        expect(row['sent_at_ms'], isNotNull);
+        expect(row['state'], 'finished');
+        expect(row['terminal'], 'complete');
+        expect(row['input_uncached'], 12);
+        expect(row['input_cache_read'], 0);
+        expect(row['input_cache_write'], 0);
+        expect(row['output_tokens'], 8);
+        expect(row['raw_usage'], containsPair('http_status', 200));
+        expect(row['raw_usage'], containsPair('complete', true));
       }
     } finally {
       await visit.close();

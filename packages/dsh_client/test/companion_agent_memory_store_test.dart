@@ -297,6 +297,12 @@ void main() {
     expect(call(turn, 'forget-home', 'forget', {'card': home['id']}).code, 'card_limit');
     expect(store.cards(), cards);
     expect(store.archive, before);
+    final overBudget = call(turn, 'forget-home-and-source', 'forget', {'card': home['id'], 'deleteChat': true});
+    expect(overBudget.applied, isFalse);
+    expect(overBudget.code, 'card_limit');
+    expect(store.cards(), cards);
+    expect(store.archive, before);
+    expect(store.messages().singleWhere((row) => row['id'] == original['id'])['text'], original['text']);
     // A separate real manual deletion makes a later user turn fit the budget.
     final extra = cards.singleWhere((card) => card['text'] == '我住杭州\n也养猫。');
     store.deleteCard(id: extra['id']! as String, expectedRowRev: extra['row_rev']! as int);
@@ -317,6 +323,100 @@ void main() {
     }
     expect(store.messages().where((row) => row['id'] == 'original').single['text'], original['text']);
     expect(database.select('SELECT * FROM memory_deleted_messages'), isEmpty);
+
+    // One selected raw root does not authorize another member of a derived
+    // AND group merely because that composite is also explicitly removed.
+    store.closeAgentTurn(next);
+    final rawX = say('and-raw-x', '我住厦门。');
+    final rawY = say('and-raw-y', '我收集邮票。');
+    final extraction = store.nextAgentMaintenance(
+      kind: 'extract',
+      offsetMinutes: 0,
+      estimateTokens: (text) => text.length,
+      forceTail: true,
+    )!;
+    final extracting = store.beginAgentMaintenance(kind: 'extract', claimId: extraction['id']! as String)['id']! as String;
+    final rootX = call(extracting, 'and-home', 'remember', {'text': '我住厦门。', 'sources': [rawX['id']]}).targetId!;
+    final independentY = call(extracting, 'and-stamps', 'remember', {'text': '我收集邮票。', 'sources': [rawY['id']]}).targetId!;
+    final composite = call(extracting, 'and-both', 'remember', {
+      'text': '我住厦门，也收集邮票。',
+      'sources': [rawX['id'], rawY['id']],
+    }).targetId!;
+    store.finishAgentMaintenance(turnId: extracting, complete: true);
+    final proof = (actualCard(composite)['evidence'] as List).cast<MemoryRow>();
+    expect(proof.map((row) => row['support_group']).toSet(), hasLength(1));
+    expect(proof.map((row) => row['message_id']), unorderedEquals([rawX['id'], rawY['id']]));
+    final unchangedY = actualCard(independentY);
+    say('and-forget', '忘掉厦门住址，连原话也删，集邮的事保留。');
+    final deletionClaim = store.nextAgentMaintenance(
+      kind: 'extract',
+      offsetMinutes: 0,
+      estimateTokens: (text) => text.length,
+      forceTail: true,
+    )!;
+    final deletionTurn = store.beginAgentMaintenance(kind: 'extract', claimId: deletionClaim['id']! as String);
+    final deleting = deletionTurn['id']! as String;
+    expect(deletionTurn['source_message_id'], isNull);
+    store.grantAgentCards(turnId: deleting, cardRevisions: {rootX: actualCard(rootX)['row_rev']! as int});
+    final shown = call(deleting, 'and-related', 'related', {'card': rootX}).relatedCards!;
+    expect(shown.map((row) => row['id']), containsAll([rootX, composite]));
+    final removed = call(deleting, 'and-delete-source', 'forget', {
+      'card': rootX,
+      'deleteChat': true,
+      'changes': [
+        {'card': rootX, 'forget': true},
+        {'card': composite, 'forget': true},
+      ],
+    });
+    expect(removed.applied, isTrue);
+    expect(removed.changedCardIds, unorderedEquals([rootX, composite]));
+    expect(store.messages().any((row) => row['id'] == rawX['id']), isFalse);
+    final keptY = store.messages().singleWhere((row) => row['id'] == rawY['id']);
+    expect(keptY['text'], rawY['text']);
+    expect(keptY['source_rev'], rawY['source_rev']);
+    expect(actualCard(independentY), unchangedY);
+    expect(store.isAgentTurnCurrent(deleting), isTrue);
+    store.finishAgentMaintenance(turnId: deleting, complete: true);
+
+    // Losing Y_X's only proof is not permission to treat its body as another
+    // raw root. A same-body Y_Z can exist independently before any merge.
+    final rawZ = say('duplicate-raw-z', '我喜欢铜管乐。');
+    final zTurn = begin(rawZ);
+    final fromZ = call(zTurn, 'duplicate-z', 'remember', {'text': '我喜欢铜管乐。'}).targetId!;
+    store.closeAgentTurn(zTurn);
+    final sharedRaw = say('duplicate-raw-x', '我住梧桐路，也喜欢铜管乐。');
+    final sharedTurn = begin(sharedRaw);
+    final primary = call(sharedTurn, 'duplicate-home', 'remember', {'text': '我住梧桐路。'}).targetId!;
+    final fromX = call(sharedTurn, 'duplicate-x', 'remember', {'text': '我喜欢铜管乐。'}).targetId!;
+    store.closeAgentTurn(sharedTurn);
+    final duplicateTurn = begin(say('duplicate-forget', '忘掉梧桐路住址和那句原话，独立说过的爱好保留。'), [actualCard(primary)]);
+    expect(call(duplicateTurn, 'duplicate-root-related', 'related', {'card': primary}).relatedCards!.map((row) => row['id']), contains(fromX));
+    expect(call(duplicateTurn, 'duplicate-fact-related', 'related', {'card': fromX}).relatedCards!.map((row) => row['id']), contains(fromZ));
+    final retainedBefore = actualCard(fromZ);
+    final isolated = call(duplicateTurn, 'duplicate-delete', 'forget', {
+      'card': primary,
+      'deleteChat': true,
+      'changes': [
+        {'card': fromX, 'forget': true},
+        {'card': primary, 'forget': true},
+        {'card': fromZ, 'text': '我喜欢铜管乐。'},
+      ],
+    });
+    expect(isolated.applied, isTrue);
+    expect(isolated.targetId, primary);
+    expect(isolated.changedCardIds, unorderedEquals([primary, fromX, fromZ]));
+    expect(store.messages().any((row) => row['id'] == sharedRaw['id']), isFalse);
+    expect(store.cards().where((row) => row['id'] == primary || row['id'] == fromX), isEmpty);
+    final independentRaw = store.messages().singleWhere((row) => row['id'] == rawZ['id']);
+    expect(independentRaw['text'], rawZ['text']);
+    expect(independentRaw['source_rev'], rawZ['source_rev']);
+    final retainedAfter = actualCard(fromZ);
+    expect(retainedAfter['text'], retainedBefore['text']);
+    expect(retainedAfter['row_rev'], (retainedBefore['row_rev']! as int) + 1);
+    expect(retainedAfter['current_basis_seq'], retainedBefore['current_basis_seq']);
+    expect(retainedAfter['source_at_ms'], retainedBefore['source_at_ms']);
+    expect((retainedAfter['evidence'] as List).single, containsPair('message_id', rawZ['id']));
+    store.closeAgentTurn(duplicateTurn);
   });
 
   test(
@@ -681,6 +781,20 @@ void main() {
     );
     expect(store.cards(), before);
     expect(store.archive, archive);
+    final originalMessages = store.messages();
+    final badRawTail = call(turn, 'bad-raw-tail', 'forget', {
+      'card': home,
+      'deleteChat': true,
+      'changes': [
+        {'card': home, 'forget': true},
+        {'card': combined, 'text': '   '},
+      ],
+    });
+    expect(badRawTail.applied, isFalse);
+    expect(badRawTail.code, 'content_empty');
+    expect(store.cards(), before);
+    expect(store.archive, archive);
+    expect(store.messages(), originalMessages);
     expect(
       store.beginAgentTurn(
         messageId: 'forget-address',
@@ -706,6 +820,145 @@ void main() {
     expect(retainedProof.any((row) => row['message_id'] == 'forget-address'), isFalse);
     expect(store.messages().singleWhere((row) => row['id'] == original['id'])['text'], original['text']);
     expect(store.archive['control_revision'], (archive['control_revision']! as int) + 1);
+
+    // Keep this original default-forget group as the independent control.
+    // Public remember/merge/saveManual calls create the raw-linked survivors;
+    // neither their proof groups nor their manual flag is inserted by SQL.
+    store.closeAgentTurn(turn);
+    final independentCards = store.cards();
+    final independentSource = store.messages().singleWhere((row) => row['id'] == original['id']);
+    final rawZ = say('raw-or-z', '我喜欢铜管乐。');
+    final zTurn = begin(rawZ);
+    final alternative = call(zTurn, 'or-z', 'remember', {'text': '我喜欢铜管乐。', 'keywords': ['铜管乐']}).targetId!;
+    store.closeAgentTurn(zTurn);
+    now += 60000;
+    final rawX = say('raw-or-x', '我住厦门，也喜欢铜管乐和模型火车。');
+    final xTurn = begin(rawX);
+    final rawRoot = call(xTurn, 'raw-home', 'remember', {'text': '我住厦门。'}).targetId!;
+    final duplicate = call(xTurn, 'or-x', 'remember', {'text': '我喜欢铜管乐。', 'keywords': ['铜管乐']}).targetId!;
+    final manualProof = call(xTurn, 'manual-proof', 'remember', {'text': '我喜欢模型火车。'}).targetId!;
+    final currentCards = store.cards(), currentMessages = store.messages(), currentArchive = store.archive;
+    final currentRefused = call(xTurn, 'raw-current-source', 'forget', {'card': rawRoot, 'deleteChat': true});
+    expect(currentRefused.applied, isFalse);
+    expect(currentRefused.code, 'current_source');
+    expect(store.cards(), currentCards);
+    expect(store.messages(), currentMessages);
+    expect(store.archive, currentArchive);
+    store.closeAgentTurn(xTurn);
+    final mergeOr = begin(say('merge-or', '铜管乐两条说的是同一件事。'), [actualCard(alternative), actualCard(duplicate)]);
+    expect(call(mergeOr, 'merge-or', 'merge', {'card': alternative, 'from': [duplicate]}).applied, isTrue);
+    store.closeAgentTurn(mergeOr);
+    now += 60000;
+    final manual = seed('我喜欢模型火车。', keywords: ['模型火车']);
+    final manualId = manual['id']! as String;
+    final mergeManual = begin(say('merge-manual', '模型火车这两条也相同。'), [actualCard(manualId), actualCard(manualProof)]);
+    expect(call(mergeManual, 'merge-manual', 'merge', {'card': manualId, 'from': [manualProof]}).applied, isTrue);
+    store.closeAgentTurn(mergeManual);
+    final orBefore = actualCard(alternative);
+    final manualBefore = actualCard(manualId);
+    final alternatives = (orBefore['evidence'] as List).cast<MemoryRow>();
+    expect(alternatives.map((row) => row['support_group']).toSet(), hasLength(2));
+    expect(alternatives.map((row) => row['message_id']), unorderedEquals([rawZ['id'], rawX['id']]));
+    expect(manualBefore['manual'], isTrue);
+    expect((manualBefore['evidence'] as List).single, containsPair('message_id', rawX['id']));
+    final request = store.reserveRequest(
+      category: 'chat',
+      provider: 'deepseek',
+      model: 'deepseek-flash',
+      inputTokens: 100,
+      outputTokens: 800,
+    )!;
+    observed(request);
+    final paid = store.requests();
+    final deleting = begin(say('raw-forget', '忘掉厦门住址，连原话也删。'), [actualCard(rawRoot)]);
+    final rawRelated = call(deleting, 'raw-related', 'related', {'card': rawRoot}).relatedCards!;
+    expect(rawRelated.map((row) => row['id']), containsAll([rawRoot, alternative, manualId]));
+    final rawRemoved = call(deleting, 'raw-forget', 'forget', {'card': rawRoot, 'deleteChat': true});
+    expect(rawRemoved.applied, isTrue);
+    expect(rawRemoved.changedCardIds, unorderedEquals([rawRoot, alternative, manualId]));
+    expect(store.messages().any((row) => row['id'] == rawX['id']), isFalse);
+    final keptZ = store.messages().singleWhere((row) => row['id'] == rawZ['id']);
+    expect(keptZ['text'], rawZ['text']);
+    expect(keptZ['source_rev'], rawZ['source_rev']);
+    final keptOriginal = store.messages().singleWhere((row) => row['id'] == original['id']);
+    expect(keptOriginal['text'], independentSource['text']);
+    expect(keptOriginal['source_rev'], independentSource['source_rev']);
+    for (final card in independentCards) {
+      expect(actualCard(card['id']! as String), card);
+    }
+    final orAfter = actualCard(alternative);
+    expect(orAfter['row_rev'], (orBefore['row_rev']! as int) + 1);
+    expect(orAfter['manual'], isFalse);
+    expect(orAfter['text'], orBefore['text']);
+    expect(orAfter['current_basis_seq'], rawZ['first_seq']);
+    expect(orAfter['source_at_ms'], rawZ['said_at_utc']);
+    expect((orAfter['evidence'] as List).single, containsPair('message_id', rawZ['id']));
+    final manualAfter = actualCard(manualId);
+    expect(manualAfter['row_rev'], (manualBefore['row_rev']! as int) + 1);
+    expect(manualAfter['manual'], isTrue);
+    expect(manualAfter['text'], manualBefore['text']);
+    expect(manualAfter['current_basis_seq'], manualBefore['current_basis_seq']);
+    expect(manualAfter['source_at_ms'], manualBefore['source_at_ms']);
+    expect(manualAfter['evidence'], isEmpty);
+    expect(store.requests(), paid);
+    expect(store.requests().single['sent_at_ms'], isNotNull);
+    expect(store.requests().single['state'], 'finished');
+    expect(store.requests().single['terminal'], 'complete');
+    expect(store.requests().single['output_tokens'], 10);
+    expect(
+      () => say('raw-or-x', '我住厦门，也喜欢铜管乐和模型火车。'),
+      throwsA(isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/deleted-source')),
+    );
+    store.closeAgentTurn(deleting);
+
+    // A retained OR parent loses its newer basis. A child with an independent
+    // direct proof must see that planned basis, not the parent's old row.
+    now += 60000;
+    final rawS = say('raw-ref-s', '铜管乐是我的爱好。');
+    now += 60000;
+    final rawK = say('raw-ref-k', '我的电话尾号是四二六一，我仍喜欢铜管乐。');
+    final kTurn = begin(rawK);
+    final refRoot = call(kTurn, 'ref-root', 'remember', {'text': '我的电话尾号是四二六一。'}).targetId!;
+    final newerOr = call(kTurn, 'newer-or', 'remember', {'text': '我喜欢铜管乐。', 'keywords': ['铜管乐']}).targetId!;
+    store.closeAgentTurn(kTurn);
+    final mergeAgain = begin(say('merge-again', '仍然是同一个铜管乐爱好。'), [actualCard(alternative), actualCard(newerOr)]);
+    expect(call(mergeAgain, 'merge-again', 'merge', {'card': alternative, 'from': [newerOr]}).applied, isTrue);
+    store.closeAgentTurn(mergeAgain);
+    final childClaim = store.nextAgentMaintenance(
+      kind: 'extract',
+      offsetMinutes: 0,
+      estimateTokens: (text) => text.length,
+      forceTail: true,
+    )!;
+    final childTurn = store.beginAgentMaintenance(kind: 'extract', claimId: childClaim['id']! as String)['id']! as String;
+    store.grantAgentCards(turnId: childTurn, cardRevisions: {alternative: actualCard(alternative)['row_rev']! as int});
+    final child = call(childTurn, 'reference-child', 'remember', {
+      'text': '铜管乐是用户的爱好。',
+      'sources': [rawS['id']],
+      'references': [alternative],
+    }).targetId!;
+    store.finishAgentMaintenance(turnId: childTurn, complete: true);
+    expect(actualCard(child)['current_basis_seq'], rawK['first_seq']);
+    expect((actualCard(child)['evidence'] as List).single, containsPair('message_id', rawS['id']));
+    expect(rawS['first_seq']! as int, lessThan(rawK['first_seq']! as int));
+    final refDeleting = begin(say('reference-forget', '忘掉电话号码，连原话也删。'), [actualCard(refRoot)]);
+    expect(call(refDeleting, 'reference-root-related', 'related', {'card': refRoot}).relatedCards!.map((row) => row['id']), contains(alternative));
+    expect(call(refDeleting, 'reference-parent-related', 'related', {'card': alternative}).relatedCards!.map((row) => row['id']), contains(child));
+    final beforeRefCards = store.cards(), beforeRefMessages = store.messages(), beforeRefArchive = store.archive;
+    final refused = call(refDeleting, 'reference-forget', 'forget', {
+      'card': refRoot,
+      'deleteChat': true,
+      'changes': [
+        {'card': refRoot, 'forget': true},
+        {'card': child, 'text': '铜管乐是用户的爱好。', 'references': [alternative]},
+      ],
+    });
+    expect(refused.applied, isFalse);
+    expect(refused.code, 'older_than_current');
+    expect(store.cards(), beforeRefCards);
+    expect(store.messages(), beforeRefMessages);
+    expect(store.archive, beforeRefArchive);
+    expect(store.requests(), paid);
   });
 
   test('retrieval checks matching and obsolete paths to the same ancestor in one query', () {
@@ -753,6 +1006,25 @@ void main() {
     }).targetId!;
     store.closeAgentTurn(second);
     final otherBefore = actualCard(otherStory);
+    final rawDeleting = begin(sayAs('raw-cross-role', '忘掉住址，连原话也删。', firstRole), [actualCard(home)]);
+    final rawRelated = call(rawDeleting, 'raw-cross-role-related', 'related', {'card': home}).relatedCards!;
+    expect(rawRelated.map((row) => row['id']), contains(story));
+    expect(rawRelated.map((row) => row['id']), isNot(contains(otherStory)));
+    final beforeRawCards = store.cards(), beforeRawMessages = store.messages(), beforeRawArchive = store.archive;
+    final rawRefused = call(rawDeleting, 'raw-cross-role', 'forget', {
+      'card': home,
+      'deleteChat': true,
+      'changes': [
+        {'card': home, 'forget': true},
+        {'card': story, 'forget': true},
+      ],
+    });
+    expect(rawRefused.applied, isFalse);
+    expect(rawRefused.code, 'card_not_in_turn');
+    expect(store.cards(), beforeRawCards);
+    expect(store.messages(), beforeRawMessages);
+    expect(store.archive, beforeRawArchive);
+    store.closeAgentTurn(rawDeleting);
     final editing = begin(sayAs('new-address', '现在住南京了。', firstRole), [actualCard(home), actualCard(story)]);
     final candidates = call(editing, 'related', 'related', {'card': home}).relatedCards!;
     expect(candidates.map((row) => row['id']), isNot(contains(otherStory)));
