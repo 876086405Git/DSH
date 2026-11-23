@@ -108,6 +108,68 @@ void main() {
       store.beginAgentTurn(messageId: 'source', expectedSourceRev: 1, shownCardRevisions: const {})['changed_cards'],
       [card['id']],
     );
+
+    // Changing an existing automatic card must inherit the new topic, even
+    // when its previous topic is equally quiet and later explicitly restored.
+    store.closeAgentTurn(turn);
+    final coffeeMaking = begin(say('rewrite-coffee-source', '我喝咖啡不加糖。'));
+    final coffeeCard = call(coffeeMaking, 'rewrite-coffee', 'remember', {
+      'text': '我喝咖啡不加糖。',
+      'keywords': ['咖啡'],
+    }).targetId!;
+    expect(call(coffeeMaking, 'rewrite-coffee-never', 'quiet', {'card': coffeeCard, 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(coffeeMaking);
+    final coffeeTopic = actualCard(coffeeCard)['topic_id'];
+    final interviewSource = say('rewrite-interview-source', '面试安排在周五下午。');
+    final interview = begin(interviewSource, [actualCard(card['id']! as String)]);
+    expect(call(interview, 'rewrite-interview-keyword', 'remember', {
+      'card': card['id'],
+      'text': '面试安排在周五下午',
+      'keywords': ['面试'],
+    }).applied, isTrue);
+    expect(call(interview, 'rewrite-interview-never', 'quiet', {'card': card['id'], 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(interview);
+    final interviewTopic = actualCard(card['id']! as String)['topic_id'];
+    final controlsBeforeRewrite = store.topicControls();
+    const rewrittenText = '我最近的咖啡甜度是无糖';
+    final rewritingSource = say('rewrite-current-source', rewrittenText);
+    final rewriting = begin(rewritingSource, [actualCard(card['id']! as String)]);
+    final rewritten = call(rewriting, 'rewrite-existing', 'remember', {
+      'card': card['id'],
+      'text': rewrittenText,
+      'keywords': ['无糖'],
+    });
+    expect(rewritten.applied, isTrue);
+    expect(rewritten.changedCardIds, [card['id']]);
+    final rewrittenCard = actualCard(card['id']! as String);
+    expect(rewrittenCard['manual'], isFalse);
+    expect(rewrittenCard['topic_id'], coffeeTopic);
+    expect(rewrittenCard['topic_mode'], 'never');
+    expect((rewrittenCard['evidence'] as List).single, containsPair('message_id', rewritingSource['id']));
+    expect(store.topicControls(), controlsBeforeRewrite);
+    expect(store.cards(includeInactive: true).where((row) => row['topic_id'] == interviewTopic), isEmpty);
+    store.closeAgentTurn(rewriting);
+    final restoringOld = begin(say('rewrite-restore-old-source', '面试以后可以聊了。'));
+    final oldControl = call(restoringOld, 'rewrite-read-old', 'recall', {'query': '面试'});
+    expect(oldControl.recalledControl, {
+      'topic_id': interviewTopic,
+      'mode': 'never',
+      'anchors': ['面试'],
+      'character_id': null,
+    });
+    expect(call(restoringOld, 'rewrite-restore-old', 'quiet', {'topic': interviewTopic, 'mode': 'normal'}).applied, isTrue);
+    expect(actualCard(card['id']! as String), rewrittenCard);
+    expect(actualCard(coffeeCard)['topic_mode'], 'never');
+    expect(explicitMemoryTopics('无糖', store.cards()), isEmpty);
+    final afterOldRestore = selectMemoryContext(
+      store.memoryRetrievalCandidates(characterId: null),
+      input: '无糖',
+      nowMs: now,
+      controlRevision: store.archive['control_revision']! as int,
+    );
+    expect(afterOldRestore.ids, isNot(contains(card['id'])));
+    expect(afterOldRestore.block, isNot(contains(rewrittenText)));
+    expect(store.requests(), isEmpty);
   });
 
   test('new cards inherit only their exact character control and ambiguous controls write no card', () {
@@ -465,6 +527,59 @@ void main() {
     expect(manualEmpty['keywords'], isEmpty);
     expect(store.topicControls(), windControls);
     expect(actualCard(windFirst), windTargetBefore);
+
+    // The existing Page editor can change this unrelated, keyword-free card.
+    // Zero matches keep its topic; ambiguous matches cannot commit a prefix.
+    final editingId = unrelatedManual['id']! as String;
+    store.saveManual(
+      CompanionMemory(id: editingId, text: '我最近想做一架纸飞机。'),
+      expectedRowRev: actualCard(editingId)['row_rev']! as int,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    expect(actualCard(editingId)['topic_id'], unrelatedManual['topic_id']);
+    expect(actualCard(editingId)['topic_mode'], 'normal');
+    final beforeAmbiguousEdit = store.cards(includeInactive: true);
+    final archiveBeforeAmbiguousEdit = store.archive;
+    final controlsBeforeEdit = store.topicControls();
+    expect(
+      () => store.saveManual(
+        CompanionMemory(id: editingId, text: '修琴和陶杯都准备好了。'),
+        expectedRowRev: actualCard(editingId)['row_rev']! as int,
+        currentValueChange: true,
+        realityKnown: true,
+      ),
+      throwsA(
+        isA<DshRemoteException>()
+            .having((error) => error.code, 'code', 'companion/invalid-request')
+            .having((error) => error.details['status'], 'status', 400)
+            .having((error) => error.details['reason'], 'reason', 'ambiguous_controlled_topic'),
+      ),
+    );
+    expect(store.cards(includeInactive: true), beforeAmbiguousEdit);
+    expect(store.archive, archiveBeforeAmbiguousEdit);
+    expect(store.topicControls(), controlsBeforeEdit);
+    store.saveManual(
+      CompanionMemory(id: editingId, text: coffeeText),
+      expectedRowRev: actualCard(editingId)['row_rev']! as int,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    expect(actualCard(editingId)['manual'], isTrue);
+    expect(actualCard(editingId)['keywords'], isEmpty);
+    expect(actualCard(editingId)['topic_id'], coffeeBefore['topic_id']);
+    expect(actualCard(editingId)['topic_mode'], 'never');
+    expect(actualCard(coffee), coffeeBefore);
+    expect(store.topicControls(), controlsBeforeEdit);
+    expect(explicitMemoryTopics('最近', store.cards()), isEmpty);
+    final afterEditing = selectMemoryContext(
+      store.memoryRetrievalCandidates(characterId: null),
+      input: '最近',
+      nowMs: now,
+      controlRevision: store.archive['control_revision']! as int,
+    );
+    expect(afterEditing.ids, isNot(contains(editingId)));
+    expect(afterEditing.block, isNot(contains(coffeeText)));
   });
 
   for (final mode in const ['less', 'never']) {
@@ -1597,6 +1712,51 @@ void main() {
     expect(store.messages(), beforeRefMessages);
     expect(store.archive, beforeRefArchive);
     expect(store.requests(), paid);
+
+    // A prepared destination topic must survive deletion of its last card in
+    // this same public group. The retained rewrite uses the new real source.
+    store.closeAgentTurn(refDeleting);
+    final destinationRaw = say('destination-source', '我喝咖啡不加糖。');
+    final destinationMaking = begin(destinationRaw);
+    final destination = call(destinationMaking, 'destination-card', 'remember', {
+      'text': '我喝咖啡不加糖。',
+      'keywords': ['咖啡'],
+    }).targetId!;
+    expect(call(destinationMaking, 'destination-never', 'quiet', {'card': destination, 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(destinationMaking);
+    final destinationTopic = actualCard(destination)['topic_id'];
+    final movingMaking = begin(say('moving-source', '我想折一架纸飞机。'));
+    final movingCard = call(movingMaking, 'moving-card', 'remember', {
+      'text': '我想折一架纸飞机。',
+      'keywords': ['纸飞机'],
+    }).targetId!;
+    store.closeAgentTurn(movingMaking);
+    expect(store.cards().where((row) => row['topic_id'] == destinationTopic).map((row) => row['id']), [destination]);
+    final destinationControls = store.topicControls();
+    final movingSource = say('moving-current-source', '旧咖啡条目删掉，将这张记录改成我最近的咖啡甜度是无糖。');
+    final moving = begin(movingSource, [actualCard(destination), actualCard(movingCard)]);
+    final moved = call(moving, 'move-and-forget', 'forget', {
+      'changes': [
+        {'card': destination, 'forget': true},
+        {'card': movingCard, 'text': '我最近的咖啡甜度是无糖。', 'keywords': ['无糖'], 'sources': [movingSource['id']]},
+      ],
+    });
+    expect(moved.applied, isTrue);
+    expect(moved.changedCardIds, unorderedEquals([destination, movingCard]));
+    expect(store.cards(includeInactive: true).any((row) => row['id'] == destination), isFalse);
+    expect(actualCard(movingCard)['topic_id'], destinationTopic);
+    expect(actualCard(movingCard)['topic_mode'], 'never');
+    expect((actualCard(movingCard)['evidence'] as List).single, containsPair('message_id', movingSource['id']));
+    expect(store.topicControls(), destinationControls);
+    expect(
+      store.messages().singleWhere((row) => row['id'] == destinationRaw['id']),
+      allOf(
+        containsPair('text', destinationRaw['text']),
+        containsPair('source_rev', destinationRaw['source_rev']),
+        containsPair('first_seq', destinationRaw['first_seq']),
+      ),
+    );
+    expect(store.requests(), paid);
   });
 
   test('retrieval checks matching and obsolete paths to the same ancestor in one query', () {
@@ -1910,6 +2070,91 @@ void main() {
     expect(database.select('SELECT * FROM memory_initiative_spends'), originalSpends);
     expect(store.nextFollowup(nowMs: now), isNull);
     expect(store.requests(), isEmpty);
+
+    // These real originals identify the same unsweetened latte as coffee.
+    // Internal controls may both match an explicit new synonymous body.
+    store.closeAgentTurn(mergingTopics);
+    final bodyExternalMaking = begin(say('body-external-source', '我喝咖啡不加糖。'));
+    final bodyExternal = call(bodyExternalMaking, 'body-external', 'remember', {
+      'text': '我喝咖啡不加糖。',
+      'keywords': ['咖啡'],
+    }).targetId!;
+    expect(call(bodyExternalMaking, 'body-external-less', 'quiet', {'card': bodyExternal, 'mode': 'less'}).applied, isTrue);
+    store.closeAgentTurn(bodyExternalMaking);
+    final bodyTargetRaw = say('body-target-source', '我最近的咖啡都是拿铁，甜度是无糖。');
+    final bodyTargetMaking = begin(bodyTargetRaw);
+    final bodyTarget = call(bodyTargetMaking, 'body-target', 'remember', {
+      'text': '我最近的拿铁甜度是无糖。',
+      'keywords': ['拿铁'],
+    }).targetId!;
+    store.closeAgentTurn(bodyTargetMaking);
+    final bodyFromRaw = say('body-from-source', '我点的拿铁就是咖啡，最近一直选无糖。');
+    final bodyFromMaking = begin(bodyFromRaw);
+    final bodyFrom = call(bodyFromMaking, 'body-from', 'remember', {
+      'text': '我点的拿铁最近一直无糖。',
+      'keywords': ['无糖'],
+    }).targetId!;
+    store.closeAgentTurn(bodyFromMaking);
+    final bodyQuieting = begin(say('body-quiet-source', '拿铁少提，无糖的这条不要主动提。'), [actualCard(bodyTarget), actualCard(bodyFrom)]);
+    expect(call(bodyQuieting, 'body-target-less', 'quiet', {'card': bodyTarget, 'mode': 'less'}).applied, isTrue);
+    expect(call(bodyQuieting, 'body-from-never', 'quiet', {'card': bodyFrom, 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(bodyQuieting);
+    final bodyNeverTopic = actualCard(bodyFrom)['topic_id'];
+    final bodyExternalTopic = actualCard(bodyExternal)['topic_id'];
+    final bodyJoining = begin(say('body-merge-source', '这两条拿铁记录是同一种咖啡的无糖甜度。'), [actualCard(bodyTarget), actualCard(bodyFrom)]);
+    final beforeMixedBody = store.cards(includeInactive: true);
+    final beforeMixedArchive = store.archive;
+    final bodyControls = store.topicControls();
+    final mixedBody = call(bodyJoining, 'body-mixed', 'merge', {
+      'card': bodyTarget,
+      'from': [bodyFrom],
+      'text': '我最近的咖啡拿铁一直无糖。',
+      'keywords': ['拿铁', '无糖'],
+    });
+    expect(mixedBody.applied, isFalse);
+    expect(mixedBody.code, 'ambiguous_controlled_topic');
+    expect(mixedBody.changedCardIds, isEmpty);
+    expect(store.cards(includeInactive: true), beforeMixedBody);
+    expect(store.archive, beforeMixedArchive);
+    expect(store.topicControls(), bodyControls);
+    final internalBody = call(bodyJoining, 'body-internal', 'merge', {
+      'card': bodyTarget,
+      'from': [bodyFrom],
+      'text': '最近我的拿铁一直无糖。',
+      'keywords': ['拿铁', '无糖'],
+    });
+    expect(internalBody.applied, isTrue);
+    expect(internalBody.changedCardIds, unorderedEquals([bodyTarget, bodyFrom]));
+    expect(actualCard(bodyTarget)['topic_id'], bodyNeverTopic);
+    expect(actualCard(bodyTarget)['topic_mode'], 'never');
+    expect((actualCard(bodyTarget)['evidence'] as List).cast<MemoryRow>().map((row) => row['message_id']), unorderedEquals([bodyTargetRaw['id'], bodyFromRaw['id']]));
+    expect(store.topicControls(), bodyControls);
+    store.closeAgentTurn(bodyJoining);
+
+    // A later explicit body matches only the external coffee control. Its
+    // less mode wins over the old never participant because it is this topic.
+    final bodyAnotherMaking = begin(say('body-another-source', '这种饮品就是刚才的拿铁咖啡，我一直不加糖。'));
+    final bodyAnother = call(bodyAnotherMaking, 'body-another', 'remember', {
+      'text': '这种饮品一直不加糖。',
+      'keywords': ['饮品'],
+    }).targetId!;
+    store.closeAgentTurn(bodyAnotherMaking);
+    final bodyExternalJoining = begin(say('body-external-merge-source', '这条饮品记录与前面的咖啡甜度是同一件事。'), [actualCard(bodyTarget), actualCard(bodyAnother)]);
+    final externalBody = call(bodyExternalJoining, 'body-external-merge', 'merge', {
+      'card': bodyTarget,
+      'from': [bodyAnother],
+      'text': '我最近喝咖啡不加糖。',
+      'keywords': ['咖啡'],
+    });
+    expect(externalBody.applied, isTrue);
+    expect(externalBody.changedCardIds, unorderedEquals([bodyTarget, bodyAnother]));
+    expect(actualCard(bodyTarget)['topic_id'], bodyExternalTopic);
+    expect(actualCard(bodyTarget)['topic_mode'], 'less');
+    expect(store.cards(includeInactive: true).any((row) => row['id'] == bodyAnother), isFalse);
+    expect(store.cards(includeInactive: true).where((row) => row['topic_id'] == bodyNeverTopic), isEmpty);
+    expect(store.topicControls(), bodyControls);
+    expect(call(bodyExternalJoining, 'body-still-quiet', 'ask_later', {'card': bodyTarget, 'whenMs': now}).code, 'topic_quiet');
+    expect(store.requests(), isEmpty);
   });
 
   test('ADD49 a person card keeps typed editor keywords through manual save and reopen', () {
@@ -2155,6 +2400,61 @@ void main() {
       isNull,
       reason: 'the served role revision is not recaptured from an older unfinished parent',
     );
+
+    // The Page also exposes an existing private impression. Its real stored
+    // role, not shared or another role's stronger control, chooses the topic.
+    final editingImpression = store.cards().singleWhere((row) => row['collection'] == 'impression' && row['character_id'] == firstRole);
+    final otherImpression = store.cards().singleWhere((row) => row['collection'] == 'impression' && row['character_id'] == secondRole);
+    final editorOwnMaking = begin(sayAs('editor-own-source', '我们最近聊过咖啡。', firstRole));
+    final editorOwn = call(editorOwnMaking, 'editor-own', 'remember', {
+      'collection': 'our_story', 'text': '我们最近聊过咖啡。', 'keywords': ['咖啡'],
+    }).targetId!;
+    expect(call(editorOwnMaking, 'editor-own-less', 'quiet', {'card': editorOwn, 'mode': 'less'}).applied, isTrue);
+    store.closeAgentTurn(editorOwnMaking);
+    final editorOtherMaking = begin(sayAs('editor-other-source', '我们谈过咖啡的温度。', secondRole));
+    final editorOther = call(editorOtherMaking, 'editor-other', 'remember', {
+      'collection': 'our_story', 'text': '我们谈过咖啡的温度。', 'keywords': ['咖啡'],
+    }).targetId!;
+    expect(call(editorOtherMaking, 'editor-other-never', 'quiet', {'card': editorOther, 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(editorOtherMaking);
+    final editorSharedMaking = begin(say('editor-shared-source', '我喝咖啡不加糖。'));
+    final editorShared = call(editorSharedMaking, 'editor-shared', 'remember', {
+      'text': '我喝咖啡不加糖。', 'keywords': ['咖啡'],
+    }).targetId!;
+    expect(call(editorSharedMaking, 'editor-shared-never', 'quiet', {'card': editorShared, 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(editorSharedMaking);
+    final editorOwnBefore = actualCard(editorOwn);
+    final editorOtherBefore = actualCard(editorOther);
+    final editorSharedBefore = actualCard(editorShared);
+    final editorControls = store.topicControls();
+    final editorRequests = store.requests();
+    final editingImpressionId = editingImpression['id']! as String;
+    expect(store.memoryPageCards(characterId: firstRole).map((row) => row['id']), contains(editingImpressionId));
+    expect(store.memoryPageCards(characterId: secondRole).map((row) => row['id']), isNot(contains(editingImpressionId)));
+    store.saveManual(
+      CompanionMemory(
+        id: editingImpressionId,
+        text: '我们聊起咖啡时彼此更放松。',
+        kind: editingImpression['kind']! as String,
+        keywords: (editingImpression['keywords']! as List).cast<String>(),
+        pinned: editingImpression['pinned'] == true,
+      ),
+      expectedRowRev: actualCard(editingImpressionId)['row_rev']! as int,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    final privateEdited = actualCard(editingImpressionId);
+    expect(privateEdited['collection'], 'impression');
+    expect(privateEdited['character_id'], firstRole);
+    expect(privateEdited['topic_id'], editorOwnBefore['topic_id']);
+    expect(privateEdited['topic_mode'], 'less');
+    expect(privateEdited['row_rev'], (editingImpression['row_rev']! as int) + 1);
+    expect(actualCard(editorOwn), editorOwnBefore);
+    expect(actualCard(editorOther), editorOtherBefore);
+    expect(actualCard(editorShared), editorSharedBefore);
+    expect(actualCard(otherImpression['id']! as String), otherImpression);
+    expect(store.topicControls(), editorControls);
+    expect(store.requests(), editorRequests);
   });
 
   test('a genuinely unsent maintenance claim closes without consuming a daily permit or reopening its turn', () {
