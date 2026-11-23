@@ -463,8 +463,11 @@ List<Color> sliceColors(Rays rays, double Function(int) inset, double Function(i
     final d = rays.d[s], c = rays.c[s];
     final ins = inset(s), k = 1 - dark(s);
     var j = 0;
-    for (var i = 0; i < d.length; i++) {
-      if (d[i] >= ins) j = i;
+    for (var i = d.length - 1; i >= 0; i--) {
+      if (d[i] >= ins) {
+        j = i;
+        break;
+      }
     }
     if (c.isEmpty) return const Color(0xFF000000);
     return Color.fromARGB(255, (c[j * 3] * k).floor(), (c[j * 3 + 1] * k).floor(), (c[j * 3 + 2] * k).floor());
