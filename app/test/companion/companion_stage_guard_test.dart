@@ -151,6 +151,14 @@ void main() {
     await room.close(tester);
   });
 
+  testWidgets('leaving the room destroys her WebView', (tester) async {
+    final room = _Room(root);
+    await room.open(tester);
+    final id = room.page.webViewIdentifier;
+    await room.close(tester);
+    expect(room.islands.destroyed, [id]);
+  });
+
   testWidgets('a WebView that could not be guarded is never loaded or shown', (tester) async {
     final room = _Room(root)..islands.guards = false;
     await room.open(tester, until: () => room.failures.isNotEmpty);

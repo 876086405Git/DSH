@@ -430,7 +430,7 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
     widget.controller
       .._web = null
       .._ready = false;
-    if (_cover) _destroyWebView();
+    _destroyWebView();
     // The hook stays until the server has closed: a pack change that races
     // leaving the room waits for the last handler too.
     final unhook = _unhook;
