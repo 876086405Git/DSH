@@ -28,6 +28,7 @@ class CallTranscript extends StatefulWidget {
 class _CallTranscriptState extends State<CallTranscript> {
   final _scroll = ScrollController();
   final _spoken = Expando<String>();
+  late List<CallTurn> _turns;
 
   /// The reader is at the bottom, following the words: only their own
   /// scrolling changes it, not the words growing under an animation.
@@ -41,6 +42,7 @@ class _CallTranscriptState extends State<CallTranscript> {
   @override
   void initState() {
     super.initState();
+    _turns = widget.call.turns;
     widget.call.addListener(_changed);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
@@ -49,7 +51,10 @@ class _CallTranscriptState extends State<CallTranscript> {
 
   void _changed() {
     if (!mounted) return;
-    setState(() {});
+    // The audio levels notify too. The list changes only with its last turn:
+    // turns are appended, or the last one replaced (each one never changes).
+    final turns = widget.call.turns;
+    if (!identical(turns.lastOrNull, _turns.lastOrNull)) setState(() => _turns = turns);
     if (!_following) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // The reader may have scrolled away since.
@@ -75,7 +80,7 @@ class _CallTranscriptState extends State<CallTranscript> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
-    final turns = widget.call.turns;
+    final turns = _turns;
     return Column(
       children: [
         SheetHeader(l10n.speechCallTranscript),

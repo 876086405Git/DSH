@@ -159,9 +159,11 @@ void main() {
     final list = find.byKey(const ValueKey('call-transcript-list'));
     expect(find.descendant(of: list, matching: find.text(long)), findsOneWidget);
     expect(find.descendant(of: list, matching: find.text(reply)), findsOneWidget);
+    final beforeLevels = tester.widget<ListView>(list);
     for (final level in [0.0, 0.6, 0.0]) {
       audio.emit(MicLevel(level));
       await tester.pump(const Duration(milliseconds: 40));
+      expect(tester.widget<ListView>(list), same(beforeLevels));
       expect(find.descendant(of: list, matching: find.text(reply)), findsOneWidget);
     }
 
@@ -170,6 +172,7 @@ void main() {
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 60));
     }
+    expect(tester.widget<ListView>(list), isNot(same(beforeLevels)));
     expect(find.descendant(of: list, matching: find.text(reply)), findsNothing);
     expect(find.descendant(of: list, matching: find.text('$reply\n$extra')), findsOneWidget);
   });
