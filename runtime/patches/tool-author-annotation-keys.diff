@@ -1,0 +1,9 @@
+--- a/node_modules/@deepseek-ai/dsh-tools/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tools/lib/index.js
+@@ -126,1 +126,2 @@
+-/** Throw one author-schema violation through the shared schema error type. */
++const REQUIRED_ANNOTATION_KEYS = [...ANNOTATION_KEYS, "required"];
++/** Throw one author-schema violation through the shared schema error type. */
+@@ -238,1 +239,1 @@
+-		const authorKeys = [...ANNOTATION_KEYS, ...task.allowRequired ? ["required"] : []];
++		const authorKeys = task.allowRequired ? REQUIRED_ANNOTATION_KEYS : ANNOTATION_KEYS;
