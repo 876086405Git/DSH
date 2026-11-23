@@ -239,7 +239,7 @@ class _RoomMemory2 extends _ReceiptMemory {
   @override
   void enter(
     Object room, {
-    required CompanionMemoryTransport? Function() transport,
+    required FutureOr<CompanionMemoryTransport?> Function() transport,
     required int Function(String) estimateTokens,
   }) {
     this.room = room;

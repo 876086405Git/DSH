@@ -218,7 +218,7 @@ class CompanionAgentModelRequest {
         onUsageSettled?.call(view.telemetry, partial: !view.complete);
       },
     );
-    _hostDrain = future.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    _hostDrain = future.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     try {
       final result = await future;
       notSentProven = result.dispatched == false;

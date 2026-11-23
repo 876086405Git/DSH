@@ -770,14 +770,14 @@ class _Receipt {
 
 class _AgentReceipt extends _Receipt {
   _AgentReceipt(
-    String instanceId,
-    String provider,
-    String model,
-    String requestId,
-    void Function() onSent,
+    super.instanceId,
+    super.provider,
+    super.model,
+    super.requestId,
+    super.onSent,
     this.abort,
     this.onText,
-  ) : super(instanceId, provider, model, requestId, onSent);
+  );
 
   final DshHttpAbort abort;
   final void Function(String) onText;

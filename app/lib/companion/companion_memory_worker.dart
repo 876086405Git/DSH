@@ -395,7 +395,7 @@ class CompanionMemoryWorker {
         !cancelled.isCompleted &&
         ownedTurnId != null &&
         _maintenanceTurn == ownedTurnId &&
-        store.isAgentTurnCurrent(ownedTurnId!) &&
+        store.isAgentTurnCurrent(ownedTurnId) &&
         (activeRoute?.current ?? false);
     try {
       final initial = await transport();
@@ -501,7 +501,7 @@ class CompanionMemoryWorker {
       try {
         // Each physical request has drained and settled before the claim can
         // close. The adapter's later close(false) cannot reopen or undo it.
-        if (ownedTurnId != null) store.finishAgentMaintenance(turnId: ownedTurnId!, complete: complete);
+        if (ownedTurnId != null) store.finishAgentMaintenance(turnId: ownedTurnId, complete: complete);
       } finally {
         try {
           tools?.close();
