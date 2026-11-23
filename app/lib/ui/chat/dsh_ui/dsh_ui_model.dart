@@ -1393,7 +1393,7 @@ final _bareObjectLine = RegExp(r'(?:^|\n)(?:[^\S\n]|\u0085)*\{');
 /// 只认「单独成段、能完整解析成视图」的 JSON 对象:行内提到的 JSON、已有围栏
 /// 里的内容、还没写完的流式半截都原样保留。
 String fenceBareDshUiViews(String markdown) {
-  if (!markdown.contains('"') || !_bareObjectLine.hasMatch(markdown)) return markdown;
+  if (!markdown.contains('{') || !markdown.contains('"') || !_bareObjectLine.hasMatch(markdown)) return markdown;
   final lines = markdown.split('\n');
   List<String>? out;
   var i = 0;
