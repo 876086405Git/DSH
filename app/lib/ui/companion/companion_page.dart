@@ -1783,6 +1783,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       });
       return found;
     }
+
     // Text may have a selection/semantics wrapper. Search only that Text's
     // render subtree, never another bubble or another page's paragraph.
     final paragraph = findParagraph(textObject);
@@ -1793,12 +1794,17 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         paragraph.text.toPlainText() != reply.words) {
       return const {};
     }
-    final viewport = RenderAbstractViewport.maybeOf(paragraph);
-    if (viewport is! RenderBox || !viewport.attached || !viewport.hasSize || viewport.size.isEmpty) {
-      return const {};
+    final RenderBox viewport;
+    switch (RenderAbstractViewport.maybeOf(paragraph)) {
+      case final RenderBox box when box.attached && box.hasSize && !box.size.isEmpty:
+        viewport = box;
+      default:
+        return const {};
     }
-    var visible = MatrixUtils.transformRect(viewport.getTransformTo(null), Offset.zero & viewport.size)
-        .intersect(Offset.zero & MediaQuery.sizeOf(context));
+    var visible = MatrixUtils.transformRect(
+      viewport.getTransformTo(null),
+      Offset.zero & viewport.size,
+    ).intersect(Offset.zero & MediaQuery.sizeOf(context));
     RenderObject child = paragraph;
     for (var parent = child.parent; parent != null; parent = child.parent) {
       // A nonzero transform does not prove that an offstage/zero-opacity child

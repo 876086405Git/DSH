@@ -57,10 +57,7 @@ class _ReplayPageState extends State<_ReplayPage> {
       final random = math.Random.secure();
       final claimSecret = base64UrlEncode(List<int>.generate(32, (_) => random.nextInt(256)));
       final file = File('${Directory.systemTemp.path}/dsh-a3-config.json');
-      final ready = {
-        'path': file.path,
-        'claimHash': crypto.sha256.convert(utf8.encode(claimSecret)).toString(),
-      };
+      final ready = {'path': file.path, 'claimHash': crypto.sha256.convert(utf8.encode(claimSecret)).toString()};
       debugPrint('A3_CONFIG_READY:${jsonEncode(ready)}');
       late final Map<String, Object?> config;
       try {
@@ -95,7 +92,9 @@ class _ReplayPageState extends State<_ReplayPage> {
   Future<String> takeKey(Map<String, Object?> config, String claimSecret) async {
     final handoff = Map<String, Object?>.from(config.remove('keyHandoff')! as Map);
     final port = handoff['port'];
-    if (port is! int || port < 1 || port > 65535 ||
+    if (port is! int ||
+        port < 1 ||
+        port > 65535 ||
         handoff['claimHash'] != crypto.sha256.convert(utf8.encode(claimSecret)).toString()) {
       throw StateError('Invalid local key handoff');
     }

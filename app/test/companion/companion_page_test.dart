@@ -1258,10 +1258,7 @@ void main() {
           final posts = <Map<String, Object?>>[];
           const markOnly = '[表情:开心]';
           const earlyWords = '第一轮：先理清线索。';
-          final lastWords = [
-            for (var i = 1; i <= 16; i++) '后续第$i行：这段文字来自最后一轮模型回复。',
-            '好了。',
-          ].join('\n');
+          final lastWords = [for (var i = 1; i <= 16; i++) '后续第$i行：这段文字来自最后一轮模型回复。', '好了。'].join('\n');
           var words = '$earlyWords\n$lastWords';
           var chatRounds = 0;
           CompanionStageEvents? stageEvents;
@@ -1275,7 +1272,9 @@ void main() {
               final response = !sameWordsFromWake && round < 2
                   ? _reply2(
                       words: round == 0 ? markOnly : earlyWords,
-                      calls: [('visible-$round', 'recall', {'query': '线索'})],
+                      calls: [
+                        ('visible-$round', 'recall', {'query': '线索'}),
+                      ],
                     )
                   : _reply2(words: sameWordsFromWake ? words : lastWords);
               return http.StreamedResponse(
@@ -1284,10 +1283,7 @@ void main() {
                 headers: response.headers,
               );
             }
-            return http.StreamedResponse(
-              Stream.value(utf8.encode(_messageEvents(_wordsTurn('')))),
-              200,
-            );
+            return http.StreamedResponse(Stream.value(utf8.encode(_messageEvents(_wordsTurn('')))), 200);
           });
           addTearDown(() async {
             if (!release.isCompleted) release.complete();
@@ -1412,9 +1408,11 @@ void main() {
             expect(shown.single['kind'], 'assistant');
             expect(shown.single['presented_at_ms'], clock.wall);
 
-            final scroll = tester.state<ScrollableState>(
-              find.descendant(of: find.byType(CompanionSpeech), matching: find.byType(Scrollable)),
-            ).position;
+            final scroll = tester
+                .state<ScrollableState>(
+                  find.descendant(of: find.byType(CompanionSpeech), matching: find.byType(Scrollable)),
+                )
+                .position;
             expect(scroll.pixels, 0, reason: 'the unchanged reverse bubble starts at its newest lines');
             expect(scroll.maxScrollExtent, greaterThan(0));
             final early = assistants.singleWhere((row) => row['text'] == earlyWords);

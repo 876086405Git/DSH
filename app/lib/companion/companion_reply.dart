@@ -109,10 +109,7 @@ class CompanionReply {
     int? start;
     for (var i = 0; i <= words.length; i++) {
       final belongs =
-          i < _rawOffsets.length &&
-          _rawOffsets[i] >= rawStart &&
-          _rawOffsets[i] < rawEnd &&
-          words[i].trim().isNotEmpty;
+          i < _rawOffsets.length && _rawOffsets[i] >= rawStart && _rawOffsets[i] < rawEnd && words[i].trim().isNotEmpty;
       if (belongs) {
         start ??= i;
       } else if (start != null) {

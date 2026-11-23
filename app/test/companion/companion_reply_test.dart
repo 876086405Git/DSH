@@ -29,10 +29,9 @@ void main() {
       final secondStart = first.length + 1;
       expect(joined.wordRangesFrom(secondStart, secondStart + second.length), [(start: 0, end: '嗯🙂'.length)]);
       final thirdStart = secondStart + second.length + 1;
-      expect(
-        joined.wordRangesFrom(thirdStart, combined.length),
-        [(start: joined.words.indexOf('好了。'), end: joined.words.length)],
-      );
+      expect(joined.wordRangesFrom(thirdStart, combined.length), [
+        (start: joined.words.indexOf('好了。'), end: joined.words.length),
+      ]);
     });
 
     test('takes the variants models actually write', () {

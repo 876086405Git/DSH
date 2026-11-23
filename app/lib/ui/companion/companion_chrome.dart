@@ -289,7 +289,7 @@ class CompanionSpeech extends StatelessWidget {
         ),
       );
     }
-    return _Rise(child: bubble, onFrame: onFrame);
+    return _Rise(onFrame: onFrame, child: bubble);
   }
 }
 
