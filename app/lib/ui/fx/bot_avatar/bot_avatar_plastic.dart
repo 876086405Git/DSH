@@ -104,7 +104,6 @@ class PlasticState {
   BotAvatarForm? _imgForm;
   double _aoK = -1;
   final _aoMul = Float32List(256);
-  Uint8List _img = Uint8List(0);
   Int32List _argb = Int32List(0);
   ui.Vertices? _verts;
   String _sliceKey = '';
@@ -277,13 +276,12 @@ bool drawPlasticCap(
     st._aoK = aoK;
   }
   if (st._n != n) {
-    st._img = Uint8List(n * n * 4);
     st._argb = Int32List(n * n);
     st._n = n;
     st._imgVersion = -1;
   }
   if (st._imgVersion != st._mixVersion || st._imgAoK != aoK || !identical(st._imgForm, form)) {
-    shadeTexels(form, st._mcMix, st._img, st._argb, st._aoMul, fur != null ? edgeLift(form) : null);
+    shadeTexels(form, st._mcMix, st._argb, st._aoMul, fur != null ? edgeLift(form) : null);
     final mesh = _meshOf(form);
     st._verts?.dispose();
     st._verts = ui.Vertices.raw(ui.VertexMode.triangles, mesh.positions, colors: st._argb, indices: mesh.indices);
@@ -321,7 +319,7 @@ bool drawPlasticCap(
   final c0x = rel.cx[0], c0y = rel.cy[0];
   final sliceKey = '${st._version}|$kk|${rel.q}|${fur != null}';
   Rays? rays;
-  Rays raysNow() => rays ??= raysOf(st._img, form, c0x, c0y);
+  Rays raysNow() => rays ??= raysOf(st._argb, form, c0x, c0y);
   Shader sweep(List<Color> colors) => ui.Gradient.sweep(
     Offset(c0x, c0y),
     colors,
