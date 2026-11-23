@@ -3,6 +3,27 @@ import 'package:sqlite3/sqlite3.dart';
 /// Reconstruct a real previous schema before exercising the production upgrade.
 /// Changing only user_version would leave new columns and hide migration bugs.
 void restoreOldMemorySchema(Database database, int version) {
+  if (version < 17) {
+    // Rebuild both CHECK constraints and keep the v16 card dependents/triggers intact.
+    final triggers = database.select("SELECT sql FROM sqlite_schema WHERE type='trigger' AND tbl_name='memory_cards'");
+    database.execute('PRAGMA foreign_keys=OFF');
+    try {
+      database.execute('BEGIN');
+      database.execute('DROP TABLE memory_notice_sources');
+      database.execute('DROP TABLE memory_notice_tombstones');
+      database.execute('DROP TABLE memory_notice_spends');
+      database.execute(_schema16Checks);
+      for (final row in triggers) {
+        database.execute(row['sql'] as String);
+      }
+      database.execute('COMMIT');
+    } catch (_) {
+      database.execute('ROLLBACK');
+      rethrow;
+    } finally {
+      database.execute('PRAGMA foreign_keys=ON');
+    }
+  }
   if (version < 16) {
     if (database.select('SELECT 1 FROM memory_characters LIMIT 1').isNotEmpty) {
       throw StateError('A pre-role fixture cannot contain character-scoped data');
@@ -149,3 +170,41 @@ CREATE TABLE memory_agent_calls (
   if (version < 3) database.execute('DROP TABLE memory_deleted_messages');
   database.execute('PRAGMA user_version=$version');
 }
+
+const _schema16Checks = '''
+CREATE TABLE memory_cards_v16 (
+  id TEXT PRIMARY KEY, row_rev INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('fact','preference','episode')), text TEXT NOT NULL,
+  keywords TEXT NOT NULL DEFAULT '[]', pinned INTEGER NOT NULL DEFAULT 0,
+  scope TEXT NOT NULL DEFAULT 'real' CHECK(scope IN ('real','story')), eligible INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'current' CHECK(status IN ('current','past','withdrawn')),
+  manual INTEGER NOT NULL, topic_id TEXT NOT NULL REFERENCES memory_topics(id), current_basis_seq INTEGER,
+  source_at_ms INTEGER NOT NULL, event_time TEXT, followup TEXT, plan_state TEXT,
+  created_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL, expires_at_ms INTEGER,
+  maintenance_row_rev INTEGER NOT NULL DEFAULT 0, cleanup_history_complete INTEGER NOT NULL DEFAULT 0,
+  collection TEXT NOT NULL DEFAULT 'about_you'
+    CHECK(collection IN ('about_you','person','our_story','diary','impression')),
+  character_id TEXT REFERENCES memory_characters(id)
+    CHECK((collection IN ('about_you','person','diary') AND character_id IS NULL)
+       OR (collection IN ('our_story','impression') AND character_id IS NOT NULL)),
+  local_day TEXT CHECK(collection!='diary' OR local_day IS NOT NULL),
+  day_zone_id TEXT CHECK(collection!='diary' OR day_zone_id IS NOT NULL)
+);
+INSERT INTO memory_cards_v16 SELECT * FROM memory_cards;
+DROP TABLE memory_cards;
+ALTER TABLE memory_cards_v16 RENAME TO memory_cards;
+CREATE INDEX memory_cards_domain ON memory_cards(character_id,collection,status);
+CREATE UNIQUE INDEX memory_diary_day ON memory_cards(local_day) WHERE collection='diary';
+CREATE UNIQUE INDEX memory_impression_character ON memory_cards(character_id) WHERE collection='impression';
+CREATE TABLE memory_requests_v16 (
+  id TEXT PRIMARY KEY, category TEXT NOT NULL CHECK(category IN ('chat','extract','organize','followup')),
+  batch_id TEXT, provider TEXT NOT NULL, model TEXT NOT NULL, reserved_at_ms INTEGER NOT NULL,
+  sent_at_ms INTEGER, reserved_input INTEGER NOT NULL, reserved_output INTEGER NOT NULL,
+  reserved_cny REAL, raw_usage TEXT, usage_semantics TEXT, input_uncached INTEGER,
+  input_cache_read INTEGER, input_cache_write INTEGER, output_tokens INTEGER,
+  estimated_cny REAL, state TEXT NOT NULL, terminal TEXT, uncertain_at_ms INTEGER
+);
+INSERT INTO memory_requests_v16 SELECT * FROM memory_requests;
+DROP TABLE memory_requests;
+ALTER TABLE memory_requests_v16 RENAME TO memory_requests;
+''';

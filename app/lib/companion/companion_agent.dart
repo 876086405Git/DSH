@@ -14,10 +14,12 @@ import 'package:http/http.dart' as http;
 
 import '../notify/chat_alerts.dart' show companionHostKey;
 import '../state/connection_state.dart';
+import '../state/android_features.dart';
 import '../state/hosts_state.dart';
 import '../state/models_state.dart';
 import '../state/read_list_identity.dart';
 import '../state/run_pulse.dart' show estimateTokens;
+import '../state/settings_state.dart';
 import 'companion_agent_loop.dart';
 import 'companion_agent_phone_tools.dart';
 import 'companion_memory_id.dart';
@@ -28,6 +30,7 @@ import 'companion_context.dart';
 import 'companion_host_memory_transport.dart';
 import 'companion_light.dart';
 import 'companion_memory.dart';
+import 'companion_notice_triage.dart';
 import 'companion_memory_worker.dart';
 import 'companion_keeper.dart';
 import 'companion_initiative.dart';
@@ -38,6 +41,7 @@ import 'companion_pack.dart';
 import 'companion_public_lookup.dart';
 import 'companion_recall_prefs.dart';
 import 'companion_reminder.dart';
+import 'companion_reply.dart';
 import 'companion_resident_signals.dart';
 import 'companion_signals.dart';
 import 'companion_state.dart';
@@ -45,6 +49,7 @@ import 'companion_widget.dart';
 
 part 'companion_agent_visit.dart';
 part 'companion_agent_resident.dart';
+part 'companion_agent_notices.dart';
 part 'companion_agent_screen_classifier.dart';
 
 /// One phone loop in either room mode. The caller supplies the tool bindings
@@ -67,6 +72,8 @@ class CompanionAgent extends ChangeNotifier {
   final CompanionMemoryTransport Function()? _memoryTransport;
   final ({HostRef host, DshClient? client})? Function()? _host;
   _CompanionAgentVisit? _visit;
+  final _noticePending = <_PendingNotice>[];
+  String? get noticeFailure => _visit?.notices?.failure;
 
   /// The Page keeps this particular attachment. Old window actions never
   /// resolve through a later current visit on this process owner.
@@ -207,6 +214,7 @@ class CompanionAgent extends ChangeNotifier {
       onStop: onStop,
       controlRevision: memory.store.archive['control_revision'] as int,
     )..externalWebContent = assistantPage != null;
+    if (context?.data['noticeReply'] != null) _markNoticeContent(run);
     _run = run;
     memory.retainReceipt(run.settled.future);
     notifyListeners();
@@ -221,6 +229,14 @@ class CompanionAgent extends ChangeNotifier {
       if (!_disposed && identical(_run, run)) notifyListeners();
       run.settled.complete();
     }
+  }
+
+  // A reply keeps the permission generation in which it first received
+  // notice content, including when that content came from a memory tool.
+  void _markNoticeContent(_CompanionAgentRun run) {
+    if (run.externalNoticeContent) return;
+    run.externalNoticeContent = true;
+    run.noticeDeliveryEpoch = _visit?.notices?.readableEpoch;
   }
 
   bool _current(_CompanionAgentRun run) => _turnCurrent(run) && (run.modelCurrent?.call() ?? true);
@@ -324,8 +340,11 @@ class CompanionAgent extends ChangeNotifier {
 
   List<CompanionAgentTool> _definitions(_CompanionAgentRun run) => [
     for (final tool in run.tools)
-      if (!run.externalWebContent || !_afterWebMemoryChanges.contains(tool.definition.name))
-        if (run.externalWebContent && tool.definition.name == 'remember')
+      if ((!run.externalNoticeContent || CompanionAgentMemoryTools.allowedAfterNotice(tool.definition.name)) &&
+          (!run.externalWebContent || !_afterWebMemoryChanges.contains(tool.definition.name)))
+        if (run.externalNoticeContent && tool.definition.name == 'forget')
+          CompanionAgentMemoryTools.noticeForget
+        else if (run.externalWebContent && tool.definition.name == 'remember')
           CompanionAgentTool(
             name: tool.definition.name,
             description: tool.definition.description,
@@ -350,6 +369,14 @@ class CompanionAgent extends ChangeNotifier {
             execute: (call) async {
               // The execution gate is checked for every call, including a
               // later call in the same already-decoded model response.
+              if (run.externalNoticeContent &&
+                  (!CompanionAgentMemoryTools.allowedAfterNotice(call.name) ||
+                      (call.name == 'forget' && !CompanionAgentMemoryTools.pureDeletion(call.input)))) {
+                return const CompanionAgentToolResult(
+                  content: '{"applied":false,"code":"memory_change_after_notice","message":"This turn includes a recent event from an external notification. It cannot create or rewrite lasting memories."}',
+                  isError: true,
+                );
+              }
               if (!_toolAvailable(run, call)) {
                 return const CompanionAgentToolResult(
                   content: '{"applied":false,"code":"memory_change_after_web","message":"This memory change is unavailable for the rest of this turn after public web content. It was not applied."}',
@@ -359,6 +386,7 @@ class CompanionAgent extends ChangeNotifier {
               if (call.name == 'public_lookup') run.externalWebContent = true;
               final result = await binding.execute(call);
               if (result.externalWebContent) run.externalWebContent = true;
+              if (result.externalNoticeContent) _markNoticeContent(run);
               return result;
             },
           ),
@@ -378,6 +406,7 @@ class CompanionAgent extends ChangeNotifier {
           isCurrent: () => _current(run),
         );
         if (!_current(run)) return null;
+        if (companionSelectionHasNotice(selection)) _markNoticeContent(run);
         run.onSelected?.call(selection);
 
         // Current control has already filtered the historical raw lines. The
@@ -512,6 +541,7 @@ class CompanionAgent extends ChangeNotifier {
 
   void _saveReply(_CompanionAgentRun run, _CompanionAgentRequest request) {
     if (request.saved ||
+        run.externalNoticeContent ||
         run.discard ||
         request.text.trim().isEmpty ||
         run.memory.store.archive['control_revision'] != run.controlRevision) {
@@ -541,13 +571,15 @@ class CompanionAgent extends ChangeNotifier {
   void _notice(_CompanionAgentRun run, String requestId, String callId, String words) {
     if (words.trim().isEmpty || run.memory.store.archive['control_revision'] != run.controlRevision) return;
     final id = 'reply:${run.source['id']}:$requestId:notice:$callId';
-    _save(run, id, words);
+    if (!run.externalNoticeContent) _save(run, id, words);
     // A committed deletion keeps its acknowledgement in the original chat.
     // An old call never takes over another source's current bubble or speech.
     if (!_disposed && identical(_run, run) && !run.discard) {
       if (run.text.isNotEmpty) run.text += '\n';
       run.text += words;
-      run.unpresentedReplies[id] = (start: run.text.length - words.length, end: run.text.length);
+      if (!run.externalNoticeContent) {
+        run.unpresentedReplies[id] = (start: run.text.length - words.length, end: run.text.length);
+      }
       notifyListeners();
     }
   }
@@ -601,6 +633,7 @@ class CompanionAgent extends ChangeNotifier {
 
   @override
   void dispose() {
+    _noticePending.clear();
     _visit?.close();
     _disposed = true;
     stop(discard: true);
@@ -650,6 +683,9 @@ class _CompanionAgentRun {
   bool toolDispatchStarted = false;
   // This capability narrowing belongs only to this original user run.
   bool externalWebContent = false;
+  // Monotonic for this logical user turn, including later HTTP continuations.
+  bool externalNoticeContent = false;
+  int? noticeDeliveryEpoch;
   int savedRows = 0;
   String text = '';
   CompanionLightError? error;

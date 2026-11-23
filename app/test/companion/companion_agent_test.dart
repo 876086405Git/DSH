@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:dsh_app/companion/companion_agent.dart';
 import 'package:dsh_app/companion/companion_agent_tools.dart';
-import 'package:dsh_app/companion/companion_context.dart' show estimateCompanionMemoryTokens;
+import 'package:dsh_app/companion/companion_context.dart';
 import 'package:dsh_app/companion/companion_host_memory_transport.dart';
 import 'package:dsh_app/companion/companion_light.dart';
 import 'package:dsh_app/companion/companion_local.dart';
@@ -43,6 +43,7 @@ List<Map<String, Object?>> _call(int index, String id, List<String> arguments, {
 CompanionMemoryOwner _memory() => CompanionMemoryOwner(
   CompanionMemoryStore(sqlite3.openInMemory(), nowMilliseconds: () => 1795309200000),
   CompanionLocal.at(Directory('/unused-companion-agent-test')),
+  nowMilliseconds: () => 1795309200000,
 );
 
 MemoryRow _source(CompanionMemoryOwner memory) => memory.store.submitMessage(
@@ -603,6 +604,250 @@ void main() {
     expect(usage, hasLength(1));
     expect(usage.single.complete, isFalse);
     expect(turnSettled, isTrue);
+  });
+
+  for (final route in ['selection', 'recall', 'related']) {
+    test(
+      '$route of a real notice narrows even same-response memory rewrites, keeps the answer live, and resets next turn',
+      () async {
+        final memory = _memory();
+        addTearDown(memory.dispose);
+        const summary = '河边驿站包裹待取';
+        final card = memory.store.rememberNotice(
+          eventId: 'a' * 64,
+          notificationKey: 'b' * 64,
+          packageName: 'test.app',
+          appName: '测试',
+          text: summary,
+          observedAtMs: 1795309200000,
+          expectedControlRevision: memory.store.archive['control_revision'] as int,
+        )!;
+        final source = memory.store.submitMessage(
+          id: 'notice-user',
+          sessionId: memory.store.lightSessionId,
+          text: route == 'selection' ? summary : '帮我了解一下。',
+          saidAtUtc: 1795309200000,
+          offsetMinutes: 480,
+        );
+        final requests = <Map>[];
+        final agent = CompanionAgent(
+          apiKey: () => 'synthetic',
+          client: () => MockClient((request) async {
+            requests.add(jsonDecode(request.body) as Map);
+            final events = <Map<String, Object?>>[];
+            if (requests.length == 1) {
+              var idx = 0;
+              if (route == 'recall') {
+                events.addAll(
+                  _call(idx++, 'read', [
+                    jsonEncode({'query': summary}),
+                  ], name: 'recall'),
+                );
+              }
+              if (route == 'related') {
+                events.addAll(
+                  _call(idx++, 'read', [
+                    jsonEncode({'card': card['id']}),
+                  ], name: 'related'),
+                );
+              }
+              events.addAll(
+                _call(idx++, 'new-card', [
+                  jsonEncode({'text': '越界推断'}),
+                ], name: 'remember'),
+              );
+              events.addAll(
+                _call(idx++, 'overwrite', [
+                  jsonEncode({
+                    'changes': [
+                      {'card': card['id'], 'text': '伪装成删除的写入'},
+                    ],
+                  }),
+                ], name: 'forget'),
+              );
+              events.addAll(_call(idx, 'real-user-task', ['{}'], name: 'task_status'));
+            } else {
+              events.add(_words(requests.length == 2 ? '她的临时通知回答。' : '普通回答。'));
+            }
+            events.addAll([
+              {
+                'type': 'message_delta',
+                'delta': {'stop_reason': requests.length == 1 ? 'tool_use' : 'end_turn'},
+                'usage': {'output_tokens': 8},
+              },
+              {'type': 'message_stop'},
+            ]);
+            return http.Response.bytes(utf8.encode(_sse(events)), 200);
+          }),
+        );
+        addTearDown(agent.dispose);
+        final tools = CompanionAgentMemoryTools(
+          memory: memory,
+          source: source,
+          isCurrent: () => true,
+          onCommitted: agent.confirmControlRevision,
+          forgottenNotice: '已忘记。',
+        );
+        if (route == 'related') tools.grantCards([card]);
+        addTearDown(tools.close);
+        var userTaskCalls = 0;
+        await agent.say(
+          memory: memory,
+          source: source,
+          system: '测试',
+          isCurrent: () => true,
+          onSelected: tools.grantSelection,
+          tools: [
+            ...tools.bindings,
+            (
+              definition: const CompanionAgentTool(
+                name: 'task_status',
+                description: 'test',
+                inputSchema: {'type': 'object'},
+              ),
+              execute: (_) async {
+                userTaskCalls++;
+                return const CompanionAgentToolResult(content: '{}');
+              },
+            ),
+          ],
+        );
+        expect(agent.error, isNull);
+        expect(agent.text, '她的临时通知回答。');
+        expect(userTaskCalls, 1);
+        expect(memory.store.messages().map((r) => r['role']), ['user']);
+        expect(memory.store.cards().map((r) => r['text']), [summary]);
+        final firstNames = (requests.first['tools'] as List).map((t) => t['name']);
+        expect(firstNames.contains('remember'), route != 'selection');
+        final results = (requests[1]['messages'] as List).last['content'] as List;
+        for (final id in ['new-card', 'overwrite']) {
+          final result = results.singleWhere((r) => r['tool_use_id'] == id);
+          expect(jsonDecode(result['content'])['code'], 'memory_change_after_notice');
+        }
+        final offered = (requests[1]['tools'] as List).map((t) => t['name']);
+        expect(offered, unorderedEquals(['recall', 'related', 'forget', 'task_status']));
+        final next = memory.store.submitMessage(
+          id: 'ordinary-next',
+          sessionId: memory.store.lightSessionId,
+          text: '今天看看日历。',
+          saidAtUtc: 1795309200001,
+          offsetMinutes: 480,
+        );
+        await agent.say(memory: memory, source: next, system: '测试', isCurrent: () => true, tools: const []);
+        expect(memory.store.messages().where((r) => r['role'] == 'assistant').map((r) => r['text']), ['普通回答。']);
+      },
+    );
+  }
+
+  test(
+    'pure group deletion still commits and its acknowledgment stays live after notice selection disappears',
+    () async {
+      final memory = _memory();
+      addTearDown(memory.dispose);
+      const summary = '车站包裹待取';
+      final card = memory.store.rememberNotice(
+        eventId: 'c' * 64,
+        notificationKey: 'd' * 64,
+        packageName: 'test.app',
+        appName: '测试',
+        text: summary,
+        observedAtMs: 1795309200000,
+        expectedControlRevision: memory.store.archive['control_revision'] as int,
+      )!;
+      final source = memory.store.submitMessage(
+        id: 'forget-from-notice',
+        sessionId: memory.store.lightSessionId,
+        text: '忘掉$summary',
+        saidAtUtc: 1795309200000,
+        offsetMinutes: 480,
+      );
+      var calls = 0;
+      final agent = CompanionAgent(
+        apiKey: () => 'synthetic',
+        client: () => MockClient((request) async {
+          calls++;
+          final events = <Map<String, Object?>>[
+            if (calls == 1)
+              ..._call(0, 'delete', [
+                jsonEncode({
+                  'changes': [
+                    {'card': card['id'], 'forget': true},
+                  ],
+                }),
+              ], name: 'forget')
+            else
+              _words('没问题。'),
+            {
+              'type': 'message_delta',
+              'delta': {'stop_reason': calls == 1 ? 'tool_use' : 'end_turn'},
+            },
+            {'type': 'message_stop'},
+          ];
+          return http.Response.bytes(utf8.encode(_sse(events)), 200);
+        }),
+      );
+      addTearDown(agent.dispose);
+      final adapter = CompanionAgentMemoryTools(
+        memory: memory,
+        source: source,
+        isCurrent: () => true,
+        onCommitted: agent.confirmControlRevision,
+        forgottenNotice: '那条已经忘掉了。',
+      );
+      addTearDown(adapter.close);
+      await agent.say(
+        memory: memory,
+        source: source,
+        system: '测试',
+        tools: adapter.bindings,
+        isCurrent: () => true,
+        onSelected: adapter.grantSelection,
+      );
+      expect(agent.error, isNull);
+      expect(agent.text, '那条已经忘掉了。\n没问题。');
+      expect(memory.store.noticeSuppressed('c' * 64), isTrue);
+      expect(memory.store.messages().map((r) => r['role']), ['user']);
+    },
+  );
+
+  test('partial reply to the displayed notice stays in RAM after cancellation', () async {
+    final memory = _memory();
+    addTearDown(memory.dispose);
+    final heard = Completer<void>();
+    late final StreamController<List<int>> body;
+    body = StreamController(onListen: () => body.add(utf8.encode(_sse([_words('草稿开头')]))));
+    final agent = CompanionAgent(
+      apiKey: () => 'synthetic',
+      client: () => MockClient.streaming((request, stream) async {
+        await stream.drain<void>();
+        return http.StreamedResponse(body.stream, 200);
+      }),
+    );
+    agent.addListener(() {
+      if (agent.text.isNotEmpty && !heard.isCompleted) heard.complete();
+    });
+    addTearDown(agent.dispose);
+    final run = agent.say(
+      memory: memory,
+      source: _source(memory),
+      system: '测试',
+      context: CompanionTurnContext(
+        const {
+          'noticeReply': {'phase': 'draft'},
+        },
+        const [],
+        sampledAt: DateTime(2026),
+        hasClock: false,
+      ),
+      tools: const [],
+      isCurrent: () => true,
+    );
+    await heard.future;
+    agent.stop();
+    await run;
+    await body.close();
+    expect(agent.text, '草稿开头');
+    expect(memory.store.messages().map((r) => r['role']), ['user']);
   });
 
   for (final webTool in ['public_lookup', 'task_status']) {

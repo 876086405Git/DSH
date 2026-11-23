@@ -285,7 +285,8 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
         final selected = <MemoryRow>[];
         final zoneId = localDay == null ? null : 'offset:$offsetMinutes';
         for (final card in _memoryDomainCards(character)) {
-          if ((kind == 'organize' ? !isMemoryContextEligible(card, nowMs: at) : card['status'] == 'withdrawn') ||
+          if (card['collection'] == 'recent' ||
+              (kind == 'organize' ? !isMemoryContextEligible(card, nowMs: at) : card['status'] == 'withdrawn') ||
               !_memoryReferencesCurrent(card['id'] as String)) {
             continue;
           }
@@ -386,7 +387,8 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
       final revisions = {for (final card in cards) card['id']: card['row_rev']};
       return [
         for (final card in _memoryDomainCards(characterId))
-          if (revisions[card['id']] == card['row_rev'] &&
+          if (card['collection'] != 'recent' &&
+              revisions[card['id']] == card['row_rev'] &&
               card['status'] != 'withdrawn' &&
               _memoryReferencesCurrent(card['id'] as String))
             card,
@@ -717,7 +719,8 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
       ..._agentContext(character, claim['local_day'] as String?, claim['zone_id'] as String?, sources, [
         if (current)
           for (final card in _memoryDomainCards(character))
-            if (revisions[card['id']] == card['row_rev'] &&
+            if (card['collection'] != 'recent' &&
+                revisions[card['id']] == card['row_rev'] &&
                 card['status'] != 'withdrawn' &&
                 _memoryReferencesCurrent(card['id'] as String))
               card,

@@ -115,9 +115,20 @@ class PetOverlayPlugin : FlutterPlugin, ActivityAware {
                 PetOverlay.companionMode(call.argument<Boolean>("enabled") == true, call.argument<String>("name"))
                 result.success(null)
             }
-            "companionLine" -> result.success(PetOverlay.companionLine(
-                call.argument<String>("id"), call.argument<String>("text"), call.argument<String>("emotion"),
-                call.argument<Boolean>("speaking") == true))
+            "companionLine" -> {
+                if (call.hasArgument("noticeEpoch")) {
+                    val expected = call.argument<Any>("noticeEpoch")
+                    if ((expected !is Long && expected !is Int) ||
+                        !io.github.ccch1mneyyy.dsh_app.companion.CompanionNotices.get(context)
+                            .allows((expected as Number).toLong())) {
+                        result.success(false)
+                        return
+                    }
+                }
+                result.success(PetOverlay.companionLine(
+                    call.argument<String>("id"), call.argument<String>("text"), call.argument<String>("emotion"),
+                    call.argument<Boolean>("speaking") == true))
+            }
             "companionSpeech" -> {
                 PetOverlay.companionSpeech(call.argument<String>("id"),
                     call.argument<Number>("chars")?.toInt() ?: 0, call.argument<Boolean>("speaking") == true)

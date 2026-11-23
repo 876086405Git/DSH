@@ -272,6 +272,15 @@
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
 
+        <!-- The explicit companion switch enables this component. No separate process or FGS. -->
+        <service android:name=".companion.NoticeListener"
+            android:enabled="false"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
         <!-- Quick Settings tile 「新对话」 (tile/NewChatTileService.kt). -->
         <!-- Same cached Flutter engine; explicit default-off companion residency. -->
         <service

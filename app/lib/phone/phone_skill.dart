@@ -1,188 +1,198 @@
-import 'dart:convert';
+// Values exchanged by skills.* and the two skill events on dsh/phone/events.
+typedef SkillWireMap = Map<Object?, Object?>;
 
-final _draftId = RegExp(r'^[a-f0-9]{32}$');
-final _skillName = RegExp(r'^phone-task-[a-f0-9]{32}$');
+T _field<T>(SkillWireMap map, String key) {
+  final value = map[key];
+  if (value is T) return value;
+  throw FormatException('Invalid skill field: $key');
+}
 
-/// Completed native trace candidate; the person still has to confirm the goal succeeded.
-class PhoneSkillCandidate {
-  const PhoneSkillCandidate({required this.taskId, required this.generation, required this.steps});
+List<T> _items<T>(SkillWireMap map, String key, T Function(Object?) parse) =>
+    List.unmodifiable(_field<List<Object?>>(map, key).map(parse));
+
+T _enum<T extends Enum>(SkillWireMap map, String key, List<T> values) =>
+    values.asNameMap()[_field<String>(map, key)] ?? (throw FormatException('Invalid skill field: $key'));
+
+enum PhoneSkillState { trial, active, suspended }
+
+enum PhoneSkillSuspensionReason { manual, misses }
+
+enum PhoneSkillSource { learned, written }
+
+enum PhoneSkillDraftKind { newSkill, update }
+
+enum PhoneSkillOutcome { ok, miss, unscored }
+
+enum PhoneSkillChange { promoted, suspended }
+
+enum PhoneSkillDiffOperation { added, removed, unchanged }
+
+class PhoneSkillOrigin {
+  const PhoneSkillOrigin(this.sessionId, this.taskId);
+  final String sessionId;
   final int taskId;
-  final int generation;
-  final int steps;
 
-  static PhoneSkillCandidate? parse(Object? raw) {
-    if (raw is! Map) return null;
-    final id = raw['taskId'], generation = raw['generation'], steps = raw['steps'];
-    if (id is! int || id <= 0 || generation is! int || generation <= 0 || steps is! int || steps < 1 || steps > 60) return null;
-    return PhoneSkillCandidate(taskId: id, generation: generation, steps: steps);
-  }
+  factory PhoneSkillOrigin.fromMap(SkillWireMap map) =>
+      PhoneSkillOrigin(_field(map, 'sessionId'), _field(map, 'taskId'));
 }
 
-class PhoneSkillStatus {
-  const PhoneSkillStatus({this.available = false, this.askAfterSuccess = false, this.candidates = const [], this.saveResults = const []});
-  final bool available;
-  final bool askAfterSuccess;
-  final List<PhoneSkillCandidate> candidates;
-  final List<PhoneSkillSaveResult> saveResults;
+class PhoneSkillSections {
+  const PhoneSkillSections({
+    required this.entry,
+    required this.steps,
+    required this.pitfalls,
+    required this.success,
+    required this.handoff,
+  });
+  final String entry, steps, pitfalls, success, handoff;
 
-  factory PhoneSkillStatus.parse(Object? raw) {
-    if (raw is! Map || raw['v'] is! int || raw['v'] != 1) return const PhoneSkillStatus();
-    final values = raw['candidates'];
-    final results = raw['saveResults'];
-    return PhoneSkillStatus(
-      saveResults: List.unmodifiable([
-        if (results is List)
-          for (final result in results.take(8)) ?PhoneSkillSaveResult.parse(result),
-      ]),
-      available: true,
-      askAfterSuccess: raw['askAfterSuccess'] == true,
-      candidates: List.unmodifiable([
-        if (values is List)
-          for (final value in values.take(8))
-            ?PhoneSkillCandidate.parse(value),
-      ]),
-    );
-  }
+  factory PhoneSkillSections.fromMap(SkillWireMap map) => PhoneSkillSections(
+    entry: _field(map, 'entry'),
+    steps: _field(map, 'steps'),
+    pitfalls: _field(map, 'pitfalls'),
+    success: _field(map, 'success'),
+    handoff: _field(map, 'handoff'),
+  );
+
+  Map<String, String> toMap() => {
+    'entry': entry,
+    'steps': steps,
+    'pitfalls': pitfalls,
+    'success': success,
+    'handoff': handoff,
+  };
 }
 
-/// The exact native revision shown to the person. Only this revision can be saved.
-class PhoneSkillDraftView {
-  const PhoneSkillDraftView({required this.draftId, required this.taskId, required this.generation,
-    required this.revision, required this.skillName, required this.markdown, required this.stepOrder,
-    required this.parameterizedFields, this.phase, this.bundleRevision});
-  final String draftId;
-  final int taskId;
-  final int generation;
-  final int revision;
-  final String skillName;
-  final String markdown;
-  final List<int> stepOrder;
-  final List<String> parameterizedFields;
-  final String? phase;
-  final String? bundleRevision;
+class PhoneSkill {
+  PhoneSkill.fromMap(SkillWireMap map)
+    : name = _field(map, 'name'),
+      display = _field(map, 'display'),
+      description = _field(map, 'description'),
+      whenToUse = _field(map, 'whenToUse'),
+      apps = _items(map, 'apps', (v) => v as String),
+      source = _enum(map, 'source', PhoneSkillSource.values),
+      state = _enum(map, 'state', PhoneSkillState.values),
+      suspensionReason = map['suspensionReason'] == null
+          ? null
+          : _enum(map, 'suspensionReason', PhoneSkillSuspensionReason.values),
+      uses = _field(map, 'uses'),
+      updatedAt = _field(map, 'updatedAt'),
+      recent = _items(
+        map,
+        'recent',
+        (v) => switch (v) {
+          'ok' => PhoneSkillOutcome.ok,
+          'miss' => PhoneSkillOutcome.miss,
+          'void' => PhoneSkillOutcome.unscored,
+          _ => throw const FormatException('Invalid skill outcome'),
+        },
+      ),
+      learnedFrom = map['learnedFrom'] == null ? null : PhoneSkillOrigin.fromMap(_field(map, 'learnedFrom')),
+      body = map['body'] as String?,
+      sections = map['sections'] == null ? null : PhoneSkillSections.fromMap(_field(map, 'sections')),
+      history = map['history'] == null ? const [] : _items(map, 'history', (v) => v as int);
 
-  static PhoneSkillDraftView? parse(Object? raw) {
-    if (raw is! Map) return null;
-    final id = raw['draftId'], task = raw['taskId'], generation = raw['generation'], revision = raw['revision'];
-    final name = raw['skillName'], markdown = raw['markdown'], order = raw['stepOrder'], fields = raw['parameterizedFields'];
-    final phase = raw['phase'];
-    final bundle = raw['bundleRevision'];
-    if (raw.containsKey('bundleRevision') && (bundle is! String || !_draftId.hasMatch(bundle))) return null;
-    if (id is! String || !_draftId.hasMatch(id) || task is! int || task <= 0 ||
-        generation is! int || generation <= 0 || revision is! int || revision <= 0 ||
-        name is! String || !_skillName.hasMatch(name) || markdown is! String ||
-        markdown.length > 32768 || utf8.encode(markdown).length > 32768 ||
-        order is! List || order.isEmpty || order.length > 60 ||
-        order.any((v) => v is! int || v < 0 || v >= 60) || order.toSet().length != order.length ||
-        fields is! List || fields.length > 62 || fields.any((v) => v is! String || v.length > 32) ||
-        phase != null && !const {'staging', 'committing', 'finished', 'cancelled'}.contains(phase)) {
-      return null;
-    }
-    return PhoneSkillDraftView(draftId: id, taskId: task, generation: generation, revision: revision,
-      skillName: name, markdown: markdown, stepOrder: List<int>.unmodifiable(order),
-      parameterizedFields: List<String>.unmodifiable(fields), phase: phase as String?, bundleRevision: bundle as String?);
-  }
+  final String name, display, description, whenToUse;
+  final List<String> apps;
+  final PhoneSkillSource source;
+  final PhoneSkillState state;
+  final PhoneSkillSuspensionReason? suspensionReason;
+  final int uses, updatedAt;
+  final List<PhoneSkillOutcome> recent;
+  final PhoneSkillOrigin? learnedFrom;
+
+  /// Present in the detail returned by skills.get and successful edits.
+  final String? body;
+  final PhoneSkillSections? sections;
+  final List<int> history;
 }
 
-enum PhoneSkillReplyKind { shown, saved, discarded, rejected, saving, unverified }
-
-class PhoneSkillReply {
-  const PhoneSkillReply._(this.kind, {this.draft, this.code, this.name, this.relativePath, this.phase, this.bundleRevision, this.publication});
-  const PhoneSkillReply.unavailable() : this._(PhoneSkillReplyKind.rejected, code: 'unavailable');
-  final PhoneSkillReplyKind kind;
-  final PhoneSkillDraftView? draft;
-  final String? code;
-  final String? name;
-  final String? relativePath;
-  final String? phase;
-  final String? bundleRevision;
-  final String? publication;
-
-  static const _codes = {'stale', 'busy', 'confirmation_required', 'unavailable', 'invalid', 'sensitive',
-    'too_large', 'no_home', 'conflict', 'io', 'cannot_cancel'};
-
-  factory PhoneSkillReply.parse(Object? raw) {
-    if (raw is! Map) return const PhoneSkillReply.unavailable();
-    final bundle = raw['bundleRevision'];
-    if (raw.containsKey('bundleRevision') && (bundle is! String || !_draftId.hasMatch(bundle))) {
-      return const PhoneSkillReply.unavailable();
-    }
-    switch (raw['kind']) {
-      case 'shown':
-        final draft = PhoneSkillDraftView.parse(raw['draft']);
-        return draft == null ? const PhoneSkillReply.unavailable() : PhoneSkillReply._(PhoneSkillReplyKind.shown, draft: draft);
-      case 'saved':
-        final name = raw['name'], path = raw['relativePath'];
-        if (name is! String || !_skillName.hasMatch(name) || path != 'skills/$name/SKILL.md') return const PhoneSkillReply.unavailable();
-        return PhoneSkillReply._(PhoneSkillReplyKind.saved, name: name, relativePath: path as String, bundleRevision: bundle as String?);
-      case 'discarded':
-        return const PhoneSkillReply._(PhoneSkillReplyKind.discarded);
-      case 'saving':
-        final phase = raw['phase'];
-        if (phase != 'staging' && phase != 'committing') return const PhoneSkillReply.unavailable();
-        final name = raw['name'];
-        if (bundle != null && (name is! String || !_skillName.hasMatch(name)) ||
-            bundle == null && raw.containsKey('name')) {
-          return const PhoneSkillReply.unavailable();
-        }
-        return PhoneSkillReply._(PhoneSkillReplyKind.saving, phase: phase as String,
-          name: name as String?, bundleRevision: bundle as String?);
-      case 'unverified':
-        final name = raw['name'], path = raw['relativePath'];
-        final publication = raw['publication'], code = raw['code'];
-        if (bundle == null || name is! String || !_skillName.hasMatch(name) || path != 'skills/$name/SKILL.md' ||
-            !const {'published', 'unknown'}.contains(publication) ||
-            !const {'verification_unavailable', 'bundle_invalid', 'origin_unavailable'}.contains(code)) {
-          return const PhoneSkillReply.unavailable();
-        }
-        return PhoneSkillReply._(PhoneSkillReplyKind.unverified, name: name, relativePath: path as String,
-          bundleRevision: bundle as String, publication: publication as String, code: code as String);
-      case 'rejected':
-        final code = raw['code'];
-        return PhoneSkillReply._(PhoneSkillReplyKind.rejected, code: code is String && _codes.contains(code) ? code : 'unavailable');
-      default:
-        return const PhoneSkillReply.unavailable();
-    }
-  }
+class PhoneSkillDiffLine {
+  PhoneSkillDiffLine.fromMap(SkillWireMap map)
+    : text = _field(map, 'text'),
+      operation = switch (map['op']) {
+        '+' => PhoneSkillDiffOperation.added,
+        '-' => PhoneSkillDiffOperation.removed,
+        ' ' => PhoneSkillDiffOperation.unchanged,
+        _ => throw const FormatException('Invalid skill diff operation'),
+      };
+  final PhoneSkillDiffOperation operation;
+  final String text;
 }
 
-/// An existing native save record, not an editable draft or a filesystem path.
-class PhoneSkillSaveHandle {
-  const PhoneSkillSaveHandle._(this.taskId, this.draftId, this.name, this.bundleRevision);
-  final int taskId;
-  final String draftId;
-  final String name;
-  final String bundleRevision;
-
-  static PhoneSkillSaveHandle? fromDraft(PhoneSkillDraftView draft) => draft.bundleRevision == null ? null
-    : PhoneSkillSaveHandle._(draft.taskId, draft.draftId, draft.skillName, draft.bundleRevision!);
-
-  static PhoneSkillSaveHandle? parse(Object? raw) {
-    if (raw is! Map) return null;
-    final task = raw['taskId'], id = raw['draftId'], name = raw['name'], revision = raw['bundleRevision'];
-    if (task is! int || task <= 0 || id is! String || !_draftId.hasMatch(id) ||
-        name is! String || !_skillName.hasMatch(name) || revision is! String || !_draftId.hasMatch(revision)) {
-      return null;
-    }
-    return PhoneSkillSaveHandle._(task, id, name, revision);
-  }
-
-  Map<String, Object> get query => {'action': 'check_save', 'taskId': taskId, 'draftId': draftId,
-    'name': name, 'bundleRevision': bundleRevision};
+class PhoneSkillDraft {
+  PhoneSkillDraft.fromMap(SkillWireMap map)
+    : id = _field(map, 'id'),
+      name = _field(map, 'name'),
+      display = _field(map, 'display'),
+      description = _field(map, 'description'),
+      whenToUse = _field(map, 'whenToUse'),
+      apps = _items(map, 'apps', (v) => v as String),
+      sections = PhoneSkillSections.fromMap(_field(map, 'sections')),
+      body = _field(map, 'body'),
+      createdAt = _field(map, 'createdAt'),
+      from = PhoneSkillOrigin.fromMap(_field(map, 'from')),
+      kind = switch (map['kind']) {
+        'new' => PhoneSkillDraftKind.newSkill,
+        'update' => PhoneSkillDraftKind.update,
+        _ => throw const FormatException('Invalid skill draft kind'),
+      },
+      target = map['target'] as String?,
+      baseFingerprint = map['baseFingerprint'] as String?,
+      diff = map['diff'] == null ? const [] : _items(map, 'diff', (v) => PhoneSkillDiffLine.fromMap(v as SkillWireMap));
+  final String id, name, display, description, whenToUse, body;
+  final List<String> apps;
+  final PhoneSkillSections sections;
+  final int createdAt;
+  final PhoneSkillOrigin from;
+  final PhoneSkillDraftKind kind;
+  final String? target, baseFingerprint;
+  final List<PhoneSkillDiffLine> diff;
 }
 
-class PhoneSkillSaveResult {
-  const PhoneSkillSaveResult._(this.handle, this.reply);
-  final PhoneSkillSaveHandle handle;
-  final PhoneSkillReply reply;
+class PhoneLegacySkill {
+  PhoneLegacySkill.fromMap(SkillWireMap map) : name = _field(map, 'name'), path = _field(map, 'path');
+  final String name, path;
+}
 
-  static PhoneSkillSaveResult? parse(Object? raw) {
-    final handle = PhoneSkillSaveHandle.parse(raw);
-    if (handle == null || raw is! Map) return null;
-    if (!const {'saving', 'saved', 'unverified'}.contains(raw['kind'])) return null;
-    // Display-only path. Queries send the frozen native identity, never a path.
-    final reply = PhoneSkillReply.parse({...raw, 'relativePath': 'skills/${handle.name}/SKILL.md'});
-    if (reply.kind == PhoneSkillReplyKind.rejected) return null;
-    return PhoneSkillSaveResult._(handle, reply);
-  }
+class PhoneSkillListing {
+  PhoneSkillListing.fromMap(SkillWireMap map)
+    : learn = _field(map, 'learn'),
+      skills = _items(map, 'skills', (v) => PhoneSkill.fromMap(v as SkillWireMap)),
+      drafts = _items(map, 'drafts', (v) => PhoneSkillDraft.fromMap(v as SkillWireMap)),
+      legacy = _items(map, 'legacy', (v) => PhoneLegacySkill.fromMap(v as SkillWireMap)),
+      archived = _items(map, 'archived', (v) => v as String);
+  final bool learn;
+  final List<PhoneSkill> skills;
+  final List<PhoneSkillDraft> drafts;
+  final List<PhoneLegacySkill> legacy;
+  final List<String> archived;
+}
+
+sealed class PhoneSkillEvent {
+  const PhoneSkillEvent();
+}
+
+final class PhoneSkillDraftEvent extends PhoneSkillEvent {
+  PhoneSkillDraftEvent.fromMap(SkillWireMap map) : draft = PhoneSkillDraft.fromMap(_field(map, 'draft'));
+  final PhoneSkillDraft draft;
+}
+
+final class PhoneSkillOutcomeEvent extends PhoneSkillEvent {
+  PhoneSkillOutcomeEvent.fromMap(SkillWireMap map)
+    : name = _field(map, 'name'),
+      display = _field(map, 'display'),
+      state = _enum(map, 'state', PhoneSkillState.values),
+      change = _enum(map, 'change', PhoneSkillChange.values),
+      from = PhoneSkillOrigin.fromMap(_field(map, 'from'));
+  final String name, display;
+  final PhoneSkillState state;
+  final PhoneSkillChange change;
+  final PhoneSkillOrigin from;
+}
+
+/// Domain failures are returned as {error, detail} by native. Transport failures use unavailable.
+class PhoneSkillException implements Exception {
+  const PhoneSkillException(this.code, this.detail);
+  final String code, detail;
 }

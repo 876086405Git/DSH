@@ -130,7 +130,10 @@ class CompanionAgentAttachment {
 
   Map<String, ({int start, int end})> get pendingReplyRanges {
     if (!isAttached) return const {};
-    return Map<String, ({int start, int end})>.unmodifiable(_visit.run?.unpresentedReplies ?? const {});
+    return Map<String, ({int start, int end})>.unmodifiable({
+      ...?_visit.run?.unpresentedReplies,
+      ...?_visit.notices?.presentationRanges(_visit.run),
+    });
   }
 
   void presentedReply(String replyId, String text, {required Set<String> sourceIds}) {
@@ -152,6 +155,16 @@ class CompanionAgentResident {
   CompanionMemoryOwner? get memory => active ? _visit.memory : null;
   String? get characterId => active ? _visit.characterId : null;
   bool get ownsCurrentRun => active && identical(_visit.runOrigin, _ui) && identical(_visit.run, _visit.agent._run);
+
+  Future<bool> deliverReply(String replyId, String text, Future<bool> Function(int? noticeEpoch) deliver) {
+    final run = _visit.run;
+    if (!active || run == null || !identical(run, _visit.agent._run) || run.replyId != replyId) {
+      return Future.value(false);
+    }
+    final notices = _visit.notices;
+    if (notices != null) return notices.deliverReply(run, text, deliver);
+    return run.externalNoticeContent ? Future.value(false) : deliver(null);
+  }
 
   /// Only this signal's actual model request may survive its own busy view.
   String? get preparingSignalId =>
@@ -214,6 +227,11 @@ class _CompanionAgentVisit {
       ref.listen(activeConnectionProvider.select((value) => value.value?.client), (_, _) => connectionChanged()).close,
     );
     subscriptions.add(ref.listen(companionModeProvider, (_, _) => connectionChanged()).close);
+    subscriptions.add(
+      ref.listen(settingsProvider.select((value) => value.apiKey), (_, _) => notices?.invalidate()).close,
+    );
+    subscriptions.add(ref.listen(companionPersonaProvider, (_, _) => notices?.invalidate()).close);
+    subscriptions.add(ref.listen(companionNameProvider, (_, _) => notices?.invalidate()).close);
     _schedulePeriodicWork();
   }
 
@@ -271,6 +289,7 @@ class _CompanionAgentVisit {
   CompanionAgentMemoryTools? retryTools;
   CompanionAgentPhoneTools? activePhoneTools;
   CompanionResidentSignals? residentSignals;
+  _VisitNotices? notices;
   ({String signalId, CompanionAgentModelRequest request, int generation, CompanionAgentRoomUi recipient})?
   signalPreparation;
   _CompanionAgentRun? run;
@@ -330,6 +349,7 @@ class _CompanionAgentVisit {
     final factor = _reducedPower ? 2 : 1;
     idleTimer = Timer.periodic(Duration(minutes: factor), (_) {
       if (active) {
+        notices?.tick();
         observe(ui.initiativeView);
         unawaited(consolidate());
       }
@@ -413,6 +433,7 @@ class _CompanionAgentVisit {
     epoch++;
     characterSourceKey = sourceKey;
     bindCharacter();
+    notices?.invalidate();
     retrySource = null;
     run = null;
     events = const [];
@@ -484,6 +505,10 @@ class _CompanionAgentVisit {
       transport: () => agent._modelTransport(isCurrent: captureCurrent(), forMemory: true),
       estimateTokens: estimateCompanionMemoryTokens,
     );
+    if (ref.read(operatingSystemProvider) == 'android') {
+      notices = _VisitNotices(this, owner, ref.read(companionNoticesProvider));
+      unawaited(notices!.start(directory.path));
+    }
     unawaited(ref.read(companionRemindersProvider).recover());
     unawaited(clearWidget());
     unawaited(extract(forceTail: true));
@@ -505,6 +530,7 @@ class _CompanionAgentVisit {
       final maintenance = owner.acceptsMaintenanceControl(this, revision);
       final own = maintenance || (identical(run, agent._run) && agent.acceptsControl(owner, revision));
       controlRevision = revision;
+      notices?.invalidate();
       if (!maintenance) owner.cancelWork();
       quietTimer?.cancel();
       if (!own) {
@@ -578,6 +604,8 @@ class _CompanionAgentVisit {
     void Function(MemoryRow)? onCommitted,
   }) async {
     if (!active || !originCurrent() || raw.trim().isEmpty || (preparing && !replacePreparing)) return;
+    final noticeReply = notices?.replyContext(raw, retrySource: retrySource?['id'] as String?);
+    notices?.invalidate(keepReply: true);
     lastUserInteractionAt = DateTime.now();
     acted();
     memory?.cancelWork();
@@ -683,6 +711,7 @@ class _CompanionAgentVisit {
       final turnContext = CompanionTurnContext(
         Map.unmodifiable({
           ...sampledContext.data,
+          if (noticeReply != null) 'noticeReply': noticeReply.context,
           'window': inputWindow,
           if (sourceClock != null) 'zoneId': sourceClock.zoneId,
           // A retry's current clock is not when its unchanged words were said.
@@ -781,8 +810,14 @@ class _CompanionAgentVisit {
         },
       );
       activePhoneTools = phoneTools;
-      await phoneTools.prepare();
+      if (noticeReply?.draftOnly != true) await phoneTools.prepare();
       if (!current()) return;
+      if (noticeReply != null) {
+        await notices?.refresh();
+        if (!current() || notices?.replyCurrent(noticeReply) != true) {
+          throw const DshClosedException('Notice reply context changed');
+        }
+      }
       preparing = false;
       final work = agent.say(
         memory: owner,
@@ -790,12 +825,17 @@ class _CompanionAgentVisit {
         system: system,
         context: turnContext,
         assistantPage: assistantPage,
-        tools: [...memoryTools.bindings, ...taskTools.bindings, ...phoneTools.bindings],
+        tools: noticeReply == null
+            ? [...memoryTools.bindings, ...taskTools.bindings, ...phoneTools.bindings]
+            : noticeReply.draftOnly
+            ? const []
+            : phoneTools.bindings,
         isCurrent: current,
         onSelected: memoryTools.grantSelection,
         onStop: phoneTools.stop,
       );
       submittedRun = run = agent._run;
+      if (submittedRun != null) notices?.bindReply(submittedRun, noticeReply);
       changed();
       await work;
       if (!current() || !identical(run, submittedRun)) return;
@@ -847,6 +887,7 @@ class _CompanionAgentVisit {
       }
       if (current()) {
         preparing = false;
+        notices?.tick();
         changed();
       }
     }
@@ -1022,7 +1063,7 @@ class _CompanionAgentVisit {
       enteredRoom = target.initiativeRoom;
       initiative.enter(target.initiativeRoom, deliveredView);
     }
-    requestFollowup(deliveredView, target);
+    if (notices?.offer() != true) requestFollowup(deliveredView, target);
     if (residentUi != null) {
       residentSignals ??= CompanionResidentSignals(
         ref: ref,
@@ -1367,7 +1408,6 @@ class _CompanionAgentVisit {
     final role = characterId;
     if (!active ||
         owner == null ||
-        role == null ||
         shown == null ||
         shown.discard ||
         !identical(shown.memory, owner) ||
@@ -1376,6 +1416,8 @@ class _CompanionAgentVisit {
         shown.text != text) {
       return;
     }
+    notices?.presentedReply(shown, text, sourceIds);
+    if (role == null) return;
     final at = clock().wallMs;
     for (final id in sourceIds) {
       final range = shown.unpresentedReplies[id];
@@ -1408,6 +1450,7 @@ class _CompanionAgentVisit {
     boundLight = nextLight;
     if (memory case final owner?) unawaited(resumeNotes(owner));
     if (!differs) return;
+    notices?.invalidate();
     stop();
     memory?.cancelWork();
     epoch++;
@@ -1553,6 +1596,8 @@ class _CompanionAgentVisit {
     window?.attached = false;
     window?.mapHandoff.close();
     oldUi?.detached();
+    notices?.close();
+    notices = null;
     closed = true;
     stop(discard: true);
     idleTimer?.cancel();

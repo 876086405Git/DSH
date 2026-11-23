@@ -252,6 +252,7 @@ class CompanionAgentToolResult {
     this.isError = false,
     this.notice,
     this.externalWebContent = false,
+    this.externalNoticeContent = false,
   });
 
   /// Includes a truthful failure explanation: DeepSeek ignores is_error.
@@ -261,6 +262,10 @@ class CompanionAgentToolResult {
   /// The adapter actually returned public-web text or a report containing it.
   /// This is application provenance, never a field trusted from model input.
   final bool externalWebContent;
+
+  /// The memory owner returned actual externally sourced notification material.
+  /// Never inferred from user wording or from any model-supplied argument.
+  final bool externalNoticeContent;
 
   /// A committed deletion's short natural acknowledgement, even if the next
   /// model request fails. This is spoken text, not a tool log.

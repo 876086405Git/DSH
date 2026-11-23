@@ -53,6 +53,7 @@ object DshFlutterEngine {
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.companion.CompanionReminderPlugin())
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.companion.CompanionMapPlugin())
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.companion.CompanionEmbeddingPlugin())
+            engine.plugins.add(io.github.ccch1mneyyy.dsh_app.companion.CompanionNoticesPlugin())
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.companion.CompanionAlwaysOnPlugin())
             engine.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())
             cache.put(ENGINE_ID, engine)

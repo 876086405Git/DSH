@@ -345,6 +345,7 @@ internal fun retireRuntime(base: File, retired: File, keep: File, paths: List<St
     if (!base.exists()) {
         // Nothing to take from; the choice still applies to what an earlier reset kept.
         pruneKept(keep, paths)
+        prunePhoneSkills(base, paths)
         return
     }
     val list = File(base, KEEP_LIST)
@@ -387,10 +388,21 @@ internal fun settleReset(base: File, retired: File, keep: File, dropFailed: Bool
         if (!from.renameTo(to) && !dropFailed) throw KeepFailed(rel)
     }
     // An unreadable list keeps whatever is already kept.
-    if (listed != null) pruneKept(keep, listed)
+    if (listed != null) {
+        pruneKept(keep, listed)
+        prunePhoneSkills(base, listed)
+    }
     // The list goes first: a delete cut short leaves nothing that a later settle would keep.
     list.delete()
     retired.deleteRecursivelySafely()
+}
+
+/** The private authority lives beside runtime; consume the same reset journal before deleting it. */
+private fun prunePhoneSkills(base: File, paths: List<String>) {
+    if (ResetKeep.UI_AND_SKILLS.paths.all { it in paths }) return
+    val records = File(base.parentFile, "phone-skills")
+    records.deleteRecursivelySafely()
+    check(!records.present()) { "Could not remove private phone skills." }
 }
 
 /** The kept paths, or null when the list is missing; anything that could leave the rootfs is dropped. */

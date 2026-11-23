@@ -133,6 +133,7 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
     required String id,
     bool user = false,
     bool quiet = true,
+    int? noticeEpoch,
   }) async {
     if (!state.enabled || state.epoch != epoch) return false;
     try {
@@ -143,6 +144,7 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
             'id': id,
             'user': user,
             'quiet': quiet,
+            'noticeEpoch': ?noticeEpoch,
           }) ??
           false;
     } on MissingPluginException {
@@ -154,7 +156,13 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
 
   /// For an already-reserved business opportunity an exception is unknown,
   /// not evidence that a native notification never appeared.
-  Future<bool> deliver({required int epoch, required String name, required String text, required String id}) async {
+  Future<bool> deliver({
+    required int epoch,
+    required String name,
+    required String text,
+    required String id,
+    int? noticeEpoch,
+  }) async {
     if (!state.enabled || state.epoch != epoch || !state.notificationAvailable) return false;
     try {
       return await channel.invokeMethod<bool>('update', {
@@ -164,6 +172,7 @@ class CompanionResidency extends Notifier<CompanionAlwaysOnStatus> {
             'id': id,
             'user': false,
             'quiet': false,
+            'noticeEpoch': ?noticeEpoch,
           }) ??
           false;
     } on MissingPluginException {

@@ -18,6 +18,7 @@ class PhonePrompts(
     private val notifications: NotificationGate,
     private val reopen: (String?, String?) -> Boolean,
     private val displaySelection: PhoneDisplaySelection,
+    private val onUserIntervened: (PhoneTasks.Owner) -> Unit = {},
     private val resolveTask: (Long, String?) -> PhoneTasks? = { id, _ -> tasks.takeIf { it.snapshot().id == id } },
 ) : UserGate {
     private val main = Handler(Looper.getMainLooper())
@@ -84,7 +85,8 @@ class PhonePrompts(
             PromptOutcome.ALLOW_ONCE -> Decision.ALLOW_ONCE
             PromptOutcome.ALLOW_APP -> Decision.ALLOW_APP_FOR_TASK
             PromptOutcome.ALLOW_VISUAL -> Decision.ALLOW_VISUAL_FOR_TASK
-            PromptOutcome.STOPPED -> Decision.STOP
+            PromptOutcome.REJECT -> { onUserIntervened(taskOwner); Decision.DENY }
+            PromptOutcome.STOPPED -> { onUserIntervened(taskOwner); Decision.STOP }
             PromptOutcome.UNAVAILABLE -> Decision.UNAVAILABLE
             else -> Decision.DENY
         }
@@ -109,7 +111,8 @@ class PhonePrompts(
         // Revocation/lock is not a user STOP. Reuse the worker interruption path.
         if (result.outcome == PromptOutcome.STOPPED && result.reason != null) throw InterruptedException()
         return when (result.outcome) {
-            PromptOutcome.CONTINUE -> HandoffResult.CONTINUE
+            PromptOutcome.CONTINUE -> { onUserIntervened(taskOwner); HandoffResult.CONTINUE }
+            PromptOutcome.STOPPED -> { onUserIntervened(taskOwner); HandoffResult.STOP }
             PromptOutcome.TIMEOUT -> HandoffResult.TIMEOUT
             else -> HandoffResult.STOP
         }

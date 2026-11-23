@@ -75,10 +75,20 @@ class CompanionAlwaysOnPlugin : FlutterPlugin, ActivityAware, PluginRegistry.Act
                             statusChanged()
                         }
                     }
-                    "update" -> result.success(CompanionConversationNotification.update(context,
-                        call.argument<Number>("epoch")!!.toLong(), call.argument<String>("id")!!,
-                        call.argument<String>("text")!!, call.argument<String>("name").orEmpty(),
-                        call.argument<Boolean>("user") == true, call.argument<Boolean>("quiet") != false))
+                    "update" -> {
+                        if (call.hasArgument("noticeEpoch")) {
+                            val expected = call.argument<Any>("noticeEpoch")
+                            if ((expected !is Long && expected !is Int) ||
+                                !CompanionNotices.get(context).allows((expected as Number).toLong())) {
+                                result.success(false)
+                                return@setMethodCallHandler
+                            }
+                        }
+                        result.success(CompanionConversationNotification.update(context,
+                            call.argument<Number>("epoch")!!.toLong(), call.argument<String>("id")!!,
+                            call.argument<String>("text")!!, call.argument<String>("name").orEmpty(),
+                            call.argument<Boolean>("user") == true, call.argument<Boolean>("quiet") != false))
+                    }
                     "clear" -> {
                         if (CompanionAlwaysOnState.read(context).epoch == call.argument<Number>("epoch")?.toLong()) {
                             CompanionConversationNotification.clear(context)

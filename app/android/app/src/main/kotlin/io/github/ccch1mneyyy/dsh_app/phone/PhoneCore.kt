@@ -307,6 +307,7 @@ class PhoneCore(
         out.summary?.let { log.add(name, out.app, it, out.decision ?: if (out.error) "error" else "ok") }
         var interjections = emptyList<String>()
         if (owner != null) tasks.runIfCurrent(owner) {
+            if (out.decision == "denied" || out.decision == "refused:no-gate") skillTrace.confirmationUnresolved(owner)
             noteRefusal(name, out.decision, owner)
             interjections = tasks.drainInterjections()
         }
@@ -554,7 +555,7 @@ class PhoneCore(
             if (!tasks.isCurrent(owner) || Thread.currentThread().isInterrupted) return stoppedOut("open")
             val summary = ui.get("phone_log_open_app", "打开 %1\$s", app.packageName) // l10n:keep test default
             confirmSystem(plan, scope, owner, summary)?.let { return it }
-            val ticket = skillTrace.beginOpen(owner, PhoneScreen.MAIN)
+            val ticket = skillTrace.beginOpen(owner, PhoneScreen.MAIN, app.packageName)
             val result = try {
                 launchSystem(plan, owner, call.requestedApp).also {
                     skillTrace.finish(ticket, it.ok, false, false)
@@ -584,7 +585,7 @@ class PhoneCore(
                 summary = ui.get("phone_log_open_background", "后台屏打开 %1\$s", app.packageName), decision = "refused:${it.rule}") // l10n:keep test default
         }
         val openRefusal = AtomicReference<SafetyGate.Verdict.Refuse?>(null)
-        val ticket = skillTrace.beginOpen(owner, PhoneScreen.BACKGROUND)
+        val ticket = skillTrace.beginOpen(owner, PhoneScreen.BACKGROUND, app.packageName)
         val res = traceResult(ticket) {
             driver.open(app.identity) {
                 if (!current(owner) || openRefusal.get() != null) false else {
@@ -1220,7 +1221,7 @@ class PhoneCore(
                 SafetyGate.Result.No(refusal.message, "refused:${refusal.rule}"))
             return policyFailure.get() == null
         }
-        val ticket = skillTrace.beginAction(owner, action, target)
+        val ticket = skillTrace.beginAction(owner, action, target, pkg)
         val res = traceResult(ticket) {
             val result = driver.perform(action, ::policyAllowed, null, ::actionSourcesAllowed)
             policyFailure.get()?.let {
@@ -1333,7 +1334,7 @@ class PhoneCore(
             return action().also { result ->
                 val post = result.screen
                 val readable = post != null && !post.secure && safety.checkRead(post.packageName, post.appLabel) == null
-                skillTrace.finish(ticket, result.ok, result.staleSnapshot, readable, result.navigationWitness)
+                skillTrace.finish(ticket, result.ok, result.staleSnapshot, readable, result.navigationWitness, result.screenChanged)
             }
         } catch (e: Throwable) { skillTrace.fail(ticket); throw e }
     }

@@ -7251,6 +7251,77 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get companionNotices => '她会留意你的通知';
+
+  @override
+  String get companionNoticesHint => '你选的 App 来了通知，她看一眼，值得说的才开口';
+
+  @override
+  String get companionNoticesNeedsAccess => '还差一步：允许 DSH Go 读取通知';
+
+  @override
+  String get companionNoticesAllow => '去授权';
+
+  @override
+  String get companionNoticesApps => '她看哪些 App';
+
+  @override
+  String get companionNoticesAppsEmpty => '开启后收到过通知的 App 会出现在这里';
+
+  @override
+  String companionNoticesAppCount(int count) {
+    return '7 天内 $count 条';
+  }
+
+  @override
+  String get companionNoticesQuiet => '最近没来过通知';
+
+  @override
+  String companionNoticesToday(int received, int said) {
+    return '今天收到 $received 条 · 她说了 $said 次';
+  }
+
+  @override
+  String get companionNoticesFooter =>
+      '通知会发给你给她配置的模型（现在是 DeepSeek），只发你选的 App 的。原文不存，只存她记下的那几句近况，在记忆页能看到、能删；本机另外只留条数、用量和防重复用的标记。锁屏时她不看。';
+
+  @override
+  String get companionNoticesFailed => '没改成，再试一次';
+
+  @override
+  String get companionNoticeLevelOff => '不看';
+
+  @override
+  String get companionNoticeLevelOffHint => '这个 App 的通知她不读';
+
+  @override
+  String get companionNoticeLevelGlance => '看一眼';
+
+  @override
+  String get companionNoticeLevelGlanceHint => '只用来决定要不要告诉你，看完就忘';
+
+  @override
+  String get companionNoticeLevelRemember => '会记住';
+
+  @override
+  String get companionNoticeLevelRememberHint => '值得记的近况，她会记下来';
+
+  @override
+  String get companionMemoryAll => '全部';
+
+  @override
+  String get companionMemoryFromNotices => '从通知看到的';
+
+  @override
+  String get companionMemoryNoticesClear => '全部清掉';
+
+  @override
+  String get companionMemoryNoticesClearTitle => '让她忘掉通知里看到的事？';
+
+  @override
+  String get companionMemoryNoticesClearBody => '她从通知里记下的近况都会删掉，同样的事以后也不再记。';
+
+  @override
   String get companionPanelCompany => '陪伴';
 
   @override
@@ -14558,98 +14629,198 @@ class L10nZh extends L10n {
   String get phoneKeepFailed => '没连上；下次打开 App 或开始操控时再试';
 
   @override
-  String get phoneSkillSectionTitle => '成功任务与技能';
+  String get phoneSkillsTitle => '手机技能';
 
   @override
-  String get phoneSkillAskAfterSuccess => '任务成功后询问是否存成技能';
+  String get phoneSkillsSummaryNone => '做过的事会在这里变成技能';
 
   @override
-  String get phoneSkillAskAfterSuccessHint => '默认关闭。此页可见时，新完成的任务会询问一次；也可随时手动选择。';
-
-  @override
-  String phoneSkillTask(int taskId, int steps) {
-    return '任务 $taskId · $steps 步';
+  String phoneSkillsSummary(int count) {
+    return '已学会 $count 项';
   }
 
   @override
-  String get phoneSkillCandidateHint => '请先核对实际结果；工具返回成功不等于目标已经完成。';
-
-  @override
-  String get phoneSkillSaveAction => '存成技能';
-
-  @override
-  String get phoneSkillConfirmGoal => '这次任务达到了目标吗？';
-
-  @override
-  String get phoneSkillConfirmGoalBody => '请核对实际结果。确认后才会起草，保存前仍可查看和编辑。';
-
-  @override
-  String get phoneSkillGoalDone => '目标已完成，查看草稿';
-
-  @override
-  String get phoneSkillPrivacyHint => '草稿只在本机处理。不要填写密码、密钥或验证码。本阶段自由文字会替换成参数，删除和重排步骤会保留；以最终预览为准。';
-
-  @override
-  String get phoneSkillGoal => '目标';
-
-  @override
-  String get phoneSkillPrerequisites => '前提（应用、版本、登录态）';
-
-  @override
-  String phoneSkillStep(int number) {
-    return '原步骤 $number';
+  String phoneSkillsSummaryDrafts(int count, int drafts) {
+    return '已学会 $count 项 · $drafts 份待确认';
   }
 
   @override
-  String get phoneSkillCheckpoint => '这一步之后应看到什么';
+  String get phoneSkillsLearn => '从做过的事里学';
 
   @override
-  String get phoneSkillMoveUp => '上移一步';
+  String get phoneSkillsLearnHint => '手机操控办成的事会起草成技能，你收下才会用';
 
   @override
-  String get phoneSkillMoveDown => '下移一步';
+  String get phoneSkillsLearnOffHint => '关着时不再起草新技能，已收下的照常用';
 
   @override
-  String get phoneSkillUpdatePreview => '更新脱敏预览';
+  String get phoneSkillsTabMine => '我的技能';
 
   @override
-  String get phoneSkillPreviewTitle => '将保存的完整内容';
+  String phoneSkillsTabDrafts(int count) {
+    return '待确认 $count';
+  }
 
   @override
-  String get phoneSkillParameterizedHint => '自由文字已替换成参数；使用技能时需要补充并重新核对。';
+  String get phoneSkillsTabDraftsNone => '待确认';
 
   @override
-  String get phoneSkillFinalConfirmation => '我已核对当前完整预览，同意保存这一版本。';
+  String get phoneSkillsEmpty => '还没有学会的技能。手机操控办成一件事后，DSH 会起草一份，等你收下。';
 
   @override
-  String get phoneSkillSavedBody => '文件已写入本机技能目录。尚未核实引擎技能列表是否已刷新；可在技能页检查。';
+  String get phoneSkillsDraftsEmpty => '没有要确认的草稿';
 
   @override
-  String get phoneSkillWriting => '正在写入技能';
+  String get phoneSkillsFootnote => '技能是给 DSH 看的做事说明：下次做同类的事，它会先读一遍再动手。用得越多，它越熟练。';
 
   @override
-  String get phoneSkillCannotCancel => '写入可能已进入提交阶段，无法保证撤回。关闭只关闭此页；已经提交的文件仍会保存。';
+  String phoneSkillStateActive(int uses) {
+    return '常用 · 用了 $uses 次';
+  }
 
   @override
-  String get phoneSkillKeepWaiting => '继续查看';
+  String get phoneSkillStateTrial => '试用中 · 还没用它办成过事';
 
   @override
-  String get phoneSkillCheckWrite => '检查写入结果';
+  String get phoneSkillStateSuspended => '已停用';
 
   @override
-  String get phoneSkillStale => '这份草稿已失效。请关闭后重新选择任务。';
+  String get phoneSkillStateSuspendedMisses => '已停用 · 最近不灵';
 
   @override
-  String get phoneSkillSensitive => '编辑中包含敏感内容，请移除后再更新预览。';
+  String get phoneSkillSourceWritten => '你让 DSH 写的';
 
   @override
-  String get phoneSkillInvalid => '编辑内容或步骤顺序不符合限制。请减少文字，至少保留一个步骤。';
+  String get phoneSkillUse => '使用这项技能';
 
   @override
-  String get phoneSkillWriteFailed => '未能写入。请核对本机运行环境和存储；修改并更新预览后才能再次确认保存。';
+  String get phoneSkillLearnedTitle => 'DSH 学会了一个新做法';
 
   @override
-  String get phoneSkillUnavailable => '当前无法处理技能草稿。请检查本机引擎状态后重试。';
+  String phoneSkillUpdateTitle(String name) {
+    return 'DSH 想改进「$name」';
+  }
+
+  @override
+  String get phoneSkillAccept => '收下';
+
+  @override
+  String get phoneSkillAcceptUpdate => '收下这次修改';
+
+  @override
+  String get phoneSkillEditDraft => '改一改';
+
+  @override
+  String get phoneSkillDiscard => '不要';
+
+  @override
+  String get phoneSkillDiscarded => '没有存这份草稿';
+
+  @override
+  String phoneSkillAccepted(String name) {
+    return '已收下「$name」，先试用';
+  }
+
+  @override
+  String get phoneSkillOpenSource => '看那次对话';
+
+  @override
+  String get phoneSkillLegacyTitle => '早期存下的';
+
+  @override
+  String get phoneSkillLegacyHint => '旧版存下的模板，DSH 不会用它们，可以删掉';
+
+  @override
+  String get phoneSkillDelete => '删除技能';
+
+  @override
+  String phoneSkillDeleteTitle(String name) {
+    return '删除「$name」？';
+  }
+
+  @override
+  String get phoneSkillDeleteBody => '删了以后 DSH 不再用它做事。';
+
+  @override
+  String get phoneSkillRestore => '恢复上一版';
+
+  @override
+  String get phoneSkillRestored => '已恢复上一版';
+
+  @override
+  String get phoneSkillUseInChat => '在对话里用';
+
+  @override
+  String get phoneSkillSaved => '已保存';
+
+  @override
+  String get phoneSkillSectionEntry => '入口';
+
+  @override
+  String get phoneSkillSectionSteps => '步骤';
+
+  @override
+  String get phoneSkillSectionPitfalls => '容易出错的地方';
+
+  @override
+  String get phoneSkillSectionSuccess => '怎样算办成';
+
+  @override
+  String get phoneSkillSectionHandoff => '什么时候停下交给你';
+
+  @override
+  String get phoneSkillFieldName => '名字';
+
+  @override
+  String get phoneSkillFieldDescription => '做什么';
+
+  @override
+  String get phoneSkillFieldWhen => '什么时候用';
+
+  @override
+  String get phoneSkillEditHint => '具体的人名、号码、内容写成 <参数>，DSH 做事时会按这次的要求填进去。';
+
+  @override
+  String get phoneSkillRecent => '最近几次';
+
+  @override
+  String get phoneSkillRecentNone => '还没用过';
+
+  @override
+  String get phoneSkillErrorChanged => '这项技能在你改的时候变了，这次修改没有覆盖它。回去重新看看。';
+
+  @override
+  String get phoneSkillErrorInvalid => '有一节是空的或格式不对，每一节都写上内容再存。';
+
+  @override
+  String get phoneSkillErrorSensitive => '里面有密码、验证码这类内容，去掉再存。';
+
+  @override
+  String get phoneSkillErrorUnavailable => '手机技能暂时用不了，稍后再试。';
+
+  @override
+  String phoneSkillPromoted(String name) {
+    return '「$name」用它办成了事，转为常用';
+  }
+
+  @override
+  String phoneSkillSuspended(String name) {
+    return '「$name」最近不灵，先停用了';
+  }
+
+  @override
+  String get phoneSkillTurnOn => '恢复';
+
+  @override
+  String phoneSkillApps(String apps) {
+    return '用在 $apps';
+  }
+
+  @override
+  String get phoneSkillUndo => '撤销';
+
+  @override
+  String get searchKwPhoneSkills => '技能、学会、熟练、沉淀、存成技能、做法';
 
   @override
   String get phoneModeTitle => '选择确认方式';

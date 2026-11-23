@@ -1458,7 +1458,7 @@ void main() {
     final before = store.archive;
     restoreOldMemorySchema(database, 14);
     reopen();
-    expect(database.select('PRAGMA user_version').single['user_version'], 16);
+    expect(database.select('PRAGMA user_version').single['user_version'], 17);
     expect(store.cards(), [card]);
     expect(store.archive, before);
     expect(database.select('SELECT * FROM memory_agent_turns'), isEmpty);
@@ -1858,6 +1858,53 @@ void main() {
     expect(call(cleanup, 'forget-stale', 'forget', {'card': otherStory}).applied, isTrue);
     expect(actualCard(home)['text'], '我住南京。');
     expect(actualCard(story)['text'], '我们聊过新的住处。');
+  });
+
+  test('a live notice may be recalled in chat but never read by an extraction turn', () {
+    final card = store.rememberNotice(
+      eventId: '1'.padLeft(64, '0'),
+      notificationKey: '2'.padLeft(64, '0'),
+      packageName: 'example.delivery',
+      appName: 'Parcel',
+      text: 'The parcel is ready for pickup.',
+      observedAtMs: now,
+      expectedControlRevision: store.archive['control_revision']! as int,
+    )!;
+    final id = card['id']! as String;
+    final chat = begin(say('question', 'How is the parcel?'));
+    CompanionAgentMemoryResult recall(String turn, String callId) => store.applyAgentMemoryTool(
+      turnId: turn,
+      callId: callId,
+      toolName: 'recall',
+      input: {'query': 'parcel'},
+      rankedRecallIds: [id],
+    );
+    final fromChat = recall(chat, 'chat-lookup').recallSelection!;
+    expect(fromChat.ids, [id]);
+    expect(fromChat.block, contains('example.delivery'));
+    expect(
+      call(chat, 'chat-related', 'related', {'card': id}).relatedCards!.single['source'],
+      containsPair('kind', 'notice'),
+    );
+    store.closeAgentTurn(chat);
+
+    final claim = store.nextAgentMaintenance(
+      kind: 'extract',
+      offsetMinutes: 0,
+      estimateTokens: (text) => text.length,
+      forceTail: true,
+    )!;
+    final maintenance = store.beginAgentMaintenance(kind: 'extract', claimId: claim['id']! as String);
+    final maintenanceId = maintenance['id']! as String;
+    expect((maintenance['cards'] as List<MemoryRow>).map((row) => row['id']), isNot(contains(id)));
+    final fromMaintenance = recall(maintenanceId, 'extract-lookup').recallSelection!;
+    expect(fromMaintenance.ids, isEmpty);
+    expect(fromMaintenance.block, isNot(contains('Parcel')));
+    // Even a previously shown ID cannot turn the management tool into a source of notice text.
+    store.grantAgentCards(turnId: maintenanceId, cardRevisions: {id: 1});
+    final related = call(maintenanceId, 'extract-related', 'related', {'card': id});
+    expect(related.relatedCards, isEmpty);
+    store.finishAgentMaintenance(turnId: maintenanceId, complete: true);
   });
 
   test('semantic merge preserves actual AND and OR proof groups and consumed followup identity', () {
@@ -3126,7 +3173,7 @@ void main() {
       expect(database.select('PRAGMA user_version').single['user_version'], 15);
       expect(database.select('PRAGMA foreign_key_check'), isEmpty);
       reopen();
-      expect(database.select('PRAGMA user_version').single['user_version'], 16);
+      expect(database.select('PRAGMA user_version').single['user_version'], 17);
       expect(database.select('PRAGMA foreign_key_check'), isEmpty);
       expect(store.archive, archive);
       expect(store.cards(), beforeCard);

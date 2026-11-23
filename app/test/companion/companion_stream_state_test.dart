@@ -730,6 +730,9 @@ class _FollowupObserver extends CompanionInitiative {
     void Function()? cancelPrepare,
     Future<bool> Function(CompanionInitiativeDisplay)? deliver,
     void Function(Future<void>)? retainDelivery,
+    String? noticeEventId,
+    String? noticePersonId,
+    void Function(String)? settled,
   }) {
     final accepted = super.requestSignal(
       room,
@@ -747,6 +750,9 @@ class _FollowupObserver extends CompanionInitiative {
       cancelPrepare: cancelPrepare,
       deliver: deliver,
       retainDelivery: retainDelivery,
+      noticeEventId: noticeEventId,
+      noticePersonId: noticePersonId,
+      settled: settled,
     );
     if (accepted && followupId != null) captured.add(candidate);
     return accepted;

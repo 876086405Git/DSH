@@ -71,7 +71,7 @@ class PhoneSkillSessionsTest {
         val legacyCore = PhoneCore(env, legacy, ActionLog(), worker, skillTrace = trace)
         val sessions = PhoneTaskSessions(time::get, ids::incrementAndGet,
             { tasks, _ -> PhoneCore(env, tasks, ActionLog(), worker, skillTrace = trace) }, legacy, legacyCore,
-            journal = journal, settleResources = { cleanup(it) }, startSkillScope = { owner -> starts.incrementAndGet(); lifecycle.startManaged(owner) },
+            journal = journal, settleResources = { cleanup(it) }, startSkillScope = { owner, _, _ -> starts.incrementAndGet(); lifecycle.startManaged(owner) },
             completeSkillScope = { owner, epoch, completion ->
                 completions += PhoneTaskTrace.key(owner) to completion
                 lifecycle.completeDrained(owner, epoch, completion).also { completed.countDown() }

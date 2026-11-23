@@ -212,6 +212,12 @@ class FakePhoneNative {
   /// Replies for `{ok, reason}` methods, by method name (default ok).
   final results = <String, Map<String, Object?>>{};
 
+  bool learn = true;
+  final skills = <String, Map<String, Object?>>{};
+  final drafts = <String, Map<String, Object?>>{};
+  final legacy = <String, Map<String, Object?>>{};
+  final archived = <String>{};
+
   final calls = <MethodCall>[];
   MockStreamHandlerEventSink? _sink;
 
@@ -240,7 +246,12 @@ class FakePhoneNative {
 
   void uninstall() {
     _messenger.setMockMethodCallHandler(phoneMethods, null);
-    _messenger.setMockStreamHandler(phoneEvents, null);
+    // A provider can outlive the fake by a frame at teardown and cancel its event stream
+    // then: leave a quiet handler rather than none (removePhoneNative removes it outright).
+    _messenger.setMockStreamHandler(
+      phoneEvents,
+      MockStreamHandler.inline(onListen: (_, _) {}, onCancel: (_) {}),
+    );
   }
 
   bool get listening => _sink != null;
@@ -251,11 +262,15 @@ class FakePhoneNative {
     _sink?.success(next);
   }
 
+  /// A domain event shares the native sink without replacing the latest status snapshot.
+  void pushSkill(Map<String, Object?> event) => _sink?.success(event);
+
   Map<String, Object?> get _background => (status['background'] as Map).cast<String, Object?>();
 
   Future<Object?> _handle(MethodCall call) async {
     calls.add(call);
     final args = call.arguments is Map ? (call.arguments as Map).cast<String, Object?>() : const <String, Object?>{};
+    if (call.method.startsWith('skills.')) return _skill(call.method, args);
     switch (call.method) {
       case 'status':
         return onStatus?.call() ?? status;
@@ -352,6 +367,42 @@ class FakePhoneNative {
     }
     throw MissingPluginException(call.method);
   }
+
+  Map<String, Object?> _skill(String method, Map<String, Object?> args) {
+    // Tests supply exact native mutation replies (including validated body, archive, and diff)
+    // without reproducing the native file format and state machine in the test double.
+    final result = results[method];
+    if (result?.containsKey('error') == true) return result!;
+    final name = args['name'] as String?;
+    final id = args['draftId'] as String?;
+    switch (method) {
+      case 'skills.list':
+        return result ?? {'learn': learn, 'skills': skills.values.toList(), 'drafts': drafts.values.toList(),
+          'legacy': legacy.values.toList(), 'archived': archived.toList()};
+      case 'skills.get':
+        return result ?? skills[name] ?? {'error': 'changed', 'detail': 'Unknown skill.'};
+      case 'skills.setLearn':
+        learn = (result?['learn'] ?? args['on']) as bool;
+        return {'learn': learn};
+      case 'skills.discard':
+        drafts.remove(id);
+        return {};
+      case 'skills.delete':
+        if (skills.remove(name) != null) archived.add(name!);
+        legacy.remove(name);
+        return {};
+      case 'skills.accept' || 'skills.save' || 'skills.setEnabled' || 'skills.restore':
+        if (result == null) return {'error': 'changed', 'detail': 'No skill result configured.'};
+        final savedName = result['name'] as String;
+        skills[savedName] = result;
+        if (method == 'skills.accept') drafts.remove(id);
+        if (method == 'skills.restore') archived.remove(savedName);
+        return result;
+      default:
+        throw MissingPluginException(method);
+    }
+  }
+
 }
 
 /// Acts as a build without the native module: every call fails with

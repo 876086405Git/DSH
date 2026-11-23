@@ -19,6 +19,7 @@ import '../../phone/android_shell_page.dart';
 import '../../phone/app_rules_page.dart';
 import '../../phone/dnd_mode_page.dart';
 import '../../phone/phone_control_screen.dart';
+import '../../phone/phone_skills_page.dart';
 import '../../phone/phone_unlock_page.dart';
 import '../../phone/system_actions_page.dart';
 import '../../plugins/plugin_inventory_page.dart';
@@ -64,6 +65,7 @@ Widget settingsPage(SettingsPageId id, {String? sessionId}) => switch (id) {
   SettingsPageId.phoneAlwaysAllow => const PhoneAlwaysAllowPage(),
   SettingsPageId.phoneAndroidShell => const AndroidShellPage(),
   SettingsPageId.phoneDnd => const PhoneDndPage(),
+  SettingsPageId.phoneSkills => const PhoneSkillsPage(),
   SettingsPageId.phoneUnlocks => const PhoneUnlockPage(),
   SettingsPageId.systemActions => const SystemActionsPage(),
   SettingsPageId.linuxEnvironment => const LinuxEnvironmentPage(),

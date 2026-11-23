@@ -166,7 +166,7 @@ void main() {
       final receipts = store.requests();
       restoreOldMemorySchema(database, version);
       reopen();
-      expect(database.select('PRAGMA user_version').single['user_version'], 16);
+      expect(database.select('PRAGMA user_version').single['user_version'], 17);
       expect(store.cards(), [
         for (final card in before) {...card, 'cleanup_history_complete': 0},
       ]);

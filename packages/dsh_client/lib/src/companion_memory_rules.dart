@@ -448,7 +448,13 @@ String _memoryBlock(List<MemoryRow> cards) => jsonEncode({
   'version': 2,
   'scope': 'real',
   'items': [
-    for (final card in cards) {'id': card['id'], 'kind': card['kind'], 'text': card['text']},
+    for (final card in cards)
+      {
+        'id': card['id'],
+        'kind': card['kind'],
+        'text': card['text'],
+        if (card['source'] != null) 'source': card['source'],
+      },
   ],
 });
 

@@ -247,7 +247,7 @@ internal class CompanionReminderLedger(private val database: SQLiteDatabase) : C
                 SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
                 DatabaseErrorHandler { throw SQLiteDatabaseCorruptException("Existing companion database is corrupt") })
             try {
-                check(database.version in 11..16) { "Reminder schema is not ready" }
+                check(database.version in 11..17) { "Reminder schema is not ready" }
                 database.setForeignKeyConstraintsEnabled(true)
                 val ledger = CompanionReminderLedger(database)
                 // Configure the primary writer connection; the first Android open/lock

@@ -29,7 +29,7 @@ class SpeechChannelContract(unittest.TestCase):
             'dsh/attachment-files', 'dsh/authorized-workspaces', 'dsh/dynamic_color', 'dsh/media_video',
             'dsh/paste', 'dsh/phone/preview', 'dsh/picture_shortcut',
             'dsh/secrets', 'dsh/streaming_asr', 'dsh/update', 'dsh/web-files', 'dsh/companion_reminders', 'dsh/companion_maps', 'dsh/companion_embeddings',
-            'dsh/companion/always_on', 'dsh/companion_screen/state',
+            'dsh/companion/always_on', 'dsh/companion_screen/state', 'dsh/companion',
         }
         self.assertFalse(dart_channels - ios_channels - exceptions,
                          sorted(dart_channels - ios_channels - exceptions))

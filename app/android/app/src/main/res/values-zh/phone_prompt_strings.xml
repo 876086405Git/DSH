@@ -15,4 +15,6 @@
     <string name="phone_prompt_result_channel">手机操控结果</string>
     <string name="phone_prompt_result_title">DSH Go · 任务完成</string>
     <string name="phone_prompt_result_text">查看结果</string>
+    <string name="phone_skill_draft_title">DSH 学会了一个新做法：%1$s</string>
+    <string name="phone_skill_draft_open">点开此对话查看草稿。</string>
 </resources>

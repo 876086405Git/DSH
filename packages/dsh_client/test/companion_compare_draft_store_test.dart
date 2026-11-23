@@ -319,7 +319,7 @@ void main() {
     reopen();
     expect(create('source'), task);
     expect(store.hostTaskCommands(id).single, command);
-    expect(database.select('PRAGMA user_version').single['user_version'], 16);
+    expect(database.select('PRAGMA user_version').single['user_version'], 17);
     expect(store.hostTaskDirectories(hostKey: 'ssh:original-host'), isEmpty);
   });
 

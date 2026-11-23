@@ -104,6 +104,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        io.github.ccch1mneyyy.dsh_app.companion.CompanionNotices.get(this).refreshBinding()
         io.github.ccch1mneyyy.dsh_app.phone.background.BackgroundControl.get(applicationContext).restoreKeptChannel()
         inForeground = true
         // Another app may have been changed meanwhile.

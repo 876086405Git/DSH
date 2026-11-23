@@ -68,6 +68,7 @@ object PhoneSkillDraft {
         val target = step.anchor?.let { "固定动作词「${anchor(it)}」（仍须核对唯一目标）" } ?: "{{target_$n}}"
         return when (step.action) {
             PhoneTaskTrace.Action.OPEN_APP -> "打开用户指定的应用"
+            PhoneTaskTrace.Action.TAP_XY -> "点了屏幕上的某处"
             PhoneTaskTrace.Action.TAP -> "点击$target"
             PhoneTaskTrace.Action.LONG_TAP -> "长按$target"
             PhoneTaskTrace.Action.TYPE -> "向$target 输入 {{input_$n}}"

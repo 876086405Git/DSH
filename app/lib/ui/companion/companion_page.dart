@@ -47,6 +47,7 @@ import '../../pets/pet_signals.dart' show petEventBusProvider;
 import '../../pets/pet_state.dart';
 import '../../speech/speech_settings.dart';
 import '../../speech/voice_cloud.dart';
+import '../../state/android_features.dart' show operatingSystemProvider;
 import '../../state/app_mode_state.dart';
 import '../../state/android_features.dart';
 import '../../state/connection_state.dart';
@@ -82,6 +83,7 @@ import 'companion_receipt_inputs.dart';
 import 'companion_log.dart';
 import 'companion_memory_page.dart';
 import 'companion_memory_model_dialog.dart';
+import 'companion_notices_page.dart';
 import 'companion_persona_page.dart';
 import 'companion_room_panel.dart';
 import 'companion_voice_page.dart';
@@ -2782,6 +2784,19 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
               );
             },
           ),
+          // 她会留意你的通知: only Android has a notification listener.
+          if (ref.read(operatingSystemProvider) == 'android')
+            SettingsTile(
+              key: const ValueKey('companion-notices'),
+              icon: AppIcons.mail,
+              tinted: false,
+              title: l10n.companionNotices,
+              onTap: () => run(
+                () => unawaited(
+                  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CompanionNoticesPage())),
+                ),
+              ),
+            ),
           Consumer(
             builder: (context, ref, _) => SettingsTile(
               icon: AppIcons.companionInvite,

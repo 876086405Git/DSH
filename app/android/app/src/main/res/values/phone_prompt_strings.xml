@@ -15,4 +15,6 @@
     <string name="phone_prompt_result_channel">Phone control results</string>
     <string name="phone_prompt_result_title">DSH Go · Task complete</string>
     <string name="phone_prompt_result_text">View results</string>
+    <string name="phone_skill_draft_title">DSH learned a new procedure: %1$s</string>
+    <string name="phone_skill_draft_open">Tap to review the draft in this chat.</string>
 </resources>

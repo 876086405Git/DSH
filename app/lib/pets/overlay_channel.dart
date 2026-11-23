@@ -245,6 +245,7 @@ class PetOverlayChannel {
     required String text,
     String emotion = 'neutral',
     bool speaking = false,
+    int? noticeEpoch,
   }) async {
     try {
       return await channel.invokeMethod<bool>('companionLine', {
@@ -252,6 +253,7 @@ class PetOverlayChannel {
             'text': text,
             'emotion': emotion,
             'speaking': speaking,
+            'noticeEpoch': ?noticeEpoch,
           }) ??
           false;
     } on MissingPluginException {

@@ -1162,6 +1162,45 @@
       }
     }
   },
+  "companionNotices": "她会留意你的通知",
+  "companionNoticesHint": "你选的 App 来了通知，她看一眼，值得说的才开口",
+  "companionNoticesNeedsAccess": "还差一步：允许 DSH Go 读取通知",
+  "companionNoticesAllow": "去授权",
+  "companionNoticesApps": "她看哪些 App",
+  "companionNoticesAppsEmpty": "开启后收到过通知的 App 会出现在这里",
+  "companionNoticesAppCount": "7 天内 {count} 条",
+  "@companionNoticesAppCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "companionNoticesQuiet": "最近没来过通知",
+  "companionNoticesToday": "今天收到 {received} 条 · 她说了 {said} 次",
+  "@companionNoticesToday": {
+    "placeholders": {
+      "received": {
+        "type": "int"
+      },
+      "said": {
+        "type": "int"
+      }
+    }
+  },
+  "companionNoticesFooter": "通知会发给你给她配置的模型（现在是 DeepSeek），只发你选的 App 的。原文不存，只存她记下的那几句近况，在记忆页能看到、能删；本机另外只留条数、用量和防重复用的标记。锁屏时她不看。",
+  "companionNoticesFailed": "没改成，再试一次",
+  "companionNoticeLevelOff": "不看",
+  "companionNoticeLevelOffHint": "这个 App 的通知她不读",
+  "companionNoticeLevelGlance": "看一眼",
+  "companionNoticeLevelGlanceHint": "只用来决定要不要告诉你，看完就忘",
+  "companionNoticeLevelRemember": "会记住",
+  "companionNoticeLevelRememberHint": "值得记的近况，她会记下来",
+  "companionMemoryAll": "全部",
+  "companionMemoryFromNotices": "从通知看到的",
+  "companionMemoryNoticesClear": "全部清掉",
+  "companionMemoryNoticesClearTitle": "让她忘掉通知里看到的事？",
+  "companionMemoryNoticesClearBody": "她从通知里记下的近况都会删掉，同样的事以后也不再记。",
   "companionPanelCompany": "陪伴",
   "companionPanelHer": "她",
   "companionPanelTalk": "对话",

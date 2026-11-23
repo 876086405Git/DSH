@@ -520,11 +520,11 @@ void main() {
       isEmpty,
     );
     restart();
-    expect(database.select('PRAGMA user_version').single['user_version'], 16);
+    expect(database.select('PRAGMA user_version').single['user_version'], 17);
     expect(store.task(prior['task_id']! as String), prior);
     // Tables that existed before the upgrade keep their schema, except the
     // ones later versions deliberately alter. New tables are not compared.
-    const altered = {'memory_followups', 'memory_cards', 'memory_messages', 'memory_topics'};
+    const altered = {'memory_followups', 'memory_cards', 'memory_messages', 'memory_topics', 'memory_requests'};
     final before = {for (final row in schema) row['name']};
     expect(
       [

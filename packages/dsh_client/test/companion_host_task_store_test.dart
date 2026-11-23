@@ -734,7 +734,7 @@ void main() {
     );
     restoreOldMemorySchema(database, 12);
     reopen();
-    expect(database.select('PRAGMA user_version').single['user_version'], 16);
+    expect(database.select('PRAGMA user_version').single['user_version'], 17);
     expect(store.task(reminder['task_id']! as String), reminder);
     expect(database.select('SELECT * FROM companion_host_tasks'), isEmpty);
     expect(database.select('SELECT * FROM companion_host_commands'), isEmpty);

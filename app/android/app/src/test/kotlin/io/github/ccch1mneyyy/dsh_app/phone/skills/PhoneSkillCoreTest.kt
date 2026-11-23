@@ -74,6 +74,7 @@ class PhoneSkillCoreTest {
         Fixture().use { f ->
             f.approve = false; assertTrue(f.tap().isError)
             assertEquals(0, f.writes); assertTrue(f.snapshot().steps.isEmpty())
+            assertFalse(f.snapshot().userIntervened) // Ambiguous driver denial is not a person's choice.
             f.approve = true; assertFalse(f.tap().isError)
             val snapshot = f.snapshot()
             assertEquals(1, f.writes)

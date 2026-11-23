@@ -116,6 +116,7 @@ import 'widgets/permission_pill.dart';
 import 'widgets/plus_panel.dart';
 import 'widgets/quote_chip.dart';
 import 'widgets/read_only_bar.dart';
+import 'widgets/phone_skill_banner.dart';
 import 'widgets/unknown_results_banner.dart';
 
 /// 聊天页:玻璃顶栏 + 消息列表 + 玻璃输入条。
@@ -2140,6 +2141,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                       padding: const EdgeInsets.only(bottom: 8),
                                     ),
                                   ),
+                                if (sessionId != null && !readOnly)
+                                  PhoneSkillBanner(sessionId: sessionId, padding: const EdgeInsets.only(bottom: 8)),
                                 SmoothSize(
                                   duration: AppMotion.of(context, AppMotion.standard),
                                   curve: AppMotion.std,
