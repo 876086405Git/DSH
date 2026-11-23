@@ -3053,18 +3053,26 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   }
 
   Widget _buildSections(BuildContext context) {
-    // Her room follows the keyboard frame by frame. The memory and task pages
-    // kept behind it query the store as they build, so they are made here,
-    // once per page build, and not again for each frame of the keyboard.
-    final hidden = <_CompanionTab, Widget>{
-      if (_tab == _CompanionTab.room)
-        for (final tab in _visited)
-          if (tab == _CompanionTab.memory || tab == _CompanionTab.tasks) tab: _sectionPage(context, tab),
-    };
-    return Builder(builder: (context) => _buildPage(context, hidden));
+    // The memory and task pages query the store as they build. This page
+    // builds for each of her streamed words and the room for each frame of the
+    // keyboard, so they are made again only for another tab, memory or
+    // character. The task page in front still is: its times move.
+    if (widget.sections) _visited.add(_tab);
+    if (_sectionPagesKey != _sectionPagesFor) _sectionPages.clear();
+    for (final tab in _visited) {
+      if (tab == _CompanionTab.memory || tab == _CompanionTab.tasks && _tab != tab) {
+        _sectionPages.putIfAbsent(tab, () => _sectionPage(context, tab));
+      }
+    }
+    _sectionPagesFor = _sectionPagesKey;
+    return Builder(builder: (context) => _buildPage(context, _sectionPages));
   }
 
-  Widget _buildPage(BuildContext context, Map<_CompanionTab, Widget> hidden) {
+  final _sectionPages = <_CompanionTab, Widget>{};
+  Object? _sectionPagesFor;
+  Object get _sectionPagesKey => (_tab, _sectionMemory, _attachment.characterId);
+
+  Widget _buildPage(BuildContext context, Map<_CompanionTab, Widget> pages) {
     final l10n = context.l10n;
     final insets = MediaQuery.viewInsetsOf(context).bottom;
     final padding = MediaQuery.paddingOf(context);
@@ -3347,7 +3355,6 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (!widget.sections) {
       return Scaffold(backgroundColor: const Color(0xFF0D2F55), resizeToAvoidBottomInset: false, body: room);
     }
-    _visited.add(_tab);
     return Scaffold(
       backgroundColor: const Color(0xFF0D2F55),
       resizeToAvoidBottomInset: false,
@@ -3376,7 +3383,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                   MediaQuery(
                     data: MediaQuery.of(context)
                         .copyWith(padding: padding.copyWith(bottom: padding.bottom + CompanionSectionNav.height + 10)),
-                    child: TickerMode(enabled: _tab == tab, child: hidden[tab] ?? _sectionPage(context, tab)),
+                    child: TickerMode(enabled: _tab == tab, child: pages[tab] ?? _sectionPage(context, tab)),
                   ),
             ],
           ),
@@ -3411,8 +3418,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   final _visited = <_CompanionTab>{};
 
   Widget _sectionPage(BuildContext context, _CompanionTab tab) {
-    final l10n = context.l10n;
     if (tab == _CompanionTab.her) {
+      final l10n = context.l10n;
       return AppPage(
         title: ref.read(companionNameProvider) ?? _character.name ?? l10n.companionTitle,
         hero: _panelHeader(l10n),
@@ -3426,27 +3433,30 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         ],
       );
     }
-    final title = tab == _CompanionTab.memory ? l10n.companionMemoryTitle : l10n.companionTasksTitle;
     return FutureBuilder<CompanionMemoryOwner>(
       future: _sectionMemory ??= _openMemory(),
-      builder: (context, snapshot) => switch (snapshot) {
-        AsyncSnapshot(hasData: true, :final data?) when tab == _CompanionTab.memory => CompanionMemoryPage(
-          memory: data,
-          characterId: _attachment.characterId,
-        ),
-        AsyncSnapshot(hasData: true, :final data?) => CompanionTasksPage(memory: data, allSessions: true),
-        AsyncSnapshot(hasError: true) => AppPage.list(
-          title: title,
-          children: [
-            EmptyView(
-              icon: tab == _CompanionTab.memory ? AppIcons.bookmark : AppIcons.reminder,
-              title: l10n.companionMemoryLoadFailed,
-              actionLabel: l10n.commonRetry,
-              onAction: () => setState(() => _sectionMemory = null),
-            ),
-          ],
-        ),
-        _ => AppPage.list(title: title, children: const []),
+      builder: (context, snapshot) {
+        final l10n = context.l10n;
+        final title = tab == _CompanionTab.memory ? l10n.companionMemoryTitle : l10n.companionTasksTitle;
+        return switch (snapshot) {
+          AsyncSnapshot(hasData: true, :final data?) when tab == _CompanionTab.memory => CompanionMemoryPage(
+            memory: data,
+            characterId: _attachment.characterId,
+          ),
+          AsyncSnapshot(hasData: true, :final data?) => CompanionTasksPage(memory: data, allSessions: true),
+          AsyncSnapshot(hasError: true) => AppPage.list(
+            title: title,
+            children: [
+              EmptyView(
+                icon: tab == _CompanionTab.memory ? AppIcons.bookmark : AppIcons.reminder,
+                title: l10n.companionMemoryLoadFailed,
+                actionLabel: l10n.commonRetry,
+                onAction: () => setState(() => _sectionMemory = null),
+              ),
+            ],
+          ),
+          _ => AppPage.list(title: title, children: const []),
+        };
       },
     );
   }
