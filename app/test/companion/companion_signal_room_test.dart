@@ -405,16 +405,24 @@ void main() {
       expect(heldFor, greaterThan(const Duration(seconds: 35)));
       expect(find.text(_done), findsOneWidget);
       expect(agent.running, isFalse);
-      expect(pageUi.initiativeView.blocked, isFalse);
       expect(room.commands.where((c) => c.$1 == 'emotion').single.$2['name'], 'happy');
       // Her voice was not allowed for it: her mouth keeps the text's rhythm.
       expect(room.commands.where((c) => c.$1 == 'say'), isNotEmpty);
       final ledger = room.memory.store.initiativeRecord()!;
       expect(ledger['signalAtMs'], hasLength(1));
+      // Her words keep their own time on screen, and while they are up the room
+      // counts as busy. Once they are down the same view is open again, and
+      // observing it does not bring the line back.
+      expect(await room.untilReady(() => !pageUi.initiativeView.blocked, const Duration(seconds: 10)), isNotNull);
+      await room.settle();
+      expect(pageUi.initiativeView.blocked, isFalse);
+      expect(find.text(_done), findsNothing);
+      final said = room.commands.where((c) => c.$1 == 'say').length;
       room.container.read(companionInitiativeProvider).observe(pageUi.initiativeRoom, pageUi.initiativeView);
       await tester.pump();
       await tester.pump();
-      expect(find.text(_done), findsOneWidget);
+      expect(find.text(_done), findsNothing);
+      expect(room.commands.where((c) => c.$1 == 'say'), hasLength(said));
       expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
       expect(posts, isEmpty);
       expect(room.memory.store.requests(), receiptsBeforeEvent);
