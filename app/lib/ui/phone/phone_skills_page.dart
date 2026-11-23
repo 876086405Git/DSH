@@ -438,6 +438,7 @@ class _PhoneSkillDraftCardState extends ConsumerState<PhoneSkillDraftCard> {
     final hidden = HiddenSkillDrafts.of(ref)..hide(_draft.id);
     final bar = messenger?.showSnackBar(
       SnackBar(
+        persist: false,
         content: Text(l10n.phoneSkillDiscarded),
         duration: const Duration(seconds: 5),
         action: SnackBarAction(

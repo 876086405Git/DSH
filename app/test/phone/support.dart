@@ -246,7 +246,12 @@ class FakePhoneNative {
 
   void uninstall() {
     _messenger.setMockMethodCallHandler(phoneMethods, null);
-    _messenger.setMockStreamHandler(phoneEvents, null);
+    // A provider can outlive the fake by a frame at teardown and cancel its event stream
+    // then: leave a quiet handler rather than none (removePhoneNative removes it outright).
+    _messenger.setMockStreamHandler(
+      phoneEvents,
+      MockStreamHandler.inline(onListen: (_, _) {}, onCancel: (_) {}),
+    );
   }
 
   bool get listening => _sink != null;

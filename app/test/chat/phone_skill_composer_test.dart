@@ -193,7 +193,7 @@ void main() {
   testWidgets('changing selection after preparation cannot silently restore old session or send', (tester) async {
     final discarded = <Object?>[];
     messenger.setMockMethodCallHandler(_method, (call) async {
-      discarded.add(call.arguments);
+      if (call.method == 'discardSkillReplay') discarded.add(call.arguments);
       return {'kind': 'discarded'};
     });
     final h = await open(tester);
@@ -212,7 +212,7 @@ void main() {
   testWidgets('replacing an unconsumed typed insert discards just its original invocation', (tester) async {
     final discarded = <Object?>[];
     messenger.setMockMethodCallHandler(_method, (call) async {
-      discarded.add(call.arguments);
+      if (call.method == 'discardSkillReplay') discarded.add(call.arguments);
       return {'kind': 'discarded'};
     });
     final h = await open(tester);

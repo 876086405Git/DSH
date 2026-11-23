@@ -47,6 +47,7 @@ class _PhoneSkillBannerState extends ConsumerState<PhoneSkillBanner> {
     final suspended = event.change == PhoneSkillChange.suspended;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
+        persist: false,
         content: Text(suspended ? l10n.phoneSkillSuspended(event.display) : l10n.phoneSkillPromoted(event.display)),
         action: suspended
             ? SnackBarAction(
