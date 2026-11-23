@@ -177,6 +177,8 @@ void main() {
         posts.add(body);
         final first = posts.length == 1;
         final terminal = first ? 'tool-calls' : 'complete';
+        // A buffered dart:io response holds the flushed frames until close.
+        response.bufferOutput = false;
         response.headers.contentType = ContentType('application', 'x-ndjson', charset: 'utf-8');
         void emit(Map<String, Object?> frame) =>
             response.write('${jsonEncode({...frame, 'requestId': body['requestId']})}\n');
