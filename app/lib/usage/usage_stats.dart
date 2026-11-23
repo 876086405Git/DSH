@@ -634,23 +634,30 @@ class UsageStatsController extends Notifier<UsageStatsState> {
     // Coming to the front on a day already noted changes nothing.
     final snapshot = (days, iid, since, failedAt, closedDay);
     if (snapshot == _saved) return;
+    // Only the fields that changed: on Android each write commits the whole
+    // preferences file, and most saves (a sent message) change just the days.
+    final old = _saved;
     _saved = snapshot;
     unawaited(
       _write((prefs) async {
-        await prefs.setString(daysKey, days);
-        if (iid != null && since != null) {
+        if (days != old?.$1) await prefs.setString(daysKey, days);
+        if (iid != null && since != null && (iid != old?.$2 || since != old?.$3)) {
           await prefs.setString(iidKey, iid);
           await prefs.setInt(iidSinceKey, since.millisecondsSinceEpoch);
         }
-        if (failedAt == null) {
-          await prefs.remove(failedAtKey);
-        } else {
-          await prefs.setInt(failedAtKey, failedAt.millisecondsSinceEpoch);
+        if (old == null || failedAt != old.$4) {
+          if (failedAt == null) {
+            await prefs.remove(failedAtKey);
+          } else {
+            await prefs.setInt(failedAtKey, failedAt.millisecondsSinceEpoch);
+          }
         }
-        if (closedDay == null) {
-          await prefs.remove(closedDayKey);
-        } else {
-          await prefs.setString(closedDayKey, closedDay);
+        if (old == null || closedDay != old.$5) {
+          if (closedDay == null) {
+            await prefs.remove(closedDayKey);
+          } else {
+            await prefs.setString(closedDayKey, closedDay);
+          }
         }
       }),
     );

@@ -5,6 +5,7 @@ import 'package:dsh_app/state/providers_state.dart';
 import 'package:dsh_app/state/read_list_cache.dart';
 import 'package:dsh_app/state/read_list_identity.dart';
 import 'package:dsh_client/dsh_client.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 ModelCatalog catalog(String title) => ModelCatalog(
@@ -42,6 +43,18 @@ void main() {
     final value = cache.stamp(catalog(name), identity ?? a, client);
     expect(cache.put(readListKey(identity ?? a, ReadListKind.models), value, () => CachedModels(value)), isTrue);
   }
+
+  test('every change reaches watchers, not only the first', () async {
+    final c = ProviderContainer(overrides: [readListCacheProvider.overrideWithValue(cache)]);
+    addTearDown(c.dispose);
+    var seen = 0;
+    c.listen(readListCacheChangesProvider, (_, _) => seen++);
+    for (var i = 0; i < 3; i++) {
+      cache.beginRefresh(ReadListKind.models, a);
+      await pumpEventQueue();
+    }
+    expect(seen, 3);
+  });
 
   test('cache contains only model display fields, not failure messages', () {
     save('Model');

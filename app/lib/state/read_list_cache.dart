@@ -244,7 +244,11 @@ final readListCacheProvider = Provider((ref) {
   return cache;
 });
 
-final readListCacheChangesProvider = StreamProvider<void>((ref) => ref.watch(readListCacheProvider).changes);
+/// A new value per change: two `AsyncData(null)` compare equal, so a `void`
+/// stream would reach its watchers only once.
+final readListCacheChangesProvider = StreamProvider<Object>(
+  (ref) => ref.watch(readListCacheProvider).changes.map((_) => Object()),
+);
 
 enum ReadListStatus { current, updating, offline, failed }
 
