@@ -3042,19 +3042,19 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     // builds for each of her streamed words and the room for each frame of the
     // keyboard, so they are made again only for another tab, memory or
     // character. The task page in front still is: its times move.
-    if (_pagesKey != _pagesFor) _pages.clear();
+    if (_sectionPagesKey != _sectionPagesFor) _sectionPages.clear();
     for (final tab in _visited) {
       if (tab == _CompanionTab.memory || tab == _CompanionTab.tasks && _tab != tab) {
-        _pages.putIfAbsent(tab, () => _sectionPage(context, tab));
+        _sectionPages.putIfAbsent(tab, () => _sectionPage(context, tab));
       }
     }
-    _pagesFor = _pagesKey;
-    return Builder(builder: (context) => _buildPage(context, _pages));
+    _sectionPagesFor = _sectionPagesKey;
+    return Builder(builder: (context) => _buildPage(context, _sectionPages));
   }
 
-  final _pages = <_CompanionTab, Widget>{};
-  Object? _pagesFor;
-  Object get _pagesKey => (_tab, _sectionMemory, _attachment.characterId);
+  final _sectionPages = <_CompanionTab, Widget>{};
+  Object? _sectionPagesFor;
+  Object get _sectionPagesKey => (_tab, _sectionMemory, _attachment.characterId);
 
   Widget _buildPage(BuildContext context, Map<_CompanionTab, Widget> pages) {
     final l10n = context.l10n;

@@ -888,6 +888,8 @@ void main() {
       );
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.text('还没有记下什么'), findsNothing);
+      // The test has no home screen widget to clear: its notice goes first.
+      await _until2(tester, () => find.byType(SnackBar).evaluate().isEmpty);
 
       await tester.tap(find.text('交代'));
       await _until2(tester, () => find.byType(CompanionTasksPage).evaluate().isNotEmpty);
