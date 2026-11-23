@@ -46,7 +46,19 @@ class _PhoneSkillsPageState extends ConsumerState<PhoneSkillsPage> {
       children: [
         if (data == null)
           listing.hasError
-              ? PageFootnote(l10n.phoneSkillErrorUnavailable)
+              ? ListPageCard(
+                  children: [
+                    ListPageRow(
+                      icon: AppIcons.error,
+                      title: l10n.phoneSkillErrorUnavailable,
+                      titleMaxLines: 3,
+                      trailing: TextButton(
+                        onPressed: () => ref.invalidate(phoneSkillsProvider),
+                        child: Text(l10n.commonRetry),
+                      ),
+                    ),
+                  ],
+                )
               : const QuietSpinner(padding: EdgeInsets.symmetric(vertical: 32))
         else ...[
           ListPageCard(
@@ -380,20 +392,21 @@ class _PhoneSkillDraftCardState extends ConsumerState<PhoneSkillDraftCard> {
                 Text('…', style: theme.textTheme.bodySmall?.copyWith(color: dsh.textTertiary)),
             ],
             const SizedBox(height: 6),
-            Row(
+            // Wraps on a narrow screen or large text instead of pushing a button off the card.
+            Wrap(
+              spacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 FilledButton.tonal(
                   key: const ValueKey('phone-skill-draft-accept'),
                   onPressed: _busy ? null : () => unawaited(_accept()),
                   child: Text(_update ? l10n.phoneSkillAcceptUpdate : l10n.phoneSkillAccept),
                 ),
-                const SizedBox(width: 4),
                 TextButton(
                   key: const ValueKey('phone-skill-draft-edit'),
                   onPressed: _busy ? null : _edit,
                   child: Text(l10n.phoneSkillEditDraft),
                 ),
-                const Spacer(),
                 if (widget.showSource)
                   TextButton(
                     key: const ValueKey('phone-skill-draft-source'),
