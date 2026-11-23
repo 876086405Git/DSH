@@ -185,7 +185,7 @@ class _ComposerState extends State<Composer> with SingleTickerProviderStateMixin
   late final _draftEmpty = ValueNotifier(widget.controller.text.trim().isEmpty);
 
   void _draftChanged() {
-    _draftEmpty.value = widget.controller.text.trim().isEmpty;
+    _draftEmpty.value = widget.controller.text.trimLeft().isEmpty;
   }
 
   // One value for everything that moves when the composer opens: the corners, the text's
