@@ -1211,7 +1211,7 @@ void main() {
       expect(interactions(), ['play', 'snack']);
       expect(phone.events, isEmpty, reason: 'no activity write is fabricated without a snapshot');
 
-      await tester.pumpWidget(_app(const SizedBox()));
+      await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 10));
       await _drained(tester, memory);
     });
@@ -6377,7 +6377,7 @@ void main() {
         expect(saved, isNot(contains('companion_context')));
 
         // The next line goes with what came before. Every explicit turn now
-        // carries its own current clock (A2), and only that: the earlier
+        // carries its own current clock and input window (A2), and only that: the earlier
         // turn's context is not replayed in the history.
         await tester.pump(const Duration(seconds: 12));
         await say(tester, '今天好累');
@@ -6390,7 +6390,7 @@ void main() {
         final clock = RegExp(r'^<companion_context>(.*)</companion_context>$')
             .firstMatch(latest.last['text']! as String)!
             .group(1)!;
-        expect((jsonDecode(clock) as Map).keys, ['localTime']);
+        expect(jsonDecode(clock), {'localTime': isA<String>(), 'window': 'room'});
         expect((next.first as Map)['content'], '你好');
 
         await tester.pumpWidget(const SizedBox());
