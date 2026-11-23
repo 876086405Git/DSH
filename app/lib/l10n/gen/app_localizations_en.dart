@@ -7599,6 +7599,34 @@ class L10nEn extends L10n {
   String get companionScreenAllowProjection => 'Allow screen recording';
 
   @override
+  String get companionScreenVision => 'Allow screen images';
+
+  @override
+  String get companionScreenVisionHint =>
+      'Send a screen image up to 512 pixels on its longest side to the model you choose; the image is not saved';
+
+  @override
+  String get companionScreenVisionTextOnly =>
+      'The current screen capture can provide text only. Images need accessibility capture with verified window sources';
+
+  @override
+  String get companionScreenVisionModel => 'Model for screen images';
+
+  @override
+  String get companionScreenVisionChoose => 'Choose a model that accepts images';
+
+  @override
+  String get companionScreenVisionAvailable =>
+      'The selected model can receive qualified screen images up to 512 pixels; images are not saved';
+
+  @override
+  String get companionScreenVisionChecking => 'Checking the selected model; screen images are not active yet';
+
+  @override
+  String get companionScreenVisionUnavailable =>
+      'Images are unavailable for this connection or model; screen observation uses text';
+
+  @override
   String get companionScreenFrequency => 'How often she speaks';
 
   @override

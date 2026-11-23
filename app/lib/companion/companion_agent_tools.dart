@@ -154,8 +154,7 @@ class CompanionAgentMemoryTools {
     'diary': 'Write this completed-day diary from actual user sources. Supply its existing card to update; older diaries use revise or forget.',
     'impression': 'Update this character\'s concise impression, supplying its existing card and only this domain\'s sources or references.',
     'relationship': 'Classify real questions, confiding or answers using supplied original source/display IDs. Never invent events or scores.',
-    'quiet':
-        'Set a supplied card topic to less or never proactive, or restore normal when the user allows it again. The card path requires all affected cards to be supplied and fit the shared budget. Alternatively, restore one quiet control just returned by recall using topic and mode normal, without card. This topic path leaves its cards unchanged and grants no card IDs. After each restoration, use a new recall call to read the next control. Restoring does not reopen old followups.',
+    'quiet': 'Set a supplied card topic to less or never proactive, or restore normal when the user allows it again. The card path requires all affected cards to be supplied and fit the shared budget. Alternatively, restore one quiet control just returned by recall using topic and mode normal, without card. This topic path leaves its cards unchanged and grants no card IDs. After each restoration, use a new recall call to read the next control. Restoring does not reopen old followups.',
     'cancel': 'Cancel a supplied memory plan and retire its followup; not a reminder or computer task.',
     'postpone':
         'Postpone a memory plan without a new time and retire its followup. Use ask_later when the time is known.',
@@ -476,13 +475,19 @@ class CompanionAgentMemoryTools {
         'oneOf': [
           {
             'required': ['card'],
-            'not': {'required': ['topic']},
+            'not': {
+              'required': ['topic'],
+            },
           },
           {
             'required': ['topic'],
-            'not': {'required': ['card']},
+            'not': {
+              'required': ['card'],
+            },
             'properties': {
-              'mode': {'enum': ['normal']},
+              'mode': {
+                'enum': ['normal'],
+              },
             },
           },
         ],

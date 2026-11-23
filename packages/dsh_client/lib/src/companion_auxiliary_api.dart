@@ -67,8 +67,7 @@ class CompanionScreenCapability {
 /// A single transient JPEG produced by the qualified native screen sampler.
 /// It is never submitted through session/attachment or written to a transcript.
 class CompanionScreenImage {
-  CompanionScreenImage._(Uint8List bytes, this.width, this.height)
-    : _bytes = Uint8List.fromList(bytes);
+  CompanionScreenImage._(Uint8List bytes, this.width, this.height) : _bytes = Uint8List.fromList(bytes);
 
   final Uint8List _bytes;
   final int width;
@@ -79,10 +78,18 @@ class CompanionScreenImage {
     final bytes = raw['bytes'];
     final width = raw['width'];
     final height = raw['height'];
-    if (raw['mime_type'] != 'image/jpeg' || bytes is! Uint8List ||
-        bytes.length < 4 || bytes.length > 512 * 512 * 4 ||
-        bytes[0] != 0xff || bytes[1] != 0xd8 ||
-        width is! int || height is! int || width < 1 || width > 512 || height < 1 || height > 512) {
+    if (raw['mime_type'] != 'image/jpeg' ||
+        bytes is! Uint8List ||
+        bytes.length < 4 ||
+        bytes.length > 512 * 512 * 4 ||
+        bytes[0] != 0xff ||
+        bytes[1] != 0xd8 ||
+        width is! int ||
+        height is! int ||
+        width < 1 ||
+        width > 512 ||
+        height < 1 ||
+        height > 512) {
       return null;
     }
     return CompanionScreenImage._(bytes, width, height);
@@ -211,7 +218,8 @@ extension CompanionAuxiliaryApi on DshClient {
     ModelSelection selection, {
     Duration timeout = const Duration(seconds: 8),
   }) async {
-    if (!_id(selection.provider) || !_id(selection.model) ||
+    if (!_id(selection.provider) ||
+        !_id(selection.model) ||
         (selection.reasoningEffort != null && !_id(selection.reasoningEffort))) {
       throw ArgumentError('invalid companion screen selection');
     }
@@ -242,19 +250,25 @@ extension CompanionAuxiliaryApi on DshClient {
     if (response.statusCode != 200) {
       throw DshHttpException(response.statusCode, 'Screen capability request failed');
     }
-    if (map == null || map['v'] != 1 || map['kind'] != 'screen' ||
-        map['supported'] is! bool || !_id(map['instanceId']) ||
-        map['provider'] != selection.provider || map['model'] != selection.model ||
+    if (map == null ||
+        map['v'] != 1 ||
+        map['kind'] != 'screen' ||
+        map['supported'] is! bool ||
+        !_id(map['instanceId']) ||
+        map['provider'] != selection.provider ||
+        map['model'] != selection.model ||
         map['reasoningEffort'] != selection.reasoningEffort) {
       throw const DshProtocolException('invalid screen capability');
     }
     final supported = map['supported'] as bool;
     final detail = _map(map['capability']);
-    if (supported && (detail == null || detail['noTools'] != true ||
-        detail['transientImage'] != 'jpeg-512-inline' ||
-        detail['physicalDispatch'] != 'fetch-invoked' ||
-        !const {'deepseek-messages-cumulative', 'unavailable'}.contains(detail['rawUsage']) ||
-        detail['maxPhysicalRequests'] != 1)) {
+    if (supported &&
+        (detail == null ||
+            detail['noTools'] != true ||
+            detail['transientImage'] != 'jpeg-512-inline' ||
+            detail['physicalDispatch'] != 'fetch-invoked' ||
+            !const {'deepseek-messages-cumulative', 'unavailable'}.contains(detail['rawUsage']) ||
+            detail['maxPhysicalRequests'] != 1)) {
       throw const DshProtocolException('invalid screen observation capability');
     }
     return CompanionScreenCapability._(
@@ -351,9 +365,14 @@ extension CompanionAuxiliaryApi on DshClient {
     if (!identical(host._owner, this) || transport is! DshHttpCarrier || !host.supported) {
       throw const CompanionAuxiliaryFailure(code: 'route-unavailable', terminal: 'preflight_error', notSent: true);
     }
-    if (!_id(requestId) || !_text(system) || !_text(input) ||
+    if (!_id(requestId) ||
+        !_text(system) ||
+        !_text(input) ||
         utf8.encode(system).length + utf8.encode(input).length > _maxInputBytes ||
-        maxTokens < 1 || maxTokens > 3000 || headerTimeout <= Duration.zero || idleTimeout <= Duration.zero) {
+        maxTokens < 1 ||
+        maxTokens > 3000 ||
+        headerTimeout <= Duration.zero ||
+        idleTimeout <= Duration.zero) {
       throw const CompanionAuxiliaryFailure(code: 'invalid-request', terminal: 'preflight_error', notSent: true);
     }
     final body = <String, Object?>{
@@ -511,10 +530,7 @@ class _Receipt {
     if (frame['requestId'] != requestId || frame['type'] is! String) _protocol();
     final type = frame['type'];
     if (type == 'accepted') {
-      if (_accepted ||
-          frame['instanceId'] != instanceId ||
-          frame['provider'] != provider ||
-          frame['model'] != model) {
+      if (_accepted || frame['instanceId'] != instanceId || frame['provider'] != provider || frame['model'] != model) {
         _protocol();
       }
       _accepted = true;

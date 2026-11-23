@@ -1294,11 +1294,7 @@ class _CompanionAgentVisit {
     CompanionAgentModelRequest? preparation;
     String? line;
     bool current() =>
-        !retired &&
-        visitCurrent() &&
-        recipientCurrent() &&
-        identical(initiativeUi, target) &&
-        signalCurrent();
+        !retired && visitCurrent() && recipientCurrent() && identical(initiativeUi, target) && signalCurrent();
     initiative.requestSignal(
       target.initiativeRoom,
       view,

@@ -95,7 +95,7 @@ class _ModelSettings extends SettingsController {
 }
 
 class _ObservedModelClient extends MockClient {
-  _ObservedModelClient(Future<http.Response> Function(http.Request) respond) : super(respond);
+  _ObservedModelClient(super.fn);
   var closeCalls = 0;
 
   @override
@@ -446,10 +446,13 @@ void main() {
       // silence, so a template appearing cannot satisfy the waiting oracle.
       final heldFor = await room.untilReady(() => posts.isNotEmpty, const Duration(seconds: 70));
       expect(heldFor, greaterThan(const Duration(seconds: 35)));
-      expect(await room.untilReady(
-        () => !agent.running && room.memory.store.requests().every((row) => row['state'] == 'finished'),
-        const Duration(seconds: 5),
-      ), isNotNull);
+      expect(
+        await room.untilReady(
+          () => !agent.running && room.memory.store.requests().every((row) => row['state'] == 'finished'),
+          const Duration(seconds: 5),
+        ),
+        isNotNull,
+      );
       expect(posts, hasLength(1));
       final silent = room.memory.store.requests().single;
       expect(silent['terminal'], 'complete');
@@ -477,7 +480,10 @@ void main() {
       expect(find.text(modelLine), findsNothing);
       expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
       release.complete();
-      expect(await room.untilReady(() => find.text(modelLine).evaluate().isNotEmpty, const Duration(seconds: 5)), isNotNull);
+      expect(
+        await room.untilReady(() => find.text(modelLine).evaluate().isNotEmpty, const Duration(seconds: 5)),
+        isNotNull,
+      );
       expect(find.text(modelLine), findsOneWidget);
       expect(find.text(_done), findsNothing, reason: 'the Agent line, not the old fixed template, is presented');
       expect(agent.running, isFalse);
@@ -557,7 +563,9 @@ void main() {
       final pageUi = tester.state(find.byType(CompanionPage)) as CompanionAgentRoomUi;
       final history = room.memory.store.messages();
       final consent = room.container.read(companionSignalConsentProvider.notifier);
-      await consent.set(const CompanionSignalConsent(state: true, optionalSpeech: true, voice: false, nightCare: false));
+      await consent.set(
+        const CompanionSignalConsent(state: true, optionalSpeech: true, voice: false, nightCare: false),
+      );
       await room.settle();
       room.commands.clear();
       await room.otherConversationEnds();
@@ -579,7 +587,9 @@ void main() {
       // physical settlement is checked only after that old response is released.
       final closesBeforeRevoke = model.closeCalls;
       expect(closesBeforeRevoke, 0);
-      await consent.set(const CompanionSignalConsent(state: false, optionalSpeech: true, voice: false, nightCare: false));
+      await consent.set(
+        const CompanionSignalConsent(state: false, optionalSpeech: true, voice: false, nightCare: false),
+      );
       await tester.pump();
       await tester.pump();
       expect(room.container.read(companionSignalConsentProvider)!.state, isFalse);
@@ -588,10 +598,13 @@ void main() {
       expect(find.text(_done), findsNothing);
       expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
       release.complete();
-      expect(await room.untilReady(
-        () => !agent.running && room.memory.store.requests().every((row) => row['state'] == 'finished'),
-        const Duration(seconds: 5),
-      ), isNotNull);
+      expect(
+        await room.untilReady(
+          () => !agent.running && room.memory.store.requests().every((row) => row['state'] == 'finished'),
+          const Duration(seconds: 5),
+        ),
+        isNotNull,
+      );
       final cancelled = room.memory.store.requests().single;
       expect(cancelled['id'], pendingReceipt['id']);
       expect(cancelled['state'], 'finished');

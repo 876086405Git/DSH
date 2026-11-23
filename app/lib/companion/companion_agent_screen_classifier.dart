@@ -8,14 +8,21 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
   CompanionScreenVisionRoute? _captureScreenRoute(Map<String, Object?> settings) {
     final ref = _ref;
     final selection = ModelSelection.fromJson(settings['vision_selection']);
-    if (_disposed || ref == null || !ref.mounted || settings['vision_enabled'] != true || selection == null) return null;
+    if (_disposed || ref == null || !ref.mounted || settings['vision_enabled'] != true || selection == null) {
+      return null;
+    }
     final host = ref.read(activeHostProvider);
     final connection = ref.read(readListLiveConnectionProvider);
     final catalog = ref.read(currentModelCatalogProvider);
     final scope = ref.read(modelSelectionScopeProvider);
-    if (settings['vision_host'] != companionHostKey(host) || connection == null ||
-        !isValidModelSelection(catalog, selection)) return null;
-    bool current() => !_disposed && ref.mounted &&
+    if (settings['vision_host'] != companionHostKey(host) ||
+        connection == null ||
+        !isValidModelSelection(catalog, selection)) {
+      return null;
+    }
+    bool current() =>
+        !_disposed &&
+        ref.mounted &&
         identical(scope, ref.read(modelSelectionScopeProvider)) &&
         identical(connection, ref.read(readListLiveConnectionProvider)) &&
         identical(catalog, ref.read(currentModelCatalogProvider)) &&
@@ -121,7 +128,9 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
     }
     final key = _apiKey().trim();
     if (key.isEmpty) return null;
-    final messages = <Map<String, Object?>>[{'role': 'user', 'content': input}];
+    final messages = <Map<String, Object?>>[
+      {'role': 'user', 'content': input},
+    ];
     const outputTokens = 220;
     final body = companionAgentRequestBody(system: system, messages: messages, maxTokens: outputTokens);
     final id = owner.store.reserveRequest(
@@ -284,7 +293,10 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
 }
 
 CompanionUsage _screenImageUsage(Map<String, Object?> raw, ModelSelection selection) {
-  int? count(String key) => switch (raw[key]) { final int value when value >= 0 => value, _ => null };
+  int? count(String key) => switch (raw[key]) {
+    final int value when value >= 0 => value,
+    _ => null,
+  };
   return CompanionUsage(
     provider: selection.provider,
     model: selection.model,

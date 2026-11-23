@@ -1014,9 +1014,9 @@ class CompanionMemoryStore {
     final sequence = _sequence();
     _removeFactRelations(
       {id},
-      domainSnapshot: _memoryDomainCards(
-        rows.single['character_id'] as String?,
-      ).where((card) => card['character_id'] == rows.single['character_id']).toList(),
+      domainSnapshot: _memoryDomainCards(rows.single['character_id'] as String?)
+          .where((card) => card['character_id'] == rows.single['character_id'])
+          .toList(),
     );
     _bumpMemory();
     _bumpControl(historyAfterSeq: sequence);
@@ -1926,16 +1926,10 @@ class CompanionMemoryStore {
         };
         if (_canonicalJson(references(targetId)) != _canonicalJson(references(fromId))) continue;
         if (target['topic_mode'] == 'less') {
-          List<String> anchors(Object? topic) =>
-              (jsonDecode(
-                        _db.select('SELECT control_anchors FROM memory_topics WHERE id=?', [
-                              topic,
-                            ]).single['control_anchors']
-                            as String,
-                      )
-                      as List)
-                  .cast<String>()
-                ..sort();
+          List<String> anchors(Object? topic) => (jsonDecode(
+            _db.select('SELECT control_anchors FROM memory_topics WHERE id=?', [topic]).single['control_anchors']
+                as String,
+          ) as List).cast<String>()..sort();
           if (jsonEncode(anchors(target['topic_id'])) != jsonEncode(anchors(from['topic_id']))) continue;
         }
         final aliases = _db.select('SELECT alias,normalized_alias FROM memory_person_aliases WHERE card_id=?', [
@@ -1993,9 +1987,9 @@ class CompanionMemoryStore {
       _bumpMemory();
       rows = _mergeRows(at);
     }
-    final groups = memoryMergeGroups(
-      rows,
-    ).where((group) => group.any((row) => row['maintenance_row_rev'] != row['row_rev'])).toList();
+    final groups = memoryMergeGroups(rows)
+        .where((group) => group.any((row) => row['maintenance_row_rev'] != row['row_rev']))
+        .toList();
     if (groups.isEmpty) {
       _db.execute('UPDATE memory_archive SET maintenance_revision=memory_revision WHERE singleton=1');
       return null;
@@ -3071,9 +3065,8 @@ class CompanionMemoryStore {
   /// Asked may remain visible for its original eight seconds; only pending
   /// can reserve, so this is never permission to show the question twice.
   bool isFollowupCurrent(MemoryRow captured, {required int nowMs}) {
-    final rows = _db
-      .select(
-        '''
+    final rows = _db.select(
+      '''
     SELECT f.* FROM memory_followups f JOIN memory_cards c ON c.id=f.card_id
     JOIN memory_topics t ON t.id=c.topic_id JOIN memory_messages m ON m.id=f.message_id
     JOIN memory_archive a ON a.singleton=1 LEFT JOIN memory_messages support ON support.id=f.support_message_id
@@ -3089,21 +3082,21 @@ class CompanionMemoryStore {
       AND (f.wait_subject IS NULL OR (support.source_rev=f.support_source_rev AND support.role='user'
         AND support.scope='real' AND support.first_seq>m.first_seq))
   ''',
-        [
-          captured['id'],
-          captured['row_rev'],
-          captured['card_id'],
-          captured['card_rev'],
-          captured['control_revision'],
-          captured['message_id'],
-          captured['source_rev'],
-          captured['support_message_id'],
-          captured['support_source_rev'],
-          nowMs,
-          nowMs,
-          nowMs,
-        ],
-      );
+      [
+        captured['id'],
+        captured['row_rev'],
+        captured['card_id'],
+        captured['card_rev'],
+        captured['control_revision'],
+        captured['message_id'],
+        captured['source_rev'],
+        captured['support_message_id'],
+        captured['support_source_rev'],
+        nowMs,
+        nowMs,
+        nowMs,
+      ],
+    );
     if (rows.isEmpty) return false;
     final current = rows.single;
     if (current['agent_origin'] == 1 || current['state'] == 'asked' || current['wait_subject'] == null) return true;
@@ -3340,9 +3333,9 @@ class CompanionMemoryStore {
         _removeFactRelations(
           {id},
           retainTargetId: id,
-          domainSnapshot: _memoryDomainCards(
-            previous['character_id'] as String?,
-          ).where((card) => card['character_id'] == previous['character_id']).toList(),
+          domainSnapshot: _memoryDomainCards(previous['character_id'] as String?)
+              .where((card) => card['character_id'] == previous['character_id'])
+              .toList(),
         );
       }
       if (previous == null && controlled.isEmpty) _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);

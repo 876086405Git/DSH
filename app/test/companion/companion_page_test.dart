@@ -1138,10 +1138,7 @@ void main() {
       final pack = installedStore();
       final clock = _Clock();
       final db = sqlite3.open('${root.path}/memory.sqlite');
-      final memory = _RoomMemory2(
-        CompanionMemoryStore(db, nowMilliseconds: () => clock.wall),
-        CompanionLocal.at(root),
-      );
+      final memory = _RoomMemory2(CompanionMemoryStore(db, nowMilliseconds: () => clock.wall), CompanionLocal.at(root));
       addTearDown(memory.dispose);
       final key = await settleMixed(tester, pack.characterKey());
       await settleMixed(tester, memory.migrateLocal());

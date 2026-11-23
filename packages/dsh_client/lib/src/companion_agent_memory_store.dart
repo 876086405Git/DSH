@@ -637,9 +637,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         basis: manual || const ['cancelled', 'postponed'].contains(card['plan_state'])
             ? card['current_basis_seq'] as int? ?? 0
             : sources.map((source) => source['first_seq'] as int).reduce(math.max),
-        sourceAt: manual
-            ? card['source_at_ms'] as int
-            : sources.map((source) => source['at'] as int).reduce(math.max),
+        sourceAt: manual ? card['source_at_ms'] as int : sources.map((source) => source['at'] as int).reduce(math.max),
       );
     }
     final planned = {for (final id in revised.keys) id: (originals[id]!['row_rev'] as int) + 1};
@@ -1198,10 +1196,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     ];
     final topic = mergedTopics.firstWhere(
       (topic) => topic['mode'] == 'never',
-      orElse: () => mergedTopics.firstWhere(
-        (topic) => topic['mode'] == 'less',
-        orElse: () => mergedTopics.first,
-      ),
+      orElse: () => mergedTopics.firstWhere((topic) => topic['mode'] == 'less', orElse: () => mergedTopics.first),
     );
     final quiet = topic['mode'] != 'normal';
     final basis = mergedRows.map((row) => row['current_basis_seq'] as int? ?? 0).reduce(math.max);
@@ -1233,9 +1228,8 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     _agentValidateReferencePlan(referencePlan, fromIds);
     final text = input['text'] == null ? target['text'] as String : _agentText(input, 'text');
     final words = input['keywords'] == null
-        ? <String>{
-            for (final row in mergedRows) ...(jsonDecode(row['keywords'] as String) as List).cast<String>(),
-          }.toList()
+        ? <String>{for (final row in mergedRows) ...(jsonDecode(row['keywords'] as String) as List).cast<String>()}
+              .toList()
         : _agentKeywords(input, text);
     final aliases = <String>{
       for (final row in mergedRows)

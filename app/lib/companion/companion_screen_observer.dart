@@ -302,7 +302,8 @@ class CompanionScreenObserver {
       // the original text path before any model handoff occurs.
       final vision = _pace.cheapDue(DateTime.now().millisecondsSinceEpoch) ? await _refreshVision() : null;
       if (!_enabled || generation != _generation || (vision != null && !vision.isCurrent())) return;
-      final sample = await _channel.invokeMapMethod<String, Object?>('companionScreenSample',
+      final sample = await _channel.invokeMapMethod<String, Object?>(
+        'companionScreenSample',
         vision?.available == true ? {'image': true, 'generation': state.value['generation']} : null,
       );
       if (!_enabled || generation != _generation || sample?['status'] != 'observed') return;
@@ -329,12 +330,14 @@ class CompanionScreenObserver {
       if (!await _permit('cheap', token) || !_enabled || generation != _generation) return;
       _pace.cheapStarted(now);
       if (!await _valid(token, generation)) return;
-      final reading = CompanionScreenReading.parse(await agent.classifyScreen(
-        context: context,
-        vision: image == null ? null : vision,
-        image: image,
-        isCurrentObservation: () => _valid(token, generation),
-      ));
+      final reading = CompanionScreenReading.parse(
+        await agent.classifyScreen(
+          context: context,
+          vision: image == null ? null : vision,
+          image: image,
+          isCurrentObservation: () => _valid(token, generation),
+        ),
+      );
       if (reading == null || !await _valid(token, generation)) return;
       _pace.observed(reading);
       // This is only a local same-day activity label; no screenshot or source text.

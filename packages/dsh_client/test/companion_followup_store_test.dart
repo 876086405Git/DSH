@@ -738,10 +738,15 @@ void main() {
       );
       expect(second['id'], isNot(reservedOpportunity['card_id']));
       expect(store.archive['control_revision'], reservedOpportunity['control_revision']);
-      expect(store.cards().singleWhere((card) => card['id'] == reservedOpportunity['card_id'])['row_rev'],
-          reservedOpportunity['card_rev']);
-      expect(store.isFollowupCurrent(reservedOpportunity, nowMs: now), isFalse,
-          reason: 'currentness must reject ambiguity before any next-followup poll');
+      expect(
+        store.cards().singleWhere((card) => card['id'] == reservedOpportunity['card_id'])['row_rev'],
+        reservedOpportunity['card_rev'],
+      );
+      expect(
+        store.isFollowupCurrent(reservedOpportunity, nowMs: now),
+        isFalse,
+        reason: 'currentness must reject ambiguity before any next-followup poll',
+      );
       expect(store.nextFollowup(nowMs: now), isNull);
       expect(store.isFollowupCurrent(reservedOpportunity, nowMs: now), isFalse);
       store.settleInitiative(reservation, outcome: 'released');

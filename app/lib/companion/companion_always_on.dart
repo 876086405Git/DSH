@@ -419,6 +419,7 @@ class _ResidentUi
         owner._status.notificationAvailable &&
         (!owner.agent.running || (preparing != null && ticket.signalId == preparing));
   }
+
   @override
   void show(CompanionInitiativeDisplay display) {}
   @override

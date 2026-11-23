@@ -13290,6 +13290,54 @@ abstract class L10n {
   /// **'允许录屏'**
   String get companionScreenAllowProjection;
 
+  /// No description provided for @companionScreenVision.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许发送屏幕图片'**
+  String get companionScreenVision;
+
+  /// No description provided for @companionScreenVisionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'把最长边不超过 512 像素的屏幕图片发给你选的模型；图片不会保存'**
+  String get companionScreenVisionHint;
+
+  /// No description provided for @companionScreenVisionTextOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前截图方式只能提供文字；图片需要能核实窗口来源的无障碍截图'**
+  String get companionScreenVisionTextOnly;
+
+  /// No description provided for @companionScreenVisionModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'看图使用的模型'**
+  String get companionScreenVisionModel;
+
+  /// No description provided for @companionScreenVisionChoose.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择支持图片的模型'**
+  String get companionScreenVisionChoose;
+
+  /// No description provided for @companionScreenVisionAvailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'所选模型可接收通过检查、最长边不超过 512 像素的屏幕图片；图片不会保存'**
+  String get companionScreenVisionAvailable;
+
+  /// No description provided for @companionScreenVisionChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检查所选模型，屏幕图片尚未启用'**
+  String get companionScreenVisionChecking;
+
+  /// No description provided for @companionScreenVisionUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前连接或模型不能接收图片，看屏时继续使用文字'**
+  String get companionScreenVisionUnavailable;
+
   /// No description provided for @companionScreenFrequency.
   ///
   /// In zh, this message translates to:

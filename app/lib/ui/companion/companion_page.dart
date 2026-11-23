@@ -929,8 +929,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _attachment.offerTaskSignal(
         speech,
         language: language,
-        isCurrent: () =>
-            mounted && !_leaving && contextKey == _initiativeContext && _signals.speechCurrent(speech),
+        isCurrent: () => mounted && !_leaving && contextKey == _initiativeContext && _signals.speechCurrent(speech),
         present: (display, text) =>
             _presentSignal(display, speech, (line: text, emotion: line.emotion, action: line.action)),
       );
@@ -2470,14 +2469,18 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                             onTap: () {
                               final scope = ref.read(modelSelectionScopeProvider);
                               final host = companionHostKey(ref.read(activeHostProvider));
-                              unawaited(showModelSheet(
-                                sheet,
-                                current: state['vision_host'] == host ? visionSelection : null,
-                                onSelected: (selection) {
-                                  if (!mounted || !ref.mounted || !identical(scope, ref.read(modelSelectionScopeProvider))) return;
-                                  send(screen.configure(visionSelection: selection.toJson(), visionHost: host));
-                                },
-                              ));
+                              unawaited(
+                                showModelSheet(
+                                  sheet,
+                                  current: state['vision_host'] == host ? visionSelection : null,
+                                  onSelected: (selection) {
+                                    if (!mounted || !identical(scope, ref.read(modelSelectionScopeProvider))) {
+                                      return;
+                                    }
+                                    send(screen.configure(visionSelection: selection.toJson(), visionHost: host));
+                                  },
+                                ),
+                              );
                             },
                           ),
                       ],

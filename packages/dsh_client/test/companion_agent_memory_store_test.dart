@@ -254,7 +254,12 @@ void main() {
     final firstTopic = firstRead.recalledControl!['topic_id']! as String;
     expect(emptyTopics, contains(firstTopic));
     expect(firstRead.targetId, firstTopic);
-    expect(firstRead.recalledControl, {'topic_id': firstTopic, 'mode': 'less', 'anchors': ['星星'], 'character_id': a});
+    expect(firstRead.recalledControl, {
+      'topic_id': firstTopic,
+      'mode': 'less',
+      'anchors': ['星星'],
+      'character_id': a,
+    });
     expect(store.archive, beforeFirstRead);
     final firstRestore = call(restoring, 'restore-first-control', 'quiet', {'topic': firstTopic, 'mode': 'normal'});
     expect(firstRestore.applied, isTrue);
@@ -270,7 +275,12 @@ void main() {
       'topic_not_in_turn',
     );
     final secondRead = call(restoring, 'read-next-star-control', 'recall', {'query': '星星'});
-    expect(secondRead.recalledControl, {'topic_id': secondTopic, 'mode': 'less', 'anchors': ['星星'], 'character_id': a});
+    expect(secondRead.recalledControl, {
+      'topic_id': secondTopic,
+      'mode': 'less',
+      'anchors': ['星星'],
+      'character_id': a,
+    });
     // This receipt really grants the still-quiet second control before cold
     // reopen. Reading its old identity must not reopen the closed execution.
     reopen();
@@ -282,12 +292,18 @@ void main() {
     expect(call(restoring, 'closed-restore', 'quiet', {'topic': secondTopic, 'mode': 'normal'}).code, 'turn_closed');
     final continuedSource = sayAs('stars-continue', '星星现在可以聊了，我们喜欢一起看星星。', a);
     final continued = begin(continuedSource);
-    expect(call(continued, 'fresh-read-star-control', 'recall', {'query': '星星'}).recalledControl, secondRead.recalledControl);
+    expect(
+      call(continued, 'fresh-read-star-control', 'recall', {'query': '星星'}).recalledControl,
+      secondRead.recalledControl,
+    );
     final secondRestore = call(continued, 'restore-second-control', 'quiet', {'topic': secondTopic, 'mode': 'normal'});
     expect(secondRestore.applied, isTrue);
     expect(secondRestore.changedCardIds, isEmpty);
     final restoredArchive = store.archive;
-    expect(call(continued, 'restore-second-control', 'quiet', {'topic': secondTopic, 'mode': 'normal'}).replayed, isTrue);
+    expect(
+      call(continued, 'restore-second-control', 'quiet', {'topic': secondTopic, 'mode': 'normal'}).replayed,
+      isTrue,
+    );
     expect(store.archive, restoredArchive);
     expect(store.cards(includeInactive: true), cardsBeforeRestore);
     expect(store.topicControls(), otherControls);
@@ -300,7 +316,11 @@ void main() {
     expect(actualCard(afterRestore.targetId!)['topic_mode'], 'normal');
     expect(actualCard(afterRestore.targetId!)['character_id'], a);
     expect(
-      store.beginAgentTurn(messageId: continuedSource['id']! as String, expectedSourceRev: 1, shownCardRevisions: const {})['changed_cards'],
+      store.beginAgentTurn(
+        messageId: continuedSource['id']! as String,
+        expectedSourceRev: 1,
+        shownCardRevisions: const {},
+      )['changed_cards'],
       [afterRestore.targetId],
     );
 
@@ -312,11 +332,23 @@ void main() {
     final liveTurn = begin(liveSource);
     final liveRead = call(liveTurn, 'read-live-topic', 'recall', {'query': '复诊'});
     expect(liveRead.applied, isTrue);
-    expect(liveRead.recalledControl, {'topic_id': privateTopic, 'mode': 'never', 'anchors': ['复诊'], 'character_id': a});
-    expect(call(liveTurn, 'topic-less-is-not-normal', 'quiet', {'topic': privateTopic, 'mode': 'less'}).code, 'invalid_mode');
+    expect(liveRead.recalledControl, {
+      'topic_id': privateTopic,
+      'mode': 'never',
+      'anchors': ['复诊'],
+      'character_id': a,
+    });
+    expect(
+      call(liveTurn, 'topic-less-is-not-normal', 'quiet', {'topic': privateTopic, 'mode': 'less'}).code,
+      'invalid_mode',
+    );
     expect(actualCard(saved.targetId!)['topic_mode'], 'never');
     expect(
-      store.beginAgentTurn(messageId: liveSource['id']! as String, expectedSourceRev: 1, shownCardRevisions: const {})['changed_cards'],
+      store.beginAgentTurn(
+        messageId: liveSource['id']! as String,
+        expectedSourceRev: 1,
+        shownCardRevisions: const {},
+      )['changed_cards'],
       isEmpty,
     );
     expect(actualCard(afterRestore.targetId!)['topic_mode'], 'normal');
@@ -390,19 +422,31 @@ void main() {
     // normal of its result leaves one actual empty less control, not a fake ID.
     const windText = '我最近买的风铃是蓝色。';
     final windTurn = begin(say('manual-empty-source', windText));
-    final windFirst = call(windTurn, 'wind-first', 'remember', {'text': windText, 'keywords': ['风铃']}).targetId!;
-    final windSecond = call(windTurn, 'wind-second', 'remember', {'text': windText, 'keywords': ['风铃']}).targetId!;
+    final windFirst = call(windTurn, 'wind-first', 'remember', {
+      'text': windText,
+      'keywords': ['风铃'],
+    }).targetId!;
+    final windSecond = call(windTurn, 'wind-second', 'remember', {
+      'text': windText,
+      'keywords': ['风铃'],
+    }).targetId!;
     final windFirstTopic = actualCard(windFirst)['topic_id'];
     final windEmptyTopic = actualCard(windSecond)['topic_id'];
     expect(windFirstTopic, isNot(windEmptyTopic));
     expect(call(windTurn, 'less-wind-first', 'quiet', {'card': windFirst, 'mode': 'less'}).applied, isTrue);
     expect(call(windTurn, 'less-wind-second', 'quiet', {'card': windSecond, 'mode': 'less'}).applied, isTrue);
     store.closeAgentTurn(windTurn);
-    final windMerge = begin(
-      say('manual-empty-merge', '把两条相同的风铃记忆合并，现在可以聊合并的这条。'),
-      [actualCard(windFirst), actualCard(windSecond)],
+    final windMerge = begin(say('manual-empty-merge', '把两条相同的风铃记忆合并，现在可以聊合并的这条。'), [
+      actualCard(windFirst),
+      actualCard(windSecond),
+    ]);
+    expect(
+      call(windMerge, 'merge-wind', 'merge', {
+        'card': windFirst,
+        'from': [windSecond],
+      }).applied,
+      isTrue,
     );
-    expect(call(windMerge, 'merge-wind', 'merge', {'card': windFirst, 'from': [windSecond]}).applied, isTrue);
     expect(call(windMerge, 'normal-wind-result', 'quiet', {'card': windFirst, 'mode': 'normal'}).applied, isTrue);
     store.closeAgentTurn(windMerge);
     final windTargetBefore = actualCard(windFirst);
@@ -474,7 +518,10 @@ void main() {
       expect(spent.single['state'], outcome);
       final consumed = store.followups().single;
       final consumedCard = actualCard(saved.targetId!);
-      expect(call(first, 'already-normal-consumed', 'quiet', {'card': saved.targetId, 'mode': 'normal'}).applied, isTrue);
+      expect(
+        call(first, 'already-normal-consumed', 'quiet', {'card': saved.targetId, 'mode': 'normal'}).applied,
+        isTrue,
+      );
       final stillConsumed = store.followups().single;
       expect(stillConsumed['id'], consumed['id']);
       expect(stillConsumed['state'], consumed['state']);
@@ -537,10 +584,16 @@ void main() {
       expect(store.requests(), paid);
 
       final fresh = begin(say('normal-new-source', '现在我改去公园骑行。'));
-      final remembered = call(fresh, 'normal-new-memory', 'remember', {'text': '你现在去公园骑行。', 'keywords': ['骑行']});
+      final remembered = call(fresh, 'normal-new-memory', 'remember', {
+        'text': '你现在去公园骑行。',
+        'keywords': ['骑行'],
+      });
       expect(remembered.applied, isTrue);
       expect(actualCard(remembered.targetId!)['topic_mode'], 'normal');
-      expect((actualCard(remembered.targetId!)['evidence'] as List).single, containsPair('message_id', 'normal-new-source'));
+      expect(
+        (actualCard(remembered.targetId!)['evidence'] as List).single,
+        containsPair('message_id', 'normal-new-source'),
+      );
       reopen();
       expect(actualCard(saved.targetId!)['topic_mode'], 'normal');
       expect(actualCard(related.targetId!)['topic_mode'], 'normal');
@@ -555,11 +608,17 @@ void main() {
       // distinct keywords are each present in their own original source.
       const sameFact = '你喜欢在天台看星星。';
       final targetTurn = begin(say('merge-quiet-target-source', '我喜欢在天台看星星。'));
-      final targetMemory = call(targetTurn, 'merge-quiet-target', 'remember', {'text': sameFact, 'keywords': ['天台']});
+      final targetMemory = call(targetTurn, 'merge-quiet-target', 'remember', {
+        'text': sameFact,
+        'keywords': ['天台'],
+      });
       expect(targetMemory.applied, isTrue);
       store.closeAgentTurn(targetTurn);
       final fromTurn = begin(say('merge-quiet-from-source', '我喜欢在天台看星星。'));
-      final fromMemory = call(fromTurn, 'merge-quiet-from', 'remember', {'text': sameFact, 'keywords': ['星星']});
+      final fromMemory = call(fromTurn, 'merge-quiet-from', 'remember', {
+        'text': sameFact,
+        'keywords': ['星星'],
+      });
       expect(fromMemory.applied, isTrue);
       store.closeAgentTurn(fromTurn);
       final targetId = targetMemory.targetId!, fromId = fromMemory.targetId!;
@@ -573,13 +632,19 @@ void main() {
       expect(call(quietFrom, 'quiet-from', 'quiet', {'card': fromId, 'mode': mode}).applied, isTrue);
       store.closeAgentTurn(quietFrom);
       final controls = database
-          .select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [targetTopic, fromTopic])
+          .select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [
+            targetTopic,
+            fromTopic,
+          ])
           .map((row) => Map<String, Object?>.from(row))
           .toList();
       expect(jsonDecode(controls.singleWhere((row) => row['id'] == targetTopic)['control_anchors']! as String), ['天台']);
       expect(jsonDecode(controls.singleWhere((row) => row['id'] == fromTopic)['control_anchors']! as String), ['星星']);
       final joining = begin(say('merge-quiet-command', '这两条说的是同一件事。'), [actualCard(targetId), actualCard(fromId)]);
-      final joined = call(joining, 'merge-quiet', 'merge', {'card': targetId, 'from': [fromId]});
+      final joined = call(joining, 'merge-quiet', 'merge', {
+        'card': targetId,
+        'from': [fromId],
+      });
       expect(joined.applied, isTrue);
       expect(joined.changedCardIds, unorderedEquals([targetId, fromId]));
       expect(joined.targetId, targetId);
@@ -589,23 +654,35 @@ void main() {
       final emptyLessTopic = mode == 'less' ? fromTopic : targetTopic;
       expect(store.cards().any((card) => card['topic_id'] == emptyLessTopic), isFalse);
       expect(
-        database.select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [targetTopic, fromTopic]),
+        database.select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [
+          targetTopic,
+          fromTopic,
+        ]),
         controls,
       );
       store.closeAgentTurn(joining);
       reopen();
       expect(
-        database.select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [targetTopic, fromTopic]),
+        database.select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [
+          targetTopic,
+          fromTopic,
+        ]),
         controls,
       );
       // Only the original from-topic anchor occurs here. An empty controlled
       // topic still applies its own mode, without inheriting the other anchor.
       final fromOnly = begin(say('merge-from-only-source', '我还想看星星。'));
-      final fromOnlyMemory = call(fromOnly, 'merge-from-only', 'remember', {'text': '你还想看星星。', 'keywords': ['星星']});
+      final fromOnlyMemory = call(fromOnly, 'merge-from-only', 'remember', {
+        'text': '你还想看星星。',
+        'keywords': ['星星'],
+      });
       expect(fromOnlyMemory.applied, isTrue);
       expect(actualCard(fromOnlyMemory.targetId!)['topic_id'], fromTopic);
       expect(actualCard(fromOnlyMemory.targetId!)['topic_mode'], mode);
-      expect(call(fromOnly, 'merge-from-only-later', 'ask_later', {'card': fromOnlyMemory.targetId, 'whenMs': now}).code, 'topic_quiet');
+      expect(
+        call(fromOnly, 'merge-from-only-later', 'ask_later', {'card': fromOnlyMemory.targetId, 'whenMs': now}).code,
+        'topic_quiet',
+      );
       expect(actualCard(unrelated.targetId!), independent);
       expect(store.requests(), paid);
       expect(database.select('SELECT * FROM memory_initiative_spends'), spent);
@@ -693,21 +770,26 @@ void main() {
     expect(store.cards(includeInactive: true), beforeCardProbe);
     store.closeAgentTurn(cardProbe);
 
-    final spendingSource = say(
-      'ride-topic-normal',
-      '我现在愿意恢复刚才的话题。我的书签是竹制的。我的杯垫是陶瓷的。我的笔记本是方格的。我的印章是木制的。',
-    );
+    final spendingSource = say('ride-topic-normal', '我现在愿意恢复刚才的话题。我的书签是竹制的。我的杯垫是陶瓷的。我的笔记本是方格的。我的印章是木制的。');
     final spendingTurn = begin(spendingSource);
     final spentOne = call(spendingTurn, 'spent-one', 'remember', {'text': '我的书签是竹制的。', 'keywords': <String>[]});
     final spentTwo = call(spendingTurn, 'spent-two', 'remember', {'text': '我的杯垫是陶瓷的。', 'keywords': <String>[]});
     final spentThree = call(spendingTurn, 'spent-three', 'remember', {'text': '我的笔记本是方格的。', 'keywords': <String>[]});
     expect([spentOne, spentTwo, spentThree].every((receipt) => receipt.applied), isTrue);
     final spentIds = [spentOne.targetId!, spentTwo.targetId!, spentThree.targetId!];
-    expect(call(spendingTurn, 'unread-riding-topic', 'quiet', {'topic': rideTopic, 'mode': 'normal'}).code, 'topic_not_in_turn');
+    expect(
+      call(spendingTurn, 'unread-riding-topic', 'quiet', {'topic': rideTopic, 'mode': 'normal'}).code,
+      'topic_not_in_turn',
+    );
     final topicRead = call(spendingTurn, 'read-riding-topic', 'recall', {'query': '骑车'});
     expect(topicRead.applied, isTrue);
     expect(topicRead.recallSelection!.ids, isEmpty);
-    expect(topicRead.recalledControl, {'topic_id': rideTopic, 'mode': 'never', 'anchors': ['骑车'], 'character_id': null});
+    expect(topicRead.recalledControl, {
+      'topic_id': rideTopic,
+      'mode': 'never',
+      'anchors': ['骑车'],
+      'character_id': null,
+    });
     final beforeTopicNormal = store.cards(includeInactive: true);
     final sourceRowsBeforeNormal = store.messages();
     final restored = call(spendingTurn, 'restore-riding-topic', 'quiet', {'topic': rideTopic, 'mode': 'normal'});
@@ -717,8 +799,7 @@ void main() {
     // cards() joins the topic mode. All card fields and nested proof values
     // remain unchanged; the mode observed through that join must change.
     expect(store.cards(includeInactive: true), [
-      for (final row in beforeTopicNormal)
-        {...row, if (row['topic_id'] == rideTopic) 'topic_mode': 'normal'},
+      for (final row in beforeTopicNormal) {...row, if (row['topic_id'] == rideTopic) 'topic_mode': 'normal'},
     ]);
     expect(store.messages(), sourceRowsBeforeNormal);
     expect(store.topicControls(), isEmpty);
@@ -816,9 +897,16 @@ void main() {
       estimateTokens: (text) => text.length,
       forceTail: true,
     )!;
-    final extracting = store.beginAgentMaintenance(kind: 'extract', claimId: extraction['id']! as String)['id']! as String;
-    final rootX = call(extracting, 'and-home', 'remember', {'text': '我住厦门。', 'sources': [rawX['id']]}).targetId!;
-    final independentY = call(extracting, 'and-stamps', 'remember', {'text': '我收集邮票。', 'sources': [rawY['id']]}).targetId!;
+    final extracting =
+        store.beginAgentMaintenance(kind: 'extract', claimId: extraction['id']! as String)['id']! as String;
+    final rootX = call(extracting, 'and-home', 'remember', {
+      'text': '我住厦门。',
+      'sources': [rawX['id']],
+    }).targetId!;
+    final independentY = call(extracting, 'and-stamps', 'remember', {
+      'text': '我收集邮票。',
+      'sources': [rawY['id']],
+    }).targetId!;
     final composite = call(extracting, 'and-both', 'remember', {
       'text': '我住厦门，也收集邮票。',
       'sources': [rawX['id'], rawY['id']],
@@ -871,8 +959,14 @@ void main() {
     final fromX = call(sharedTurn, 'duplicate-x', 'remember', {'text': '我喜欢铜管乐。'}).targetId!;
     store.closeAgentTurn(sharedTurn);
     final duplicateTurn = begin(say('duplicate-forget', '忘掉梧桐路住址和那句原话，独立说过的爱好保留。'), [actualCard(primary)]);
-    expect(call(duplicateTurn, 'duplicate-root-related', 'related', {'card': primary}).relatedCards!.map((row) => row['id']), contains(fromX));
-    expect(call(duplicateTurn, 'duplicate-fact-related', 'related', {'card': fromX}).relatedCards!.map((row) => row['id']), contains(fromZ));
+    expect(
+      call(duplicateTurn, 'duplicate-root-related', 'related', {'card': primary}).relatedCards!.map((row) => row['id']),
+      contains(fromX),
+    );
+    expect(
+      call(duplicateTurn, 'duplicate-fact-related', 'related', {'card': fromX}).relatedCards!.map((row) => row['id']),
+      contains(fromZ),
+    );
     final retainedBefore = actualCard(fromZ);
     final isolated = call(duplicateTurn, 'duplicate-delete', 'forget', {
       'card': primary,
@@ -1333,13 +1427,19 @@ void main() {
     final independentSource = store.messages().singleWhere((row) => row['id'] == original['id']);
     final rawZ = say('raw-or-z', '我喜欢铜管乐。');
     final zTurn = begin(rawZ);
-    final alternative = call(zTurn, 'or-z', 'remember', {'text': '我喜欢铜管乐。', 'keywords': ['铜管乐']}).targetId!;
+    final alternative = call(zTurn, 'or-z', 'remember', {
+      'text': '我喜欢铜管乐。',
+      'keywords': ['铜管乐'],
+    }).targetId!;
     store.closeAgentTurn(zTurn);
     now += 60000;
     final rawX = say('raw-or-x', '我住厦门，也喜欢铜管乐和模型火车。');
     final xTurn = begin(rawX);
     final rawRoot = call(xTurn, 'raw-home', 'remember', {'text': '我住厦门。'}).targetId!;
-    final duplicate = call(xTurn, 'or-x', 'remember', {'text': '我喜欢铜管乐。', 'keywords': ['铜管乐']}).targetId!;
+    final duplicate = call(xTurn, 'or-x', 'remember', {
+      'text': '我喜欢铜管乐。',
+      'keywords': ['铜管乐'],
+    }).targetId!;
     final manualProof = call(xTurn, 'manual-proof', 'remember', {'text': '我喜欢模型火车。'}).targetId!;
     final currentCards = store.cards(), currentMessages = store.messages(), currentArchive = store.archive;
     final currentRefused = call(xTurn, 'raw-current-source', 'forget', {'card': rawRoot, 'deleteChat': true});
@@ -1350,13 +1450,25 @@ void main() {
     expect(store.archive, currentArchive);
     store.closeAgentTurn(xTurn);
     final mergeOr = begin(say('merge-or', '铜管乐两条说的是同一件事。'), [actualCard(alternative), actualCard(duplicate)]);
-    expect(call(mergeOr, 'merge-or', 'merge', {'card': alternative, 'from': [duplicate]}).applied, isTrue);
+    expect(
+      call(mergeOr, 'merge-or', 'merge', {
+        'card': alternative,
+        'from': [duplicate],
+      }).applied,
+      isTrue,
+    );
     store.closeAgentTurn(mergeOr);
     now += 60000;
     final manual = seed('我喜欢模型火车。', keywords: ['模型火车']);
     final manualId = manual['id']! as String;
     final mergeManual = begin(say('merge-manual', '模型火车这两条也相同。'), [actualCard(manualId), actualCard(manualProof)]);
-    expect(call(mergeManual, 'merge-manual', 'merge', {'card': manualId, 'from': [manualProof]}).applied, isTrue);
+    expect(
+      call(mergeManual, 'merge-manual', 'merge', {
+        'card': manualId,
+        'from': [manualProof],
+      }).applied,
+      isTrue,
+    );
     store.closeAgentTurn(mergeManual);
     final orBefore = actualCard(alternative);
     final manualBefore = actualCard(manualId);
@@ -1423,10 +1535,19 @@ void main() {
     final rawK = say('raw-ref-k', '我的电话尾号是四二六一，我仍喜欢铜管乐。');
     final kTurn = begin(rawK);
     final refRoot = call(kTurn, 'ref-root', 'remember', {'text': '我的电话尾号是四二六一。'}).targetId!;
-    final newerOr = call(kTurn, 'newer-or', 'remember', {'text': '我喜欢铜管乐。', 'keywords': ['铜管乐']}).targetId!;
+    final newerOr = call(kTurn, 'newer-or', 'remember', {
+      'text': '我喜欢铜管乐。',
+      'keywords': ['铜管乐'],
+    }).targetId!;
     store.closeAgentTurn(kTurn);
     final mergeAgain = begin(say('merge-again', '仍然是同一个铜管乐爱好。'), [actualCard(alternative), actualCard(newerOr)]);
-    expect(call(mergeAgain, 'merge-again', 'merge', {'card': alternative, 'from': [newerOr]}).applied, isTrue);
+    expect(
+      call(mergeAgain, 'merge-again', 'merge', {
+        'card': alternative,
+        'from': [newerOr],
+      }).applied,
+      isTrue,
+    );
     store.closeAgentTurn(mergeAgain);
     final childClaim = store.nextAgentMaintenance(
       kind: 'extract',
@@ -1434,7 +1555,8 @@ void main() {
       estimateTokens: (text) => text.length,
       forceTail: true,
     )!;
-    final childTurn = store.beginAgentMaintenance(kind: 'extract', claimId: childClaim['id']! as String)['id']! as String;
+    final childTurn =
+        store.beginAgentMaintenance(kind: 'extract', claimId: childClaim['id']! as String)['id']! as String;
     store.grantAgentCards(turnId: childTurn, cardRevisions: {alternative: actualCard(alternative)['row_rev']! as int});
     final child = call(childTurn, 'reference-child', 'remember', {
       'text': '铜管乐是用户的爱好。',
@@ -1446,15 +1568,27 @@ void main() {
     expect((actualCard(child)['evidence'] as List).single, containsPair('message_id', rawS['id']));
     expect(rawS['first_seq']! as int, lessThan(rawK['first_seq']! as int));
     final refDeleting = begin(say('reference-forget', '忘掉电话号码，连原话也删。'), [actualCard(refRoot)]);
-    expect(call(refDeleting, 'reference-root-related', 'related', {'card': refRoot}).relatedCards!.map((row) => row['id']), contains(alternative));
-    expect(call(refDeleting, 'reference-parent-related', 'related', {'card': alternative}).relatedCards!.map((row) => row['id']), contains(child));
+    expect(
+      call(refDeleting, 'reference-root-related', 'related', {'card': refRoot}).relatedCards!.map((row) => row['id']),
+      contains(alternative),
+    );
+    expect(
+      call(refDeleting, 'reference-parent-related', 'related', {
+        'card': alternative,
+      }).relatedCards!.map((row) => row['id']),
+      contains(child),
+    );
     final beforeRefCards = store.cards(), beforeRefMessages = store.messages(), beforeRefArchive = store.archive;
     final refused = call(refDeleting, 'reference-forget', 'forget', {
       'card': refRoot,
       'deleteChat': true,
       'changes': [
         {'card': refRoot, 'forget': true},
-        {'card': child, 'text': '铜管乐是用户的爱好。', 'references': [alternative]},
+        {
+          'card': child,
+          'text': '铜管乐是用户的爱好。',
+          'references': [alternative],
+        },
       ],
     });
     expect(refused.applied, isFalse);
@@ -1665,9 +1799,15 @@ void main() {
     // topic keyword; they have different bodies, originals and no references.
     const sameFact = '你周四安排修琴，修的是小提琴。';
     final targetTurn = begin(say('topic-target-source', '我周四安排修琴，修的是小提琴。'));
-    final topicTarget = call(targetTurn, 'topic-target', 'remember', {'text': sameFact, 'keywords': ['修琴']});
+    final topicTarget = call(targetTurn, 'topic-target', 'remember', {
+      'text': sameFact,
+      'keywords': ['修琴'],
+    });
     expect(topicTarget.applied, isTrue);
-    expect(call(targetTurn, 'topic-target-less', 'quiet', {'card': topicTarget.targetId, 'mode': 'less'}).applied, isTrue);
+    expect(
+      call(targetTurn, 'topic-target-less', 'quiet', {'card': topicTarget.targetId, 'mode': 'less'}).applied,
+      isTrue,
+    );
     store.closeAgentTurn(targetTurn);
     final neighborTurn = begin(say('topic-target-neighbor-source', '我想请修琴师给中提琴调弦。'));
     final targetNeighbor = call(neighborTurn, 'topic-target-neighbor', 'remember', {
@@ -1679,13 +1819,19 @@ void main() {
     final topicTargetId = topicTarget.targetId!, targetNeighborId = targetNeighbor.targetId!;
     final normalTopic = actualCard(topicTargetId)['topic_id'];
     expect(actualCard(targetNeighborId)['topic_id'], normalTopic);
-    final restoring = begin(say('topic-target-normal-source', '以后可以聊修琴了。'), [actualCard(topicTargetId), actualCard(targetNeighborId)]);
+    final restoring = begin(say('topic-target-normal-source', '以后可以聊修琴了。'), [
+      actualCard(topicTargetId),
+      actualCard(targetNeighborId),
+    ]);
     expect(call(restoring, 'topic-target-normal', 'quiet', {'card': topicTargetId, 'mode': 'normal'}).applied, isTrue);
     final scheduledTarget = call(restoring, 'topic-target-later', 'ask_later', {'card': topicTargetId, 'whenMs': now});
     expect(scheduledTarget.applied, isTrue);
     store.closeAgentTurn(restoring);
     final fromTurn = begin(say('topic-from-source', '我周四安排修琴，修的是小提琴。'));
-    final topicFrom = call(fromTurn, 'topic-from', 'remember', {'text': sameFact, 'keywords': ['小提琴']});
+    final topicFrom = call(fromTurn, 'topic-from', 'remember', {
+      'text': sameFact,
+      'keywords': ['小提琴'],
+    });
     expect(topicFrom.applied, isTrue);
     expect(call(fromTurn, 'topic-from-never', 'quiet', {'card': topicFrom.targetId, 'mode': 'never'}).applied, isTrue);
     store.closeAgentTurn(fromTurn);
@@ -1704,7 +1850,10 @@ void main() {
     expect(untouchedNormal['topic_mode'], 'normal');
     expect(untouchedNever['topic_mode'], 'never');
     final topics = database
-        .select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [normalTopic, neverTopic])
+        .select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [
+          normalTopic,
+          neverTopic,
+        ])
         .map((row) => Map<String, Object?>.from(row))
         .toList();
     expect(jsonDecode(topics.singleWhere((row) => row['id'] == normalTopic)['control_anchors']! as String), isEmpty);
@@ -1712,11 +1861,20 @@ void main() {
     final pendingTarget = store.followups().singleWhere((row) => row['id'] == scheduledTarget.targetId);
     expect(pendingTarget['state'], 'pending');
     expect(store.isFollowupCurrent(pendingTarget, nowMs: now), isTrue);
-    final originalSpends = database.select('SELECT * FROM memory_initiative_spends').map((row) => Map<String, Object?>.from(row)).toList();
+    final originalSpends = database
+        .select('SELECT * FROM memory_initiative_spends')
+        .map((row) => Map<String, Object?>.from(row))
+        .toList();
     expect(originalSpends.single['id'], spend);
     expect(originalSpends.single['state'], 'shown');
-    final mergingTopics = begin(say('merge-topics-source', '这两条修琴记录是同一件事。'), [actualCard(topicTargetId), actualCard(topicFromId)]);
-    final mergedTopics = call(mergingTopics, 'merge-topics', 'merge', {'card': topicTargetId, 'from': [topicFromId]});
+    final mergingTopics = begin(say('merge-topics-source', '这两条修琴记录是同一件事。'), [
+      actualCard(topicTargetId),
+      actualCard(topicFromId),
+    ]);
+    final mergedTopics = call(mergingTopics, 'merge-topics', 'merge', {
+      'card': topicTargetId,
+      'from': [topicFromId],
+    });
     expect(mergedTopics.applied, isTrue);
     expect(mergedTopics.changedCardIds, unorderedEquals([topicTargetId, topicFromId]));
     expect(mergedTopics.targetId, topicTargetId);
@@ -1726,7 +1884,10 @@ void main() {
     expect(actualCard(targetNeighborId), untouchedNormal);
     expect(actualCard(fromNeighborId), untouchedNever);
     expect(
-      database.select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [normalTopic, neverTopic]),
+      database.select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [
+        normalTopic,
+        neverTopic,
+      ]),
       topics,
     );
     // Read the stored state before nextFollowup can refresh it. The merge
@@ -1735,7 +1896,15 @@ void main() {
     expect(closedTarget['state'], 'closed');
     expect(closedTarget['reason'], 'quiet');
     expect(closedTarget['card_id'], topicTargetId);
-    for (final field in const ['id', 'message_id', 'source_rev', 'invitation', 'opens_at_ms', 'expires_at_ms', 'presented_at_ms']) {
+    for (final field in const [
+      'id',
+      'message_id',
+      'source_rev',
+      'invitation',
+      'opens_at_ms',
+      'expires_at_ms',
+      'presented_at_ms',
+    ]) {
       expect(closedTarget[field], pendingTarget[field]);
     }
     expect(database.select('SELECT * FROM memory_initiative_spends'), originalSpends);
@@ -2211,223 +2380,199 @@ void main() {
     });
   }
 
-  test(
-    'a new diary needs its real target-day source while a controlled old-diary rewrite keeps its original day and proof',
-    () {
-      now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
-      final original = say('old-day-source', '我住在杭州，也喜欢红茶。');
-      final initial = begin(original);
-      final location = call(initial, 'location', 'remember', {'text': '住在杭州'}).targetId!;
-      store.closeAgentTurn(initial);
-      now += 86400000;
-      final claim = store.nextAgentMaintenance(
-        kind: 'organize',
-        offsetMinutes: 0,
-        estimateTokens: (text) => text.length,
-      )!;
-      final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
-      grantMaintenance(turn);
-      final before = store.archive['memory_revision'];
-      expect(
-        call(turn['id']! as String, 'references-only', 'diary', {
-          'text': '仅凭旧卡不能填写当天发生了什么。',
-          'references': [location],
-        }).code,
-        'diary_day_source_required',
-      );
-      expect(store.archive['memory_revision'], before);
-      expect(store.cards(), hasLength(1));
-      final diary = call(turn['id']! as String, 'real-day', 'diary', {
-        'text': '住在杭州，也喜欢红茶。',
-        'source': original['id'],
-      }).targetId!;
-      expect(actualCard(diary)['local_day'], '2026-10-01');
-      expect(actualCard(diary)['keywords'], ['住在杭州，也喜欢红茶。']);
-      store.finishAgentMaintenance(turnId: turn['id']! as String, complete: true);
-      final control = say('later-control', '不要记住我的住处，喜欢红茶这件事保留。');
-      now += 86400000;
-      final nextClaim = store.nextAgentMaintenance(
-        kind: 'organize',
-        offsetMinutes: 0,
-        estimateTokens: (text) => text.length,
-      )!;
-      final next = store.beginAgentMaintenance(kind: 'organize', claimId: nextClaim['id']! as String);
-      grantMaintenance(next);
-      expect(next['local_day'], '2026-10-02');
-      expect(
-        call(next['id']! as String, 'retain-tea', 'forget', {
-          'changes': [
-            {'card': location, 'forget': true},
-            {'card': diary, 'text': '喜欢红茶。'},
-          ],
-        }).applied,
-        isTrue,
-      );
-      final retained = actualCard(diary);
-      expect(retained['text'], '喜欢红茶。');
-      expect(retained['keywords'], ['喜欢红茶。']);
-      expect(retained['local_day'], '2026-10-01');
-      expect(retained['day_zone_id'], 'offset:0');
-      expect((retained['evidence'] as List).map((proof) => (proof as MemoryRow)['message_id']), [original['id']]);
-      expect(
-        (retained['evidence'] as List).any((proof) => (proof as MemoryRow)['message_id'] == control['id']),
-        isFalse,
-      );
-      expect(store.cards().map((row) => row['id']), [diary]);
-      final fresh = store.beginAgentMaintenance(kind: 'organize', claimId: nextClaim['id']! as String);
-      expect(fresh['id'], next['id']);
-      expect(fresh['closed'], 0);
-      expect(fresh['sources'], isEmpty, reason: 'the same live claim uses the new history cutoff');
-      final visible = (fresh['cards'] as List<MemoryRow>).single;
-      expect(visible['id'], diary);
-      expect(visible['row_rev'], retained['row_rev']);
-      expect(visible['text'], '喜欢红茶。');
-      expect(visible['keywords'], ['喜欢红茶。']);
-      expect(jsonEncode(fresh), isNot(contains('杭州')));
-      expect(visible['local_day'], retained['local_day']);
-      expect(visible['evidence'], isEmpty, reason: 'the retained local proof still contains the forgotten address');
-      grantMaintenance(fresh);
-      expect(store.isAgentTurnCurrent(next['id']! as String), isTrue);
-      expect(actualCard(diary), retained, reason: 'context projection and actual grants do not rewrite local proof');
-      expect(store.messages().singleWhere((row) => row['id'] == original['id'])['text'], original['text']);
-    },
-  );
+  test('a new diary needs its real target-day source while a controlled old-diary rewrite keeps its original day and proof', () {
+    now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
+    final original = say('old-day-source', '我住在杭州，也喜欢红茶。');
+    final initial = begin(original);
+    final location = call(initial, 'location', 'remember', {'text': '住在杭州'}).targetId!;
+    store.closeAgentTurn(initial);
+    now += 86400000;
+    final claim = store.nextAgentMaintenance(
+      kind: 'organize',
+      offsetMinutes: 0,
+      estimateTokens: (text) => text.length,
+    )!;
+    final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+    grantMaintenance(turn);
+    final before = store.archive['memory_revision'];
+    expect(
+      call(turn['id']! as String, 'references-only', 'diary', {
+        'text': '仅凭旧卡不能填写当天发生了什么。',
+        'references': [location],
+      }).code,
+      'diary_day_source_required',
+    );
+    expect(store.archive['memory_revision'], before);
+    expect(store.cards(), hasLength(1));
+    final diary = call(turn['id']! as String, 'real-day', 'diary', {
+      'text': '住在杭州，也喜欢红茶。',
+      'source': original['id'],
+    }).targetId!;
+    expect(actualCard(diary)['local_day'], '2026-10-01');
+    expect(actualCard(diary)['keywords'], ['住在杭州，也喜欢红茶。']);
+    store.finishAgentMaintenance(turnId: turn['id']! as String, complete: true);
+    final control = say('later-control', '不要记住我的住处，喜欢红茶这件事保留。');
+    now += 86400000;
+    final nextClaim = store.nextAgentMaintenance(
+      kind: 'organize',
+      offsetMinutes: 0,
+      estimateTokens: (text) => text.length,
+    )!;
+    final next = store.beginAgentMaintenance(kind: 'organize', claimId: nextClaim['id']! as String);
+    grantMaintenance(next);
+    expect(next['local_day'], '2026-10-02');
+    expect(
+      call(next['id']! as String, 'retain-tea', 'forget', {
+        'changes': [
+          {'card': location, 'forget': true},
+          {'card': diary, 'text': '喜欢红茶。'},
+        ],
+      }).applied,
+      isTrue,
+    );
+    final retained = actualCard(diary);
+    expect(retained['text'], '喜欢红茶。');
+    expect(retained['keywords'], ['喜欢红茶。']);
+    expect(retained['local_day'], '2026-10-01');
+    expect(retained['day_zone_id'], 'offset:0');
+    expect((retained['evidence'] as List).map((proof) => (proof as MemoryRow)['message_id']), [original['id']]);
+    expect((retained['evidence'] as List).any((proof) => (proof as MemoryRow)['message_id'] == control['id']), isFalse);
+    expect(store.cards().map((row) => row['id']), [diary]);
+    final fresh = store.beginAgentMaintenance(kind: 'organize', claimId: nextClaim['id']! as String);
+    expect(fresh['id'], next['id']);
+    expect(fresh['closed'], 0);
+    expect(fresh['sources'], isEmpty, reason: 'the same live claim uses the new history cutoff');
+    final visible = (fresh['cards'] as List<MemoryRow>).single;
+    expect(visible['id'], diary);
+    expect(visible['row_rev'], retained['row_rev']);
+    expect(visible['text'], '喜欢红茶。');
+    expect(visible['keywords'], ['喜欢红茶。']);
+    expect(jsonEncode(fresh), isNot(contains('杭州')));
+    expect(visible['local_day'], retained['local_day']);
+    expect(visible['evidence'], isEmpty, reason: 'the retained local proof still contains the forgotten address');
+    grantMaintenance(fresh);
+    expect(store.isAgentTurnCurrent(next['id']! as String), isTrue);
+    expect(actualCard(diary), retained, reason: 'context projection and actual grants do not rewrite local proof');
+    expect(store.messages().singleWhere((row) => row['id'] == original['id'])['text'], original['text']);
+  });
 
-  test(
-    'an unsent role after a sent shared scope interrupts the parent and resumes only that unserved role in a new parent',
-    () {
-      now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
-      final role = character('local:unserved-role');
-      final source = sayAs('unserved-source', '今天一起谈了散步。', role);
-      now += 86400000;
-      final first = store.nextAgentMaintenance(
-        kind: 'organize',
-        offsetMinutes: 0,
-        estimateTokens: (text) => text.length,
-      )!;
-      final shared = store.beginAgentMaintenance(kind: 'organize', claimId: first['id']! as String);
-      final request = store.reserveAgentMaintenanceRequest(
-        turnId: shared['id']! as String,
-        provider: 'deepseek',
-        model: 'deepseek-flash',
-        inputTokens: 100,
-        outputTokens: 10,
-      )!;
-      observed(request);
-      store.finishAgentMaintenance(turnId: shared['id']! as String, complete: true);
-      final untouched = store.beginAgentMaintenance(
-        kind: 'organize',
-        claimId: first['id']! as String,
-        characterId: role,
-      );
-      store.finishAgentMaintenance(turnId: untouched['id']! as String, complete: false);
-      final old = database.select('SELECT state,completed_scopes FROM memory_agent_maintenance_claims WHERE id=?', [
-        first['id'],
-      ]).single;
-      expect(old['state'], 'interrupted');
-      expect(jsonDecode(old['completed_scopes'] as String), ['']);
-      expect(store.isAgentTurnCurrent(untouched['id']! as String), isFalse);
-      expect(
-        store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length),
-        isNull,
-      );
-      now += 86400000;
-      reopen();
-      final next = store.nextAgentMaintenance(
-        kind: 'organize',
-        offsetMinutes: 0,
-        estimateTokens: (text) => text.length,
-      )!;
-      expect(next['id'], isNot(first['id']));
-      expect(next['scope_characters'], [role]);
-      final live = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String, characterId: role);
-      expect(live['id'], isNot(untouched['id']));
-      expect((live['sources'] as List).map((row) => (row as MemoryRow)['id']), [source['id']]);
-      expect(call(untouched['id']! as String, 'no-reopen', 'remember', {'text': '不能重开旧机会。'}).code, 'turn_closed');
-      final nextRequest = store.reserveAgentMaintenanceRequest(
-        turnId: live['id']! as String,
-        provider: 'deepseek',
-        model: 'deepseek-flash',
-        inputTokens: 100,
-        outputTokens: 10,
-      )!;
-      observed(nextRequest);
-      expect(
-        call(live['id']! as String, 'real-impression', 'impression', {
-          'text': '用户愿意分享一起散步的日常。',
-          'source': source['id'],
-        }).applied,
-        isTrue,
-      );
-      store.finishAgentMaintenance(turnId: live['id']! as String, complete: true);
-      now += 86400000;
-      reopen();
-      expect(
-        store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length),
-        isNull,
-      );
-      expect(store.requests().map((row) => row['id']), unorderedEquals([request, nextRequest]));
-    },
-  );
+  test('an unsent role after a sent shared scope interrupts the parent and resumes only that unserved role in a new parent', () {
+    now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
+    final role = character('local:unserved-role');
+    final source = sayAs('unserved-source', '今天一起谈了散步。', role);
+    now += 86400000;
+    final first = store.nextAgentMaintenance(
+      kind: 'organize',
+      offsetMinutes: 0,
+      estimateTokens: (text) => text.length,
+    )!;
+    final shared = store.beginAgentMaintenance(kind: 'organize', claimId: first['id']! as String);
+    final request = store.reserveAgentMaintenanceRequest(
+      turnId: shared['id']! as String,
+      provider: 'deepseek',
+      model: 'deepseek-flash',
+      inputTokens: 100,
+      outputTokens: 10,
+    )!;
+    observed(request);
+    store.finishAgentMaintenance(turnId: shared['id']! as String, complete: true);
+    final untouched = store.beginAgentMaintenance(kind: 'organize', claimId: first['id']! as String, characterId: role);
+    store.finishAgentMaintenance(turnId: untouched['id']! as String, complete: false);
+    final old = database.select('SELECT state,completed_scopes FROM memory_agent_maintenance_claims WHERE id=?', [
+      first['id'],
+    ]).single;
+    expect(old['state'], 'interrupted');
+    expect(jsonDecode(old['completed_scopes'] as String), ['']);
+    expect(store.isAgentTurnCurrent(untouched['id']! as String), isFalse);
+    expect(
+      store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length),
+      isNull,
+    );
+    now += 86400000;
+    reopen();
+    final next = store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length)!;
+    expect(next['id'], isNot(first['id']));
+    expect(next['scope_characters'], [role]);
+    final live = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String, characterId: role);
+    expect(live['id'], isNot(untouched['id']));
+    expect((live['sources'] as List).map((row) => (row as MemoryRow)['id']), [source['id']]);
+    expect(call(untouched['id']! as String, 'no-reopen', 'remember', {'text': '不能重开旧机会。'}).code, 'turn_closed');
+    final nextRequest = store.reserveAgentMaintenanceRequest(
+      turnId: live['id']! as String,
+      provider: 'deepseek',
+      model: 'deepseek-flash',
+      inputTokens: 100,
+      outputTokens: 10,
+    )!;
+    observed(nextRequest);
+    expect(
+      call(live['id']! as String, 'real-impression', 'impression', {
+        'text': '用户愿意分享一起散步的日常。',
+        'source': source['id'],
+      }).applied,
+      isTrue,
+    );
+    store.finishAgentMaintenance(turnId: live['id']! as String, complete: true);
+    now += 86400000;
+    reopen();
+    expect(
+      store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length),
+      isNull,
+    );
+    expect(store.requests().map((row) => row['id']), unorderedEquals([request, nextRequest]));
+  });
 
-  test(
-    'cold interrupted organization consumes its served source scope without marking a later card revision or an unserved role',
-    () {
-      now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
-      final role = character('local:cold-organize');
-      final source = sayAs('cold-organize-source', '今天聊过练琴。', role);
-      final card = seed('偏好简洁的说明。');
-      now += 86400000;
-      final claim = store.nextAgentMaintenance(
-        kind: 'organize',
-        offsetMinutes: 0,
-        estimateTokens: (text) => text.length,
-      )!;
-      final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
-      grantMaintenance(turn);
-      final request = store.reserveAgentMaintenanceRequest(
-        turnId: turn['id']! as String,
-        provider: 'deepseek',
-        model: 'deepseek-flash',
-        inputTokens: 100,
-        outputTokens: 10,
-      )!;
-      store.markRequestUncertain(request);
-      store.setPinned(id: card['id']! as String, expectedRowRev: card['row_rev']! as int, pinned: true);
-      reopen();
-      expect(store.requests().single['terminal'], 'dispatch_unknown');
-      final changed = actualCard(card['id']! as String);
-      expect(changed['row_rev'], (card['row_rev']! as int) + 1);
-      expect(
-        changed['maintenance_row_rev'],
-        isNot(changed['row_rev']),
-        reason: 'the old captured revision cannot consume a new edit',
-      );
-      expect(
-        jsonDecode(
-          database.select('SELECT completed_scopes FROM memory_agent_maintenance_claims WHERE id=?', [
-                claim['id'],
-              ]).single['completed_scopes']
-              as String,
-        ),
-        [''],
-      );
-      now += 86400000;
-      final next = store.nextAgentMaintenance(
-        kind: 'organize',
-        offsetMinutes: 0,
-        estimateTokens: (text) => text.length,
-      )!;
-      expect(next['scope_characters'], [null, role]);
-      final shared = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String);
-      expect(shared['sources'], isEmpty, reason: 'old role material cannot become a new shared diary day');
-      grantMaintenance(shared);
-      store.finishAgentMaintenance(turnId: shared['id']! as String, complete: true);
-      final pending = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String, characterId: role);
-      expect((pending['sources'] as List).map((row) => (row as MemoryRow)['id']), [source['id']]);
-      expect(store.requests(), hasLength(1));
-    },
-  );
+  test('cold interrupted organization consumes its served source scope without marking a later card revision or an unserved role', () {
+    now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
+    final role = character('local:cold-organize');
+    final source = sayAs('cold-organize-source', '今天聊过练琴。', role);
+    final card = seed('偏好简洁的说明。');
+    now += 86400000;
+    final claim = store.nextAgentMaintenance(
+      kind: 'organize',
+      offsetMinutes: 0,
+      estimateTokens: (text) => text.length,
+    )!;
+    final turn = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+    grantMaintenance(turn);
+    final request = store.reserveAgentMaintenanceRequest(
+      turnId: turn['id']! as String,
+      provider: 'deepseek',
+      model: 'deepseek-flash',
+      inputTokens: 100,
+      outputTokens: 10,
+    )!;
+    store.markRequestUncertain(request);
+    store.setPinned(id: card['id']! as String, expectedRowRev: card['row_rev']! as int, pinned: true);
+    reopen();
+    expect(store.requests().single['terminal'], 'dispatch_unknown');
+    final changed = actualCard(card['id']! as String);
+    expect(changed['row_rev'], (card['row_rev']! as int) + 1);
+    expect(
+      changed['maintenance_row_rev'],
+      isNot(changed['row_rev']),
+      reason: 'the old captured revision cannot consume a new edit',
+    );
+    expect(
+      jsonDecode(
+        database.select('SELECT completed_scopes FROM memory_agent_maintenance_claims WHERE id=?', [
+              claim['id'],
+            ]).single['completed_scopes']
+            as String,
+      ),
+      [''],
+    );
+    now += 86400000;
+    final next = store.nextAgentMaintenance(kind: 'organize', offsetMinutes: 0, estimateTokens: (text) => text.length)!;
+    expect(next['scope_characters'], [null, role]);
+    final shared = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String);
+    expect(shared['sources'], isEmpty, reason: 'old role material cannot become a new shared diary day');
+    grantMaintenance(shared);
+    store.finishAgentMaintenance(turnId: shared['id']! as String, complete: true);
+    final pending = store.beginAgentMaintenance(kind: 'organize', claimId: next['id']! as String, characterId: role);
+    expect((pending['sources'] as List).map((row) => (row as MemoryRow)['id']), [source['id']]);
+    expect(store.requests(), hasLength(1));
+  });
 
   test('scoped followup selection skips a failed candidate without asking it or crossing character invitations', () {
     final firstRole = character('local:followup-first');

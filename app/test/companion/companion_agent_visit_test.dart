@@ -958,16 +958,21 @@ void main() {
         saidAtUtc: _now,
         offsetMinutes: originalSource['offset_minutes']! as int,
       );
-      final keptTurn = store.beginAgentTurn(
-        messageId: keptSource['id']! as String,
-        expectedSourceRev: keptSource['source_rev']! as int,
-        shownCardRevisions: const {},
-      )['id']! as String;
+      final keptTurn =
+          store.beginAgentTurn(
+                messageId: keptSource['id']! as String,
+                expectedSourceRev: keptSource['source_rev']! as int,
+                shownCardRevisions: const {},
+              )['id']!
+              as String;
       final kept = store.applyAgentMemoryTool(
         turnId: keptTurn,
         callId: 'raw-keep',
         toolName: 'remember',
-        input: {'text': keptText, 'keywords': ['明信片']},
+        input: {
+          'text': keptText,
+          'keywords': ['明信片'],
+        },
       );
       expect(kept.applied, isTrue);
       store.closeAgentTurn(keptTurn);
@@ -976,7 +981,18 @@ void main() {
 
       const rawText = '我住海棠路二十号。';
       replies.addAll([
-        _message(calls: [('raw-remember', 'remember', {'text': rawText, 'keywords': ['海棠路']})]),
+        _message(
+          calls: [
+            (
+              'raw-remember',
+              'remember',
+              {
+                'text': rawText,
+                'keywords': ['海棠路'],
+              },
+            ),
+          ],
+        ),
         _message(words: '这条住址已记下。'),
       ]);
       await visit.attachment.submit(rawText);
@@ -1001,7 +1017,11 @@ void main() {
       }
 
       replies.addAll([
-        _message(calls: [('raw-forget', 'forget', {'card': rawCard['id'], 'deleteChat': true})]),
+        _message(
+          calls: [
+            ('raw-forget', 'forget', {'card': rawCard['id'], 'deleteChat': true}),
+          ],
+        ),
         _message(words: '这条住址和原话都已删除。'),
       ]);
       await visit.attachment.submit('忘掉海棠路这条住址，连原话也删。');
@@ -1010,21 +1030,36 @@ void main() {
       final beforeDelete = jsonEncode(visit.requests[6]);
       expect(beforeDelete, contains(rawText));
       expect(beforeDelete, contains(rawCard['id']! as String));
-      final forgetDefinition = (visit.requests[6]['tools']! as List).cast<Map>().singleWhere((tool) => tool['name'] == 'forget');
+      final forgetDefinition = (visit.requests[6]['tools']! as List).cast<Map>().singleWhere(
+        (tool) => tool['name'] == 'forget',
+      );
       final properties = (forgetDefinition['input_schema']! as Map)['properties']! as Map;
       expect(properties['deleteChat'], containsPair('type', 'boolean'));
-      final quietDefinition = (visit.requests[6]['tools']! as List).cast<Map>().singleWhere((tool) => tool['name'] == 'quiet');
+      final quietDefinition = (visit.requests[6]['tools']! as List).cast<Map>().singleWhere(
+        (tool) => tool['name'] == 'quiet',
+      );
       final quietProperties = (quietDefinition['input_schema']! as Map)['properties']! as Map;
       expect((quietProperties['mode']! as Map)['enum'], unorderedEquals(['less', 'never', 'normal']));
       expect(quietProperties['topic'], containsPair('type', 'string'));
       final quietSchema = quietDefinition['input_schema']! as Map;
       expect(quietSchema['required'], ['mode']);
       expect(quietSchema['oneOf'], [
-        {'required': ['card'], 'not': {'required': ['topic']}},
+        {
+          'required': ['card'],
+          'not': {
+            'required': ['topic'],
+          },
+        },
         {
           'required': ['topic'],
-          'not': {'required': ['card']},
-          'properties': {'mode': {'enum': ['normal']}},
+          'not': {
+            'required': ['card'],
+          },
+          'properties': {
+            'mode': {
+              'enum': ['normal'],
+            },
+          },
         },
       ]);
       expect(jsonEncode(visit.requests[7]), isNot(contains(rawText)));
@@ -1050,7 +1085,10 @@ void main() {
       for (final entry in paid.entries) {
         expect(after[entry.key], entry.value);
       }
-      final newRequests = after.entries.where((entry) => !paid.containsKey(entry.key)).map((entry) => entry.value).toList();
+      final newRequests = after.entries
+          .where((entry) => !paid.containsKey(entry.key))
+          .map((entry) => entry.value)
+          .toList();
       expect(newRequests, hasLength(2));
       for (final row in newRequests) {
         expect(row['origin'], 'local');
@@ -1381,9 +1419,9 @@ void main() {
       await visit.container.read(companionInitiativeEnabledProvider.notifier).set(true);
       visit.container.read(companionSignalConsentProvider);
       await _until(() => visit.container.read(companionSignalConsentProvider) != null);
-      await visit.container.read(companionSignalConsentProvider.notifier).set(
-        const CompanionSignalConsent(state: true, optionalSpeech: true),
-      );
+      await visit.container
+          .read(companionSignalConsentProvider.notifier)
+          .set(const CompanionSignalConsent(state: true, optionalSpeech: true));
       final turnsBeforeEvents = visit.database.select('SELECT * FROM memory_agent_turns');
       final callsBeforeEvents = visit.database.select('SELECT * FROM memory_agent_calls');
       final firstReceiptId = visit.memory.store.requests().single['id'];
@@ -1392,10 +1430,12 @@ void main() {
       wall += 46000;
       mono += 46000;
       reopened.observe(background.initiativeView);
-      await _until(() =>
-          visit.requests.length == 2 &&
-          !visit.agent.running &&
-          visit.memory.store.requests().every((row) => row['state'] == 'finished'));
+      await _until(
+        () =>
+            visit.requests.length == 2 &&
+            !visit.agent.running &&
+            visit.memory.store.requests().every((row) => row['state'] == 'finished'),
+      );
       await Future<void>.delayed(Duration.zero);
       final silent = visit.memory.store.requests().singleWhere((row) => row['id'] != firstReceiptId);
       expect(silent['terminal'], 'complete');
@@ -1439,8 +1479,9 @@ void main() {
       expect(lineReceipt['output_tokens'], 8);
       expect(visit.database.select('SELECT state FROM memory_initiative_spends').single['state'], 'reserved');
       background.acknowledgement.complete(true);
-      await _until(() =>
-          visit.database.select('SELECT state FROM memory_initiative_spends').single['state'] == 'shown');
+      await _until(
+        () => visit.database.select('SELECT state FROM memory_initiative_spends').single['state'] == 'shown',
+      );
       expect(visit.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
 
       expect(visit.requests, hasLength(3));
@@ -1550,9 +1591,9 @@ void main() {
       await visit.container.read(companionInitiativeEnabledProvider.notifier).set(true);
       visit.container.read(companionSignalConsentProvider);
       await _until(() => visit.container.read(companionSignalConsentProvider) != null);
-      await visit.container.read(companionSignalConsentProvider.notifier).set(
-        const CompanionSignalConsent(state: true, optionalSpeech: true),
-      );
+      await visit.container
+          .read(companionSignalConsentProvider.notifier)
+          .set(const CompanionSignalConsent(state: true, optionalSpeech: true));
       final receiptIds = visit.memory.store.requests().map((row) => row['id']).toSet();
       final turnsBeforeEvent = visit.database.select('SELECT * FROM memory_agent_turns');
       visit.attachment.observe(background.initiativeView);
@@ -1581,9 +1622,7 @@ void main() {
       expect(visit.agent.text, '先听你这件事。');
       expect(resident.preparingSignalId, isNull);
       signalRelease.complete();
-      await _until(() =>
-          !visit.agent.running &&
-          visit.memory.store.requests().every((row) => row['terminal'] != null));
+      await _until(() => !visit.agent.running && visit.memory.store.requests().every((row) => row['terminal'] != null));
       await Future<void>.delayed(Duration.zero);
       final cancelled = visit.memory.store.requests().singleWhere((row) => row['id'] == pendingReceipt['id']);
       expect(cancelled['state'], 'finished');
@@ -1598,12 +1637,8 @@ void main() {
       expect(background.delivered, isEmpty);
       expect(visit.database.select('SELECT * FROM memory_initiative_spends'), isEmpty);
       final after = visit.memory.store.messages();
-      expect(after.where((row) => row['role'] == 'user').map((row) => row['text']), [
-        '第一句话。', '停一下，听这一句。', '先听我这件事。',
-      ]);
-      expect(after.where((row) => row['role'] == 'assistant').map((row) => row['text']), [
-        '我听见新的话了。', '先听你这件事。',
-      ]);
+      expect(after.where((row) => row['role'] == 'user').map((row) => row['text']), ['第一句话。', '停一下，听这一句。', '先听我这件事。']);
+      expect(after.where((row) => row['role'] == 'assistant').map((row) => row['text']), ['我听见新的话了。', '先听你这件事。']);
       expect(visit.database.select('SELECT * FROM memory_agent_turns'), hasLength(turnsBeforeEvent.length + 1));
       expect(visit.database.select('SELECT * FROM memory_agent_calls'), isEmpty);
       expect(visit.memory.store.tasks(), isEmpty);
