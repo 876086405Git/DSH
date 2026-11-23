@@ -1,0 +1,40 @@
+--- a/node_modules/@deepseek-ai/dsh-file-reference-local/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-file-reference-local/lib/index.js
+@@ -246,13 +246,24 @@
+-function rankCandidates(candidates, query, limit) {
+-	const needle = query === "" ? "" : query.toLowerCase();
+-	const ranked = [];
+-	for (const candidate of candidates) {
+-		const score = scoreCandidate(candidate, needle);
+-		if (score !== void 0) ranked.push({
+-			candidate,
+-			score
+-		});
+-	}
+-	ranked.sort((left, right) => right.score - left.score || kindRank(left.candidate.kind) - kindRank(right.candidate.kind) || (query === "" ? 0 : left.candidate.path.length - right.candidate.path.length) || compareText(left.candidate.path, right.candidate.path));
+-	return ranked.slice(0, limit).map((entry) => entry.candidate);
+-}
++function rankCandidates(candidates, query, limit) {
++	const needle = query === "" ? "" : query.toLowerCase();
++	const compare = (left, right) => right.score - left.score
++		|| kindRank(left.candidate.kind) - kindRank(right.candidate.kind)
++		|| (query === "" ? 0 : left.candidate.path.length - right.candidate.path.length)
++		|| compareText(left.candidate.path, right.candidate.path);
++	const ranked = [];
++	let cutoff;
++	for (const candidate of candidates) {
++		const score = scoreCandidate(candidate, needle);
++		if (score === void 0 || (cutoff && score < cutoff.score)) continue;
++		const entry = { candidate, score };
++		if (cutoff && compare(entry, cutoff) >= 0) continue;
++		ranked.push(entry);
++		// Keep the first page of each batch. Later ties cannot displace its last entry.
++		if (ranked.length === limit * 2) {
++			ranked.sort(compare);
++			ranked.length = limit;
++			cutoff = ranked[limit - 1];
++		}
++	}
++	ranked.sort(compare);
++	return ranked.slice(0, limit).map((entry) => entry.candidate);
++}
