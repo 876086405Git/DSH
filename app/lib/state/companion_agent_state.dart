@@ -10,7 +10,6 @@ import '../companion/companion_state.dart';
 import '../usage/usage_stats.dart';
 import 'connection_state.dart';
 import 'hosts_state.dart';
-import 'models_state.dart';
 import 'settings_state.dart';
 
 /// A mode or connection change does not create a second chat runtime. Windows
@@ -40,7 +39,6 @@ final companionAgentProvider = Provider<CompanionAgent>((ref) {
       }
     },
   );
-  ref.listen(modelSelectionScopeProvider, (_, _) => agent.screenRouteChanged());
   ref.onDispose(agent.dispose);
   return agent;
 });

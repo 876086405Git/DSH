@@ -8,6 +8,7 @@ import '../pets/overlay_channel.dart';
 import '../speech/speech_settings.dart' show companionEffectiveVoiceProvider;
 
 import '../state/companion_agent_state.dart';
+import '../state/models_state.dart' show modelSelectionScopeProvider;
 import 'companion_agent.dart';
 import 'companion_agent_task_ui.dart';
 import 'companion_float.dart';
@@ -61,6 +62,7 @@ class CompanionAlwaysOnOwner {
   late final CompanionSpeaker _speaker;
   late final CompanionScreenObserver _screen;
   CompanionScreenObserver get screen => _screen;
+  ProviderSubscription<Object>? _screenRoute;
   StreamSubscription<int>? _packChanges;
   void Function()? _removeBeforePack;
   CompanionAgentResident? _resident;
@@ -143,6 +145,8 @@ class CompanionAlwaysOnOwner {
     lease.setReducedPower(_status.reducedPower);
     await lease.openMemory();
     if (_closed || generation != _generation || !lease.active) return;
+    // A model change re-routes what she sees; heard only while she can look.
+    _screenRoute ??= ref.listen(modelSelectionScopeProvider, (_, _) => agent.screenRouteChanged());
     _screen.start();
     _changed();
   }
@@ -268,6 +272,8 @@ class CompanionAlwaysOnOwner {
   void _retireLease() {
     final resident = _resident;
     _screen.stop();
+    _screenRoute?.close();
+    _screenRoute = null;
     _hush();
     ++_outputGeneration;
     unawaited(overlay.clearCompanion());
@@ -302,6 +308,7 @@ class CompanionAlwaysOnOwner {
     unawaited(_input.cancel());
     unawaited(_voiceEvents.cancel());
     _screen.dispose();
+    _screenRoute?.close();
   }
 
   Future<bool> _presentLine({
