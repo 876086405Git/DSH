@@ -56,6 +56,7 @@ zzzzzzz-reference-drop-size.diff
 zzzzzzz-reference-encoding.diff
 otel-product-transport-lazy.diff
 otel-log-transformer-imports.diff
+otel-stable-attributes-imports.diff
 zzzzzzz-retainer-decode-copy.diff
 zzzzzzz-settings-local-redaction.diff
 zzzzzzz-skill-watcher-recheck.diff
@@ -155,6 +156,7 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end.diff
 tool-schema-keyword-types.diff
 tool-schema-intrinsic-source.diff
 tool-schema-rule-pair-fields.diff
+tool-schema-local-intrinsic-identity.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-schema.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-retry.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-live-retry.diff
