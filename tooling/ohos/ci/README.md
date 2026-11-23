@@ -12,7 +12,7 @@ dsh-Go 的 Release 发布后，`ohos-release-dispatch.yml` 把发布事件对应
 
 ## Linux runner
 
-按私有仓 **Settings → Actions → Runners → New self-hosted runner** 的指引在 Linux 上注册，在 `config.sh` 的标签参数加上 `--labels harmony,dsh-go-ohos-build`。机器需要满足 `check-arkts.sh` 的 Linux 工具要求，包括 JDK、Python 3.12+、CMake、Ninja 及 OpenHarmony API 26 SDK。设置以下环境变量给 Runner 服务，修改后重启服务使它读取新配置。
+按私有仓 **Settings → Actions → Runners → New self-hosted runner** 的指引在 Linux 上注册，在 `config.sh` 的标签参数加上 `--labels harmony,dsh-go-ohos-build`。工作流准备 Python 3.12 和仓库锁定的 Node 版本。机器仍需安装 JDK、CMake、Ninja 及 OpenHarmony API 26 SDK。设置以下环境变量给 Runner 服务，修改后重启服务使它读取新配置。
 
 | 变量 | 路径 |
 | --- | --- |
