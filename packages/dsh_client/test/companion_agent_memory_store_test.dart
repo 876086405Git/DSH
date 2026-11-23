@@ -708,6 +708,27 @@ void main() {
     expect(store.archive['control_revision'], (archive['control_revision']! as int) + 1);
   });
 
+  test('retrieval checks matching and obsolete paths to the same ancestor in one query', () {
+    final parent = seed('我喜欢茶。'), left = seed('我喜欢绿茶。'), right = seed('我喜欢红茶。'), root = seed('我常去茶店。');
+    void link(MemoryRow child, MemoryRow ancestor, int revision) => database.execute(
+      'INSERT INTO memory_card_references(card_id,parent_card_id,parent_row_rev) VALUES (?,?,?)',
+      [child['id'], ancestor['id'], revision],
+    );
+    link(left, parent, 1);
+    link(right, parent, 2);
+    link(root, left, 1);
+    link(root, right, 1);
+    var checks = 0;
+    database.trace = SqliteTraceCallback((event) {
+      if (event is SqliteTraceStatement && (event.sql?.contains('memory_card_references') ?? false)) checks++;
+      return 0;
+    });
+    final candidates = store.memoryRetrievalCandidates(characterId: null);
+    database.trace = null;
+    expect(candidates.map((card) => card['id']), [parent['id'], left['id']]);
+    expect(checks, 1);
+  });
+
   test('planned reference revisions stay current while another character becomes read-stale without a write', () {
     final firstRole = character('local:first');
     final secondRole = character('local:second');
@@ -1157,6 +1178,30 @@ void main() {
     expect(store.requests().single['raw_usage'], isNull);
     expect(store.isAgentTurnCurrent(active['id']! as String), isFalse);
     expect(store.cards(), isEmpty);
+  });
+
+  test('local exact consolidation reads evidence once and only for potentially equal cards', () {
+    for (final (i, text) in ['绿茶。', '红茶。', '绿茶。', '乌龙。'].indexed) {
+      final turn = begin(say('tea-$i', text));
+      expect(call(turn, 'remember-$i', 'remember', {'text': text}).applied, isTrue);
+      store.closeAgentTurn(turn);
+    }
+    var reads = 0, evidenceRows = 0;
+    int? statement;
+    database.trace = SqliteTraceCallback((event) {
+      if (event is SqliteTraceStatement && (event.sql?.contains('SELECT s.*, m.role, m.scope, m.first_seq') ?? false)) {
+        reads++;
+        statement = event.statementAddress;
+      } else if (event is SqliteTraceRow && event.statementAddress == statement) {
+        evidenceRows++;
+      } else if (event is SqliteTraceProfile && event.statementAddress == statement) {
+        statement = null;
+      }
+      return 0;
+    });
+    expect(store.mergeAgentExactDuplicates(), 0);
+    database.trace = null;
+    expect((reads, evidenceRows), (1, 2));
   });
 
   test('local exact consolidation preserves shared proof alternatives and merges only one same-collection pair', () {

@@ -352,15 +352,14 @@ class CompanionMemoryStore {
     return session;
   });
 
-  List<MemoryRow> cards({bool includeInactive = false}) => [
-    for (final row in _db.select('''
+  List<MemoryRow> cards({bool includeInactive = false}) => [for (final row in _cardRows(includeInactive)) _card(row)];
+
+  ResultSet _cardRows(bool includeInactive) => _db.select('''
       SELECT c.*, t.mode AS topic_mode FROM memory_cards c
       JOIN memory_topics t ON t.id = c.topic_id
       ${includeInactive ? '' : "WHERE c.status != 'withdrawn'"}
       ORDER BY c.id
-    '''))
-      _card(row),
-  ];
+    ''');
 
   /// The current `row_rev` of each of [ids] that is a card and not withdrawn.
   Map<String, int> cardRevisions(Iterable<String> ids) => {
@@ -1861,6 +1860,24 @@ class CompanionMemoryStore {
     _db.execute('UPDATE memory_archive SET cursor_seq=? WHERE singleton=1', [cursor]);
   }
 
+  /// Only cards that share all five exact-merge fields with another card can
+  /// pair, so evidence is loaded once, for those alone.
+  List<MemoryRow> _exactMergeCards() {
+    Record key(MemoryRow card) =>
+        (card['collection'], card['character_id'], card['local_day'], card['day_zone_id'], card['text']);
+    final cards = [for (final row in _cardRows(false)) _card(row, includeEvidence: false)];
+    final counts = <Record, int>{};
+    for (final card in cards) {
+      counts.update(key(card), (n) => n + 1, ifAbsent: () => 1);
+    }
+    final paired = [
+      for (final card in cards)
+        if (counts[key(card)]! > 1) card,
+    ];
+    _loadRetrievalEvidence(paired);
+    return paired;
+  }
+
   /// One actual opportunity can merge one locally certain pair without a
   /// model/key or a model claim. It never rewrites a captured live scope.
   int mergeAgentExactDuplicates() => _transaction(() {
@@ -1868,7 +1885,10 @@ class CompanionMemoryStore {
       return 0;
     }
     final at = _checkedNow();
-    final rows = _mergeRows(at).where((row) => _memoryReferencesCurrent(row['id'] as String)).toList();
+    final rows = [
+      for (final row in _mergeRows(at, _exactMergeCards()))
+        if (_memoryReferencesCurrent(row['id'] as String)) row,
+    ];
     final proofs = {for (final row in rows) row['id']: _supportGroups(row).values.map(_mergeProofKey).toSet()};
     for (var i = 0; i < rows.length; i++) {
       final target = rows[i];
@@ -2008,10 +2028,10 @@ class CompanionMemoryStore {
     return batch(selected);
   });
 
-  List<MemoryRow> _mergeRows(int at) {
+  List<MemoryRow> _mergeRows(int at, [List<MemoryRow>? source]) {
     final cutoff = archive['history_after_seq'] as int;
     final rows = <MemoryRow>[];
-    for (final card in cards()) {
+    for (final card in source ?? cards()) {
       if (card['scope'] != 'real' ||
           card['eligible'] != true ||
           card['topic_mode'] == 'never' ||
@@ -2696,6 +2716,15 @@ class CompanionMemoryStore {
         if (receipt.usage.containsKey(key)) key: receipt.usage[key],
     },
   };
+
+  /// The local physical request's existing cost fields, without projecting history.
+  MemoryRow? localRequestCost(String id) {
+    final rows = _db.select(
+      'SELECT sent_at_ms,reserved_at_ms,estimated_cny,reserved_cny FROM memory_requests WHERE id=?',
+      [id],
+    );
+    return rows.isEmpty ? null : rows.single;
+  }
 
   List<MemoryRow> requests() {
     final rows = <MemoryRow>[

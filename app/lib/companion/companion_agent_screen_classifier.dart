@@ -5,9 +5,8 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
   /// held estimate when final usage is unknown. This defines no prices.
   void recordScreenObservationCost(CompanionMemoryStore store, String id) {
     try {
-      final matches = store.requests().where((row) => row['id'] == id);
-      if (matches.isEmpty) return;
-      final row = matches.first;
+      final row = store.localRequestCost(id);
+      if (row == null) return;
       final at = row['sent_at_ms'] ?? row['reserved_at_ms'];
       final amount = row['sent_at_ms'] == null ? 0 : row['estimated_cny'] ?? row['reserved_cny'];
       if (at is int) onScreenCost?.call(id, at, amount is num ? amount.toDouble() : null);
