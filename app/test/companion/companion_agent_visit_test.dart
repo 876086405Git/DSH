@@ -25,6 +25,7 @@ import 'package:dsh_app/notify/chat_alerts.dart';
 import 'package:dsh_app/pets/pet_signals.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/models_state.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -460,6 +461,7 @@ class _Visit {
     CompanionInitiativeClock Function()? clock,
     CompanionMemoryTransport Function()? memoryTransport,
     HostConnection? connection,
+    ModelCatalog? catalog,
   }) async {
     int now() => clock?.call().wallMs ?? _now;
     final root = await Directory.systemTemp.createTemp('agent-public-visit-');
@@ -516,6 +518,7 @@ class _Visit {
       overrides: [
         activeHostProvider.overrideWith(_Host.new),
         activeConnectionProvider.overrideWithValue(AsyncData<HostConnection?>(connection)),
+        if (catalog != null) currentModelCatalogProvider.overrideWithValue(catalog),
         companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
         companionInitiativeClockProvider.overrideWithValue(
           clock ?? (() => CompanionInitiativeClock(wallMs: _now, monoMs: 0, offsetMinutes: 480)),
@@ -1812,8 +1815,109 @@ void main() {
     }
   });
 
-  test('screen observation revalidates after the model and awaits the actual presentation acknowledgement', () async {
-    final visit = await _Visit.open([_message(words: '第一句观察。'), _message(words: '第二句观察。')]);
+  test('screen observation revalidates after the model and awaits the actual presentation acknowledgement', () => HttpOverrides.runWithHttpOverrides(() async {
+    const selection = ModelSelection(provider: 'screen-provider', model: 'screen-model');
+    const catalog = ModelCatalog(
+      defaultSelection: selection,
+      routableProviders: ['screen-provider'],
+      groups: [ProviderGroup('screen-provider', 'Screen', [
+        ModelInfo(provider: 'screen-provider', id: 'screen-model', name: 'Screen model'),
+      ])],
+      failures: [],
+    );
+    const classification = <String, Object?>{
+      'scene': 'reading', 'mood': 'calm', 'salience': 0.4,
+      'busy': false, 'quip': '慢慢看这一页。', 'emotion': 'neutral',
+    };
+    final visionQueries = <Map<String, String>>[];
+    final visionRequests = <Map<String, Object?>>[];
+    final sockets = <WebSocket>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      for (final socket in sockets) {
+        await socket.close();
+      }
+      await server.close(force: true);
+    });
+    server.listen((request) async {
+      if (request.uri.path == '/' && request.uri.queryParameters['token'] == 'vision-test') {
+        request.response
+          ..statusCode = 303
+          ..headers.set('location', './')
+          ..headers.add('set-cookie', 'dsh-auth-vision=v1.test; Path=/; HttpOnly');
+        await request.response.close();
+        return;
+      }
+      if (request.uri.path == '/api/remote.mux') {
+        final socket = await WebSocketTransformer.upgrade(request);
+        sockets.add(socket);
+        socket.listen((raw) {
+          final frame = jsonDecode(raw as String) as Map;
+          if (frame['type'] == 'open' && frame['endpoint'] == r'$events') {
+            socket.add(jsonEncode({
+              'type': 'item', 'streamId': frame['streamId'],
+              'value': {'type': 'ready', 'clientId': 'vision-client', 'host': {'home': '/test'}},
+            }));
+          }
+        });
+        return;
+      }
+      if (request.method == 'GET' && request.uri.path == '/dsh-go/v1/companion/auxiliary') {
+        visionQueries.add(request.uri.queryParameters);
+        request.response
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({
+            'v': 1, 'kind': 'screen', 'instanceId': 'vision-host', 'supported': true,
+            'provider': selection.provider, 'model': selection.model,
+            'capability': {
+              'noTools': true, 'transientImage': 'jpeg-512-inline',
+              'physicalDispatch': 'fetch-invoked', 'rawUsage': 'deepseek-messages-cumulative',
+              'maxPhysicalRequests': 1,
+            },
+          }));
+        await request.response.close();
+        return;
+      }
+      if (request.method == 'POST' && request.uri.path == '/dsh-go/v1/companion/auxiliary/screen') {
+        final body = Map<String, Object?>.from(jsonDecode(await utf8.decoder.bind(request).join()) as Map);
+        visionRequests.add(body);
+        final id = body['requestId']! as String;
+        final usage = <String, Object?>{
+          'provider': selection.provider, 'model': selection.model,
+          'start_usage': {'input_tokens': 7},
+          'final_usage': {'input_tokens': 7, 'output_tokens': 5},
+          'start_event': 'message_start', 'final_event': 'message_delta',
+          'usage_semantics': 'cumulative', 'input_uncached': 7,
+          'input_cache_read': 0, 'input_cache_write': null, 'output_tokens': 5,
+          'stop_reason': 'end_turn', 'terminal': 'complete', 'complete': true, 'http_status': 200,
+        };
+        final frames = [
+          {'type': 'accepted', 'requestId': id, 'instanceId': 'vision-host',
+            'provider': selection.provider, 'model': selection.model},
+          {'type': 'dispatch', 'requestId': id, 'atMs': _now, 'boundary': 'fetch-invoked'},
+          {'type': 'text', 'requestId': id, 'text': jsonEncode(classification)},
+          {'type': 'finish', 'requestId': id, 'dispatched': true, 'dispatchAtMs': _now,
+            'terminal': 'complete', 'complete': true, 'stopReason': 'end_turn', 'httpStatus': 200, 'usage': usage},
+        ];
+        request.response.headers.contentType = ContentType('application', 'x-ndjson', charset: 'utf-8');
+        for (final frame in frames) {
+          request.response.write('${jsonEncode(frame)}\n');
+        }
+        await request.response.close();
+        return;
+      }
+      request.response.statusCode = 404;
+      await request.response.close();
+    });
+    final client = await DshClient.connect(
+      baseUri: Uri.parse('http://127.0.0.1:${server.port}'), token: 'vision-test',
+      muxOptions: const MuxOptions(autoReconnect: false),
+    );
+    addTearDown(client.close);
+    final visit = await _Visit.open(
+      [_message(words: '第一句观察。'), _message(words: '第二句观察。')],
+      connection: HostConnection(client: client, isLocal: true), catalog: catalog,
+    );
     const character = CompanionCharacter(name: '伙伴');
     const sourceKey = 'builtin:companion/whale-girl';
     visit.attachment.updateCharacter(character, const CompanionMoves(), sourceKey: sourceKey);
@@ -1996,6 +2100,66 @@ void main() {
       expect(observationReceipt['terminal'], 'complete');
       expect(observationReceipt['input_uncached'], 12);
       expect(observationReceipt['output_tokens'], 8);
+
+      // Populate this role's actual conversation first; absence in the image
+      // payload must not pass merely because there was no recent chat.
+      const privateUser = '这是只留在伙伴聊天里的私密标记松灯七。';
+      const privateAssistant = '我记得这句聊天中的回声海桥九。';
+      visit.replies.add(_message(words: privateAssistant));
+      await visit.attachment.submit(privateUser);
+      expect(visit.attachment.error, isNull);
+      expect(visit.requests, hasLength(4));
+      final history = store.modelMessages(
+        sessionId: store.lightSessionId, characterId: resident.characterId, limit: 6,
+      );
+      expect(history.map((row) => row['text']), containsAll([privateUser, privateAssistant]));
+      final historyInput = [for (final row in history) {'role': row['role'], 'text': row['text']}];
+      final vision = await visit.agent.prepareScreenVision({
+        'vision_enabled': true,
+        'vision_host': companionHostKey(visit.container.read(activeHostProvider)),
+        'vision_selection': selection.toJson(),
+      });
+      expect(vision?.available, isTrue);
+      expect(visionQueries, [{'kind': 'screen', 'provider': selection.provider, 'model': selection.model}]);
+      const imageData = '/9j/wAALCAABAAEBAREA/9k=';
+      final image = CompanionScreenImage.fromNative({
+        'mime_type': 'image/jpeg', 'width': 1, 'height': 1, 'bytes': base64Decode(imageData),
+      })!;
+      expect(await visit.agent.classifyScreen(
+        context: context, image: image, vision: vision, isCurrentObservation: () async => true,
+      ), classification);
+      expect(visionRequests, hasLength(1));
+      final imageBody = visionRequests.single;
+      expect(jsonDecode(imageBody['input']! as String), {'screen_observation': context});
+      expect(jsonEncode(imageBody), isNot(contains(privateUser)));
+      expect(jsonEncode(imageBody), isNot(contains(privateAssistant)));
+      expect(imageBody['kind'], 'screen');
+      expect(imageBody['provider'], selection.provider);
+      expect(imageBody['model'], selection.model);
+      expect(imageBody['maxTokens'], 220);
+      expect(imageBody['image'], {'mediaType': 'image/jpeg', 'width': 1, 'height': 1, 'data': imageData});
+      expect(imageBody.containsKey('tools'), isFalse);
+      final imageReceipt = store.requests().singleWhere((row) => row['id'] == imageBody['requestId']);
+      expect(imageReceipt['sent_at_ms'], isNotNull);
+      expect(imageReceipt['terminal'], 'complete');
+      expect(imageReceipt['provider'], selection.provider);
+      expect(imageReceipt['model'], selection.model);
+      expect(imageReceipt['input_uncached'], 7);
+      expect(imageReceipt['output_tokens'], 5);
+
+      // The existing text-only classification contract still uses that same
+      // actual history. The image-only change must not remove it here.
+      visit.replies.add(_message(words: jsonEncode(classification)));
+      expect(await visit.agent.classifyScreen(context: context), classification);
+      expect(visit.requests, hasLength(5));
+      final textMessage = (visit.requests.last['messages']! as List).single as Map;
+      expect(jsonDecode(textMessage['content']! as String), {
+        'screen_observation': context, 'recent_conversation': historyInput,
+      });
+      expect(visionRequests, hasLength(1));
+      expect(store.modelMessages(
+        sessionId: store.lightSessionId, characterId: resident.characterId, limit: 6,
+      ), history);
     } finally {
       final acknowledgement = ambient.acknowledgement;
       if (acknowledgement != null && !acknowledgement.isCompleted) acknowledgement.complete(true);
@@ -2003,5 +2167,5 @@ void main() {
       resident.close();
       await visit.close();
     }
-  });
+  }, _Loopback()));
 }

@@ -107,13 +107,6 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
         '只输出一行JSON，字段为scene、mood、salience(0到1)、busy(bool)、quip(最多20字)、emotion。'
         'scene只取gaming/coding/video/reading/chatting/idle/other。没必要说话时quip为空。'
         '阅读或剧情沉浸时轻声短句，不剧透；不要重复最近的话；发呆少说，一局结束或代码完成的空档再点评。';
-    final history = owner.store.modelMessages(sessionId: owner.store.lightSessionId, characterId: role, limit: 6);
-    final input = jsonEncode({
-      'screen_observation': context,
-      'recent_conversation': [
-        for (final row in history) {'role': row['role'], 'text': row['text']},
-      ],
-    });
     if (image != null) {
       if (vision == null || !vision.available || isCurrentObservation == null) return null;
       return _classifyScreenImage(
@@ -121,11 +114,18 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
         vision: vision,
         image: image,
         system: system,
-        input: input,
+        input: jsonEncode({'screen_observation': context}),
         current: current,
         isCurrentObservation: isCurrentObservation,
       );
     }
+    final history = owner.store.modelMessages(sessionId: owner.store.lightSessionId, characterId: role, limit: 6);
+    final input = jsonEncode({
+      'screen_observation': context,
+      'recent_conversation': [
+        for (final row in history) {'role': row['role'], 'text': row['text']},
+      ],
+    });
     final key = _apiKey().trim();
     if (key.isEmpty) return null;
     final messages = <Map<String, Object?>>[
