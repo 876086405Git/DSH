@@ -1852,12 +1852,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     }
 
     var stream = _replyStream;
-    // A run only appends (including tool-round separators), or discards its
-    // text on stop. A retry gets a new replyId, even for the same user line.
-    if (stream == null ||
-        stream.user != user ||
-        !identical(stream.moves, _moves) ||
-        text.length < (_lastReply?.text.length ?? 0)) {
+    // A retry gets a new replyId, even for the same user line.
+    if (stream == null || stream.user != user || !identical(stream.moves, _moves)) {
       stream = _replyStream = (
         user: user,
         moves: _moves,

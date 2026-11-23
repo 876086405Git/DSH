@@ -121,6 +121,18 @@ void main() {
       }
     });
 
+    test('a final text that rewrites the streamed start is read afresh', () {
+      final stream = CompanionReplyStream();
+      expect(stream.read('先乙', streaming: true).words, '先乙');
+      final sealed = stream.read('[动作:点头]乙', streaming: false);
+      final expected = parseCompanionReply('[动作:点头]乙');
+      expect(sealed.words, expected.words);
+      expect(sealed.marks, expected.marks);
+      for (var i = 0; i < 8; i++) {
+        expect(sealed.wordRangesFrom(i, i + 1), expected.wordRangesFrom(i, i + 1));
+      }
+    });
+
     test('the same text gives the same marks on every streaming update', () {
       const text = '[表情:开心]你好呀[动作:挥手]，今天';
       final seen = <CompanionMark>[];
