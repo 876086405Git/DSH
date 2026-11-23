@@ -105,8 +105,13 @@ class CompanionAgentAttachment {
     if (isAttached) _visit.acted();
   }
 
-  void presentedReply(String replyId, String text) {
-    if (isAttached) _visit.presentedReply(replyId, text);
+  Map<String, ({int start, int end})> get pendingReplyRanges {
+    if (!isAttached) return const {};
+    return Map<String, ({int start, int end})>.unmodifiable(_visit.run?.unpresentedReplies ?? const {});
+  }
+
+  void presentedReply(String replyId, String text, {required Set<String> sourceIds}) {
+    if (isAttached) _visit.presentedReply(replyId, text, sourceIds: sourceIds);
   }
 
   void updateCharacter(CompanionCharacter character, CompanionMoves moves, {String? sourceKey}) {
@@ -1231,7 +1236,7 @@ class _CompanionAgentVisit {
     );
   }
 
-  void presentedReply(String replyId, String text) {
+  void presentedReply(String replyId, String text, {required Set<String> sourceIds}) {
     final shown = run;
     final owner = memory;
     final role = characterId;
@@ -1247,17 +1252,18 @@ class _CompanionAgentVisit {
       return;
     }
     final at = clock().wallMs;
-    for (final entry in shown.unpresentedReplies.entries.toList()) {
-      if (entry.value > text.length) continue;
+    for (final id in sourceIds) {
+      final range = shown.unpresentedReplies[id];
+      if (range == null || range.end > text.length) continue;
       try {
         owner.store.recordCompanionPresentation(
           characterId: role,
-          presentationId: 'assistant:${entry.key}',
+          presentationId: 'assistant:$id',
           kind: 'assistant',
           presentedAtMs: at,
-          assistantSourceId: entry.key,
+          assistantSourceId: id,
         );
-        shown.unpresentedReplies.remove(entry.key);
+        shown.unpresentedReplies.remove(id);
       } on Object {
         // No fabricated presentation on an unavailable/deleted source. A
         // later actual frame may retry; leaving never fabricates a frame.

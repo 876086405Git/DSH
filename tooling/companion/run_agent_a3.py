@@ -20,7 +20,7 @@ import time
 import uuid
 
 PACKAGE = "io.github.ccch1mneyyy.dsh_app.test"
-PARENT = "1ba8222fd377602ca0aad124dae828044639ad90"
+PARENT = "89011333285efa14b525708ff652eaf2ed1d2309"
 CONFIG_NAME = "dsh-a3-config.json"
 RESULT_NAMES = ("events.jsonl", "summary.json", "human-review.md")
 CLEANUP_TIMEOUT_SECONDS = 5
@@ -28,10 +28,10 @@ KEY_HANDOFF_SECONDS = 15
 
 
 class _KeyHandoff:
-    """One in-memory response; the bootstrap contains only its short-lived token."""
+    """One in-memory response, authorized by the target's in-memory secret."""
 
-    def __init__(self, key: str, run_id: str):
-        self.token = secrets.token_urlsafe(24)
+    def __init__(self, key: str, run_id: str, claim_hash: str):
+        self.claim_hash = claim_hash
         self._key = key
         self.run_id = run_id
         self.expires = time.monotonic() + KEY_HANDOFF_SECONDS
@@ -48,9 +48,11 @@ class _KeyHandoff:
                 pass  # Neither request headers nor the one-use token are logged.
 
             def do_POST(self):
+                claim_hash = hashlib.sha256(
+                    self.headers.get("X-DSH-A3-Token", "").encode("utf-8")).hexdigest()
                 if (self.path != "/a3-key" or owner.stopping.is_set()
                         or owner.consumed or time.monotonic() >= owner.expires
-                        or not secrets.compare_digest(self.headers.get("X-DSH-A3-Token", ""), owner.token)):
+                        or not secrets.compare_digest(claim_hash, owner.claim_hash)):
                     self.send_response(403)
                     self.send_header("Content-Length", "0")
                     self.end_headers()
@@ -162,7 +164,6 @@ def main() -> int:
     env.pop("DEEPSEEK_API_KEY", None)
     env.pop("ADB_TRACE", None)
     env["DSH_SIDE_BUILD"] = "1"
-    handoff_token = ""
     deadline = time.monotonic() + args.run_timeout_seconds
 
     def remaining() -> float:
@@ -187,8 +188,7 @@ def main() -> int:
         return adb + ["shell", "-T", shlex.join(parts)]
 
     def safe(value: object) -> str:
-        text = str(value).replace(key, "[REDACTED_API_KEY]")
-        return text.replace(handoff_token, "[REDACTED_HANDOFF_TOKEN]") if handoff_token else text
+        return str(value).replace(key, "[REDACTED_API_KEY]")
 
     def run_as(parts: list[str]) -> list[str]:
         return shell(["run-as", PACKAGE, "--user", android_user, *parts])
@@ -199,7 +199,8 @@ def main() -> int:
         if "shell_v2" not in features.stdout.decode("utf-8", errors="replace").replace(",", " ").split():
             print("ENV_UNAVAILABLE: adb shell_v2 is required for reliable artifact exit status", file=sys.stderr)
             return 2
-        installed = command(shell(["pm", "list", "packages", "--user", android_user, PACKAGE]))
+        # install -R checks the whole device, not only the selected profile.
+        installed = command(shell(["pm", "list", "packages", "--user", "all", PACKAGE]))
     except (TimeoutError, subprocess.TimeoutExpired):
         print("INCOMPLETE: setup exceeded the remaining run deadline", file=sys.stderr)
         return 1
@@ -210,7 +211,7 @@ def main() -> int:
         print("ENV_UNAVAILABLE: the selected Android device is not ready", file=sys.stderr)
         return 2
     if installed.stdout.strip():
-        print("ENV_UNAVAILABLE: the side-build package already exists; use a separate test device/profile", file=sys.stderr)
+        print("ENV_UNAVAILABLE: the side build exists on this device; another profile is not a clean device", file=sys.stderr)
         return 2
 
     output.mkdir(parents=True)
@@ -225,6 +226,7 @@ def main() -> int:
     installation_state = "not_attempted"
     key_handoff = None
     reverse_port = None
+    reverse_state = "not_attempted"
     key_claimed = False
     configuration_delivered = False
     config_path = None
@@ -254,14 +256,19 @@ def main() -> int:
             return None
 
     def finish_handoff():
-        nonlocal key_handoff, reverse_port, key_claimed
+        nonlocal key_handoff, reverse_state, key_claimed
         if key_handoff is not None:
             key_handoff.stopping.set()
             key_claimed = key_claimed or key_handoff.consumed
-        if reverse_port is not None:
+        if reverse_state == "created":
             removed = cleanup_command("remove-key-reverse", adb + ["reverse", "--remove", reverse_port])
             if removed is not None and removed.returncode == 0:
-                reverse_port = None
+                reverse_state = "removed"
+        elif reverse_state == "pending":
+            # A timeout/error does not establish ownership. A competing client
+            # may have won --no-rebind; keep the port for explicit recovery.
+            reverse_state = "unresolved"
+            cleanup_errors.append("key_reverse_creation_unresolved: " + reverse_port)
         if key_handoff is not None:
             try:
                 key_handoff.close()
@@ -351,21 +358,29 @@ def main() -> int:
                             or PACKAGE not in candidate.parts or candidate.name != CONFIG_NAME):
                         raise RuntimeError("Invalid private configuration path")
                     config_path = candidate
-                    key_handoff = _KeyHandoff(key, run_id)
-                    handoff_token = key_handoff.token
+                    key_handoff = _KeyHandoff(key, run_id, value["claimHash"])
                     port = "tcp:" + str(key_handoff.port)
-                    # Fail rather than replace another reverse mapping.
-                    command(adb + ["reverse", "--no-rebind", port, port], limit=5)
+                    mappings = command(adb + ["reverse", "--list"], limit=5)
+                    rows = [line.split() for line in mappings.stdout.decode("utf-8").splitlines() if line.strip()]
+                    if any(len(row) != 3 for row in rows):
+                        raise RuntimeError("Cannot establish existing reverse mappings")
+                    if any(row[1] == port for row in rows):
+                        raise RuntimeError("Key reverse port already exists; left untouched")
+                    # Register before dispatch: a timed-out adb client may have
+                    # installed a listener, but does not prove that we own it.
                     reverse_port = port
+                    reverse_state = "pending"
+                    command(adb + ["reverse", "--no-rebind", port, port], limit=5)
+                    reverse_state = "created"
                     key_handoff.start()
-                    config["keyHandoff"] = {"port": key_handoff.port, "token": handoff_token}
+                    config["keyHandoff"] = {"port": key_handoff.port, "claimHash": key_handoff.claim_hash}
                     payload = json.dumps(config, ensure_ascii=False).encode("utf-8")
                     temporary = str(candidate) + ".tmp"
                     script = ("umask 077; cat > " + shlex.quote(temporary)
                               + " && chmod 600 " + shlex.quote(temporary)
                               + " && mv " + shlex.quote(temporary) + " " + shlex.quote(str(candidate)))
-                    # The file contains the fixture and a one-use token, never
-                    # the full key. The key travels only through the local socket.
+                    # The file contains only a public commitment to the target's
+                    # secret. Sending that commitment cannot claim the key.
                     command(run_as(["sh", "-c", script]), data=payload, limit=5)
                     configuration_delivered = True
                 for marker in ("A3_STARTED:", "A3_FINISHED:"):
@@ -507,6 +522,7 @@ def main() -> int:
         "parentFixture": cases.get("parent"), "device": args.device,
         "androidUser": args.android_user, "installationState": installation_state,
         "ownedInstallation": owned_install, "keyHandoffConsumed": key_claimed,
+        "keyReversePort": reverse_port, "keyReverseState": reverse_state,
         "configurationDelivered": configuration_delivered, "targetStarted": model_run_started,
         "targetFinished": finished is not None, "failure": failure, "files": members,
         "replayOutcome": replay_outcome, "replayExitCode": replay_exit_code, "exitCode": exit_code,
@@ -515,7 +531,7 @@ def main() -> int:
         "deviceRecoveryRequired": recovery_required,
         "deviceResultDirectory": str(remote) if remote is not None else None,
         "summaryValidated": summary_validated,
-        "credentials": "environment to one-use loopback response over adb reverse; only short-lived token in private bootstrap; full key stays in memory",
+        "credentials": "environment to one-use loopback response over adb reverse; only SHA-256 commitment in bootstrap/READY; raw claim secret and full key stay in memory",
         "execution": "OWNER_MANUAL_RUN", "humanReview": "PENDING",
     }
     try:
