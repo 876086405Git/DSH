@@ -18,6 +18,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../plugins/islands/island_platform.dart';
@@ -70,6 +71,14 @@ class WebViewGuard {
     final id = _id;
     _id = null;
     if (id != null) await _platform.destroy(id);
+  }
+
+  /// For a page going away: destroys [controller]'s WebView once the frame
+  /// that drops its WebViewWidget is done, rather than whenever the plugin's
+  /// finalizer gets to it. Also covers a WebView not attached yet.
+  static void release(WebViewController? controller) {
+    final id = controller == null ? null : identifierOf(controller);
+    if (id != null) WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(IslandPlatform.instance.destroy(id)));
   }
 
   void dispose() {
