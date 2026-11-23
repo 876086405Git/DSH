@@ -357,6 +357,7 @@ class CompanionAgent extends ChangeNotifier {
       request: () async {
         final selection = await run.memory.selectForAgent(
           run.source['text'] as String,
+          explicitUserInput: run.source['text'] as String,
           characterId: run.source['character_id'] as String?,
           offsetMinutes: run.source['offset_minutes']! as int,
           isCurrent: () => _current(run),

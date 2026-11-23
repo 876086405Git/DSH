@@ -2455,6 +2455,128 @@ void main() {
     expect(actualCard(otherImpression['id']! as String), otherImpression);
     expect(store.topicControls(), editorControls);
     expect(store.requests(), editorRequests);
+
+    // Keep the three existing coffee controls above. A different real topic
+    // makes the fixed-layer invitation and ambiguity checks independent.
+    final magnoliaMaking = begin(sayAs('fixed-magnolia-source', '我们看过玉兰，也谈过散步。', firstRole));
+    final magnolia = call(magnoliaMaking, 'fixed-magnolia', 'remember', {
+      'collection': 'our_story', 'text': '我们看过玉兰。', 'keywords': ['玉兰'],
+    });
+    expect(magnolia.applied, isTrue);
+    expect(call(magnoliaMaking, 'fixed-magnolia-never', 'quiet', {
+      'card': magnolia.targetId, 'mode': 'never',
+    }).applied, isTrue);
+    store.closeAgentTurn(magnoliaMaking);
+    final bookMaking = begin(say('fixed-book-source', '我喜欢读纸书。'));
+    final book = call(bookMaking, 'fixed-book', 'remember', {
+      'text': '我喜欢读纸书。', 'keywords': ['纸书'],
+    });
+    expect(book.applied, isTrue);
+    store.closeAgentTurn(bookMaking);
+    final impressionSource = sayAs('fixed-invitation-source', '我们聊过玉兰，散步时更自在。', firstRole);
+    final impressionWriting = begin(impressionSource, [actualCard(editingImpressionId), actualCard(book.targetId!)]);
+    expect(call(impressionWriting, 'fixed-invitation-impression', 'impression', {
+      'card': editingImpressionId,
+      'text': '聊过玉兰后，散步时彼此更自在。',
+      'keywords': ['散步'],
+      'sources': [impressionSource['id']],
+      'references': [book.targetId],
+    }).applied, isTrue);
+    store.closeAgentTurn(impressionWriting);
+    final invitedImpression = actualCard(editingImpressionId);
+    expect(invitedImpression['topic_id'], actualCard(magnolia.targetId!)['topic_id']);
+    expect(invitedImpression['topic_mode'], 'never');
+    expect(invitedImpression['keywords'], ['散步']);
+    final cardsBeforeFixedReads = store.cards();
+    final controlsBeforeFixedReads = store.topicControls();
+    final archiveBeforeFixedReads = store.archive;
+    final requestsBeforeFixedReads = store.requests();
+    expect(store.memoryFixedLayerCards(
+      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
+    ).map((row) => row['id']), isNot(contains(editingImpressionId)));
+    expect(store.memoryFixedLayerCards(
+      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
+      explicitUserInput: '聊聊玉兰',
+    ).map((row) => row['id']), contains(editingImpressionId));
+    expect(store.memoryFixedLayerCards(
+      characterId: null, fromDay: '2026-10-02', beforeDay: '2026-10-04',
+      explicitUserInput: '聊聊玉兰',
+    ).map((row) => row['id']), isNot(contains(editingImpressionId)));
+    expect(store.memoryFixedLayerCards(
+      characterId: secondRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
+      explicitUserInput: '聊聊玉兰',
+    ).map((row) => row['id']), isNot(contains(editingImpressionId)));
+    expect(store.cards(), cardsBeforeFixedReads);
+    expect(store.topicControls(), controlsBeforeFixedReads);
+    expect(store.archive, archiveBeforeFixedReads);
+    expect(store.requests(), requestsBeforeFixedReads);
+
+    // A shared ordinary card is outside the fixed subset but inside the
+    // same real selection domain, so it can make the invitation ambiguous.
+    final ambiguousMaking = begin(say('fixed-shared-magnolia-source', '我在窗边养了一盆玉兰。'));
+    final ambiguous = call(ambiguousMaking, 'fixed-shared-magnolia', 'remember', {
+      'text': '我在窗边养了一盆玉兰。', 'keywords': ['玉兰'],
+    });
+    expect(ambiguous.applied, isTrue);
+    expect(call(ambiguousMaking, 'fixed-shared-magnolia-never', 'quiet', {
+      'card': ambiguous.targetId, 'mode': 'never',
+    }).applied, isTrue);
+    expect(actualCard(ambiguous.targetId!)['topic_id'], isNot(invitedImpression['topic_id']));
+    expect(store.memoryPageCards(characterId: firstRole).map((row) => row['id']), contains(editingImpressionId));
+    expect(store.memoryFixedLayerCards(
+      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
+      explicitUserInput: '聊聊玉兰',
+    ).map((row) => row['id']), isNot(contains(editingImpressionId)));
+    expect(call(ambiguousMaking, 'fixed-shared-magnolia-forget', 'forget', {
+      'card': ambiguous.targetId,
+    }).applied, isTrue);
+    store.closeAgentTurn(ambiguousMaking);
+    expect(store.memoryFixedLayerCards(
+      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
+      explicitUserInput: '聊聊玉兰',
+    ).map((row) => row['id']), contains(editingImpressionId));
+
+    // The other role can update a shared parent without rewriting this
+    // private impression. An invitation cannot revive its stale reference.
+    final bookChanging = begin(sayAs('fixed-book-changed-source', '我现在主要读电子书。', secondRole), [actualCard(book.targetId!)]);
+    expect(call(bookChanging, 'fixed-book-changed', 'remember', {
+      'card': book.targetId, 'text': '我现在主要读电子书。', 'keywords': ['电子书'],
+    }).applied, isTrue);
+    store.closeAgentTurn(bookChanging);
+    expect(store.memoryPageCards(characterId: firstRole).map((row) => row['id']), isNot(contains(editingImpressionId)));
+    expect(store.memoryFixedLayerCards(
+      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
+      explicitUserInput: '聊聊玉兰',
+    ).map((row) => row['id']), isNot(contains(editingImpressionId)));
+
+    // These are the Scope's explicit half-open date bounds, not a claim
+    // that the Owner's current October 4 window includes October 1.
+    final dated = actualCard(diary.targetId!);
+    store.saveManual(
+      CompanionMemory(id: diary.targetId!, text: dated['text']! as String, keywords: const ['红茶']),
+      expectedRowRev: dated['row_rev']! as int,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    final diaryQuieting = begin(say('fixed-diary-quiet-source', '那天日记里的红茶暂时不主动聊。'), [actualCard(diary.targetId!)]);
+    expect(call(diaryQuieting, 'fixed-diary-never', 'quiet', {'card': diary.targetId, 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(diaryQuieting);
+    expect(actualCard(diary.targetId!)['local_day'], '2026-10-01');
+    expect(store.memoryFixedLayerCards(
+      characterId: firstRole, fromDay: '2026-09-30', beforeDay: '2026-10-02',
+    ).map((row) => row['id']), isNot(contains(diary.targetId)));
+    expect(store.memoryFixedLayerCards(
+      characterId: firstRole, fromDay: '2026-09-30', beforeDay: '2026-10-02',
+      explicitUserInput: '聊聊红茶',
+    ).map((row) => row['id']), contains(diary.targetId));
+    expect(store.memoryFixedLayerCards(
+      characterId: firstRole, fromDay: '2026-09-30', beforeDay: '2026-10-01',
+      explicitUserInput: '聊聊红茶',
+    ).map((row) => row['id']), isNot(contains(diary.targetId)));
+    expect(store.memoryFixedLayerCards(
+      characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04',
+      explicitUserInput: '聊聊红茶',
+    ).map((row) => row['id']), isNot(contains(diary.targetId)));
   });
 
   test('a genuinely unsent maintenance claim closes without consuming a daily permit or reopening its turn', () {

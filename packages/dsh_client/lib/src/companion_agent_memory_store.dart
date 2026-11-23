@@ -274,7 +274,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
   MemorySelection _agentRecallSelection(Row turn, MemoryRow input, List<String>? rankedIds) {
     final query = _agentText(input, 'query');
     final candidates = memoryRetrievalCandidates(characterId: turn['character_id'] as String?, input: query);
-    final explicit = explicitMemoryTopics(query, candidates);
+    final explicit = <String>{
+      for (final card in candidates)
+        if (card['topic_mode'] == 'never') card['topic_id']! as String,
+    };
     final revision = archive['control_revision']! as int;
     return rankedIds == null
         ? selectMemoryContext(

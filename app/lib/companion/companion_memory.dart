@@ -259,18 +259,27 @@ class CompanionMemoryOwner extends ChangeNotifier {
   }) async {
     final revision = store.archive['control_revision'];
     bool current() => !_disposed && isCurrent() && store.archive['control_revision'] == revision;
-    final ranked = await embeddings.rank(store: store, characterId: characterId, query: query, isCurrent: current);
+    final ranked = await embeddings.rank(
+      store: store,
+      characterId: characterId,
+      query: query,
+      explicitInput: query,
+      isCurrent: current,
+    );
     if (!current()) throw const CompanionMemoryRetrievalCancelled();
     return ranked == null ? null : [for (final row in ranked) row['id']! as String];
   }
 
   /// Fixed impression and the last two completed diary dates are separate
   /// from card ranking. A vector result cannot crowd those layers out.
+  /// Observation text can guide relevance; only an actual user source supplies
+  /// [explicitUserInput] for the one-selection quiet exception.
   Future<MemorySelection> selectForAgent(
     String input, {
     required String? characterId,
     required int offsetMinutes,
     required bool Function() isCurrent,
+    String? explicitUserInput,
   }) async {
     final revision = store.archive['control_revision']! as int;
     bool current() => !_disposed && isCurrent() && store.archive['control_revision'] == revision;
@@ -278,10 +287,21 @@ class CompanionMemoryOwner extends ChangeNotifier {
     // null; the read below is the one the selection uses, so skip the first.
     final ranked = embeddings.knownUnavailable
         ? null
-        : await embeddings.rank(store: store, characterId: characterId, query: input, isCurrent: current);
+        : await embeddings.rank(
+            store: store,
+            characterId: characterId,
+            query: input,
+            explicitInput: explicitUserInput,
+            isCurrent: current,
+          );
     if (!current()) throw const CompanionMemoryRetrievalCancelled();
-    final cards = store.memoryRetrievalCandidates(characterId: characterId, input: input);
-    final explicit = explicitMemoryTopics(input, cards);
+    final cards = store.memoryRetrievalCandidates(characterId: characterId, input: explicitUserInput);
+    // Scope resolved the invitation in the whole domain. Its matching row
+    // can belong to a fixed layer, outside these returned ordinary candidates.
+    final explicit = <String>{
+      for (final card in cards)
+        if (card['topic_mode'] == 'never') card['topic_id']! as String,
+    };
     final selection = ranked == null
         ? selectMemoryContext(cards, input: input, nowMs: _now(), controlRevision: revision, explicitTopicIds: explicit)
         : selectRankedMemoryContext(
@@ -295,10 +315,12 @@ class CompanionMemoryOwner extends ChangeNotifier {
     final today = DateTime.utc(local.year, local.month, local.day);
     final firstDay = today.subtract(const Duration(days: 2)).toIso8601String().substring(0, 10);
     final todayKey = today.toIso8601String().substring(0, 10);
-    final fixed = [
-      for (final row in store.memoryFixedLayerCards(characterId: characterId, fromDay: firstDay, beforeDay: todayKey))
-        if (isMemoryContextEligible(row, nowMs: _now())) row,
-    ];
+    final fixed = store.memoryFixedLayerCards(
+      characterId: characterId,
+      fromDay: firstDay,
+      beforeDay: todayKey,
+      explicitUserInput: explicitUserInput,
+    );
     final diaries = fixed.where((row) => row['layer'] == 'diary').toList()
       ..sort((a, b) => (a['local_day']! as String).compareTo(b['local_day']! as String));
     final selected = [
