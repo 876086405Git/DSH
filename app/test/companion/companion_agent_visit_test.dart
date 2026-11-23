@@ -1006,6 +1006,9 @@ void main() {
       final forgetDefinition = (visit.requests[6]['tools']! as List).cast<Map>().singleWhere((tool) => tool['name'] == 'forget');
       final properties = (forgetDefinition['input_schema']! as Map)['properties']! as Map;
       expect(properties['deleteChat'], containsPair('type', 'boolean'));
+      final quietDefinition = (visit.requests[6]['tools']! as List).cast<Map>().singleWhere((tool) => tool['name'] == 'quiet');
+      final quietProperties = (quietDefinition['input_schema']! as Map)['properties']! as Map;
+      expect((quietProperties['mode']! as Map)['enum'], unorderedEquals(['less', 'never', 'normal']));
       expect(jsonEncode(visit.requests[7]), isNot(contains(rawText)));
       final rawResults = <Map>[
         for (final message in (visit.requests[7]['messages']! as List).cast<Map>())

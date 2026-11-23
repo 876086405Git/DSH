@@ -155,7 +155,7 @@ class CompanionAgentMemoryTools {
     'impression': 'Update this character\'s concise impression, supplying its existing card and only this domain\'s sources or references.',
     'relationship': 'Classify real questions, confiding or answers using supplied original source/display IDs. Never invent events or scores.',
     'quiet':
-        'Set a memory topic to less or never proactive. All affected cards must be supplied and fit the shared budget.',
+        'Set a memory topic to less or never proactive, or restore normal when the user allows it again. All affected cards must be supplied and fit the shared budget. Restoring does not reopen old followups.',
     'cancel': 'Cancel a supplied memory plan and retire its followup; not a reminder or computer task.',
     'postpone':
         'Postpone a memory plan without a new time and retire its followup. Use ask_later when the time is known.',
@@ -460,14 +460,14 @@ class CompanionAgentMemoryTools {
     ),
     CompanionAgentTool(
       name: 'quiet',
-      description: 'Mention the topic of this supplied card less, or never proactively. All affected topic cards must be supplied and fit the turn budget.',
+      description: 'Mention the topic of this supplied card less, or never proactively; restore normal when the user allows it again, clearing its saved quiet anchors. All affected topic cards must be supplied and fit the turn budget. Restoring does not reopen old followups.',
       inputSchema: {
         'type': 'object',
         'properties': {
           'card': _card,
           'mode': {
             'type': 'string',
-            'enum': ['less', 'never'],
+            'enum': ['less', 'never', 'normal'],
           },
         },
         'required': ['card', 'mode'],

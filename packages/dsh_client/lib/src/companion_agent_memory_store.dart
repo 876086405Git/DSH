@@ -1346,19 +1346,32 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     final selected = _agentCard(turn, _agentText(input, 'card'));
     final topic = selected['topic_id']! as String;
     final mode = input['mode'];
-    if (mode != 'less' && mode != 'never') throw const _AgentMemoryRejected('invalid_mode');
+    if (mode != 'less' && mode != 'never' && mode != 'normal') throw const _AgentMemoryRejected('invalid_mode');
     final cards = _db.select('SELECT id FROM memory_cards WHERE topic_id=?', [topic]);
     if (cards.isEmpty) throw const _AgentMemoryRejected('topic_not_in_turn');
     final ids = cards.map((row) => row['id']! as String).toSet();
     _agentBudget(turn, ids);
-    final anchors = _controlAnchors(topic);
+    if (mode == 'normal') {
+      // Match the existing normal control without revising cards or
+      // retiring live invitations.
+      _db.execute(
+        '''
+        UPDATE memory_cards SET maintenance_row_rev=0 WHERE topic_id=?
+          AND EXISTS(SELECT 1 FROM memory_topics WHERE id=? AND mode!='normal')
+      ''',
+        [topic, topic],
+      );
+    }
+    final anchors = mode == 'normal' ? <String>[] : _controlAnchors(topic);
     _db.execute('UPDATE memory_topics SET mode=?,control_anchors=? WHERE id=?', [mode, jsonEncode(anchors), topic]);
-    _db.execute(
-      'UPDATE memory_cards SET followup=NULL,maintenance_row_rev=0,row_rev=row_rev+1,updated_at_ms=? WHERE topic_id=?',
-      [_checkedNow(), topic],
-    );
-    for (final id in ids) {
-      _closeAgentFollowups(id, 'quiet');
+    if (mode != 'normal') {
+      _db.execute(
+        'UPDATE memory_cards SET followup=NULL,maintenance_row_rev=0,row_rev=row_rev+1,updated_at_ms=? WHERE topic_id=?',
+        [_checkedNow(), topic],
+      );
+      for (final id in ids) {
+        _closeAgentFollowups(id, 'quiet');
+      }
     }
     _bumpMemory();
     _bumpControl(historyAfterSeq: mode == 'never' ? _sequence() : null);

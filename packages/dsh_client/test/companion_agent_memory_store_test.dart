@@ -186,12 +186,64 @@ void main() {
 
   for (final mode in const ['less', 'never']) {
     test('a remembered shared topic keeps $mode across reopen without quieting another clause', () {
+      store.initializeInitiative({
+        'v': 2,
+        'lastGreetingAtMs': null,
+        'inviteAtMs': <int>[],
+        'signalAtMs': <int>[],
+        'declinedUntilMs': 0,
+        'night': null,
+      });
       final first = begin(say('controlled-first', '我在周末骑行。'));
       final saved = call(first, 'remember-first', 'remember', {
         'text': '你在周末骑行。',
         'keywords': ['骑行'],
       });
       expect(saved.applied, isTrue);
+      final scheduled = call(first, 'schedule-first', 'ask_later', {'card': saved.targetId, 'whenMs': now});
+      expect(scheduled.applied, isTrue);
+      final ticket = store.nextFollowup(nowMs: now)!;
+      expect(ticket['id'], scheduled.targetId);
+      final spend = store.reserveInitiative(
+        kind: 'followup',
+        nowMs: now,
+        maxPerDay: 2,
+        gapMs: 0,
+        followupId: ticket['id']! as String,
+      )!;
+      final outcome = mode == 'less' ? 'shown' : 'unknown';
+      store.settleInitiative(spend, outcome: outcome);
+      expect(store.followups().single['state'], mode == 'less' ? 'asked' : 'maybe_shown');
+      // This SDK fixture records a sent request through the public ledger API;
+      // it does not claim an HTTP provider was contacted.
+      final request = store.reserveRequest(
+        category: 'chat',
+        provider: 'deepseek',
+        model: 'deepseek-flash',
+        inputTokens: 100,
+        outputTokens: 800,
+      )!;
+      observed(request);
+      final paid = store.requests();
+      expect(paid.single['id'], request);
+      expect(paid.single['sent_at_ms'], isNotNull);
+      expect(paid.single['state'], 'finished');
+      final spent = database
+          .select('SELECT * FROM memory_initiative_spends')
+          .map((row) => Map<String, Object?>.from(row))
+          .toList();
+      expect(spent.single['state'], outcome);
+      final consumed = store.followups().single;
+      final consumedCard = actualCard(saved.targetId!);
+      expect(call(first, 'already-normal-consumed', 'quiet', {'card': saved.targetId, 'mode': 'normal'}).applied, isTrue);
+      final stillConsumed = store.followups().single;
+      expect(stillConsumed['id'], consumed['id']);
+      expect(stillConsumed['state'], consumed['state']);
+      expect(stillConsumed['presented_at_ms'], consumed['presented_at_ms']);
+      expect(store.nextFollowup(nowMs: now), isNull);
+      expect(actualCard(saved.targetId!), consumedCard);
+      expect(database.select('SELECT * FROM memory_initiative_spends'), spent);
+      expect(store.requests(), paid);
       expect(call(first, 'quiet-first', 'quiet', {'card': saved.targetId, 'mode': mode}).applied, isTrue);
       final topic = actualCard(saved.targetId!)['topic_id'];
       reopen();
@@ -220,6 +272,45 @@ void main() {
       expect(actualCard(related.targetId!)['topic_id'], topic);
       expect(actualCard(related.targetId!)['topic_mode'], mode);
       expect(actualCard(unrelated.targetId!)['topic_mode'], 'normal');
+
+      final oldOpportunities = store.followups();
+      expect(oldOpportunities.single['state'], mode == 'less' ? 'closed' : 'maybe_shown');
+      final controlled = [actualCard(saved.targetId!), actualCard(related.targetId!)];
+      final independent = actualCard(unrelated.targetId!);
+      final cutoff = store.archive['history_after_seq'];
+      final restoring = begin(say('restore-normal', '以后可以聊骑行了。'), controlled);
+      final restored = call(restoring, 'restore-normal', 'quiet', {'card': saved.targetId, 'mode': 'normal'});
+      expect(restored.applied, isTrue);
+      expect(restored.targetId, topic);
+      expect(restored.changedCardIds, unorderedEquals(controlled.map((card) => card['id'])));
+      for (final card in controlled) {
+        expect(actualCard(card['id']! as String), {...card, 'topic_mode': 'normal', 'maintenance_row_rev': 0});
+      }
+      final topicRow = database.select('SELECT mode,control_anchors FROM memory_topics WHERE id=?', [topic]).single;
+      expect(topicRow['mode'], 'normal');
+      expect(jsonDecode(topicRow['control_anchors']! as String), isEmpty);
+      expect(store.topicControls().any((row) => row['topic_id'] == topic), isFalse);
+      expect(actualCard(unrelated.targetId!), independent);
+      expect(store.archive['history_after_seq'], cutoff);
+      expect(store.followups(), oldOpportunities);
+      expect(store.nextFollowup(nowMs: now), isNull);
+      expect(database.select('SELECT * FROM memory_initiative_spends'), spent);
+      expect(store.requests(), paid);
+
+      final fresh = begin(say('normal-new-source', '现在我改去公园骑行。'));
+      final remembered = call(fresh, 'normal-new-memory', 'remember', {'text': '你现在去公园骑行。', 'keywords': ['骑行']});
+      expect(remembered.applied, isTrue);
+      expect(actualCard(remembered.targetId!)['topic_mode'], 'normal');
+      expect((actualCard(remembered.targetId!)['evidence'] as List).single, containsPair('message_id', 'normal-new-source'));
+      reopen();
+      expect(actualCard(saved.targetId!)['topic_mode'], 'normal');
+      expect(actualCard(related.targetId!)['topic_mode'], 'normal');
+      expect(actualCard(remembered.targetId!)['topic_mode'], 'normal');
+      expect(actualCard(unrelated.targetId!), independent);
+      expect(store.followups(), oldOpportunities);
+      expect(store.nextFollowup(nowMs: now), isNull);
+      expect(database.select('SELECT * FROM memory_initiative_spends'), spent);
+      expect(store.requests(), paid);
     });
   }
 
@@ -653,6 +744,29 @@ void main() {
     final turn = begin(say('source', '这几件事都聊过了。'), [first, other]);
     expect(call(turn, 'schedule', 'ask_later', {'card': first['id'], 'whenMs': now}).applied, isTrue);
     expect(store.nextFollowup(nowMs: now), isNotNull);
+    final pending = store.nextFollowup(nowMs: now)!;
+    final cardBeforeNormal = actualCard(first['id']! as String);
+    final paid = store.requests();
+    expect(call(turn, 'already-normal', 'quiet', {'card': first['id'], 'mode': 'normal'}).applied, isTrue);
+    final rebound = store.nextFollowup(nowMs: now)!;
+    expect(store.isFollowupCurrent(pending, nowMs: now), isFalse);
+    expect(store.isFollowupCurrent(rebound, nowMs: now), isTrue);
+    for (final field in const [
+      'id',
+      'state',
+      'card_id',
+      'card_rev',
+      'message_id',
+      'source_rev',
+      'invitation',
+      'opens_at_ms',
+      'expires_at_ms',
+      'presented_at_ms',
+    ]) {
+      expect(rebound[field], pending[field]);
+    }
+    expect(actualCard(first['id']! as String), cardBeforeNormal);
+    expect(store.requests(), paid);
     expect(call(turn, 'quiet', 'quiet', {'card': first['id'], 'mode': 'less'}).applied, isTrue);
     expect(store.nextFollowup(nowMs: now), isNull);
     expect(store.cards().singleWhere((card) => card['id'] == other['id']), other);
