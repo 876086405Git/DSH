@@ -138,6 +138,7 @@ extension CompanionAgentAmbient on CompanionAgent {
         request: () async {
           if (requested || !current()) return null;
           requested = true;
+          if (!await isCurrentObservation() || !current()) return null;
           final message = await agentRoute.readAgent(
             request: request,
             system: system,
