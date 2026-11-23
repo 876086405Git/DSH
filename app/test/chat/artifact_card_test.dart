@@ -39,6 +39,7 @@ class _Android {
   String? savedAt;
   Object? saveError;
   Future<void>? saveGate;
+  Uint8List? pagePng;
 
   void install(WidgetTester tester) {
     final messenger = tester.binding.defaultBinaryMessenger;
@@ -64,7 +65,7 @@ class _Android {
             {'width': 595, 'height': 842},
           ];
         case 'pdfPage':
-          return Uint8List(0);
+          return pagePng ?? Uint8List(0);
       }
       return null;
     });
@@ -473,7 +474,9 @@ void main() {
 
   testWidgets('a PDF previews in the app, page by page', (tester) async {
     usePhoneView(tester);
-    final android = _Android()..install(tester);
+    final android = _Android()
+      ..pagePng = tinyPng
+      ..install(tester);
     await tester.pumpWidget(_card([_pdf]));
     await tester.pumpAndSettle();
     await tester.tap(find.text('report.pdf'));
@@ -489,12 +492,21 @@ void main() {
       [0, 1],
       reason: 'both pages are on screen',
     );
+    final pages = tester.widgetList<Image>(find.byType(Image)).map((w) => w.image).whereType<MemoryImage>().toSet();
+    expect(pages, hasLength(2));
+    final cache = PaintingBinding.instance.imageCache;
+    for (var i = 0; i < 40 && pages.any((image) => cache.statusForKey(image).pending); i++) {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(pages.where((image) => cache.statusForKey(image).keepAlive), hasLength(2));
     await tester.drag(find.byType(ListView), const Offset(0, -1500));
     await tester.pumpAndSettle();
     expect(find.text('共 2 页'), findsOneWidget);
     await tester.tap(find.byTooltip('返回'));
     await tester.pumpAndSettle();
     expect(android.methods.last, 'pdfClose');
+    expect(pages.where((image) => cache.statusForKey(image).tracked), isEmpty);
   });
 
   testWidgets('an Office file previews as the Host\'s PDF; apps stay a tap away', (tester) async {
