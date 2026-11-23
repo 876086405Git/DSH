@@ -507,7 +507,7 @@ class CompanionAgent extends ChangeNotifier {
           system: system,
           messages: messages,
           tools: definitions,
-          isCurrent: () => _current(run),
+          isCurrent: () => route is CompanionHostMemoryTransport ? _turnCurrent(run) : _current(run),
           onText: (delta) {
             if (request.text.isEmpty && run.text.isNotEmpty && delta.isNotEmpty) run.text += '\n';
             request.text += delta;
