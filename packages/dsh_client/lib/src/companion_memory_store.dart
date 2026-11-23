@@ -341,7 +341,12 @@ class CompanionMemoryStore {
   final int Function() _now;
   final String Function() _createId;
 
-  void close() => _db.close();
+  _PendingRawErase? _pendingRawErase;
+
+  void close() {
+    invalidateRawErase();
+    _db.close();
+  }
 
   MemoryRow get archive => Map<String, Object?>.from(_db.select('SELECT * FROM memory_archive').single);
 
@@ -828,7 +833,7 @@ class CompanionMemoryStore {
     _db.execute('DELETE FROM memory_card_sources WHERE card_id=? AND support_group=?', [cardId, groupId]);
   }
 
-  ({int basis, int sourceAt}) _currentParentSourceValues(Row card) {
+  ({int basis, int sourceAt}) _currentParentSourceValues(MemoryRow card) {
     var basis = 0, sourceAt = 0;
     for (final parent in _db.select(
       '''
@@ -845,6 +850,53 @@ class CompanionMemoryStore {
     return (basis: basis, sourceAt: sourceAt);
   }
 
+  MemoryRow? _sourceRefreshValues(
+    MemoryRow card,
+    Iterable<MemoryRow> sources, {
+    bool eraseUnsupported = false,
+  }) {
+    final manual = card['manual'] == 1;
+    final supported = sources.isNotEmpty;
+    if (eraseUnsupported && !manual && !supported) return null;
+    final parents = !manual && supported ? _currentParentSourceValues(card) : (basis: 0, sourceAt: 0);
+    final sourceAt = manual || !supported
+        ? card['source_at_ms']
+        : math.max(parents.sourceAt, sources.map((source) => source['at'] as int).reduce(math.max));
+    // Cancellation is an explicit later user control, not an inferred tense
+    // or the timestamp of a remaining older proof.
+    final basis = manual || const ['cancelled', 'postponed'].contains(card['plan_state'])
+        ? card['current_basis_seq']
+        : supported
+        ? math.max(parents.basis, sources.map((source) => source['first_seq'] as int).reduce(math.max))
+        : null;
+    final keywords = (jsonDecode(card['keywords'] as String) as List)
+        .cast<String>()
+        .where(
+          (keyword) =>
+              manual ||
+              sources.any(
+                (source) => normalizeMemoryText(source['text'] as String).contains(normalizeMemoryText(keyword)),
+              ),
+        )
+        .toList();
+    return {
+      'eligible': manual || supported ? card['eligible'] : 0,
+      'status': manual || supported ? card['status'] : 'withdrawn',
+      'keywords': jsonEncode(keywords),
+      'current_basis_seq': basis,
+      'source_at_ms': sourceAt,
+    };
+  }
+
+  void _applySourceRefresh(String id, MemoryRow values) => _db.execute(
+    '''UPDATE memory_cards SET row_rev=row_rev+1,eligible=?,status=?,keywords=?,
+      current_basis_seq=?,source_at_ms=?,updated_at_ms=? WHERE id=?''',
+    [
+      values['eligible'], values['status'], values['keywords'], values['current_basis_seq'],
+      values['source_at_ms'], _checkedNow(), id,
+    ],
+  );
+
   void _refreshSources(Set<String> affected, {bool eraseUnsupported = false}) {
     for (final id in affected) {
       final card = _db.select('SELECT * FROM memory_cards WHERE id=?', [id]).single;
@@ -855,48 +907,12 @@ class CompanionMemoryStore {
       ''',
         [id],
       );
-      final manual = card['manual'] == 1;
-      final supported = sources.isNotEmpty;
-      if (eraseUnsupported && !manual && !supported) {
+      final values = _sourceRefreshValues(card, sources, eraseUnsupported: eraseUnsupported);
+      if (values == null) {
         _deleteCards([id]);
-        continue;
+      } else {
+        _applySourceRefresh(id, values);
       }
-      final parents = !manual && supported ? _currentParentSourceValues(card) : (basis: 0, sourceAt: 0);
-      final sourceAt = manual || !supported
-          ? card['source_at_ms']
-          : math.max(parents.sourceAt, sources.map((source) => source['at'] as int).reduce(math.max));
-      // Cancellation is an explicit later user control, not an inferred tense
-      // or the timestamp of a remaining older proof.
-      final basis = manual || const ['cancelled', 'postponed'].contains(card['plan_state'])
-          ? card['current_basis_seq']
-          : supported
-          ? math.max(parents.basis, sources.map((source) => source['first_seq'] as int).reduce(math.max))
-          : null;
-      final keywords = (jsonDecode(card['keywords'] as String) as List)
-          .cast<String>()
-          .where(
-            (keyword) =>
-                manual ||
-                sources.any(
-                  (source) => normalizeMemoryText(source['text'] as String).contains(normalizeMemoryText(keyword)),
-                ),
-          )
-          .toList();
-      _db.execute(
-        '''
-        UPDATE memory_cards SET row_rev=row_rev+1,eligible=?,status=?,keywords=?,
-          current_basis_seq=?,source_at_ms=?,updated_at_ms=? WHERE id=?
-      ''',
-        [
-          manual || supported ? card['eligible'] : 0,
-          manual || supported ? card['status'] : 'withdrawn',
-          jsonEncode(keywords),
-          basis,
-          sourceAt,
-          _checkedNow(),
-          id,
-        ],
-      );
     }
     if (affected.isNotEmpty) _bumpMemory();
   }
@@ -1261,7 +1277,7 @@ class CompanionMemoryStore {
     }
   }
 
-  void _eraseMessage(Row message) {
+  void _eraseMessage(MemoryRow message) {
     _removeSourceGroups(message['id'] as String, message['source_rev'] as int, eraseUnsupported: true);
     _db.execute('INSERT INTO memory_deleted_messages(id,first_seq) VALUES(?,?)', [message['id'], message['first_seq']]);
     _db.execute('DELETE FROM memory_messages WHERE id=?', [message['id']]);

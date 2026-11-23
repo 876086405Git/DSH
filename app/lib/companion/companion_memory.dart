@@ -65,18 +65,103 @@ class CompanionMemoryOwner extends ChangeNotifier {
   CompanionMemoryWorker? _worker;
   FutureOr<CompanionMemoryTransport?> Function()? _route;
   Object? _room;
+  bool _roomReady = false;
   bool _disposed = false;
+  Timer? _rawEraseExpiryTimer;
+  String? _rawEraseTimerId;
+  int? _rawEraseTimerDeadline;
+  int? _rawEraseTimerControlRevision;
 
   bool get working => _worker?.busy == true;
+
+  /// The Store owns the one plan. A projection never offers it or notifies
+  /// listeners from inside a widget build.
+  CompanionPendingRawErase? pendingRawErase(Object room, {required String? characterId}) =>
+      _disposed || !identical(_room, room) ? null : store.pendingRawErase(characterId: characterId);
+
+  CompanionRawEraseResult markRawEraseOffered(Object room, String id, {required String? characterId}) {
+    _checkRawEraseRoom(room);
+    final result = store.markRawEraseOffered(id, characterId: characterId);
+    if (result.state == 'awaiting') {
+      final pending = store.pendingRawErase(characterId: characterId);
+      if (pending != null && pending.id == id) _watchRawEraseExpiry(pending);
+    }
+    return _rawEraseChanged(result);
+  }
+
+  CompanionRawEraseResult confirmRawErase(Object room, String id, {required String? characterId}) {
+    _checkRawEraseRoom(room);
+    return _rawEraseChanged(store.confirmRawErase(id, characterId: characterId));
+  }
+
+  CompanionRawEraseResult declineRawErase(Object room, String id, {required String? characterId}) {
+    _checkRawEraseRoom(room);
+    return _rawEraseChanged(store.declineRawErase(id, characterId: characterId));
+  }
+
+  void _checkRawEraseRoom(Object room) {
+    if (_disposed || !identical(_room, room)) throw const DshClosedException('Companion memory room closed');
+  }
+
+  CompanionRawEraseResult _rawEraseChanged(CompanionRawEraseResult result) {
+    if (result.id == _rawEraseTimerId && result.state != 'awaiting' && result.state != 'deferred') {
+      _cancelRawEraseExpiry();
+    }
+    // Confirmation is the person's external control commit, never an
+    // acknowledgement on behalf of a closed model/tool turn.
+    changed();
+    return result;
+  }
+
+  void _watchRawEraseExpiry(CompanionPendingRawErase pending) {
+    final deadline = pending.expiresAtUtcMs;
+    if (deadline == null || (pending.id == _rawEraseTimerId && deadline == _rawEraseTimerDeadline)) return;
+    _cancelRawEraseExpiry();
+    final id = _rawEraseTimerId = pending.id;
+    _rawEraseTimerDeadline = deadline;
+    _rawEraseTimerControlRevision = store.archive['control_revision']! as int;
+    final delay = deadline - _now();
+    _rawEraseExpiryTimer = Timer(Duration(milliseconds: delay > 0 ? delay : 0), () {
+      if (_disposed || _rawEraseTimerId != id || _rawEraseTimerDeadline != deadline) return;
+      _cancelRawEraseExpiry();
+      // The real getter/action still validates the clock and every Store
+      // fence. This timer only asks the current UI to refresh its projection.
+      changed();
+    });
+  }
+
+  void _cancelRawEraseExpiry() {
+    _rawEraseExpiryTimer?.cancel();
+    _rawEraseExpiryTimer = null;
+    _rawEraseTimerId = null;
+    _rawEraseTimerDeadline = null;
+    _rawEraseTimerControlRevision = null;
+  }
+
+  bool invalidateRawErase(Object room, {bool notify = true}) {
+    // An old Visit may close after another Visit entered this phone Owner.
+    // Do not even cancel the later plan's timer before checking its identity.
+    if (_disposed || !identical(_room, room)) return false;
+    final invalidated = store.invalidateRawErase();
+    _cancelRawEraseExpiry();
+    if (invalidated && notify) changed();
+    return invalidated;
+  }
 
   void enter(
     Object room, {
     required FutureOr<CompanionMemoryTransport?> Function() transport,
     required int Function(String) estimateTokens,
+    String? characterId,
+    bool ready = true,
   }) {
     if (!identical(_room, room)) _worker?.cancel();
     _room = room;
+    _roomReady = ready;
     _route = transport;
+    // A deferred record may outlive an external window's Visit. Reuse only
+    // its original id and the current real role; entering does not offer it.
+    if (store.pendingRawErase(characterId: characterId) == null) _cancelRawEraseExpiry();
     _worker ??= CompanionMemoryWorker(
       store: store,
       transport: () => _route!(),
@@ -93,11 +178,19 @@ class CompanionMemoryOwner extends ChangeNotifier {
     );
   }
 
+  /// A Visit owns its close/invalidation identity before initialization awaits,
+  /// but maintenance keeps its original start point after those awaits finish.
+  void finishOpening(Object room) {
+    if (_disposed || !identical(_room, room)) return;
+    _roomReady = true;
+    changed();
+  }
+
   bool acceptsMaintenanceControl(Object room, int revision) =>
-      identical(_room, room) && _worker?.acceptsControl(revision) == true;
+      identical(_room, room) && _roomReady && _worker?.acceptsControl(revision) == true;
 
   Future<CompanionMemoryWork> extract(Object room, {bool forceTail = false, int? offsetMinutes}) async {
-    if (!identical(_room, room)) return CompanionMemoryWork.idle;
+    if (!identical(_room, room) || !_roomReady) return CompanionMemoryWork.idle;
     final result = await _worker!.extract(forceTail: forceTail, offsetMinutes: offsetMinutes);
     if (result == CompanionMemoryWork.committed) changed();
     return result;
@@ -109,12 +202,12 @@ class CompanionMemoryOwner extends ChangeNotifier {
     required String persona,
     required int offsetMinutes,
     required bool Function() isCurrent,
-  }) => identical(_room, room)
+  }) => identical(_room, room) && _roomReady
       ? _worker!.followup(captured, persona: persona, offsetMinutes: offsetMinutes, isCurrent: isCurrent)
       : Future.value(null);
 
   Future<CompanionMemoryWork> consolidate(Object room, {int? offsetMinutes}) async {
-    if (!identical(_room, room)) return CompanionMemoryWork.idle;
+    if (!identical(_room, room) || !_roomReady) return CompanionMemoryWork.idle;
     final before = store.archive['memory_revision'];
     try {
       return await _worker!.consolidate(offsetMinutes: offsetMinutes);
@@ -124,10 +217,21 @@ class CompanionMemoryOwner extends ChangeNotifier {
     }
   }
 
-  void leave(Object room) {
-    if (!identical(_room, room)) return;
+  void leave(Object room, {String? characterId, bool actualRoomLeave = false}) {
+    if (_disposed || !identical(_room, room)) return;
+    // A notification/float that never offered confirmation may retire while
+    // this phone Owner survives. The next real room reads the same deferred
+    // id. Actual room departure and an already offered record both revoke it.
+    final pending = actualRoomLeave ? null : store.pendingRawErase(characterId: characterId);
+    final invalidated = (actualRoomLeave || pending?.expiresAtUtcMs != null) && store.invalidateRawErase();
+    _cancelRawEraseExpiry();
+    _roomReady = false;
     _worker?.cancel();
     _room = null;
+    // A Visit leaves from inside its Page's dispose, while other pages over it
+    // may be coming down in the same frame. Only a plan actually revoked here
+    // is news to the listeners that remain; an ordinary leave stays quiet.
+    if (invalidated) changed();
   }
 
   void cancelWork() => _worker?.cancel();
@@ -408,13 +512,21 @@ class CompanionMemoryOwner extends ChangeNotifier {
   }
 
   void changed() {
-    if (!_disposed) notifyListeners();
+    if (_disposed) return;
+    if (_rawEraseTimerControlRevision != null &&
+        store.archive['control_revision'] != _rawEraseTimerControlRevision) {
+      _cancelRawEraseExpiry();
+    }
+    notifyListeners();
   }
 
   @override
   void dispose() {
     _disposed = true;
+    store.invalidateRawErase();
+    _cancelRawEraseExpiry();
     _room = null;
+    _roomReady = false;
     embeddings.dispose();
     hostTasks.closeForegrounds();
     final pending = <Future<void>>[

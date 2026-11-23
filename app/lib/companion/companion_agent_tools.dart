@@ -154,7 +154,7 @@ class CompanionAgentMemoryTools {
   static const _maintenanceDescriptions = <String, String>{
     'remember':
         'Save or update a fact, preference or episode. about_you is shared; our_story belongs to this character.',
-    'forget': 'Forget a card or complete changes group. Preserve independent clauses. Original chat stays unless explicitly requested: deleteChat=true uses top-level card as the single original-source target; when changes is supplied it must forget that card. Report successful deletion.',
+    'forget': 'Forget a card or complete changes group, preserving independent clauses. Maintenance cannot erase original chat or create a confirmation request; deleteChat does not change that. Report only the actual card changes.',
     'revise': 'Correct a card or complete changes group. Keep its ID and preserve independent clauses.',
     'related': 'Read and grant same-source candidates and required effects for a card; without card, return only stale cleanup IDs.',
     'merge': 'Merge proven duplicate facts or people into card, preserving proofs and consumed followups. Include required dependency updates.',
@@ -243,6 +243,22 @@ class CompanionAgentMemoryTools {
       'targetId': receipt.targetId,
     };
     var externalNoticeContent = false;
+    if (receipt.pendingRawEraseId case final id?) result['pendingRawEraseId'] = id;
+    if (receipt.rawEraseState case final state?) {
+      result['rawEraseState'] = state;
+      result['rawEraseMessage'] = switch (state) {
+        'pending' =>
+          'The card changes are committed. Original chat remains and needs the owner\'s separate confirmation.',
+        'maintenance' =>
+          'The card changes are committed. Maintenance cannot erase original chat or request confirmation.',
+        'no_originals' => 'The card changes are committed. There are no original chat messages to confirm erasing.',
+        'confirmed' => 'The owner separately confirmed the original chat erasure. This replay performs no new erasure.',
+        'declined' => 'The owner kept the original chat. This request cannot erase it.',
+        'expired' => 'The confirmation expired. This request did not erase the original chat.',
+        'invalidated' => 'The confirmation is no longer valid. This request did not erase the original chat.',
+        _ => 'No live confirmation is available for this recorded request. Do not claim that original chat was erased.',
+      };
+    }
     if (call.name == 'recall') {
       final selection = receipt.recallSelection;
       if (selection == null) return _failure('recall_not_current');
@@ -406,7 +422,7 @@ class CompanionAgentMemoryTools {
     ),
     CompanionAgentTool(
       name: 'forget',
-      description: 'First use related to inspect same-source candidates: sharing a source does not mean the same fact. Forget the intended entries atomically; changes must explicitly include all true literal/reference dependencies and preserve independent facts by nonempty rewrites. Original chat stays unless the user explicitly asks to delete it too: set deleteChat=true and supply top-level card as the single original-source target, also forgotten in changes if present. Other changes are not additional original-source targets. All affected entries must be granted and fit the shared budget. Tell the user when deletion succeeds.',
+      description: 'First use related to inspect same-source candidates: sharing a source does not mean the same fact. Forget the intended entries atomically; changes must explicitly include all true literal/reference dependencies and preserve independent facts by nonempty rewrites. To request erasing original chat too, set deleteChat=true and supply top-level card as the single original-source target, also forgotten in changes if present. This only prepares a separate owner confirmation: original chat remains until the person confirms through the app. Other changes are not additional original-source targets. All affected entries must be granted and fit the shared budget. Report the actual card changes and pending confirmation; never claim raw erasure from the model request alone.',
       inputSchema: {
         'type': 'object',
         'properties': {

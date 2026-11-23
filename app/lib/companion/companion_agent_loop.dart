@@ -64,6 +64,11 @@ Map<String, Object?> _safeToolOutcome(String content) {
       'limited',
       'sourceSessionId',
       'receiptError',
+      // A forget that asked to erase original chat as well: what is still
+      // waiting for the person, so her reply does not claim it is gone.
+      'pendingRawEraseId',
+      'rawEraseState',
+      'rawEraseMessage',
     ])
       if (decoded.containsKey(key)) key: decoded[key],
     if (decoded['task'] case final Map row) 'task': task(row),

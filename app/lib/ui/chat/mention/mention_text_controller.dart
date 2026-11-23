@@ -100,7 +100,7 @@ class MentionTextController extends TextEditingController {
     final delta = inserted.length - (end - start);
     final added =
         _incoming ??
-        (inserted.length > 1 && !next.composing.isValid
+        (inserted.length > 1 && !next.composing.isValid && inserted.contains('@')
             ? parseDraftMentions(text, start, start + inserted.length)
             : const <MentionToken>[]);
     _tokens = [

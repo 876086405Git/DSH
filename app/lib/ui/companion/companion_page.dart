@@ -314,6 +314,53 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   String? _inviteOpen;
   bool _routeShown = true;
 
+  /// The erase question last actually put in front of the person.
+  String? _rawEraseOffered;
+
+  /// Marks [id] offered once its card has been drawn: only then does its
+  /// five minutes start, and only a card on screen counts.
+  void _offerRawErase(String id) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _rawEraseOffered == id || !_attachment.isAttached) return;
+      if (_attachment.pendingRawErase?.id != id) return;
+      _rawEraseOffered = id;
+      try {
+        _attachment.markRawEraseOffered(id);
+      } on Object {
+        return;
+      }
+      setState(() {});
+    });
+  }
+
+  String _rawEraseQuestion(L10n l10n, CompanionPendingRawErase erase) {
+    final preview = erase.previewText.trim();
+    final quote = preview.runes.length > 18 ? '${String.fromCharCodes(preview.runes.take(18))}…' : preview;
+    return erase.rawMessageCount > 1
+        ? l10n.companionRawEraseAskMany(quote, erase.rawMessageCount)
+        : l10n.companionRawEraseAsk(quote);
+  }
+
+  /// The person's own answer: only a tap on 删掉 erases, and she says what happened.
+  void _answerRawErase(CompanionPendingRawErase? pending, {required bool erase}) {
+    if (pending == null || !_attachment.isAttached) return;
+    _acted();
+    final l10n = context.l10n;
+    final CompanionRawEraseResult result;
+    try {
+      result = erase ? _attachment.confirmRawErase(pending.id) : _attachment.declineRawErase(pending.id);
+    } on Object {
+      _say(l10n.companionRawEraseGone);
+      return;
+    }
+    setState(() {});
+    _say(switch (result.state) {
+      'confirmed' => l10n.companionRawErased,
+      'declined' => l10n.companionRawKept,
+      _ => l10n.companionRawEraseGone,
+    });
+  }
+
   /// Which of the section's pages shows ([CompanionPage.sections]).
   _CompanionTab _tab = _CompanionTab.room;
 
@@ -1061,8 +1108,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     );
   }
 
-  /// Night care keeps its local line. Task phases supply the original visual
-  /// style only; their words above come from the Agent, with no template fallback.
+  /// Task and night-care words stay local. Task phases supply the original
+  /// visual style; the admitted signal supplies its local speech text.
   ({String line, String emotion, String action})? _signalLine(CompanionSignalV1 signal) {
     final l10n = context.l10n;
     return switch (signal.kind) {
@@ -3088,6 +3135,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       ),
       _ => null,
     };
+    // Her question about erasing original words, while her room is what's on screen.
+    final rawErase = showStage && _stageReady && _routeShown && _attachment.isAttached
+        ? _attachment.pendingRawErase
+        : null;
+    if (rawErase != null && _rawEraseOffered != rawErase.id) _offerRawErase(rawErase.id);
+    final rawEraseLeft = switch (rawErase?.expiresAtUtcMs) {
+      final ends? => Duration(milliseconds: max(0, ends - DateTime.now().millisecondsSinceEpoch)),
+      _ => null,
+    };
     final events = CompanionStageEvents(
       onReady: _onReady,
       onFailed: (why) {
@@ -3293,8 +3349,20 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                         );
                       },
                     ),
+                // Erasing original words waits for the person's own tap.
                 CompanionInvite(
-                  ticket: _adaptOffer == null || inviting ? null : 'adapt-${_adaptOffer!.moc}',
+                  ticket: rawErase == null ? null : 'raw-erase-${rawErase.id}',
+                  mark: const Icon(AppIcons.delete, size: 20, color: Color(0xFFFFB4A8)),
+                  text: rawErase == null ? '' : _rawEraseQuestion(l10n, rawErase),
+                  accept: l10n.companionRawEraseYes,
+                  decline: l10n.companionRawEraseNo,
+                  remaining: rawEraseLeft,
+                  total: const Duration(minutes: 5),
+                  onAccept: () => _answerRawErase(rawErase, erase: true),
+                  onDecline: () => _answerRawErase(rawErase, erase: false),
+                ),
+                CompanionInvite(
+                  ticket: _adaptOffer == null || inviting || rawErase != null ? null : 'adapt-${_adaptOffer!.moc}',
                   mark: const Icon(AppIcons.configure, size: 20, color: Color(0xFFFFD27A)),
                   text: l10n.companionAdaptOffer,
                   accept: l10n.companionAdaptOfferYes,
@@ -3303,7 +3371,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                   onDecline: () => unawaited(_answerAdaptOffer(yes: false)),
                 ),
                 CompanionInvite(
-                  ticket: inviting ? invite.ticket.id : null,
+                  ticket: inviting && rawErase == null ? invite.ticket.id : null,
                   text: l10n.companionInviteRest,
                   accept: l10n.companionInviteAccept,
                   decline: l10n.companionInviteDecline,
