@@ -125,6 +125,7 @@ void main() {
 
   testWidgets('a long question is shown whole, and 字幕 opens the call in full', (tester) async {
     const long = '我想问一下这个周末北京的天气怎么样，如果下雨的话有没有什么室内的地方可以带孩子去玩，最好离朝阳区近一点';
+    const reply = '北京晴，最高二十度。';
     final (audio, conversation) = await pumpCall(tester, said: long);
     audio.emit(const SpeechStart(over: false));
     audio.emit(Utterance(Uint8List(32044), const Duration(seconds: 5)));
@@ -134,7 +135,7 @@ void main() {
     // Whole, over several lines, not cut to one.
     expect(find.text(long, findRichText: true), findsOneWidget);
 
-    conversation.reply('北京晴，最高二十度。', done: true);
+    conversation.reply('**$reply**', done: false);
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 60));
     }
@@ -144,7 +145,20 @@ void main() {
     }
     final list = find.byKey(const ValueKey('call-transcript-list'));
     expect(find.descendant(of: list, matching: find.text(long)), findsOneWidget);
-    expect(find.descendant(of: list, matching: find.text('北京晴，最高二十度。')), findsOneWidget);
+    expect(find.descendant(of: list, matching: find.text(reply)), findsOneWidget);
+    for (final level in [0.0, 0.6, 0.0]) {
+      audio.emit(MicLevel(level));
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(find.descendant(of: list, matching: find.text(reply)), findsOneWidget);
+    }
+
+    const extra = '出门记得带伞。';
+    conversation.reply('**$reply**\n[$extra](https://example.test)', done: true);
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(find.descendant(of: list, matching: find.text(reply)), findsNothing);
+    expect(find.descendant(of: list, matching: find.text('$reply\n$extra')), findsOneWidget);
   });
 
   testWidgets('a call that fails with 字幕 open closes the call page, not just the sheet', (tester) async {
