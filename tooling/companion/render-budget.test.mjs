@@ -49,6 +49,7 @@ test('iPhone budget reaches both canvases before model allocation and disables M
   }
   assert.equal(options[0].antialias, false);
   assert.equal(options[0].preserveDrawingBuffer, false);
+  assert.equal(options[0].depth, false);
 });
 
 test('without a budget the model draws at the screen density up to 3x, its marks at 2x', async () => {
