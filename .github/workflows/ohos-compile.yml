@@ -15,12 +15,18 @@ on:
       - 'tooling/ohos/**'
       - '.github/workflows/ohos-compile.yml'
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: dsh-Go commit to compile in the private HAP build
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ohos-compile-${{ github.ref }}
+  group: ohos-compile-${{ inputs.source_sha || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -31,8 +37,20 @@ jobs:
       FLUTTER_OHOS_TAG: 3.47.9-ohos-1.0.0
       FLUTTER_OHOS_COMMIT: e5f752df3e25ec897da3c98a74bcced7c21b0bd3
     steps:
+      - name: Validate the requested source commit
+        if: inputs.source_sha != ''
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'source_sha must be a full lowercase commit SHA' >&2
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          repository: ${{ inputs.source_sha && 'ccch1mneyyy/dsh-Go' || github.repository }}
+          ref: ${{ inputs.source_sha || '' }}
           persist-credentials: false
 
       # oh-flutter comes from atomgit, its tools from Huawei's OBS and the OHOS plugins
@@ -144,7 +162,8 @@ jobs:
       - name: Keep the compiled app
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ohos-aot-${{ github.sha }}
+          name: ohos-aot-${{ inputs.source_sha || github.sha }}
           path: app/build/ohos-aot
           if-no-files-found: error
+          overwrite: ${{ inputs.source_sha != '' }}
           retention-days: 14

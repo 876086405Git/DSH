@@ -1,0 +1,23 @@
+name: Queue HarmonyOS release build
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  dispatch:
+    if: github.repository == 'ccch1mneyyy/dsh-Go'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Queue the exact release commit in the private build repository
+        env:
+          GH_TOKEN: ${{ secrets.OHOS_BUILD_DISPATCH_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          : "${GH_TOKEN:?Set OHOS_BUILD_DISPATCH_TOKEN for the private build repository}"
+          gh workflow run harmony-hap.yml --repo ccch1mneyyy/dsh-go-ohos-build --ref main \
+            -f "source_sha=$SOURCE_SHA"
