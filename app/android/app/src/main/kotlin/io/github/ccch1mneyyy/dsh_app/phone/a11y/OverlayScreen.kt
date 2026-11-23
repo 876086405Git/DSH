@@ -693,7 +693,16 @@ internal class OverlayScreen(
                     if (e.actionMasked == MotionEvent.ACTION_UP) {
                         val release = if (state?.stopped == true) HoldToStop.Release.TAP else hold.up(SystemClock.uptimeMillis())
                         endHold()
-                        if (release == HoldToStop.Release.TAP && !dragging) mini.performClick()
+                        when (release) {
+                            HoldToStop.Release.TAP -> if (!dragging) mini.performClick()
+                            // Let go just as the second closed, before the ring's last frame.
+                            HoldToStop.Release.STOP -> {
+                                mini.hold = 1f
+                                mini.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                actions.stop()
+                            }
+                            else -> Unit
+                        }
                     } else {
                         hold.cancel()
                         endHold()
