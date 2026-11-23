@@ -165,11 +165,20 @@ class CompanionReplyStream {
 
   final Map<String, String> emotions;
   final Map<String, String> actions;
-  final _offsets = <int>[];
+  var _offsets = <int>[];
+  var _read = '';
   var _end = 0;
   var _committed = const CompanionReply('', []);
 
   CompanionReply read(String text, {required bool streaming}) {
+    // Stop discards the text, and the host's final text can rewrite what
+    // streamed: read it from the start.
+    if (!text.startsWith(_read)) {
+      _offsets = [];
+      _read = '';
+      _end = 0;
+      _committed = const CompanionReply('', []);
+    }
     if (text.length == _end) return _committed;
     final part = _parseReplyPart(
       text.substring(_end),
@@ -186,6 +195,7 @@ class CompanionReplyStream {
         ? _committed.marks
         : List<CompanionMark>.unmodifiable([..._committed.marks, ...tail.marks]);
     if (part.canCommit) {
+      _read = text;
       _end = text.length;
       _offsets.addAll(tail._rawOffsets);
       // A frame may still hold an older reply. Its take count never changes.
