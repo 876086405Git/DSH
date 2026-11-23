@@ -170,6 +170,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   int _wordsSpoken = 0;
   String _replyWords = '';
 
+  /// The reply [_onReply] last read, for the frames that show it.
+  ({String text, bool streaming, CompanionReply reply})? _lastReply;
+
   // The log can still display the phone's pre-Agent history. New messages in
   // both modes use the original SQLite phone conversation.
   CompanionLightHistory? _lightHistory;
@@ -1678,6 +1681,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       emotions: _moves.emotionLabels,
       actions: _moves.actionLabels,
     );
+    _lastReply = (text: text, streaming: running, reply: reply);
     for (final mark in reply.marks.skip(_marksHandled)) {
       _retireGreeting();
       switch (mark.kind) {
@@ -1742,12 +1746,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     final user = attachment.replyId;
     final text = attachment.text;
     if (!attachment.isAttached || user == null || _baselineUser != user || attachment.error != null) return;
-    final reply = parseCompanionReply(
-      text,
-      streaming: attachment.running,
-      emotions: _moves.emotionLabels,
-      actions: _moves.actionLabels,
-    );
+    final running = attachment.running;
+    final last = _lastReply;
+    // Every build and every frame of the bubble's rise lands here; the words
+    // and their offsets do not depend on the mark labels.
+    final reply = last != null && last.streaming == running && last.text == text
+        ? last.reply
+        : parseCompanionReply(text, streaming: running);
     if (reply.words.isEmpty || _bubbleReplyId != user || _bubbleIsError || _bubble != reply.words) return;
     final current = attachment.captureCurrent();
     WidgetsBinding.instance.addPostFrameCallback((_) {
