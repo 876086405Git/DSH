@@ -708,6 +708,27 @@ void main() {
     expect(store.archive['control_revision'], (archive['control_revision']! as int) + 1);
   });
 
+  test('retrieval checks matching and obsolete paths to the same ancestor in one query', () {
+    final parent = seed('我喜欢茶。'), left = seed('我喜欢绿茶。'), right = seed('我喜欢红茶。'), root = seed('我常去茶店。');
+    void link(MemoryRow child, MemoryRow ancestor, int revision) => database.execute(
+      'INSERT INTO memory_card_references(card_id,parent_card_id,parent_row_rev) VALUES (?,?,?)',
+      [child['id'], ancestor['id'], revision],
+    );
+    link(left, parent, 1);
+    link(right, parent, 2);
+    link(root, left, 1);
+    link(root, right, 1);
+    var checks = 0;
+    database.trace = SqliteTraceCallback((event) {
+      if (event is SqliteTraceStatement && (event.sql?.contains('memory_card_references') ?? false)) checks++;
+      return 0;
+    });
+    final candidates = store.memoryRetrievalCandidates(characterId: null);
+    database.trace = null;
+    expect(candidates.map((card) => card['id']), [parent['id'], left['id']]);
+    expect(checks, 1);
+  });
+
   test('planned reference revisions stay current while another character becomes read-stale without a write', () {
     final firstRole = character('local:first');
     final secondRole = character('local:second');
