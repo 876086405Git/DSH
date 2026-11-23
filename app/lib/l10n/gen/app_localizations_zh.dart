@@ -14812,6 +14812,18 @@ class L10nZh extends L10n {
   String get phoneSkillRecentNone => '还没用过';
 
   @override
+  String get phoneSkillRecentOk => '办成';
+
+  @override
+  String get phoneSkillRecentMiss => '不灵';
+
+  @override
+  String get phoneSkillRecentVoid => '不算';
+
+  @override
+  String get phoneSkillRecentSeparator => '、';
+
+  @override
   String get phoneSkillErrorChanged => '这项技能在你改的时候变了，这次修改没有覆盖它。回去重新看看。';
 
   @override

@@ -27390,6 +27390,30 @@ abstract class L10n {
   /// **'还没用过'**
   String get phoneSkillRecentNone;
 
+  /// No description provided for @phoneSkillRecentOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'办成'**
+  String get phoneSkillRecentOk;
+
+  /// No description provided for @phoneSkillRecentMiss.
+  ///
+  /// In zh, this message translates to:
+  /// **'不灵'**
+  String get phoneSkillRecentMiss;
+
+  /// No description provided for @phoneSkillRecentVoid.
+  ///
+  /// In zh, this message translates to:
+  /// **'不算'**
+  String get phoneSkillRecentVoid;
+
+  /// No description provided for @phoneSkillRecentSeparator.
+  ///
+  /// In zh, this message translates to:
+  /// **'、'**
+  String get phoneSkillRecentSeparator;
+
   /// No description provided for @phoneSkillErrorChanged.
   ///
   /// In zh, this message translates to:

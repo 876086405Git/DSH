@@ -60,9 +60,9 @@ class PhoneSkillsController extends AsyncNotifier<PhoneSkillListing> {
   }
 }
 
-final phoneSkillsProvider = AsyncNotifierProvider.autoDispose<PhoneSkillsController, PhoneSkillListing>(
-  PhoneSkillsController.new,
-);
+/// Kept for the app's life (not auto-disposed): a discard after 「撤销」 times out, a save or a
+/// 「恢复」 still finish when the page or chat that started them is gone.
+final phoneSkillsProvider = AsyncNotifierProvider<PhoneSkillsController, PhoneSkillListing>(PhoneSkillsController.new);
 
 /// One skill in full (its five sections and history), for the detail page.
 final phoneSkillDetailProvider = FutureProvider.autoDispose.family<PhoneSkill, String>((ref, name) {

@@ -870,6 +870,35 @@ void main() {
       await tester.tap(find.text('记忆'));
       await _until2(tester, () => find.byType(CompanionMemoryPage).evaluate().isNotEmpty);
       expect(find.text('还没有记下什么'), findsOneWidget);
+
+      // Her memory editor also opens the keyboard over the stored cards.
+      await tester.tap(find.byTooltip('添加'));
+      await _settle(tester);
+      expect(find.byType(TextFormField), findsOneWidget);
+      final rebuilt = <Type>[];
+      addTearDown(tester.view.resetViewInsets);
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      debugOnRebuildDirtyWidget = (element, _) {
+        if (element.widget is CompanionMemoryPage) rebuilt.add(element.widget.runtimeType);
+      };
+      for (final inset in [120.0, 240.0]) {
+        tester.view.viewInsets = FakeViewPadding(bottom: inset);
+        await tester.pump();
+      }
+      debugOnRebuildDirtyWidget = null;
+      expect(rebuilt, isEmpty);
+      await tester.enterText(find.byType(TextFormField), '周末喜欢去海边散步');
+      await tester.tap(find.text('保存'));
+      tester.view.resetViewInsets();
+      await _until2(
+        tester,
+        () => find.byType(AlertDialog).evaluate().isEmpty && find.text('周末喜欢去海边散步').evaluate().isNotEmpty,
+      );
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('还没有记下什么'), findsNothing);
+      // The test has no home screen widget to clear: its notice goes first.
+      await _until2(tester, () => find.byType(SnackBar).evaluate().isEmpty);
+
       await tester.tap(find.text('交代'));
       await _until2(tester, () => find.byType(CompanionTasksPage).evaluate().isNotEmpty);
 
@@ -883,19 +912,23 @@ void main() {
       expect(find.text('已附当前页面文字'), findsOneWidget);
       expect(find.text('和鲸鱼娘说点什么'), findsOneWidget);
 
-      // The keyboard moves her room; the pages kept behind it (which query
-      // the store as they build) don't build again.
-      final rebuilt = <Type>[];
+      // The keyboard moves her room, and anything of hers (each update of a
+      // reply too) builds the page again; the pages kept behind it (which
+      // query the store as they build) don't build again.
+      rebuilt.clear();
       debugOnRebuildDirtyWidget = (element, _) {
-        if (element.widget case CompanionMemoryPage() || CompanionTasksPage()) rebuilt.add(element.widget.runtimeType);
+        if (element.widget case CompanionPage() || CompanionMemoryPage() || CompanionTasksPage()) {
+          rebuilt.add(element.widget.runtimeType);
+        }
       };
-      addTearDown(tester.view.resetViewInsets);
       for (final inset in [120.0, 240.0]) {
         tester.view.viewInsets = FakeViewPadding(bottom: inset);
         await tester.pump();
       }
+      stageEvents!.onMood('sleeping');
+      await tester.pump();
       debugOnRebuildDirtyWidget = null;
-      expect(rebuilt, isEmpty);
+      expect(rebuilt, [CompanionPage]);
 
       await tester.pumpWidget(_app(const SizedBox()));
       await tester.pump(const Duration(seconds: 10));

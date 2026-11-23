@@ -117,6 +117,29 @@ class LayerPackaging(unittest.TestCase):
             return json.loads((out / 'manifest.json').read_text())
         return result
 
+    def test_typescript_source_pruning_keeps_runtime_files_and_licenses(self):
+        dropped = {'openai/src/client.ts', '@anthropic-ai/sdk/src/client.ts', '@js-temporal/polyfill/lib/instant.ts'}
+        kept = {
+            'openai/index.js', '@anthropic-ai/sdk/index.mjs', '@js-temporal/polyfill/dist/index.cjs',
+            'openai/src/internal/auth/x509-transport-state.cts',
+            'openai/src/internal/qs/LICENSE.md',
+            'zod/src/index.ts',
+        }
+        for relative in dropped | kept:
+            path = self.root / 'dsh/node_modules' / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(relative)
+        before, _ = self.build('ts-source-unpruned')
+        after, command = self.command('ts-source-pruned')
+        result = subprocess.run(command + ['--prune-dev-metadata'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        original = members(before / 'engine-arm64-v8a.tar.gz')
+        candidate = members(after / 'engine-arm64-v8a.tar.gz')
+        removed = {'opt/dsh/node_modules/' + relative for relative in dropped}
+        self.assertEqual(candidate, {path: value for path, value in original.items() if path not in removed})
+        self.assertEqual((before / 'base-arm64-v8a.tar.gz').read_bytes(),
+                         (after / 'base-arm64-v8a.tar.gz').read_bytes())
+
     def test_assembly_without_file_digest_keeps_archives_and_report(self):
         # Simulate the missing Python 3.11 API, not a different interpreter.
         runner = ('import hashlib, runpy, sys; '

@@ -15645,6 +15645,18 @@ class L10nEn extends L10n {
   String get phoneSkillRecentNone => 'Not used yet';
 
   @override
+  String get phoneSkillRecentOk => 'worked';
+
+  @override
+  String get phoneSkillRecentMiss => 'failed';
+
+  @override
+  String get phoneSkillRecentVoid => 'not counted';
+
+  @override
+  String get phoneSkillRecentSeparator => ', ';
+
+  @override
   String get phoneSkillErrorChanged =>
       'The skill changed meanwhile, so this edit didn\'t overwrite it. Go back and look again.';
 

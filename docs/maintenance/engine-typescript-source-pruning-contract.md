@@ -1,0 +1,5 @@
+# 引擎层省略 TypeScript 源码
+
+`PRUNE_DEV_METADATA=1`（Android 默认）时，引擎归档不带 `rtbuild.py` 里 `TS_SOURCE_DIRS` 列出目录下的 `.ts`：openai 7.19.0 和 @anthropic-ai/sdk 0.129.0 的 `src/`、@js-temporal/polyfill 0.5.1 的 `lib/`。这三个包的 exports、browser 映射和编译产物都只指向这些目录以外的 JS，source map 早已裁掉，`.ts` 运行时不会被读到。目录里的 `.cts`、许可证照常保留；关闭裁剪时全部保留。只动引擎层，不影响基础层和 baseId；OHOS composition 另有自己的省略表。
+
+升级这几个包时，重新核对 exports/imports 条件、编译文件的相对和动态导入、按路径读文件的地方，再决定是否保留。不要扩大到带源码导出条件的包（如 Zod）。

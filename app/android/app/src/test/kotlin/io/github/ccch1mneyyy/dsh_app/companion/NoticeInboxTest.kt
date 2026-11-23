@@ -65,6 +65,11 @@ class NoticeInboxTest {
         assertNull(NoticeFilter.segment(listOf("您的驗證碼為 １２３４５６")))
         // Split across title and text, each harmless alone.
         assertNull(NoticeFilter.segment(listOf("Your code", "123456")))
+        assertNull(NoticeFilter.segment(listOf("Your code is 123 456")))
+        assertNull(NoticeFilter.segment(listOf("Your code is A1B2C3")))
+        assertEquals("Promo code SPRING", NoticeFilter.segment(listOf("Promo code SPRING")))
+        // A date near 「code」 is not a code.
+        assertEquals("Dress code for 11-24 is casual", NoticeFilter.segment(listOf("Dress code for 11-24 is casual")))
     }
 
     @Test fun traditionalPasswordIsDroppedEvenWithAnInvisibleSeparator() {
