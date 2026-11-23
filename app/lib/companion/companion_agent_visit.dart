@@ -73,7 +73,13 @@ class CompanionAgentAttachment {
       isAttached ? _visit.openMemory() : Future.error(const DshClosedException('Companion window closed'));
   Future<void> submit(String raw) async {
     if (isAttached) {
-      await _visit.submit(raw, origin: _window.ui, handoff: _window.mapHandoff, originCurrent: () => isAttached);
+      await _visit.submit(
+        raw,
+        inputWindow: 'room',
+        origin: _window.ui,
+        handoff: _window.mapHandoff,
+        originCurrent: () => isAttached,
+      );
     }
   }
 
@@ -140,10 +146,11 @@ class CompanionAgentResident {
 
   Future<CompanionMemoryOwner> openMemory() =>
       active ? _visit.openMemory() : Future.error(const DshClosedException('Companion resident closed'));
-  Future<void> submit(String raw, {void Function(MemoryRow)? onCommitted}) async {
+  Future<void> submit(String raw, {bool fromFloat = false, void Function(MemoryRow)? onCommitted}) async {
     if (active) {
       await _visit.submit(
         raw,
+        inputWindow: fromFloat ? 'floating' : 'notification',
         origin: _ui,
         handoff: _visit.residentMapHandoff!,
         originCurrent: () => active,
@@ -501,6 +508,7 @@ class _CompanionAgentVisit {
 
   Future<void> submit(
     String raw, {
+    required String inputWindow,
     required CompanionAgentRoomUi origin,
     required CompanionMapHandoff handoff,
     required bool Function() originCurrent,
@@ -613,6 +621,7 @@ class _CompanionAgentVisit {
       final turnContext = CompanionTurnContext(
         Map.unmodifiable({
           ...sampledContext.data,
+          'window': inputWindow,
           if (sourceClock != null) 'zoneId': sourceClock.zoneId,
           // A retry's current clock is not when its unchanged words were said.
           if (reuse)

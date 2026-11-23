@@ -481,6 +481,7 @@ void main() {
       expect(visit.requests, hasLength(3));
       // Real wire bodies: cold first request, explicit retry and continuation.
       for (final request in visit.requests) {
+        expect(_context(request)['window'], 'room');
         final system = jsonEncode(request['system']);
         expect(system, contains(savedCustom));
         expect(system, contains(savedCallMe));
@@ -1053,6 +1054,7 @@ void main() {
       await work;
       expect(visit.requests, hasLength(1));
       expect(visit.calls('clock'), 1);
+      expect(_context(visit.requests.single)['window'], 'notification');
       expect(visit.userSource, source);
       expect(visit.turn['id'], turn['id']);
       expect(visit.turn['closed'], 1);
@@ -1122,7 +1124,8 @@ void main() {
       old = resident.submit('第一句话。');
       await entered.future;
       final firstSource = visit.userSource;
-      await resident.submit('停一下，听这一句。');
+      expect(_context(visit.requests.single)['window'], 'notification');
+      await resident.submit('停一下，听这一句。', fromFloat: true);
       final newSourceId = visit.agent.sourceId;
       final newReplyId = visit.agent.replyId;
       expect(newSourceId, isNot(firstSource['id']));
@@ -1130,6 +1133,8 @@ void main() {
       expect(visit.requests, hasLength(2));
       release.complete();
       await old;
+      // A later window cannot relabel the earlier request's captured origin.
+      expect(visit.requests.map((request) => _context(request)['window']), ['notification', 'floating']);
       expect(visit.agent.sourceId, newSourceId);
       expect(visit.agent.replyId, newReplyId);
       expect(visit.agent.text, '我听见新的话了。');

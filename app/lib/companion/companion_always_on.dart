@@ -158,6 +158,7 @@ class CompanionAlwaysOnOwner {
       _resident!
           .submit(
             text,
+            fromFloat: fromFloat,
             onCommitted: (source) {
               if (!accepted.isCompleted) accepted.complete(true);
               _post(id: 'input:${source['id']}', text: text, user: true);
