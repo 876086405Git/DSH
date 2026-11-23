@@ -144,6 +144,8 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
         catch { controller.abort(new Error('Auxiliary response closed')); }
       }
     };
+    // A provider completion event is not yet acceptance by the bridge guard.
+    let providerComplete = false;
     const observe = event => {
       if (event.type === 'dispatch') {
         record.dispatched = true; record.dispatchAtMs = event.atMs;
@@ -154,7 +156,7 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
         record.dispatched = null; record.handoffAtMs = event.atMs;
       } else if (event.type === 'http') record.httpStatus = event.status;
       else if (event.type === 'stop') record.stopReason = event.stopReason;
-      else if (event.type === 'complete') record.complete = true;
+      else if (event.type === 'complete') providerComplete = true;
       else if (event.type === 'usage') {
         if (!isObject(event.raw) || Buffer.byteLength(JSON.stringify(event.raw)) > MAX_BYTES) throw failure(502, 'invalid-usage', 'Provider usage is not a bounded object');
         const value = structuredClone(event.raw);
@@ -164,7 +166,7 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
         emit({ type: 'usage', event: event.event, semantics: 'cumulative', raw: value });
       }
     };
-    let failureCode;
+    let failureCode, guard;
     try {
       res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
       emit({ type: 'accepted', instanceId, provider: body.provider, model: body.model });
@@ -173,7 +175,7 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
       record.agent = target.agent;
       if (!target.capability || typeof target.llm.prepareCompanionAuxiliaryCall !== 'function') throw failure(422, 'unavailable', 'This provider has no callable auxiliary model transport');
       record.rawUsageAvailable = target.capability.rawUsage === 'deepseek-messages-cumulative';
-      const guard = () => { controller.signal.throwIfAborted(); target.guard(); };
+      guard = () => { controller.signal.throwIfAborted(); target.guard(); };
       guard();
       // DeepSeek's verified extraction path disables thinking. Other models
       // retain the selected effort/default; do not impose an unsupported knob.
@@ -203,16 +205,24 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
           emit({ type: 'runtime-usage', semantics: 'runtime-normalized', usage: value });
         }
       }
-      if (!record.rawUsageAvailable) {
-        record.complete = ['stop', 'max-tokens'].includes(finish?.kind) || ['REFUSAL', 'EMPTY_RESPONSE'].includes(finish?.failure?.code);
-        record.runtimeFinishKind = finish?.kind ?? null;
-      }
+      // The iterator may finish without yielding another guarded chunk.
+      guard();
+      record.complete = (!record.rawUsageAvailable || providerComplete) &&
+        (['stop', 'max-tokens'].includes(finish?.kind) || ['REFUSAL', 'EMPTY_RESPONSE'].includes(finish?.failure?.code));
+      if (!record.rawUsageAvailable) record.runtimeFinishKind = finish?.kind ?? null;
       if (record.complete && finish?.kind === 'stop') record.terminal = 'complete';
       else if (record.complete && finish?.kind === 'max-tokens') record.terminal = 'max_tokens';
       else if (record.stopReason === 'refusal' || finish?.failure?.code === 'REFUSAL') record.terminal = 'refusal';
       else if (finish?.kind === 'aborted') record.terminal = 'cancelled';
       else if (finish?.kind === 'error') { record.terminal = 'provider_error'; failureCode = errorCode(finish.failure); }
     } catch (error) {
+      record.complete = false;
+      // Complete empty/refusal responses keep their finite proposal outcome,
+      // but only while this same owner/model still accepts the attempt.
+      if (providerComplete && ['EMPTY_RESPONSE', 'REFUSAL'].includes(errorCode(error))) {
+        try { guard(); record.complete = true; }
+        catch (stale) { error = stale; }
+      }
       failureCode = errorCode(error);
       record.terminal = controller.signal.aborted ? 'cancelled' : record.dispatched === false ? 'preflight_error'
         : record.httpStatus >= 400 ? 'http_error' : failureCode === 'STREAM_CLOSED' ? 'incomplete'
