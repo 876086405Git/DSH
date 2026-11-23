@@ -150,7 +150,16 @@ class _Run {
 /// One gpt_markdown segment, as far as cutting next to it goes.
 class _Segment {
   _Segment(String text, this.start, MarkdownHtml html) {
-    final lines = text.split('\n');
+    final opening = _fenceOpen.firstMatch(text);
+    final run = opening?.group(1);
+    // A closing fence must contain the entire opening run.
+    final List<String> lines;
+    if (run != null && text.indexOf(run, opening!.end) < 0) {
+      final end = text.indexOf('\n');
+      lines = [end < 0 ? text : text.substring(0, end)];
+    } else {
+      lines = text.split('\n');
+    }
     String? fenceRun;
     var fenceUnsafe = false;
     var endsWithFence = false;
@@ -166,7 +175,7 @@ class _Segment {
         }
         continue;
       }
-      final fence = _fenceOpen.firstMatch(line);
+      final fence = i == 0 ? opening : _fenceOpen.firstMatch(line);
       if (fence != null) {
         fenceRun = fence.group(1);
         fenceUnsafe = _unsafeFences.contains(fence.group(2));
