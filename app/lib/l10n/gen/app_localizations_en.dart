@@ -7829,6 +7829,32 @@ class L10nEn extends L10n {
   }
 
   @override
+  String companionRawEraseAsk(String quote) {
+    return 'Erase the original words too — “$quote”? It can\'t be undone.';
+  }
+
+  @override
+  String companionRawEraseAskMany(String quote, int count) {
+    return 'Erase the original words too — “$quote” and $count lines in all? It can\'t be undone.';
+  }
+
+  @override
+  String get companionRawEraseYes => 'Erase';
+
+  @override
+  String get companionRawEraseNo => 'Keep';
+
+  @override
+  String get companionRawErased => 'Done, the original words are gone too.';
+
+  @override
+  String get companionRawKept => 'Okay, the original words stay.';
+
+  @override
+  String get companionRawEraseGone =>
+      'Too late this time; the original words are still here. Ask me again if you want them gone.';
+
+  @override
   String get automaticDiagnosticsRecover => 'Recover local records';
 
   @override

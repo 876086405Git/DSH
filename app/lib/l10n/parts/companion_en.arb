@@ -1140,5 +1140,29 @@
         "type": "String"
       }
     }
-  }
+  },
+  "companionRawEraseAsk": "Erase the original words too — “{quote}”? It can't be undone.",
+  "@companionRawEraseAsk": {
+    "placeholders": {
+      "quote": {
+        "type": "String"
+      }
+    }
+  },
+  "companionRawEraseAskMany": "Erase the original words too — “{quote}” and {count} lines in all? It can't be undone.",
+  "@companionRawEraseAskMany": {
+    "placeholders": {
+      "quote": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "companionRawEraseYes": "Erase",
+  "companionRawEraseNo": "Keep",
+  "companionRawErased": "Done, the original words are gone too.",
+  "companionRawKept": "Okay, the original words stay.",
+  "companionRawEraseGone": "Too late this time; the original words are still here. Ask me again if you want them gone."
 }

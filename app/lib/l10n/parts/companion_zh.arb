@@ -1234,5 +1234,29 @@
         "type": "String"
       }
     }
-  }
+  },
+  "companionRawEraseAsk": "「{quote}」这句原话也一起删掉吗？删了就找不回来了。",
+  "@companionRawEraseAsk": {
+    "placeholders": {
+      "quote": {
+        "type": "String"
+      }
+    }
+  },
+  "companionRawEraseAskMany": "「{quote}」等 {count} 句原话也一起删掉吗？删了就找不回来了。",
+  "@companionRawEraseAskMany": {
+    "placeholders": {
+      "quote": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "companionRawEraseYes": "删掉",
+  "companionRawEraseNo": "留着",
+  "companionRawErased": "好，原话也删掉了。",
+  "companionRawKept": "好，原话留着。",
+  "companionRawEraseGone": "这次来不及了，原话还留着。想删的话再跟我说一次。"
 }
