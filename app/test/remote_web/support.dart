@@ -37,6 +37,8 @@ class WebRpc implements RemoteRpcClient {
   @override
   bool get isClosed => _done.isCompleted;
   @override
+  bool get isChannelClosed => isClosed;
+  @override
   Future<SecureChannelClosed> get done => _done.future;
   @override
   Future<Object?> call(String method, Object? params, {Duration? timeout}) async {

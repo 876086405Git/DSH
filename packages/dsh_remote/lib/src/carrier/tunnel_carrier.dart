@@ -170,7 +170,7 @@ class RemoteHostSession {
   bool get supportsTransfer => capabilities.contains('harness.remote.transfer.v1');
   bool get supportsStreamTransfer => capabilities.contains('harness.remote.stream.transfer.v1');
 
-  bool get isClosed => rpc.isClosed;
+  bool get isClosed => rpc.isClosed || rpc.isChannelClosed;
 
   Future<void> close() => rpc.close();
 }

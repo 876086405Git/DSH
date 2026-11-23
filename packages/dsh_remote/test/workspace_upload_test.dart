@@ -480,6 +480,9 @@ class _UploadRpc implements RemoteRpcClient {
   bool get isClosed => _done.isCompleted;
 
   @override
+  bool get isChannelClosed => isClosed;
+
+  @override
   Future<SecureChannelClosed> get done => _done.future;
 
   @override

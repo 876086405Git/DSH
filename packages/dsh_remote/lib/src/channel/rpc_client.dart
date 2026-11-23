@@ -76,6 +76,10 @@ class RemoteRpcClient {
 
   bool get isClosed => _done.isCompleted;
 
+  /// The channel closes at peer EOF while replies received before it may
+  /// still be draining; no new call can be sent from then on.
+  bool get isChannelClosed => _channel.isClosed;
+
   SecureChannel get channel => _channel;
 
   /// Time since the Host last sent anything (a reply, event or stream frame).
