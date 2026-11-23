@@ -2195,7 +2195,14 @@ internal object PetOverlay {
         override fun onLowMemory() = Unit
 
         override fun onTrimMemory(level: Int) {
-            if (petView == null) loaded?.release()
+            if (petView != null) return
+            loaded?.release()
+            // 不显示: its idle picture, kept to come back quickly, has nothing to come back to.
+            if (packKey(machine.last) == null) {
+                loaded = null
+                loadedKey = null
+                stateKey = null
+            }
         }
     }
 

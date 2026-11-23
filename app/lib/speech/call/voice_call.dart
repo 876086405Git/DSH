@@ -299,6 +299,7 @@ class VoiceCallController extends ChangeNotifier {
           return;
         } else {
           _speaker = await audio.speaker(_speaker);
+          if (_disposed || _phase == CallPhase.ended) return;
         }
         _set(CallPhase.listening);
       case CallStart.permission:
