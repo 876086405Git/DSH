@@ -1,0 +1,6 @@
+--- a/node_modules/@deepseek-ai/cordis/lib/index.js
++++ b/node_modules/@deepseek-ai/cordis/lib/index.js
+@@ -1437,1 +1437,2 @@
+-	notify(names, filter = (ctx, name) => ctx[symbols.isolate][name] === this.ctx[symbols.isolate][name]) {
++	notify(names, filter = (ctx, name) => ctx[symbols.isolate][name] === this.ctx[symbols.isolate][name]) {
++		if (!names.length) return;
