@@ -24,6 +24,12 @@ part 'companion_memory_maintenance_store.dart';
 part 'companion_affinity_store.dart';
 part 'companion_memory_embedding_store.dart';
 
+const _memoryEvidenceSelect = '''
+  SELECT s.*, m.role, m.scope, m.first_seq, m.said_at_utc, m.offset_minutes, m.edited_at_utc
+  FROM memory_card_sources s
+  JOIN memory_messages m ON m.id = s.message_id AND m.source_rev = s.source_rev
+''';
+
 const _conflict = DshRemoteException('companion/conflict', 'Companion memory changed; read it again', {'status': 409});
 const _cleanupUnknown = DshRemoteException(
   'companion/cleanup-source-unknown',
@@ -356,7 +362,19 @@ class CompanionMemoryStore {
       _card(row),
   ];
 
-  MemoryRow _card(Row row) => {
+  /// The current `row_rev` of each of [ids] that is a card and not withdrawn.
+  Map<String, int> cardRevisions(Iterable<String> ids) => {
+    for (final row in _db.select(
+      '''
+      SELECT c.id, c.row_rev FROM memory_cards c JOIN memory_topics t ON t.id = c.topic_id
+      WHERE c.status != 'withdrawn' AND c.id IN (SELECT value FROM json_each(?))
+    ''',
+      [jsonEncode(ids.toList())],
+    ))
+      row['id'] as String: row['row_rev'] as int,
+  };
+
+  MemoryRow _card(Row row, {bool includeEvidence = true}) => {
     ...row,
     'layer': _memoryLayer(row.containsKey('collection') ? row['collection'] as String : 'about_you'),
     'keywords': (jsonDecode(row['keywords'] as String) as List).cast<String>(),
@@ -373,16 +391,15 @@ class CompanionMemoryStore {
     'event_time': row['event_time'] == null ? null : jsonDecode(row['event_time'] as String),
     'followup': row['followup'] == null ? null : jsonDecode(row['followup'] as String),
     'evidence': [
-      for (final source in _db.select(
-        '''
-        SELECT s.*, m.role, m.scope, m.first_seq, m.said_at_utc, m.offset_minutes,
-          m.edited_at_utc FROM memory_card_sources s
-        JOIN memory_messages m ON m.id = s.message_id AND m.source_rev = s.source_rev
+      if (includeEvidence)
+        for (final source in _db.select(
+          '''
+        $_memoryEvidenceSelect
         WHERE s.card_id = ? ORDER BY s.support_group, m.first_seq
       ''',
-        [row['id']],
-      ))
-        Map<String, Object?>.from(source),
+          [row['id']],
+        ))
+          Map<String, Object?>.from(source),
     ],
   };
 
@@ -1830,9 +1847,16 @@ class CompanionMemoryStore {
 
   void _advanceCursor() {
     var cursor = archive['cursor_seq'] as int;
-    for (final event in _db.select('SELECT seq,state FROM memory_events WHERE seq>? ORDER BY seq', [cursor])) {
-      if (event['state'] == 'pending') break;
-      cursor = event['seq'] as int;
+    final statement = _db.prepare('SELECT seq,state FROM memory_events WHERE seq>? ORDER BY seq');
+    try {
+      final events = statement.selectCursor([cursor]);
+      while (events.moveNext()) {
+        final event = events.current;
+        if (event['state'] == 'pending') break;
+        cursor = event['seq'] as int;
+      }
+    } finally {
+      statement.close();
     }
     _db.execute('UPDATE memory_archive SET cursor_seq=? WHERE singleton=1', [cursor]);
   }

@@ -28,7 +28,109 @@ List<TurnArtifacts> _derive(ChatTranscript t, {List<PhoneOutput> outputs = const
 
 List<Type> _types(List<ChatRow> rows) => [for (final r in rows) r.runtimeType];
 
+class _CountedMessage extends Message {
+  _CountedMessage(Message message)
+    : super(id: message.id, role: message.role, parts: message.parts, source: message.source);
+
+  int reads = 0;
+
+  @override
+  String get text {
+    reads++;
+    return super.text;
+  }
+}
+
 void main() {
+  test('finished artifact inputs are read once until that turn changes', () {
+    final transcript = _load(_fixture);
+    final messages = <_CountedMessage>[];
+    for (final event in transcript.events.toList()) {
+      if (event is! AssistantMessageEvent) continue;
+      final message = _CountedMessage(event.message);
+      messages.add(message);
+      transcript.apply(
+        AssistantMessageEvent(
+          event.seq,
+          event.time,
+          event.data,
+          turn: event.turn,
+          step: event.step,
+          message: message,
+          usage: event.usage,
+          interrupted: event.interrupted,
+        ),
+      );
+    }
+    final cache = SessionArtifactsCache();
+    var cwd = _ws;
+    List<PhoneOutput> outputs = const [];
+    List<TurnArtifacts> read() =>
+        cache.derive(events: transcript.events, turns: transcript.turns, cwd: cwd, phoneOutputs: outputs);
+    int reads() => messages.fold(0, (sum, message) => sum + message.reads);
+    final first = read();
+    expect(reads(), 12, reason: 'only the 12 committed messages of finished turns');
+    final running = transcript.turns.last;
+    transcript.apply(
+      ToolCallEvent(46, running.start, const {}, turn: 4, step: 2, callId: 'next', name: 'bash', arguments: '{}'),
+    );
+    final again = read();
+    expect(reads(), 12, reason: 'no history reply rejoined, including the turn with no artifacts');
+    expect(again[0], same(first[0]));
+    expect(again[1], same(first[1]));
+
+    // A late declaration changes a reused trace, including integral JSON doubles.
+    transcript.apply(
+      SessionLogEvent.fromJson({
+        'seq': 47,
+        'time': running.start.millisecondsSinceEpoch,
+        'type': presentedEventType,
+        'data': {
+          'turn': 3.0,
+          'callId': 'late',
+          'files': [
+            {'path': 'late.xlsx'},
+          ],
+        },
+      }),
+    );
+    final late = read();
+    expect(reads(), 14, reason: 'only the two messages of turn 3 are reconsidered');
+    expect(late[0], same(first[0]));
+    expect(late.last.files.single.path, '$_ws/late.xlsx');
+
+    // An older page can replace an event without replacing its TurnTrace.
+    final old = transcript.events.whereType<AssistantMessageEvent>().firstWhere((event) => event.seq == 31);
+    final replacement = _CountedMessage(
+      Message.fromJson({
+        'id': old.message.id,
+        'role': 'assistant',
+        'content': [
+          {'type': 'text', 'text': 'No linked spreadsheet now.'},
+        ],
+      }),
+    );
+    messages.add(replacement);
+    transcript.prependHistory(
+      HistoryPage([
+        AssistantMessageEvent(old.seq, old.time, old.data, turn: old.turn, step: old.step, message: replacement),
+      ], false),
+    );
+    final changed = read();
+    expect(reads(), 20, reason: 'only the six messages of the replaced turn are reconsidered');
+    expect(changed[1].files.map((file) => file.path), ['$_ws/site/index.html']);
+    expect(changed[0], same(first[0]));
+
+    cwd = '/another';
+    final moved = read();
+    expect(reads(), 32);
+    expect(moved.last.files.single.path, '/another/late.xlsx');
+    outputs = [PhoneOutput(path: '$phoneOutputDir/new.pdf', modified: transcript.turns[1].start)];
+    final withOutput = read();
+    expect(reads(), 44);
+    expect(withOutput[1].files.last.path, '$phoneOutputDir/new.pdf');
+  });
+
   test('invalid bash arguments do not affect a write create artifact', () {
     final transcript = ChatTranscript();
     var seq = 0;

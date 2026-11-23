@@ -5,6 +5,7 @@
 import 'dart:async';
 
 import 'package:dsh_client/dsh_client.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -337,6 +338,7 @@ final _code = RegExp(r'^ {0,3}(`{3,}|~{3,})[\s\S]*?(?:^ {0,3}\1|(?![\s\S]))|`[^`
 /// in order, resolved against [cwd]; web links and anchors dropped, and links shown as
 /// examples in code ignored (#1432).
 List<String> linkedPaths(String text, {String? cwd}) {
+  if (!text.contains('](')) return [];
   final out = <String>{};
   for (final match in _linkTarget.allMatches(text.replaceAll(_code, ' '))) {
     final target = (match.group(1) ?? match.group(2) ?? '').trim();
@@ -396,8 +398,9 @@ List<TurnArtifacts> deriveArtifacts({
         if (created != null) scan.written.add((created, event.seq));
       case AssistantMessageEvent(:final turn, :final message):
         if (!finished.containsKey(turn)) break;
-        if (message.text.trim().isNotEmpty) {
-          (scans[turn] ??= _TurnScan()).reply = message.text;
+        final text = message.text;
+        if (text.trim().isNotEmpty) {
+          (scans[turn] ??= _TurnScan()).reply = text;
         }
       default:
         break;
@@ -456,6 +459,70 @@ List<TurnArtifacts> deriveArtifacts({
   }
   out.sort((a, b) => a.endSeq.compareTo(b.endSeq));
   return List.unmodifiable(out);
+}
+
+/// Reuses finished turns without rejoining their replies or scanning their links.
+/// Raw event identities also invalidate late declarations and replaced history;
+/// a reused [TurnTrace] alone does not cover those changes.
+class SessionArtifactsCache {
+  var _turns = <TurnTrace, ({List<SessionLogEvent> events, TurnArtifacts? artifacts})>{};
+  String? _cwd;
+  List<PhoneOutput>? _outputs;
+
+  List<TurnArtifacts> derive({
+    required Iterable<SessionLogEvent> events,
+    required List<TurnTrace> turns,
+    String? cwd,
+    List<PhoneOutput> phoneOutputs = const [],
+  }) {
+    if (_cwd != cwd || !identical(_outputs, phoneOutputs)) _turns.clear();
+    _cwd = cwd;
+    _outputs = phoneOutputs;
+    final finished = <int, TurnTrace>{
+      for (final trace in turns)
+        if (!trace.running && trace.endSeq != null) trace.turn: trace,
+    };
+    if (finished.isEmpty) {
+      _turns.clear();
+      return const [];
+    }
+    final byTurn = {for (final turn in finished.keys) turn: <SessionLogEvent>[]};
+    for (final event in events) {
+      final turn = switch (event) {
+        ToolCallEvent(:final turn) || ToolResultEvent(:final turn) || AssistantMessageEvent(:final turn) => turn,
+        _ when event.type == presentedEventType => event.data['turn'],
+        _ => null,
+      };
+      byTurn[turn]?.add(event);
+    }
+    final next = <TurnTrace, ({List<SessionLogEvent> events, TurnArtifacts? artifacts})>{};
+    final missing = <TurnTrace>[];
+    for (final trace in finished.values) {
+      final cached = _turns[trace];
+      if (cached != null && listEquals(cached.events, byTurn[trace.turn])) {
+        next[trace] = cached;
+      } else {
+        missing.add(trace);
+      }
+    }
+    final derived = {
+      for (final group in deriveArtifacts(
+        events: missing.expand((trace) => byTurn[trace.turn]!),
+        turns: missing,
+        cwd: cwd,
+        phoneOutputs: phoneOutputs,
+      ))
+        group.turn: group,
+    };
+    for (final trace in missing) {
+      next[trace] = (events: byTurn[trace.turn]!, artifacts: derived[trace.turn]);
+    }
+    _turns = next;
+    // Labels are dynamic getters, so cached files still follow appL10n.
+    final out = <TurnArtifacts>[for (final trace in finished.values) ?next[trace]!.artifacts]
+      ..sort((a, b) => a.endSeq.compareTo(b.endSeq));
+    return List.unmodifiable(out);
+  }
 }
 
 /// The file a successful `write` / `str_replace_editor create` created
@@ -594,6 +661,10 @@ class PhoneOutputsController extends Notifier<List<PhoneOutput>> {
 
 final phoneOutputsProvider = NotifierProvider<PhoneOutputsController, List<PhoneOutput>>(PhoneOutputsController.new);
 
+final _sessionArtifactsCacheProvider = Provider.autoDispose.family<SessionArtifactsCache, String>(
+  (ref, sessionId) => SessionArtifactsCache(),
+);
+
 /// Every finished turn's artifacts in one session ([deriveArtifacts]).
 final sessionArtifactsProvider = Provider.autoDispose.family<List<TurnArtifacts>, String>((ref, sessionId) {
   final turns = ref.watch(chatProvider(sessionId).select((s) => s.turns));
@@ -604,5 +675,7 @@ final sessionArtifactsProvider = Provider.autoDispose.family<List<TurnArtifacts>
   });
   final outputs = ref.watch(phoneOutputsProvider);
   final chat = ref.read(chatProvider(sessionId).notifier);
-  return deriveArtifacts(events: chat.events, turns: turns, cwd: chat.header?.cwd, phoneOutputs: outputs);
+  return ref
+      .watch(_sessionArtifactsCacheProvider(sessionId))
+      .derive(events: chat.events, turns: turns, cwd: chat.header?.cwd, phoneOutputs: outputs);
 });

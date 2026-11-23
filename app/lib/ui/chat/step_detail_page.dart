@@ -63,7 +63,6 @@ class StepDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final trace = ref.watch(chatProvider(sessionId).select((s) => s.turns.where((t) => t.turn == turn).lastOrNull));
-    final items = ref.watch(chatProvider(sessionId).select((s) => s.items));
     final skew = ref.watch(chatProvider(sessionId).select((s) => s.clockSkew));
     if (trace == null) {
       return AppPage(title: l10n.activityStepTitle, slivers: const [_Missing()]);
@@ -73,6 +72,7 @@ class StepDetailPage extends ConsumerWidget {
       if (span == null) {
         return AppPage(title: l10n.activityStepTitle, slivers: const [_Missing()]);
       }
+      final items = ref.watch(chatProvider(sessionId).select((s) => s.items));
       final reply = items.whereType<AssistantChatItem>().where((a) => a.seq == span.seq).firstOrNull;
       return _ModelStep(
         sessionId: sessionId,
@@ -90,7 +90,10 @@ class StepDetailPage extends ConsumerWidget {
     if (anchor == null) {
       return AppPage(title: l10n.activityStepTitle, slivers: const [_Missing()]);
     }
-    final item = items.whereType<ToolChatItem>().where((t) => t.callId == callId).lastOrNull;
+    final item = ref.watch(
+      chatProvider(sessionId)
+          .select((s) => s.items.reversed.whereType<ToolChatItem>().where((t) => t.callId == callId).firstOrNull),
+    );
     return _ToolStep(trace: trace, work: work, wait: wait, item: item, span: anchor, skew: skew);
   }
 }

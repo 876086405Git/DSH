@@ -95,11 +95,7 @@ class CompanionAgentMemoryTools {
   void grantSelection(MemorySelection selection) {
     if (!isCurrent || selection.controlRevision != _knownControlRevision) return;
     final selected = selection.ids.toSet();
-    final revisions = <String, int>{
-      if (selected.isNotEmpty)
-        for (final card in memory.store.cards())
-          if (selected.contains(card['id'])) card['id']! as String: card['row_rev']! as int,
-    };
+    final revisions = memory.store.cardRevisions(selected);
     if (revisions.length != selected.length) {
       throw const DshRemoteException('companion/conflict', 'Selected memory changed', {'status': 409});
     }

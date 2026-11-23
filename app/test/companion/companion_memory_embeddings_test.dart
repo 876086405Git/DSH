@@ -196,9 +196,11 @@ void main() {
   test('missing optional model is null without downloading and empty candidates need no native call', () async {
     expect(await embeddings.rank(store: store, characterId: null, query: '空', isCurrent: () => true), isEmpty);
     expect(calls, isEmpty);
+    expect(embeddings.knownUnavailable, isFalse, reason: 'not checked yet: the next request may load it');
     shared('还没有下载本地模型');
     expect(await embeddings.rank(store: store, characterId: null, query: '查询', isCurrent: () => true), isNull);
     expect(calls.map((call) => call.method), ['load']);
+    expect(embeddings.knownUnavailable, isTrue);
     expect(embeddings.status, CompanionMemoryModelStatus.notDownloaded);
     expect(database.select('SELECT * FROM memory_embeddings'), isEmpty);
   });

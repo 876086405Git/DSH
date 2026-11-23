@@ -19,6 +19,32 @@ Iterable<TextSpan> _leaves(InlineSpan span) sync* {
 void main() {
   setUpAll(loadTestFonts);
 
+  testWidgets('diff rows stay put when a syntax highlight would have cooled down', (tester) async {
+    final code = ValueNotifier(('-old', false));
+    addTearDown(code.dispose);
+    await tester.pumpWidget(
+      testApp(
+        Scaffold(
+          body: ValueListenableBuilder<(String, bool)>(
+            valueListenable: code,
+            builder: (_, value, _) => CodeBlock(code: value.$1, language: 'patch', showLineNumbers: value.$2),
+          ),
+        ),
+      ),
+    );
+    code.value = ('-old\n+new', false);
+    await tester.pump();
+    code.value = ('-old\n+new\n+more', false);
+    await tester.pump(const Duration(milliseconds: 32));
+    final row = tester.widget<Text>(find.text('+more'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.widget<Text>(find.text('+more')), same(row));
+
+    code.value = (code.value.$1, true);
+    await tester.pump();
+    expect(find.text(code.value.$1, findRichText: true), findsOneWidget);
+  });
+
   testWidgets('streaming code is highlighted at most every 250 ms, and whole at the end', (tester) async {
     final code = ValueNotifier('final a = 1;\n');
     addTearDown(code.dispose);
