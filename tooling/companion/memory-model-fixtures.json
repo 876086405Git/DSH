@@ -56,7 +56,7 @@
     },
     {
       "path": "app/test/companion/companion_page_test.dart",
-      "sha256": "223beb2e9047c786fecdbbc98a00da2393674c7ab9f2f41f19fcdd373d394b9f"
+      "sha256": "7122ff757cc79d3e4df129fb3c4a4dd8600f57555a3345cb5aaf22fc725c5d48"
     },
     {
       "path": "app/test/companion/companion_recall_room_test.dart",
@@ -116,11 +116,11 @@
     },
     {
       "path": "packages/dsh_client/test/companion_auxiliary_api_test.dart",
-      "sha256": "3bc991d01afeda49a17f979defeccd326413c60560e42897eb31f2d1077098eb"
+      "sha256": "32e2af79ce2979a460050f7d8b4cae6331784007b58e6a580cdd24fbbc331ddc"
     },
     {
       "path": "packages/dsh_client/test/companion_followup_store_test.dart",
-      "sha256": "bab7fe8348d7a2a94dd16e22409b354e2b2c94180df6d9d594d52976e616e97e"
+      "sha256": "3554e3e0ae9b13cce45bedd8d1e6e05dbf7f5538b78a208eb555ef49ade5f267"
     },
     {
       "path": "packages/dsh_client/test/companion_memory_chat_replay_test.dart",
@@ -136,7 +136,7 @@
     },
     {
       "path": "packages/dsh_client/test/companion_memory_flow_test.dart",
-      "sha256": "1ea9fc52a9e52a7c54297a501608ae44a7bfd9d2a753c88d54b73d8a2c5d4b31"
+      "sha256": "cfb65a70c7f39a46bcaa56ebdce64df1747ea1f200c926e50925f12e0d6a3511"
     },
     {
       "path": "packages/dsh_client/test/companion_memory_merge_rules_test.dart",
