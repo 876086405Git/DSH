@@ -111,6 +111,10 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   double _pinchFont = TerminalFontSize.fallback;
   String? _composing;
 
+  /// Kept while the size stays: a new one makes xterm measure its cell again and
+  /// drop every laid-out character (each pinyin keystroke rebuilds this page).
+  TerminalStyle? _style;
+
   TerminalTab get _tab => widget.tab;
   Terminal get _terminal => widget.tab.terminal;
   bool get _canType => _tab.phase == TerminalPhase.live && _tab.writable;
@@ -335,11 +339,13 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
       controller: _selection,
       scrollController: _scroll,
       theme: canType ? TerminalPalette.of(context).theme : TerminalPalette.of(context).quiet,
-      textStyle: TerminalStyle(
-        fontSize: font,
-        fontFamily: AppType.monoFamily,
-        fontFamilyFallback: AppType.monoFallback,
-      ),
+      textStyle: _style?.fontSize == font
+          ? _style!
+          : _style = TerminalStyle(
+              fontSize: font,
+              fontFamily: AppType.monoFamily,
+              fontFamilyFallback: AppType.monoFallback,
+            ),
       backgroundOpacity: 0,
       focusNode: widget.focusNode,
       autofocus: canType,
