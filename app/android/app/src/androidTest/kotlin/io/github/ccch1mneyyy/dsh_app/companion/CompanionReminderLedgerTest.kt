@@ -202,6 +202,32 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         assertEquals(0, f.effects.notified.size)
         assertEquals("failed", f.ledger.current("t")!!.state)
         assertEquals("time_passed", f.ledger.current("t")!!.waitReason)
+
+        f.now = DUE - 1
+        f.revision(3)
+        assertTrue(f.runner().resume("t"))
+        val key = ReminderKey("t", 3)
+        f.runner().alarm(key)
+        assertNull(f.ledger.revision(key)!!.notificationClaim)
+        assertEquals(0, f.effects.notified.size)
+
+        // Move the injected wall clock back only after the real claim commits.
+        // No call-count schedule or replacement ledger decides that boundary.
+        val clock = {
+            if (f.ledger.revision(key)!!.notificationClaim == null) DUE else DUE - 1
+        }
+        f.effects.afterNotify = { assertEquals(DUE - 1, clock()) }
+        CompanionReminderRunner(f.ledger, f.effects, EXECUTOR, clock).alarm(key)
+        assertEquals(listOf(key), f.effects.notified)
+        assertEquals(1L, f.count("task_rev=3 AND step_key='notification' AND event_kind='returned' AND outcome='succeeded'"))
+        assertEquals(0L, f.count("task_rev=3 AND step_key='notification' AND event_kind='skipped'"))
+
+        f.reopen()
+        f.now = DUE + 1
+        assertTrue(f.runner().resume("t"))
+        f.runner().alarm(key)
+        assertEquals(listOf(key), f.effects.notified)
+        assertEquals(1L, f.count("task_rev=3 AND step_key='notification' AND event_kind='claimed'"))
     }
 
     fun testLookupUpgradeKeepsReminderRecoveryAndDoesNotExecuteTheLookupTask() {
