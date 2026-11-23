@@ -332,7 +332,7 @@ void main() {
     final archive = store.archive;
     final card = store.cards().single;
     reopenFromV4();
-    expect(database.select('PRAGMA user_version').single['user_version'], 16);
+    expect(database.select('PRAGMA user_version').single['user_version'], 17);
     expect(store.archive, archive);
     expect(mapping()['source_fingerprint'], isNull);
     expect(mapping()['cleanup_read_revision'], 2);

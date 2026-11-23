@@ -319,6 +319,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
               'layer': row['layer'],
               'collection': row['collection'],
               'text': row['text'],
+              if (row['source'] != null) 'source': row['source'],
               if (row['local_day'] != null) 'local_day': row['local_day'],
             },
         ],
@@ -377,6 +378,11 @@ class CompanionMemoryOwner extends ChangeNotifier {
       'historyAfterSeq': archive['history_after_seq'],
       'block': selection.block,
     };
+  }
+
+  void clearNoticeMemories() {
+    store.clearNoticeMemories();
+    changed();
   }
 
   void changed() {

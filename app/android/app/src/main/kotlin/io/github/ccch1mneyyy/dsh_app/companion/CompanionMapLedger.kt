@@ -167,7 +167,7 @@ internal class CompanionMapLedger(private val database: SQLiteDatabase) : Closea
                 SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
                 DatabaseErrorHandler { throw SQLiteDatabaseCorruptException("Existing companion database is corrupt") })
             try {
-                check(database.version in 14..16) { "Map schema is not ready" }
+                check(database.version in 14..17) { "Map schema is not ready" }
                 database.setForeignKeyConstraintsEnabled(true)
                 val ledger = CompanionMapLedger(database)
                 ledger.transaction {

@@ -96,7 +96,7 @@ void main() {
     expect(command['possible_sent_at_ms'], isNull);
     expect((command['request']! as MemoryRow)['args'], receiptAgreement()['args']);
     expect((command['request']! as MemoryRow).containsKey('hostStoreId'), isFalse);
-    expect(database.select('PRAGMA user_version').single['user_version'], 16);
+    expect(database.select('PRAGMA user_version').single['user_version'], 17);
     expect(store.requests(), isEmpty);
     store.deleteMessage(id: 'source', expectedSourceRev: 1);
     reopen();

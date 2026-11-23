@@ -260,7 +260,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
 
   MemorySelection _agentRecallSelection(Row turn, MemoryRow input, List<String>? rankedIds) {
     final query = _agentText(input, 'query');
-    final candidates = memoryRetrievalCandidates(characterId: turn['character_id'] as String?, input: query);
+    final candidates = [
+      for (final card in memoryRetrievalCandidates(characterId: turn['character_id'] as String?, input: query))
+        if (turn['origin_kind'] == 'chat' || card['collection'] != 'recent') card,
+    ];
     final explicit = explicitMemoryTopics(query, candidates);
     final revision = archive['control_revision']! as int;
     return rankedIds == null
@@ -584,7 +587,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
 
   List<MemoryRow> _agentRelated(Row turn, MemoryRow input) {
     final character = turn['character_id'] as String?;
-    final domain = _memoryDomainCards(character);
+    final domain = [
+      for (final card in _memoryDomainCards(character))
+        if (turn['origin_kind'] == 'chat' || card['collection'] != 'recent') card,
+    ];
     final wanted = <String>{};
     final requiredEffects = <String>{};
     final root = input['card'];
@@ -609,6 +615,8 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     final result = <MemoryRow>[];
     for (final card in domain) {
       final id = card['id'] as String;
+      final expiredNotice = card['collection'] == 'recent' && (card['expires_at_ms'] as int) <= _checkedNow();
+      if (expiredNotice) continue;
       final stale = !_memoryReferencesCurrent(id);
       if (card['status'] == 'withdrawn' || (!wanted.contains(id) && !stale)) continue;
       shown[id] = card['row_rev'] as int;
@@ -620,6 +628,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         'stale': stale,
         'required_effect': requiredEffects.contains(id),
         if (stale) 'reason': 'reference_changed',
+        if (card['collection'] == 'recent') 'source': _noticeSource(id),
         if (!stale) ...{
           'text': card['text'],
           'keywords': card['keywords'],
@@ -646,6 +655,9 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     bool preserveProof = false,
     ({int basis, int sourceAt})? Function(String)? plannedReference,
   }) {
+    if (previous?['collection'] == 'recent' || input['collection'] == 'recent') {
+      throw const _AgentMemoryRejected('notice_requires_user_source');
+    }
     final text = _agentText(input, 'text');
     final collection = previous?['collection'] as String? ?? input['collection'] as String? ?? 'about_you';
     final private = const ['our_story', 'impression'].contains(collection);
@@ -682,6 +694,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     for (final reference in rawRefs.cast<String>()) {
       if (reference == id || deleted.contains(reference)) throw const _AgentMemoryRejected('invalid_reference');
       final card = _agentCard(turn, reference);
+      if (card['collection'] == 'recent') throw const _AgentMemoryRejected('notice_requires_user_source');
       if ((card['character_id'] != null && card['character_id'] != character) ||
           (!planned.containsKey(reference) && !_memoryReferencesCurrent(reference))) {
         throw const _AgentMemoryRejected('reference_not_current');
@@ -1001,7 +1014,8 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     };
     final target = rows[targetId]!;
     for (final row in rows.values) {
-      if (row['collection'] != target['collection'] ||
+      if (row['collection'] == 'recent' ||
+          row['collection'] != target['collection'] ||
           row['character_id'] != target['character_id'] ||
           !_memoryReferencesCurrent(row['id'] as String)) {
         throw const _AgentMemoryRejected('merge_domain_changed');

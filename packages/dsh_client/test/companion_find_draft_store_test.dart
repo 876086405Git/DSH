@@ -240,7 +240,7 @@ void main() {
     expect(create('source'), task);
     expect(store.hostTaskCommands(id).single, original);
     expect(store.hostTask(id)!['agreement'], agreement());
-    expect(database.select('PRAGMA user_version').single['user_version'], 16);
+    expect(database.select('PRAGMA user_version').single['user_version'], 17);
   });
 
   test(

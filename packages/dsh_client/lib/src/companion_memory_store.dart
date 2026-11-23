@@ -23,6 +23,7 @@ part 'companion_memory_scope_store.dart';
 part 'companion_memory_maintenance_store.dart';
 part 'companion_affinity_store.dart';
 part 'companion_memory_embedding_store.dart';
+part 'companion_notice_store.dart';
 
 const _memoryEvidenceSelect = '''
   SELECT s.*, m.role, m.scope, m.first_seq, m.said_at_utc, m.offset_minutes, m.edited_at_utc
@@ -83,7 +84,7 @@ class CompanionMemoryStore {
       _db.execute('PRAGMA foreign_keys = ON');
       _db.execute('PRAGMA busy_timeout = 1000');
       final version = _db.select('PRAGMA user_version').single['user_version'] as int;
-      if (version > 16) {
+      if (version > 17) {
         throw const DshRemoteException('companion/newer-store', 'This memory store needs a newer app', {'status': 409});
       }
       if (version == 0) {
@@ -307,6 +308,7 @@ class CompanionMemoryStore {
           _db.execute('PRAGMA user_version = 16');
         });
       }
+      if (version < 17) _migrateNotices();
       _transaction(() {
         // A cold process can read old effects, but cannot retry an unknown
         // dispatched maintenance source under a new claim identity.
@@ -376,6 +378,7 @@ class CompanionMemoryStore {
   MemoryRow _card(Row row, {bool includeEvidence = true}) => {
     ...row,
     'layer': _memoryLayer(row.containsKey('collection') ? row['collection'] as String : 'about_you'),
+    if (row['collection'] == 'recent') 'source': _noticeSource(row['id'] as String),
     'keywords': (jsonDecode(row['keywords'] as String) as List).cast<String>(),
     'pinned': row['pinned'] == 1,
     'eligible': row['eligible'] == 1,
@@ -1221,6 +1224,7 @@ class CompanionMemoryStore {
       final rows = _db.select('SELECT topic_id FROM memory_cards WHERE id=?', [id]);
       if (rows.isEmpty) continue;
       _db.execute("UPDATE memory_migrations SET result='forgotten' WHERE local_card_id=?", [id]);
+      _forgetNoticeCard(id);
       _db.execute('DELETE FROM memory_cards WHERE id=?', [id]);
       _db.execute('DELETE FROM memory_topics WHERE id=? AND NOT EXISTS(SELECT 1 FROM memory_cards WHERE topic_id=?)', [
         rows.single['topic_id'],
@@ -1276,6 +1280,10 @@ class CompanionMemoryStore {
     final ending = RegExp(r'[。.!！?？]+$');
     final clauseBreak = RegExp(r'[，,。.;；\r\n]+');
     bool containsBody(MemoryRow card, MemoryRow old) {
+      // Equal words do not join independent external events or a later fact
+      // that the user supplied in their own chat. Notice references are not
+      // allowed, so these roots have only their explicit source identity.
+      if (card['collection'] == 'recent' || old['collection'] == 'recent') return false;
       final text = card['text'] as String;
       if (_containsCardText(text, old)) return true;
       final original = normalizeMemoryText(old['text'] as String);
@@ -1567,6 +1575,7 @@ class CompanionMemoryStore {
       _currentAnchor(card, at) && !const ['cancelled', 'postponed'].contains(card['plan_state']);
 
   bool _currentAnchor(MemoryRow card, int at) =>
+      card['collection'] != 'recent' &&
       card['scope'] == 'real' &&
       card['eligible'] == true &&
       card['status'] == 'current' &&
@@ -2032,7 +2041,8 @@ class CompanionMemoryStore {
     final cutoff = archive['history_after_seq'] as int;
     final rows = <MemoryRow>[];
     for (final card in source ?? cards()) {
-      if (card['scope'] != 'real' ||
+      if (card['collection'] == 'recent' ||
+          card['scope'] != 'real' ||
           card['eligible'] != true ||
           card['topic_mode'] == 'never' ||
           const ['cancelled', 'postponed'].contains(card['plan_state']) ||
@@ -2263,7 +2273,7 @@ class CompanionMemoryStore {
     String? batchId,
     String? maintenanceClaimId,
   }) {
-    if (!const ['chat', 'extract', 'organize', 'followup'].contains(category) ||
+    if (!const ['chat', 'extract', 'organize', 'followup', 'notice'].contains(category) ||
         provider.isEmpty ||
         model.isEmpty ||
         _usageCount(inputTokens) == null ||
@@ -2989,7 +2999,16 @@ class CompanionMemoryStore {
     required int maxPerDay,
     required int gapMs,
     String? followupId,
+    String? noticeEventId,
+    String? noticePersonId,
   }) {
+    if (noticeEventId != null) {
+      _noticeIdentity(noticeEventId);
+      if (noticePersonId != null) _noticeIdentity(noticePersonId);
+      if (kind != 'signal' || followupId != null) throw ArgumentError('A notice must be a signal');
+    } else if (noticePersonId != null) {
+      throw ArgumentError('Missing notice event');
+    }
     if (nowMs < 0 || nowMs > 8640000000000000) throw ArgumentError('Invalid initiative clock');
     return _transaction(() {
       final states = _db.select('SELECT * FROM memory_initiative_state WHERE singleton=1');
@@ -3007,6 +3026,9 @@ class CompanionMemoryStore {
         [nowMs - 86400000],
       );
       if (spent.length >= maxPerDay || (spent.isNotEmpty && nowMs - (spent.last['at'] as int) < gapMs)) return null;
+      if (noticeEventId != null && !_noticeMaySpeak(eventId: noticeEventId, personId: noticePersonId, nowMs: nowMs)) {
+        return null;
+      }
       if (kind == 'followup') {
         if (spent.any((row) => row['kind'] == 'followup')) return null;
         final rows = _db.select('SELECT * FROM memory_followups WHERE id=?', [followupId]);
@@ -3022,6 +3044,9 @@ class CompanionMemoryStore {
       ''',
         [id, followupId, kind, nowMs],
       );
+      if (noticeEventId != null) {
+        _db.execute('INSERT INTO memory_notice_spends(spend_id,person_id) VALUES(?,?)', [id, noticePersonId]);
+      }
       return id;
     });
   }
@@ -3291,6 +3316,13 @@ class CompanionMemoryStore {
       final id = memory.id.toLowerCase();
       final rows = _db.select('SELECT * FROM memory_cards WHERE id = ?', [id]);
       final previous = rows.isEmpty ? null : rows.single;
+      if (previous?['collection'] == 'recent') {
+        throw const DshRemoteException(
+          'companion/notice-readonly',
+          'Notice summaries can be forgotten; chat confirmation creates a separate memory',
+          {'status': 400},
+        );
+      }
       if ((previous == null && expectedRowRev != null) || (previous != null && previous['row_rev'] != expectedRowRev)) {
         throw _conflict;
       }
