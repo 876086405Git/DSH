@@ -33,6 +33,10 @@ sealed class LauncherEntry {
     return switch (raw['kind']) {
       'new' => NewChatEntry(text: text),
       'voice' => NewChatEntry(voice: true, text: text),
+      'companion_assistant' => CompanionAssistantEntry(
+        page: raw['page'] is String ? raw['page'] as String : null,
+        returnToApp: raw['returnToApp'] == true,
+      ),
       'screenshot' when path is String && path.startsWith('/') && !path.contains('\u0000') => ScreenshotEntry(path),
       'chat' when sessionId is String && sessionId.isNotEmpty => OpenChatEntry(
         HostRef.decode(host is String ? host : null),
@@ -53,6 +57,14 @@ class NewChatEntry extends LauncherEntry {
   final String text;
 
   final bool voice;
+}
+
+/// The Android digital assistant opened the room, optionally with a system Assist snapshot.
+class CompanionAssistantEntry extends LauncherEntry {
+  const CompanionAssistantEntry({this.page, this.returnToApp = false});
+
+  final String? page;
+  final bool returnToApp;
 }
 
 /// A pet screenshot in the app's private cache, authenticated by the native

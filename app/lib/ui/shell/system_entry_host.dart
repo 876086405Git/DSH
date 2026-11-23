@@ -38,6 +38,7 @@ import '../../state/draft_store.dart';
 import '../../state/hosts_state.dart';
 import '../../state/sessions_state.dart';
 import '../common/discard_guard.dart';
+import '../companion/companion_page.dart';
 import '../companion/companion_tasks_page.dart';
 import '../tavern/tavern_deepseek_import.dart';
 import '../tavern/tavern_intake.dart';
@@ -179,6 +180,8 @@ class _SystemEntryHostState extends ConsumerState<SystemEntryHost> {
             ),
           );
         }
+      case CompanionAssistantEntry():
+        if (mounted) await openCompanionAssistant(context, ref, entry);
     }
   }
 

@@ -155,7 +155,7 @@ extension _ScriptRegexWriter on _ScriptCoordinator {
               },
             ),
           );
-          engine._cacheCharacterDetail(id, Future.value(stored));
+          engine._cacheCharacterRecord(id, stored);
           engine._notifyLists();
         case TavernScriptRegexWriteKind.preset:
           // This delegate owns its real stored/RAM adoption and post-adoption errors.

@@ -40,6 +40,7 @@ import '../../companion/companion_voice.dart';
 import '../../companion/companion_voice_source.dart';
 import '../../companion/companion_widget.dart';
 import '../../l10n/l10n.dart';
+import '../../links/launcher_entries.dart';
 import '../../notify/chat_alerts.dart' show CompanionAlertDelivery, companionHostKey;
 import '../../pets/pet_mood.dart' show PetEvent, PetEventKind;
 import '../../pets/pet_signals.dart' show petEventBusProvider;
@@ -47,6 +48,7 @@ import '../../pets/pet_state.dart';
 import '../../speech/speech_settings.dart';
 import '../../speech/voice_cloud.dart';
 import '../../state/app_mode_state.dart';
+import '../../state/android_features.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
 import '../../state/models_state.dart';
@@ -74,6 +76,7 @@ import '../shell/page_frame.dart';
 import '../workshop/workshop_screen.dart';
 import '../workspace/directory_picker.dart';
 import 'companion_chrome.dart';
+import 'companion_assistant_settings.dart';
 import 'companion_draft_inputs.dart';
 import 'companion_receipt_inputs.dart';
 import 'companion_log.dart';
@@ -96,6 +99,17 @@ enum _Phase { checking, setup, stage, failed }
 
 typedef CompanionStageBuilder = Widget Function(CompanionStageController controller, CompanionStageEvents events);
 
+typedef _AssistantReceiver = bool Function(CompanionAssistantEntry);
+final _assistantRooms = Provider((_) => <_AssistantReceiver>[]);
+
+Future<void> openCompanionAssistant(BuildContext context, WidgetRef ref, CompanionAssistantEntry entry) async {
+  if (ref.read(_assistantRooms).reversed.any((receive) => receive(entry))) return;
+  await Navigator.of(
+    context,
+    rootNavigator: true,
+  ).push(MaterialPageRoute<void>(builder: (_) => CompanionPage(assistantEntry: entry)));
+}
+
 class CompanionPage extends ConsumerStatefulWidget {
   const CompanionPage({
     super.key,
@@ -104,12 +118,14 @@ class CompanionPage extends ConsumerStatefulWidget {
     this.stageController,
     this.bundledPack,
     this.sections = false,
+    this.assistantEntry,
   });
 
   /// The whole 伙伴小屋 section: her room, what she remembers, what you asked
   /// her to do and her own page, under one bar along the bottom. Without it,
   /// just the room with its ⋯ panel.
   final bool sections;
+  final CompanionAssistantEntry? assistantEntry;
 
   /// Tests point this at a temporary folder.
   final CompanionPackStore? storeOverride;
@@ -135,6 +151,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   final _focus = FocusNode();
   final _random = Random();
   late final VoiceInputController _voice;
+  late final List<_AssistantReceiver> _assistantReceivers;
+  bool _assistantVoicePending = false;
+  bool _assistantReturnToApp = false;
+  String? _assistantPage;
 
   CompanionPackStore? _store;
   String? _characterSourceKey;
@@ -338,10 +358,18 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         if (state != AppLifecycleState.resumed) {
           _notesForegroundEpoch++;
           _mapHandoff.close();
+          if (state == AppLifecycleState.paused && (_assistantPage != null || _assistantReturnToApp)) {
+            setState(() {
+              _assistantPage = null;
+              _assistantReturnToApp = false;
+              _assistantVoicePending = false;
+            });
+          }
         } else if (mounted) {
           // A reply can finish while this window is paused. Its next actual
           // frame, even without another Agent notification, may present it.
           setState(() {});
+          scheduleMicrotask(_startAssistantVoice);
         }
         _observeInitiative();
         _observeLateUse();
@@ -394,7 +422,41 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     }, fireImmediately: true);
     _focus.addListener(_refreshMood);
     _input.addListener(_inputChanged);
+    _assistantReceivers = ref.read(_assistantRooms)..add(_receiveAssistant);
+    if (widget.assistantEntry case final entry?) {
+      _assistantVoicePending = true;
+      _assistantPage = entry.page;
+      _assistantReturnToApp = entry.returnToApp;
+    }
     unawaited(_prepare());
+  }
+
+  bool _receiveAssistant(CompanionAssistantEntry entry) {
+    if (_leaving || !_attachment.isAttached || ModalRoute.of(context)?.isCurrent != true) return false;
+    _selectTab(_CompanionTab.room);
+    _closeLog();
+    setState(() {
+      _assistantPage = entry.page;
+      _assistantReturnToApp = entry.returnToApp;
+      _assistantVoicePending = true;
+    });
+    _startAssistantVoice();
+    return true;
+  }
+
+  void _startAssistantVoice() {
+    if (!mounted ||
+        !_assistantVoicePending ||
+        _phase != _Phase.stage ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    _assistantVoicePending = false;
+    if (_input.text.isNotEmpty || _attachment.preparing) return;
+    _acted();
+    _retireGreeting();
+    _hush();
+    unawaited(_voice.start());
   }
 
   Future<void> _prepare() async {
@@ -415,6 +477,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     // The first time, the pack inside the app is unpacked while she swims over.
     // After the person removed it, it waits on the setup screen to be asked for.
     if (!installed && bundled && !removed) await _installBundled(arriving: true);
+    _startAssistantVoice();
   }
 
   Future<bool> _hasBundled() async {
@@ -429,6 +492,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   @override
   void dispose() {
+    _assistantReceivers.remove(_receiveAssistant);
     _mapHandoff.close();
     // Leaving her: no invitation follows, and nothing comes back to this page.
     _leaving = true;
@@ -1911,14 +1975,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   Future<void> _send() async {
     final raw = _input.text;
     if (raw.trim().isEmpty || _attachment.preparing || !_attachment.isAttached) return;
+    final page = _assistantPage;
+    final returnToApp = _assistantReturnToApp;
     _acted();
     _hush();
     _retireGreeting();
-    if (_voice.active) unawaited(_voice.cancel());
+    if (_voice.active || _voice.cancelling) {
+      await _voice.cancel();
+      if (!mounted || _attachment.preparing || !_attachment.isAttached) return;
+    }
     _notesSelectionRoutes.clear();
     _bubbleTimer?.cancel();
     _objectTimer?.cancel();
     setState(() {
+      _assistantPage = null;
+      _assistantReturnToApp = false;
       _bubble = null;
       _myLine = raw.trim();
       _lookupResults = const [];
@@ -1926,7 +1997,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _mapResults = const [];
     });
     _stage.command('mood', {'mood': 'thinking'});
-    await _attachment.submit(raw);
+    await _attachment.submit(raw, assistantPage: page, returnToApp: returnToApp);
   }
 
   void _checkNotesSelectionRoute() {
@@ -2784,6 +2855,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         title: l10n.companionPanelTalk,
         margin: groupMargin,
         children: [
+          if (ref.watch(operatingSystemProvider) == 'android')
+            SettingsTile(
+              icon: AppIcons.companionVoice,
+              tinted: false,
+              title: l10n.companionSystemAssistant,
+              onTap: () => run(() => unawaited(showCompanionAssistantSettings(context))),
+            ),
           SettingsTile(
             icon: light ? AppIcons.engineStarting : AppIcons.engine,
             tinted: false,
@@ -3203,6 +3281,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                   onDecline: () => _answerInvite(yes: false),
                 ),
                 const SizedBox(height: 10),
+                if (_assistantPage != null)
+                  InputChip(
+                    label: Text(l10n.companionAssistantPageAttached),
+                    onDeleted: () => setState(() => _assistantPage = null),
+                  ),
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: _input,
                   builder: (context, value, _) => CompanionComposer(

@@ -314,6 +314,25 @@ void main() {
     expect(rig.wire.calls, isEmpty);
   });
 
+  testWidgets('a new capture waits for the prior cancellation acknowledgement', (tester) async {
+    final rig = _Rig(mode: VoiceMode.engine);
+    await rig.voice.start();
+    final cleanup = Completer<void>();
+    rig.bridge.cancelGate = cleanup;
+    addTearDown(() {
+      if (!cleanup.isCompleted) cleanup.complete();
+    });
+    final release = rig.voice.cancel();
+    expect(rig.voice.cancel(), same(release));
+    final next = rig.voice.start();
+    await _flush(tester);
+    expect(rig.bridge.calls.where((s) => s.startsWith('recorder:')), hasLength(1));
+    cleanup.complete();
+    await release;
+    await next;
+    expect(rig.bridge.calls.where((s) => s.startsWith('recorder:')), hasLength(2));
+  });
+
   testWidgets('late mode load from a canceled attempt cannot change new explicit system routing', (tester) async {
     final oldMode = Completer<VoiceMode>();
     var choices = 0;

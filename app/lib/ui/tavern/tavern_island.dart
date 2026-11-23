@@ -360,6 +360,7 @@ class _TavernHtmlIslandState extends ConsumerState<TavernHtmlIsland> {
   void dispose() {
     _IslandQueue.instance.leave(this);
     _guard.dispose();
+    if (!_gone) WebViewGuard.release(_controller);
     _toasts.dispose();
     super.dispose();
   }

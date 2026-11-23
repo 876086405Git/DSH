@@ -58,6 +58,8 @@ class VoicePlugin :
     private var recorder: WavRecorder? = null
     private var recognizerMic = 0
     private var recorderMic = 0
+    private var releasingRecorders = 0
+    private val afterRecorderRelease = ArrayList<() -> Unit>()
     private var generation = 0L
     private var pendingPermission: MethodChannel.Result? = null
 
@@ -130,7 +132,8 @@ class VoicePlugin :
             "stop" -> stop(result)
             "cancel" -> {
                 releaseAll()
-                result.success(null)
+                if (releasingRecorders == 0) result.success(null)
+                else afterRecorderRelease += { result.success(null) }
             }
             else -> result.notImplemented()
         }
@@ -244,16 +247,17 @@ class VoicePlugin :
         override fun onError(error: Int) {
             if (!current()) return
             VoiceDiagnostics.failure(appContext, environment, error, "listen")
-            emit(sessionId, mapOf("type" to "error", "code" to error))
             releaseRecognizer()
+            emit(sessionId, mapOf("type" to "error", "code" to error))
             emit(sessionId, mapOf("type" to "end"))
         }
 
         override fun onResults(results: Bundle?) {
             if (!current()) return
-            if (firstText(results).isNotEmpty()) VoiceDiagnostics.success(appContext, environment)
-            emit(sessionId, mapOf("type" to "final", "text" to firstText(results)))
+            val text = firstText(results)
+            if (text.isNotEmpty()) VoiceDiagnostics.success(appContext, environment)
             releaseRecognizer()
+            emit(sessionId, mapOf("type" to "final", "text" to text))
             emit(sessionId, mapOf("type" to "end"))
         }
 
@@ -309,10 +313,7 @@ class VoicePlugin :
         val mic = MicArbiter.beginDictation()
         val started = runCatching { r.start() }
         if (started.getOrDefault(false) != true) {
-            Thread {
-                runCatching { r.discard() }
-                main.post { MicArbiter.endDictation(mic) }
-            }.start()
+            releaseRecorder(mic, r::discard) {}
             VoiceDiagnostics.failure(appContext, environment, 100, "record", started.exceptionOrNull())
             return result.error("audio", "the microphone could not be opened", mapOf("code" to 100))
         }
@@ -339,15 +340,11 @@ class VoicePlugin :
         val mic = recorderMic
         val environment = VoiceDiagnostics.environment(appContext)
         // Joining the capture thread and building the WAV can take a moment.
-        Thread {
-            val recorded = runCatching { r.finish() }
+        releaseRecorder(mic, r::finish) { recorded ->
             if (recorded.isFailure) VoiceDiagnostics.failure(appContext, environment, 100, "record", recorded.exceptionOrNull())
-            main.post {
-                MicArbiter.endDictation(mic)
-                if (recorded.isFailure) result.error("audio", "could not finish recording", mapOf("code" to 100))
-                else result.success(recorded.getOrNull())
-            }
-        }.start()
+            if (recorded.isFailure) result.error("audio", "could not finish recording", mapOf("code" to 100))
+            else result.success(recorded.getOrNull())
+        }
     }
 
     private fun releaseAll() {
@@ -355,12 +352,25 @@ class VoicePlugin :
         releaseRecognizer()
         recorder?.let { r ->
             recorder = null
-            val mic = recorderMic
-            Thread {
-                runCatching { r.discard() }
-                main.post { MicArbiter.endDictation(mic) }
-            }.start()
+            releaseRecorder(recorderMic, r::discard) {}
         }
+    }
+
+    private fun <T> releaseRecorder(mic: Int, work: () -> T, finished: (Result<T>) -> Unit) {
+        releasingRecorders++
+        Thread {
+            val outcome = runCatching(work)
+            main.post {
+                MicArbiter.endDictation(mic)
+                releasingRecorders--
+                finished(outcome)
+                if (releasingRecorders == 0) {
+                    val callbacks = afterRecorderRelease.toList()
+                    afterRecorderRelease.clear()
+                    callbacks.forEach { it() }
+                }
+            }
+        }.start()
     }
 
     // EventChannel

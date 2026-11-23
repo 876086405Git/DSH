@@ -5054,6 +5054,42 @@ class L10nZh extends L10n {
   String get companionVoice => '语音';
 
   @override
+  String get companionSystemAssistant => '系统数字助理';
+
+  @override
+  String get companionAssistantChoose => '选择默认数字助理';
+
+  @override
+  String get companionAssistantChooseHint => '在 Android 设置选中 DSH Go 小屋伙伴，再用手机的助理手势或按键唤起。';
+
+  @override
+  String get companionAssistantSelected => '小屋伙伴已设为默认助理。再次打开可切换回其他助理。';
+
+  @override
+  String get companionAssistantSettingsMissing => '找不到助理选择页。请在系统设置搜索「默认数字助理」。';
+
+  @override
+  String get companionAssistantSharePage => '带上唤起时的页面文字';
+
+  @override
+  String get companionAssistantSharePageHint => '仅使用 Android 允许提供的文字，发送本轮问题时交给伙伴模型。你可以在发送前移除。';
+
+  @override
+  String get companionAssistantPageAttached => '已附当前页面文字';
+
+  @override
+  String get companionAssistantCalendarAccess => '允许读取日历';
+
+  @override
+  String get companionAssistantCalendarHint => '让伙伴和手机工具读取可见日程。查询结果会发给当前模型。';
+
+  @override
+  String get companionAssistantCalendarAllowed => '已授权读取。点此可在系统应用权限中撤回。';
+
+  @override
+  String get companionAssistantAppPermissions => '打开系统应用权限';
+
+  @override
   String get companionStop => '让她停下';
 
   @override

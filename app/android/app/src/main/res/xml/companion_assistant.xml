@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:recognitionService="io.github.ccch1mneyyy.dsh_app.companion.CompanionAssistantRecognitionService"
+    android:sessionService="io.github.ccch1mneyyy.dsh_app.companion.CompanionAssistantSessionService"
+    android:supportsAssist="true"
+    android:supportsLaunchVoiceAssistFromKeyguard="true" />

@@ -66,6 +66,19 @@ void main() {
       expect((entry as ScreenshotEntry).path, '/cache/pet-screenshots/slot/screen.png');
     });
 
+    test('the system assistant opens the room even when Android shares no page', () {
+      final plain = LauncherEntry.parse({'kind': 'companion_assistant', 'page': null}) as CompanionAssistantEntry;
+      expect(plain.page, isNull);
+      expect(plain.returnToApp, isFalse);
+      final entry = LauncherEntry.parse({
+        'kind': 'companion_assistant',
+        'page': 'Train arrives at 9:30',
+        'returnToApp': true,
+      }) as CompanionAssistantEntry;
+      expect(entry.page, 'Train arrives at 9:30');
+      expect(entry.returnToApp, isTrue);
+    });
+
     test('a reminder notification retains its task and the revision that was opened', () {
       final entry = LauncherEntry.parse({'kind': 'companion_task', 'taskId': 'task-one', 'taskRev': 2});
       expect(entry, isA<OpenCompanionTaskEntry>());

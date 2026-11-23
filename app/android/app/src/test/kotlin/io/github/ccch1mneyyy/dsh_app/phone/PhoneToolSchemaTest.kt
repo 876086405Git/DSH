@@ -1,6 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
 import java.time.ZoneId
+import java.time.LocalDate
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
@@ -10,6 +11,7 @@ class PhoneToolSchemaTest {
     private val intents = mutableListOf<IntentSpec>()
     private val actions = mutableListOf<PhoneAction>()
     private val pages = mutableListOf<Int>()
+    private val calendarQueries = mutableListOf<Triple<LocalDate, LocalDate, ZoneId>>()
     private var confirmations = 0
     private val confirmationText = mutableListOf<String>()
     private val driver = object : PhoneDriver {
@@ -55,6 +57,10 @@ class PhoneToolSchemaTest {
             override fun notify(title: String, text: String): SysResult = error("unexpected notification")
             override fun clipboardSet(text: String): SysResult = error("unexpected clipboard")
             override fun clipboardGet(): SysResult = error("unexpected clipboard")
+            override fun calendarList(start: LocalDate, until: LocalDate, zone: ZoneId): SysResult {
+                calendarQueries += Triple(start, until, zone)
+                return SysResult(true, """{"status":"verified","events":[]}""")
+            }
         }
     }, PhoneTasks(), ActionLog())
 
@@ -65,7 +71,7 @@ class PhoneToolSchemaTest {
         val json = checkNotNull(server.handle(Json.write(mapOf("jsonrpc" to "2.0", "id" to 1, "method" to "tools/list"))))
         val listed = ((Json.parse(json) as Map<*, *>)["result"] as Map<*, *>)["tools"] as List<*>
         assertEquals(PhoneToolCatalog.listJson(), listed)
-        assertEquals(listOf("android_shell", "apps", "open", "intent", "notify", "clipboard", "screen", "collect", "tap", "type", "scroll", "key", "tap_xy", "handoff", "diagnostics"),
+        assertEquals(listOf("android_shell", "apps", "open", "intent", "notify", "clipboard", "screen", "collect", "tap", "type", "scroll", "key", "tap_xy", "handoff", "diagnostics", "calendar_list"),
             listed.map { (it as Map<*, *>)["name"] })
         for (tool in listed) {
             val schema = (tool as Map<*, *>)["inputSchema"] as Map<*, *>
@@ -73,7 +79,7 @@ class PhoneToolSchemaTest {
         }
         assertFalse(json.contains("\"minimum\""))
         assertFalse(json.contains("\"maximum\""))
-        assertEquals(15, PhoneToolCatalog.tools.size)
+        assertEquals(16, PhoneToolCatalog.tools.size)
         val tap = PhoneToolCatalog.tools.single { it.name == PhoneToolCatalog.TAP_XY }
         assertEquals(listOf("observation", "x", "y"), tap.required)
         assertEquals(listOf("observation", "x", "y", "action", "x2", "y2", "duration_ms"), tap.properties.keys.toList())
@@ -97,6 +103,21 @@ class PhoneToolSchemaTest {
         val days = intent.properties["days"] as Map<*, *>
         assertEquals(mapOf("type" to "integer"), days["items"])
         assertTrue((days["description"] as String).contains("1=周一 … 7=周日"))
+    }
+
+    @Test fun calendarQueryUsesPhoneZoneAndDoesNotNeedAScreen() {
+        val name = PhoneToolCatalog.CALENDAR_LIST
+        val args = mapOf("start_date" to "2026-11-23", "end_date" to "2026-11-24")
+        assertEquals(emptyList<PhoneScreen>(), (core.requiredScreens(name, args) as Either.Right).value)
+        for (end in listOf("2026-11-23", "2027-01-01", "tomorrow")) {
+            assertTrue(core.call(name, args + ("end_date" to end)).isError)
+        }
+        assertTrue(calendarQueries.isEmpty())
+        assertFalse(core.call(name, args).isError)
+        assertEquals(listOf(Triple(LocalDate.of(2026, 11, 23), LocalDate.of(2026, 11, 24),
+            ZoneId.of("Asia/Shanghai"))), calendarQueries)
+        assertTrue(intents.isEmpty())
+        assertTrue(actions.isEmpty())
     }
 
     @Test fun alarmTimeAndWeekdayBoundsStillRejectBeforeSystemDispatch() {

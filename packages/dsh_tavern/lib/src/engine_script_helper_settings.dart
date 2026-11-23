@@ -249,7 +249,7 @@ extension _ScriptHelperSettings on _ScriptCoordinator {
               },
             ),
           );
-          engine._cacheCharacterDetail(owner.assetId!, Future.value(stored));
+          engine._cacheCharacterRecord(owner.assetId!, stored);
           engine._notifyLists();
         case TavernScriptOwnerKind.preset:
           await engine._presetOperation(() async {

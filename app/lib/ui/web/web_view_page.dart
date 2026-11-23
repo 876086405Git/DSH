@@ -1012,6 +1012,7 @@ class _WebViewPageState extends State<WebViewPage> {
     _keyboardRest?.cancel();
     _files.dispose();
     _guard.dispose();
+    if (!_gone) WebViewGuard.release(_controller);
     _lifecycle.dispose();
     super.dispose();
   }
