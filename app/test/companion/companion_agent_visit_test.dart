@@ -913,6 +913,13 @@ void main() {
       expect(visit.attachment.error, isNull);
       expect(visit.requests, hasLength(4));
       expect(jsonEncode(visit.requests[1]), contains(oldText));
+      final recalledResult = <Map>[
+        for (final message in (visit.requests[1]['messages']! as List).cast<Map>())
+          if (message['role'] == 'user' && message['content'] is List)
+            for (final row in (message['content']! as List).cast<Map>())
+              if (row['type'] == 'tool_result') row,
+      ].singleWhere((row) => row['tool_use_id'] == 'private-recall');
+      expect((jsonDecode(recalledResult['content']! as String) as Map).containsKey('control'), isFalse);
       expect(jsonEncode(visit.requests[2]), isNot(contains(oldText)));
       expect(jsonEncode(visit.requests[2]), contains(newText));
       final finalBody = jsonEncode(visit.requests.last);
@@ -1009,6 +1016,17 @@ void main() {
       final quietDefinition = (visit.requests[6]['tools']! as List).cast<Map>().singleWhere((tool) => tool['name'] == 'quiet');
       final quietProperties = (quietDefinition['input_schema']! as Map)['properties']! as Map;
       expect((quietProperties['mode']! as Map)['enum'], unorderedEquals(['less', 'never', 'normal']));
+      expect(quietProperties['topic'], containsPair('type', 'string'));
+      final quietSchema = quietDefinition['input_schema']! as Map;
+      expect(quietSchema['required'], ['mode']);
+      expect(quietSchema['oneOf'], [
+        {'required': ['card'], 'not': {'required': ['topic']}},
+        {
+          'required': ['topic'],
+          'not': {'required': ['card']},
+          'properties': {'mode': {'enum': ['normal']}},
+        },
+      ]);
       expect(jsonEncode(visit.requests[7]), isNot(contains(rawText)));
       final rawResults = <Map>[
         for (final message in (visit.requests[7]['messages']! as List).cast<Map>())

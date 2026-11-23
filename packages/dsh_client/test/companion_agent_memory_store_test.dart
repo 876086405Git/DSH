@@ -182,6 +182,145 @@ void main() {
     expect(store.cards(includeInactive: true), beforeCards);
     expect(store.archive, beforeArchive);
     expect(store.agentToolCall(turnId: attempt, callId: 'ambiguous-write')!.state, 'ignored');
+
+    // Three actual sources create independent topics before any star control.
+    // Keep the original live-topic ambiguity above: restoring empty controls
+    // must not guess that two independently controlled facts are one topic.
+    final otherControls = store.topicControls();
+    const starText = '我们喜欢一起看星星。';
+    final stars = <String>[];
+    for (final sourceId in const ['star-one', 'star-two', 'star-three']) {
+      final making = begin(sayAs(sourceId, starText, a));
+      final made = call(making, 'remember-star', 'remember', {
+        'collection': 'our_story',
+        'text': starText,
+        'keywords': ['星星'],
+      });
+      expect(made.applied, isTrue);
+      stars.add(made.targetId!);
+      store.closeAgentTurn(making);
+    }
+    final starTopics = [for (final cardId in stars) actualCard(cardId)['topic_id']! as String];
+    expect(starTopics.toSet(), hasLength(3));
+    final quieting = begin(sayAs('stars-less', '以后少提星星。', a), stars.map(actualCard));
+    expect(call(quieting, 'less-one', 'quiet', {'card': stars[0], 'mode': 'less'}).applied, isTrue);
+    expect(call(quieting, 'less-two', 'quiet', {'card': stars[1], 'mode': 'less'}).applied, isTrue);
+    expect(call(quieting, 'less-three', 'quiet', {'card': stars[2], 'mode': 'less'}).applied, isTrue);
+    store.closeAgentTurn(quieting);
+    final merging = begin(sayAs('stars-merge', '把同一件看星星的事合成一条。', a), stars.map(actualCard));
+    final merged = call(merging, 'merge-three', 'merge', {'card': stars[0], 'from': stars.skip(1).toList()});
+    expect(merged.applied, isTrue);
+    expect(merged.changedCardIds, unorderedEquals(stars));
+    expect(actualCard(stars[0])['topic_mode'], 'less');
+    expect(store.cards(includeInactive: true).where((card) => stars.skip(1).contains(card['id'])), isEmpty);
+    store.closeAgentTurn(merging);
+
+    final restoringSource = sayAs('stars-allowed', '以后可以聊星星了，我们仍喜欢一起看星星。', a);
+    final restoring = begin(restoringSource, [actualCard(stars[0])]);
+    expect(call(restoring, 'normal-result', 'quiet', {'card': stars[0], 'mode': 'normal'}).applied, isTrue);
+    final emptyTopics = starTopics.skip(1).toSet();
+    final emptyControls = store.topicControls().where((row) => emptyTopics.contains(row['topic_id'])).toList();
+    expect(emptyControls, hasLength(2));
+    expect(emptyControls.every((row) => row['mode'] == 'less' && jsonEncode(row['anchors']) == '["星星"]'), isTrue);
+    final stillAmbiguous = call(restoring, 'stars-before-read', 'remember', {
+      'collection': 'our_story',
+      'text': starText,
+      'keywords': ['星星'],
+    });
+    expect(stillAmbiguous.code, 'ambiguous_controlled_topic');
+    final cardsBeforeRestore = store.cards(includeInactive: true);
+    final archiveBeforeRead = store.archive;
+    expect(
+      call(restoring, 'unread-topic', 'quiet', {'topic': starTopics[1], 'mode': 'normal'}).code,
+      'topic_not_in_turn',
+    );
+    expect(store.archive, archiveBeforeRead);
+    final otherRole = begin(sayAs('b-stars', '以后可以聊星星了。', b));
+    final otherRead = call(otherRole, 'b-read-stars', 'recall', {'query': '星星'});
+    expect(otherRead.applied, isTrue);
+    expect(otherRead.recalledControl, isNull);
+    expect(otherRead.recallSelection!.ids, isNot(contains(stars[0])));
+    expect(
+      call(otherRole, 'b-restore-stars', 'quiet', {'topic': starTopics[1], 'mode': 'normal'}).code,
+      'topic_not_in_turn',
+    );
+    store.closeAgentTurn(otherRole);
+
+    final beforeFirstRead = store.archive;
+    final firstRead = call(restoring, 'read-star-control', 'recall', {'query': '星星'});
+    expect(firstRead.applied, isTrue);
+    expect(firstRead.changedCardIds, isEmpty);
+    expect(firstRead.recallSelection!.ids, contains(stars[0]));
+    final firstTopic = firstRead.recalledControl!['topic_id']! as String;
+    expect(emptyTopics, contains(firstTopic));
+    expect(firstRead.targetId, firstTopic);
+    expect(firstRead.recalledControl, {'topic_id': firstTopic, 'mode': 'less', 'anchors': ['星星'], 'character_id': a});
+    expect(store.archive, beforeFirstRead);
+    final firstRestore = call(restoring, 'restore-first-control', 'quiet', {'topic': firstTopic, 'mode': 'normal'});
+    expect(firstRestore.applied, isTrue);
+    expect(firstRestore.changedCardIds, isEmpty);
+    expect(firstRestore.targetId, firstTopic);
+    final secondTopic = emptyTopics.singleWhere((topic) => topic != firstTopic);
+    final oldRead = call(restoring, 'read-star-control', 'recall', {'query': '星星'});
+    expect(oldRead.replayed, isTrue);
+    expect(oldRead.targetId, firstTopic);
+    expect(oldRead.recalledControl, isNull, reason: 'replaying a read cannot grant the next matching control');
+    expect(
+      call(restoring, 'second-without-read', 'quiet', {'topic': secondTopic, 'mode': 'normal'}).code,
+      'topic_not_in_turn',
+    );
+    final secondRead = call(restoring, 'read-next-star-control', 'recall', {'query': '星星'});
+    expect(secondRead.recalledControl, {'topic_id': secondTopic, 'mode': 'less', 'anchors': ['星星'], 'character_id': a});
+    // This receipt really grants the still-quiet second control before cold
+    // reopen. Reading its old identity must not reopen the closed execution.
+    reopen();
+    final closedRead = call(restoring, 'read-next-star-control', 'recall', {'query': '星星'});
+    expect(closedRead.replayed, isTrue);
+    expect(closedRead.targetId, secondTopic);
+    expect(closedRead.recalledControl, isNull);
+    expect(closedRead.recallSelection, isNull);
+    expect(call(restoring, 'closed-restore', 'quiet', {'topic': secondTopic, 'mode': 'normal'}).code, 'turn_closed');
+    final continuedSource = sayAs('stars-continue', '星星现在可以聊了，我们喜欢一起看星星。', a);
+    final continued = begin(continuedSource);
+    expect(call(continued, 'fresh-read-star-control', 'recall', {'query': '星星'}).recalledControl, secondRead.recalledControl);
+    final secondRestore = call(continued, 'restore-second-control', 'quiet', {'topic': secondTopic, 'mode': 'normal'});
+    expect(secondRestore.applied, isTrue);
+    expect(secondRestore.changedCardIds, isEmpty);
+    final restoredArchive = store.archive;
+    expect(call(continued, 'restore-second-control', 'quiet', {'topic': secondTopic, 'mode': 'normal'}).replayed, isTrue);
+    expect(store.archive, restoredArchive);
+    expect(store.cards(includeInactive: true), cardsBeforeRestore);
+    expect(store.topicControls(), otherControls);
+    final afterRestore = call(continued, 'stars-after-restore', 'remember', {
+      'collection': 'our_story',
+      'text': starText,
+      'keywords': ['星星'],
+    });
+    expect(afterRestore.applied, isTrue);
+    expect(actualCard(afterRestore.targetId!)['topic_mode'], 'normal');
+    expect(actualCard(afterRestore.targetId!)['character_id'], a);
+    expect(
+      store.beginAgentTurn(messageId: continuedSource['id']! as String, expectedSourceRev: 1, shownCardRevisions: const {})['changed_cards'],
+      [afterRestore.targetId],
+    );
+
+    // The original nonempty private control is not an empty-control grant,
+    // even when recall legitimately supplies its cards through the old path.
+    store.closeAgentTurn(continued);
+    final liveSource = sayAs('live-topic-only', '以后可以聊复诊了。', a);
+    final liveTurn = begin(liveSource);
+    final liveRead = call(liveTurn, 'read-live-topic', 'recall', {'query': '复诊'});
+    expect(liveRead.applied, isTrue);
+    expect(liveRead.recalledControl, isNull);
+    expect(call(liveTurn, 'not-an-empty-topic', 'quiet', {'topic': privateTopic, 'mode': 'normal'}).code, 'topic_not_in_turn');
+    expect(actualCard(saved.targetId!)['topic_mode'], 'never');
+    expect(
+      store.beginAgentTurn(messageId: liveSource['id']! as String, expectedSourceRev: 1, shownCardRevisions: const {})['changed_cards'],
+      isEmpty,
+    );
+    expect(actualCard(afterRestore.targetId!)['topic_mode'], 'normal');
+    expect(store.topicControls(), otherControls);
+    expect(store.requests(), isEmpty, reason: 'these are public SDK transactions, not HTTP request receipts');
   });
 
   for (final mode in const ['less', 'never']) {
@@ -311,6 +450,65 @@ void main() {
       expect(store.nextFollowup(nowMs: now), isNull);
       expect(database.select('SELECT * FROM memory_initiative_spends'), spent);
       expect(store.requests(), paid);
+
+      // Create both same-fact cards before either new control exists. Their
+      // distinct keywords are each present in their own original source.
+      const sameFact = '你喜欢在天台看星星。';
+      final targetTurn = begin(say('merge-quiet-target-source', '我喜欢在天台看星星。'));
+      final targetMemory = call(targetTurn, 'merge-quiet-target', 'remember', {'text': sameFact, 'keywords': ['天台']});
+      expect(targetMemory.applied, isTrue);
+      store.closeAgentTurn(targetTurn);
+      final fromTurn = begin(say('merge-quiet-from-source', '我喜欢在天台看星星。'));
+      final fromMemory = call(fromTurn, 'merge-quiet-from', 'remember', {'text': sameFact, 'keywords': ['星星']});
+      expect(fromMemory.applied, isTrue);
+      store.closeAgentTurn(fromTurn);
+      final targetId = targetMemory.targetId!, fromId = fromMemory.targetId!;
+      final targetTopic = actualCard(targetId)['topic_id'], fromTopic = actualCard(fromId)['topic_id'];
+      expect(targetTopic, isNot(fromTopic));
+      final targetMode = mode == 'less' ? 'never' : 'less';
+      final quietTarget = begin(say('merge-quiet-target-command', '按这个主题控制频率。'), [actualCard(targetId)]);
+      expect(call(quietTarget, 'quiet-target', 'quiet', {'card': targetId, 'mode': targetMode}).applied, isTrue);
+      store.closeAgentTurn(quietTarget);
+      final quietFrom = begin(say('merge-quiet-from-command', '另一条也按这个主题控制频率。'), [actualCard(fromId)]);
+      expect(call(quietFrom, 'quiet-from', 'quiet', {'card': fromId, 'mode': mode}).applied, isTrue);
+      store.closeAgentTurn(quietFrom);
+      final controls = database
+          .select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [targetTopic, fromTopic])
+          .map((row) => Map<String, Object?>.from(row))
+          .toList();
+      expect(jsonDecode(controls.singleWhere((row) => row['id'] == targetTopic)['control_anchors']! as String), ['天台']);
+      expect(jsonDecode(controls.singleWhere((row) => row['id'] == fromTopic)['control_anchors']! as String), ['星星']);
+      final joining = begin(say('merge-quiet-command', '这两条说的是同一件事。'), [actualCard(targetId), actualCard(fromId)]);
+      final joined = call(joining, 'merge-quiet', 'merge', {'card': targetId, 'from': [fromId]});
+      expect(joined.applied, isTrue);
+      expect(joined.changedCardIds, unorderedEquals([targetId, fromId]));
+      expect(joined.targetId, targetId);
+      expect(actualCard(targetId)['topic_mode'], 'never');
+      expect(actualCard(targetId)['topic_id'], mode == 'never' ? fromTopic : targetTopic);
+      expect(store.cards().any((card) => card['id'] == fromId), isFalse);
+      final emptyLessTopic = mode == 'less' ? fromTopic : targetTopic;
+      expect(store.cards().any((card) => card['topic_id'] == emptyLessTopic), isFalse);
+      expect(
+        database.select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [targetTopic, fromTopic]),
+        controls,
+      );
+      store.closeAgentTurn(joining);
+      reopen();
+      expect(
+        database.select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [targetTopic, fromTopic]),
+        controls,
+      );
+      // Only the original from-topic anchor occurs here. An empty controlled
+      // topic still applies its own mode, without inheriting the other anchor.
+      final fromOnly = begin(say('merge-from-only-source', '我还想看星星。'));
+      final fromOnlyMemory = call(fromOnly, 'merge-from-only', 'remember', {'text': '你还想看星星。', 'keywords': ['星星']});
+      expect(fromOnlyMemory.applied, isTrue);
+      expect(actualCard(fromOnlyMemory.targetId!)['topic_id'], fromTopic);
+      expect(actualCard(fromOnlyMemory.targetId!)['topic_mode'], mode);
+      expect(call(fromOnly, 'merge-from-only-later', 'ask_later', {'card': fromOnlyMemory.targetId, 'whenMs': now}).code, 'topic_quiet');
+      expect(actualCard(unrelated.targetId!), independent);
+      expect(store.requests(), paid);
+      expect(database.select('SELECT * FROM memory_initiative_spends'), spent);
     });
   }
 
@@ -1199,6 +1397,9 @@ void main() {
     }).targetId!;
     store.closeAgentTurn(dependentTurn);
     expect(actualCard(dependent)['current_basis_seq'], greaterThan(actualCard(target)['current_basis_seq']! as int));
+    final quietDependent = begin(say('quiet-dependent', '这条聊过住处的记录少提一点。'), [actualCard(dependent)]);
+    expect(call(quietDependent, 'quiet-dependent', 'quiet', {'card': dependent, 'mode': 'less'}).applied, isTrue);
+    store.closeAgentTurn(quietDependent);
     now += 3600000;
     final third = say('proof-three', '我的居住地是杭州。');
     expect(third['said_at_utc'], greaterThan(actualCard(target)['source_at_ms']! as int));
@@ -1262,6 +1463,90 @@ void main() {
     final consumed = store.followups().singleWhere((row) => row['id'] == ticket);
     expect(consumed['state'], 'asked');
     expect(consumed['card_id'], target);
+    expect(store.nextFollowup(nowMs: now), isNull);
+    expect(store.requests(), isEmpty);
+    expect(actualCard(target)['topic_mode'], 'normal');
+    expect(actualCard(dependent)['topic_mode'], 'less');
+    store.closeAgentTurn(merging);
+
+    // T and F describe the same fact. U and V share only their respective
+    // topic keyword; they have different bodies, originals and no references.
+    const sameFact = '你周四安排修琴，修的是小提琴。';
+    final targetTurn = begin(say('topic-target-source', '我周四安排修琴，修的是小提琴。'));
+    final topicTarget = call(targetTurn, 'topic-target', 'remember', {'text': sameFact, 'keywords': ['修琴']});
+    expect(topicTarget.applied, isTrue);
+    expect(call(targetTurn, 'topic-target-less', 'quiet', {'card': topicTarget.targetId, 'mode': 'less'}).applied, isTrue);
+    store.closeAgentTurn(targetTurn);
+    final neighborTurn = begin(say('topic-target-neighbor-source', '我想请修琴师给中提琴调弦。'));
+    final targetNeighbor = call(neighborTurn, 'topic-target-neighbor', 'remember', {
+      'text': '你想请修琴师给中提琴调弦。',
+      'keywords': ['修琴'],
+    });
+    expect(targetNeighbor.applied, isTrue);
+    store.closeAgentTurn(neighborTurn);
+    final topicTargetId = topicTarget.targetId!, targetNeighborId = targetNeighbor.targetId!;
+    final normalTopic = actualCard(topicTargetId)['topic_id'];
+    expect(actualCard(targetNeighborId)['topic_id'], normalTopic);
+    final restoring = begin(say('topic-target-normal-source', '以后可以聊修琴了。'), [actualCard(topicTargetId), actualCard(targetNeighborId)]);
+    expect(call(restoring, 'topic-target-normal', 'quiet', {'card': topicTargetId, 'mode': 'normal'}).applied, isTrue);
+    final scheduledTarget = call(restoring, 'topic-target-later', 'ask_later', {'card': topicTargetId, 'whenMs': now});
+    expect(scheduledTarget.applied, isTrue);
+    store.closeAgentTurn(restoring);
+    final fromTurn = begin(say('topic-from-source', '我周四安排修琴，修的是小提琴。'));
+    final topicFrom = call(fromTurn, 'topic-from', 'remember', {'text': sameFact, 'keywords': ['小提琴']});
+    expect(topicFrom.applied, isTrue);
+    expect(call(fromTurn, 'topic-from-never', 'quiet', {'card': topicFrom.targetId, 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(fromTurn);
+    final fromNeighborTurn = begin(say('topic-from-neighbor-source', '我喜欢小提琴的暖色音色。'));
+    final fromNeighbor = call(fromNeighborTurn, 'topic-from-neighbor', 'remember', {
+      'text': '你喜欢小提琴的暖色音色。',
+      'keywords': ['小提琴'],
+    });
+    expect(fromNeighbor.applied, isTrue);
+    store.closeAgentTurn(fromNeighborTurn);
+    final topicFromId = topicFrom.targetId!, fromNeighborId = fromNeighbor.targetId!;
+    final neverTopic = actualCard(topicFromId)['topic_id'];
+    expect(neverTopic, isNot(normalTopic));
+    expect(actualCard(fromNeighborId)['topic_id'], neverTopic);
+    final untouchedNormal = actualCard(targetNeighborId), untouchedNever = actualCard(fromNeighborId);
+    expect(untouchedNormal['topic_mode'], 'normal');
+    expect(untouchedNever['topic_mode'], 'never');
+    final topics = database
+        .select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [normalTopic, neverTopic])
+        .map((row) => Map<String, Object?>.from(row))
+        .toList();
+    expect(jsonDecode(topics.singleWhere((row) => row['id'] == normalTopic)['control_anchors']! as String), isEmpty);
+    expect(jsonDecode(topics.singleWhere((row) => row['id'] == neverTopic)['control_anchors']! as String), ['小提琴']);
+    final pendingTarget = store.followups().singleWhere((row) => row['id'] == scheduledTarget.targetId);
+    expect(pendingTarget['state'], 'pending');
+    expect(store.isFollowupCurrent(pendingTarget, nowMs: now), isTrue);
+    final originalSpends = database.select('SELECT * FROM memory_initiative_spends').map((row) => Map<String, Object?>.from(row)).toList();
+    expect(originalSpends.single['id'], spend);
+    expect(originalSpends.single['state'], 'shown');
+    final mergingTopics = begin(say('merge-topics-source', '这两条修琴记录是同一件事。'), [actualCard(topicTargetId), actualCard(topicFromId)]);
+    final mergedTopics = call(mergingTopics, 'merge-topics', 'merge', {'card': topicTargetId, 'from': [topicFromId]});
+    expect(mergedTopics.applied, isTrue);
+    expect(mergedTopics.changedCardIds, unorderedEquals([topicTargetId, topicFromId]));
+    expect(mergedTopics.targetId, topicTargetId);
+    expect(actualCard(topicTargetId)['topic_id'], neverTopic);
+    expect(actualCard(topicTargetId)['topic_mode'], 'never');
+    expect(store.cards().any((card) => card['id'] == topicFromId), isFalse);
+    expect(actualCard(targetNeighborId), untouchedNormal);
+    expect(actualCard(fromNeighborId), untouchedNever);
+    expect(
+      database.select('SELECT id,mode,control_anchors FROM memory_topics WHERE id IN (?,?) ORDER BY id', [normalTopic, neverTopic]),
+      topics,
+    );
+    // Read the stored state before nextFollowup can refresh it. The merge
+    // itself must retire this actual pending invitation without a new debit.
+    final closedTarget = store.followups().singleWhere((row) => row['id'] == scheduledTarget.targetId);
+    expect(closedTarget['state'], 'closed');
+    expect(closedTarget['reason'], 'quiet');
+    expect(closedTarget['card_id'], topicTargetId);
+    for (final field in const ['id', 'message_id', 'source_rev', 'invitation', 'opens_at_ms', 'expires_at_ms', 'presented_at_ms']) {
+      expect(closedTarget[field], pendingTarget[field]);
+    }
+    expect(database.select('SELECT * FROM memory_initiative_spends'), originalSpends);
     expect(store.nextFollowup(nowMs: now), isNull);
     expect(store.requests(), isEmpty);
   });
