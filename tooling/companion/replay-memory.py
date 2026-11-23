@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """09g offline results from the product tests; no model client or rule clone."""
 import argparse
+import base64
 from collections import Counter
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
 
 
@@ -71,6 +75,134 @@ class Report:
         if done.get('hidden') is not False or done.get('result') != 'success':
             return 'NOT_RUN', 'no completed visible test result'
         return 'PASS', 'offline product assertion completed'
+
+
+def batch_exit(codes):
+    return next((code for code in codes if code not in (0, None)),
+                None if None in codes else 0)
+
+
+class BatchReport:
+    """Keep each Windows child's Dart IDs and completion inside that child."""
+
+    def __init__(self, path, raw, suite, guards, names, exit_code):
+        self.path = path
+        self.complete = False
+        self.success = None
+        self.issue = None
+        self.guards = list(guards)
+        self.plan = {}
+        self.owners = {}
+        self.observed = []
+        results = {}
+        failed = False
+        footer = False
+        if raw is None:
+            self.issue = 'batch report missing'
+            return
+        try:
+            lines = raw.splitlines()
+            if not lines:
+                raise ValueError('batch plan missing')
+            plan = json.loads(lines[0])
+            if (not isinstance(plan, dict) or plan.get('type') != 'replayBatchPlan' or
+                    type(plan.get('version')) is not int or plan['version'] != 1 or
+                    plan.get('suite') != suite or plan.get('guards') != self.guards):
+                raise ValueError('batch plan does not match this suite and its guards')
+            batches = plan.get('batches')
+            if not isinstance(batches, list) or not batches:
+                raise ValueError('batch plan has no batches')
+            for batch in batches:
+                identifier = batch['id']
+                normal = batch['names']
+                if (type(identifier) is not int or identifier <= 0 or identifier in self.plan or
+                        not isinstance(normal, list) or any(not isinstance(n, str) or not n for n in normal)):
+                    raise ValueError('invalid or duplicate planned batch')
+                self.plan[identifier] = normal
+                for name in normal:
+                    if name in self.owners or name in self.guards:
+                        raise ValueError('ordinary name belongs to more than one batch or is a guard')
+                    self.owners[name] = identifier
+            if set(self.owners) != set(names).difference(self.guards):
+                raise ValueError('batch plan does not cover the manifest names')
+            for line in lines[1:]:
+                event = json.loads(line)
+                kind = event['type']
+                if kind == 'replayBatchResult':
+                    identifier = event['id']
+                    code = event['exit_code']
+                    if type(code) is int and code != 0:
+                        failed = True
+                    if code is not None and type(code) is not int:
+                        raise ValueError('invalid batch exit code')
+                    encoded = event['report_base64']
+                    if encoded is not None and not isinstance(encoded, str):
+                        raise ValueError('invalid batch reporter bytes')
+                    report = Report(path, None if encoded is None else base64.b64decode(encoded, validate=True))
+                    # Remember proof before rejecting a duplicate/unknown result.
+                    # A later structural error must not erase an earlier failure.
+                    self.observed.append((identifier, report))
+                    failed = failed or report.success is False or any(
+                        item['errors'] or item.get('done', {}).get('result') in ('failure', 'error')
+                        for item in report.tests.values())
+                    if (footer or type(identifier) is not int or identifier not in self.plan or
+                            identifier in results):
+                        raise ValueError('duplicate, unknown or post-footer batch result')
+                    results[identifier] = (code, report)
+                elif kind == 'replayBatchesDone' and not footer:
+                    footer = True
+                else:
+                    raise ValueError('unexpected batch event')
+            if not footer or set(results) != set(self.plan):
+                raise ValueError('batch run did not complete')
+            codes = [results[identifier][0] for identifier in self.plan]
+            if ((exit_code is not None and type(exit_code) is not int) or batch_exit(codes) != exit_code):
+                raise ValueError('batch exits disagree with the original suite exit')
+            if any(code is None for code in codes):
+                raise ValueError('a batch has no actual child exit')
+            if any(not report.complete for _, report in results.values()):
+                raise ValueError('a Dart batch did not complete')
+            if any(report.check(name)[0] != 'PASS' for _, report in results.values() for name in self.guards):
+                raise ValueError('every batch must complete every guard')
+            successful = all(code == 0 and report.success is True and
+                             all(report.check(name)[0] == 'PASS' for name in self.plan[identifier])
+                             for identifier, (code, report) in results.items())
+            self.complete = True
+            if successful:
+                self.success = True
+        except (ValueError, KeyError, TypeError) as error:
+            self.issue = f'incomplete batch reporter stream: {error}'
+        if failed:
+            self.success = False
+
+    def check(self, name):
+        identifiers = set(self.plan) if name in self.guards else {self.owners.get(name)}
+        found = []
+        for identifier, report in self.observed:
+            if type(identifier) is int and identifier in identifiers:
+                try:
+                    found.append(report.check(name))
+                except (ValueError, KeyError, TypeError) as error:
+                    found.append(('NOT_RUN', f'incomplete Dart batch: {error}'))
+        if any(status == 'FAIL' for status, _ in found):
+            return 'FAIL', 'test error in a Dart batch; see canonical reporter bytes'
+        if not self.complete:
+            return 'NOT_RUN', self.issue or 'batch run did not complete'
+        if not found:
+            return 'NOT_RUN', 'name not in the batch plan'
+        return next((result for result in found if result[0] != 'PASS'),
+                    ('PASS', 'offline product assertion and every batch guard completed'))
+
+
+def dart_report(path, raw, key, data, exit_code):
+    try:
+        first = json.loads(raw.splitlines()[0]) if raw else None
+    except (ValueError, IndexError):
+        first = None
+    if isinstance(first, dict) and first.get('type') == 'replayBatchPlan':
+        names = {check['name'] for case in data['cases'] for check in case['checks'] if check['suite'] == key}
+        return BatchReport(path, raw, key, data['suites'][key]['guards'], names, exit_code)
+    return Report(path, raw)
 
 
 class EngineReport:
@@ -229,6 +361,124 @@ def unique_test_counts(rows):
     return dict(Counter(tests.values()))
 
 
+def windows_command(command, environment, comspec=None):
+    """Assemble one launch; CRT quoting is only for a direct executable."""
+    child = environment.copy()
+    if Path(command[0]).suffix.lower() in ('.bat', '.cmd'):
+        if not comspec:
+            raise OSError('COMSPEC is missing or cannot be resolved')
+        if any(char in value for value in [comspec, *command] for char in ('"', '\r', '\n', '\0')):
+            raise ValueError('bat/cmd arguments containing a double quote, CR, LF or NUL are not representable')
+        child['DSH_REPLAY_EXE'] = command[0]
+        variables = ['DSH_REPLAY_EXE']
+        for index, value in enumerate(command[1:]):
+            variable = f'DSH_REPLAY_ARG_{index}'
+            child[variable] = value
+            variables.append(variable)
+        prefix = f'"{comspec}" /d /v:off /s /c "'
+        raw = prefix + ' '.join(f'"%{variable}%"' for variable in variables) + '"'
+        # Substitute this launch's values once, without rescanning literal %.
+        expanded = prefix + ' '.join(f'"{value}"' for value in command) + '"'
+        units = [len(value.encode('utf-16-le')) // 2 + 1 for value in (raw, expanded)]
+        return {'args': raw, 'options': {'executable': comspec, 'shell': False, 'env': child},
+                'units': units, 'limit': 8191}
+    units = len(subprocess.list2cmdline(command).encode('utf-16-le')) // 2 + 1
+    return {'args': command, 'options': {'shell': False, 'env': child}, 'units': [units], 'limit': 32767}
+
+
+def windows_batches(key, suite, cases, folder, executable, environment, comspec=None):
+    groups = {}
+    seen = set(suite['guards'])
+    for case in cases:
+        for check in case['checks']:
+            if check['suite'] == key and check['name'] not in seen:
+                seen.add(check['name'])
+                groups.setdefault(check.get('file'), []).append(check['name'])
+    batches = []
+
+    def assemble(names):
+        identifier = len(batches) + 1
+        report = folder / f'{identifier}.jsonl'
+        selected = sorted(set(suite['guards']).union(names))
+        command = [executable, *suite['command'][1:], '--name',
+                   '^(?:' + '|'.join(re.escape(name) for name in selected) + ')$',
+                   '--file-reporter', f'json:{report}']
+        launch = windows_command(command, environment, comspec)
+        return {'id': identifier, 'names': list(names), 'report': report, **launch}
+
+    for group in groups.values() if groups else [[]]:
+        whole = assemble(group)
+        if max(whole['units']) <= whole['limit']:
+            batches.append(whole)
+            continue
+        pending = []
+        for name in group:
+            candidate = assemble([*pending, name])
+            if max(candidate['units']) > candidate['limit']:
+                if pending:
+                    batches.append(assemble(pending))
+                pending = [name]
+                candidate = assemble(pending)
+                if max(candidate['units']) > candidate['limit']:
+                    raise ValueError(f'one full name plus guards/paths exceeds the Windows command limit: '
+                                     f'{candidate["units"]} UTF-16 units, limit {candidate["limit"]}')
+            else:
+                pending.append(name)
+        if pending:
+            batches.append(assemble(pending))
+        elif not group:
+            raise ValueError(f'guards/paths exceed the Windows command limit: '
+                             f'{whole["units"]} UTF-16 units, limit {whole["limit"]}')
+    return batches
+
+
+def run_windows_suite(root, key, suite, cases, output, log):
+    environment = os.environ.copy()
+    executable = shutil.which(suite['command'][0])
+    if executable is None:
+        raise OSError(f'command not found on PATH/PATHEXT: {suite["command"][0]}')
+    executable = os.path.abspath(executable)
+    comspec = None
+    if Path(executable).suffix.lower() in ('.bat', '.cmd'):
+        requested = environment.get('COMSPEC')
+        comspec = shutil.which(requested) if requested else None
+        if comspec is None:
+            raise OSError('COMSPEC is missing or cannot be resolved')
+        comspec = os.path.abspath(comspec)
+    with tempfile.TemporaryDirectory(prefix=f'{key}-replay-') as folder:
+        # Resolve the actual temporary paths before measuring any command.
+        batches = windows_batches(key, suite, cases, Path(folder), executable, environment, comspec)
+        codes = []
+        with (output / f'{key}.jsonl').open('w', encoding='utf-8', newline='\n') as canonical:
+            def emit(event):
+                canonical.write(json.dumps(event, ensure_ascii=False) + '\n')
+                canonical.flush()
+
+            emit({'type': 'replayBatchPlan', 'version': 1, 'suite': key, 'guards': suite['guards'],
+                  'batches': [{'id': batch['id'], 'names': batch['names']} for batch in batches]})
+            log.write(f'Windows executable: {executable}; COMSPEC: {comspec}\n')
+            for batch in batches:
+                log.write(f'--- batch {batch["id"]}: {len(batch["names"])} ordinary names; '
+                          f'command UTF-16 units {batch["units"]}/{batch["limit"]} ---\n')
+                log.flush()
+                try:
+                    code = subprocess.run(batch['args'], cwd=root / suite['cwd'], stdout=log,
+                                          stderr=subprocess.STDOUT, check=False, **batch['options']).returncode
+                except (OSError, ValueError) as error:
+                    code = None
+                    log.write(f'NOT_RUN: {error}\n')
+                codes.append(code)
+                try:
+                    raw = batch['report'].read_bytes()
+                except OSError as error:
+                    raw = None
+                    log.write(f'NOT_RUN: batch reporter unavailable: {error}\n')
+                emit({'type': 'replayBatchResult', 'id': batch['id'], 'exit_code': code,
+                      'report_base64': base64.b64encode(raw).decode('ascii') if raw is not None else None})
+            emit({'type': 'replayBatchesDone'})
+        return batch_exit(codes)
+
+
 def run_suites(root, data, output, engine_report=None):
     exits = {}
     for key, suite in data['suites'].items():
@@ -261,6 +511,13 @@ def run_suites(root, data, output, engine_report=None):
             if any(not (package / name).is_file() for name in ('package_config.json', 'package_graph.json')):
                 exits[key] = None
                 log.write('NOT_RUN: resolve dependencies explicitly before offline replay; implicit pub is disabled here\n')
+                continue
+            if os.name == 'nt' and key in ('sdk', 'app'):
+                try:
+                    exits[key] = run_windows_suite(root, key, suite, data['cases'], output, log)
+                except (OSError, ValueError) as error:
+                    exits[key] = None
+                    log.write(f'NOT_RUN: {error}\n')
                 continue
             try:
                 exits[key] = subprocess.run(command, cwd=root / suite['cwd'], stdout=log,
@@ -386,7 +643,8 @@ def main():
             except (OSError, ValueError) as error:
                 fixture_issue = f'replay inputs not verified: {error}'
     reports = {key: EngineReport(report_dir / report_name(key), raw_reports.get(key)) if key == 'engine'
-               else Report(report_dir / report_name(key), raw_reports.get(key)) for key in data['suites']}
+               else dart_report(report_dir / report_name(key), raw_reports.get(key), key, data,
+                                exits.get(key) if exits else None) for key in data['suites']}
     run_id = inputs['run_id'] if inputs and not fixture_issue else now
     rows = collect(data, reports, run_id, fixture_issue, fixtures['sha256'] if fixtures else None)
     if not fixture_issue:
