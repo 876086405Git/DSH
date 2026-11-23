@@ -258,6 +258,22 @@ void main() {
       await settle(tester);
       expect(body(tester), '嗯');
     });
+
+    testWidgets('closed while sending: the draft is still cleared once the post lands', (tester) async {
+      final api = _HeldReplyApi();
+      await openReply(tester, api);
+      await tester.enterText(find.byType(TextField), '发出去了');
+      await tester.tap(find.text('发送'));
+      await tester.pump();
+      await tester.tap(find.byTooltip('关闭'));
+      await settle(tester);
+      api.release.complete();
+      await settle(tester);
+      expect(api.created, hasLength(1));
+      await tester.tap(find.text('open'));
+      await settle(tester);
+      expect(body(tester), isEmpty);
+    });
   });
 
   group('links', () {
@@ -289,6 +305,19 @@ void main() {
       expect(find.byType(ForumTopicPage), findsOneWidget);
     });
   });
+}
+
+/// Holds a reply until [release] completes.
+class _HeldReplyApi extends FakeForumApi {
+  _HeldReplyApi() : super(signedIn: true);
+
+  final release = Completer<void>();
+
+  @override
+  Future<ForumPostResult> reply({required int topicId, required String raw, int? replyToPostNumber}) async {
+    await release.future;
+    return super.reply(topicId: topicId, raw: raw, replyToPostNumber: replyToPostNumber);
+  }
 }
 
 class _RecordingAuth extends FakeForumAuth {

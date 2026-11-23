@@ -211,6 +211,9 @@ class _ForumComposerSheetState extends ConsumerState<ForumComposerSheet> {
       _notice = null;
     });
     final api = ref.read(forumApiProvider);
+    // Read before awaiting: the sheet may be closed by the time the post lands.
+    final drafts = ref.read(forumDraftsProvider.notifier);
+    final draftKey = widget.target.draftKey;
     try {
       final result = switch (widget.target) {
         ForumReplyTarget(:final topicId, :final replyTo) => await api.reply(
@@ -220,7 +223,7 @@ class _ForumComposerSheetState extends ConsumerState<ForumComposerSheet> {
         ),
         ForumNewTopicTarget() => await api.createTopic(title: title, raw: body, categoryId: _categoryId),
       };
-      ref.read(forumDraftsProvider.notifier).clear(widget.target.draftKey);
+      drafts.clear(draftKey);
       if (mounted) Navigator.of(context).pop(result);
     } on ForumException catch (e) {
       if (!mounted) return;
