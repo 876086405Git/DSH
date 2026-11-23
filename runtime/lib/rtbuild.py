@@ -880,7 +880,7 @@ def base_drop(path):
 # Packages whose runtime entry points all resolve outside these directories; the .ts
 # sources only feed their own builds (docs/maintenance/engine-typescript-source-pruning-contract.md).
 TS_SOURCE_DIRS = ("node_modules/openai/src/", "node_modules/@anthropic-ai/sdk/src/",
-                  "node_modules/@js-temporal/polyfill/lib/")
+                  "node_modules/@js-temporal/polyfill/lib/", "node_modules/minisearch/src/")
 
 
 def dsh_drop_reason(rel, abi, prune_dev):
