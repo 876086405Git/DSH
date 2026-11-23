@@ -67,7 +67,10 @@ class ForumDraftsController extends Notifier<Map<String, ForumDraft>> {
   void save(String key, ForumDraft draft) =>
       state = {...state, key: draft}..removeWhere((_, d) => d.isEmpty && d.categoryId == null);
 
-  void clear(String key) => state = {...state}..remove(key);
+  /// Drops [key]'s draft once [body] is posted, unless a newer draft took its place.
+  void clearSent(String key, String body) {
+    if (state[key]?.body.trim() == body) state = {...state}..remove(key);
+  }
 }
 
 final forumDraftsProvider = NotifierProvider<ForumDraftsController, Map<String, ForumDraft>>(ForumDraftsController.new);
@@ -223,7 +226,7 @@ class _ForumComposerSheetState extends ConsumerState<ForumComposerSheet> {
         ),
         ForumNewTopicTarget() => await api.createTopic(title: title, raw: body, categoryId: _categoryId),
       };
-      drafts.clear(draftKey);
+      drafts.clearSent(draftKey, body);
       if (mounted) Navigator.of(context).pop(result);
     } on ForumException catch (e) {
       if (!mounted) return;
