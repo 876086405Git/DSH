@@ -425,10 +425,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   /// [child] coming in with the page: a fade and a short rise, starting at [from] (0–1).
   Widget _rise(double from, Widget child, {double distance = 18}) {
     if (_still) return child;
-    final curve = CurvedAnimation(
-      parent: _enter,
-      curve: Interval(from, math.min(1, from + 0.5), curve: Curves.easeOutCubic),
-    );
+    final curve = _enter.drive(CurveTween(curve: Interval(from, math.min(1, from + 0.5), curve: Curves.easeOutCubic)));
     return AnimatedBuilder(
       animation: curve,
       builder: (context, child) => Opacity(
