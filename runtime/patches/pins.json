@@ -16,6 +16,14 @@
         }
       }
     },
+    "client-chunk-empty-path.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-client-modules/lib/index.js": {
+          "after": "9554f37910bae77f351e73fe4eafcb35b724582571a8f8a5ade61f413175cb4e",
+          "before": "df8d52b11e513073225b8a47175dd267039744e048e30c18cc45a88d26d3759a"
+        }
+      }
+    },
     "client-hmr-closed-response.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-client-hmr/lib/index.js": {
@@ -599,8 +607,8 @@
     "ohos-plugin-hmr-transaction.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "575d6941483904f0c69b8881b1fa7ae06fcae75f4f51a089e1d5f61c560d84a1",
-          "before": "8e3c887434303bc28ea2342d33eb7d5c4c7fb18108061a1811be879a0098d7a0"
+          "after": "32fc02f185887a31d204b13ecb1d18cfdaff7d1994e4f7c3d8c24ce758811dba",
+          "before": "9ce2aa14e1ac49d11d85de9f2a35498962c369c144f43e24d1dbf112db7d7280"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "3ee700fc06ab7f0a357231337f7f33bed885290f26fe7226945a42d189680020",
@@ -611,8 +619,8 @@
     "ohos-plugin-linkless.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "d1e221fa254e15070931890bf3c5b3d3e681f55c2afb011f5a3d663fe3cb12db",
-          "before": "9a0af36c5b51a342e9111c5d11a3972690dfdd35b2be036ae8707a294ee9a6f3"
+          "after": "2bd43731ce469afca864c72a89374d515dd210d80f1119f7a934b851316977fd",
+          "before": "b9649a098c3aa648f646ff4072f72d398744e45d5a6dd161cd4b217e1278a3e5"
         },
         "node_modules/@deepseek-ai/dsh-app-boot/lib/worker/profile-resolution-bootstrap.js": {
           "after": "82e895216414eaa3a8f29d5d7aad31366272c8a6382e2ab4fe00fe30601e13c4",
@@ -623,16 +631,16 @@
     "ohos-plugin-locale-bom.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "9a0af36c5b51a342e9111c5d11a3972690dfdd35b2be036ae8707a294ee9a6f3",
-          "before": "7b7f56911615d4fa31f660bdeb9775db29afcf7913a543d8c85353ba47a2f4ab"
+          "after": "b9649a098c3aa648f646ff4072f72d398744e45d5a6dd161cd4b217e1278a3e5",
+          "before": "77087485b0b82e0c9b549d54e45e9fc04302680d98f69bc089e321ee4b8364d6"
         }
       }
     },
     "ohos-plugin-manifest-bom.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "7b7f56911615d4fa31f660bdeb9775db29afcf7913a543d8c85353ba47a2f4ab",
-          "before": "575d6941483904f0c69b8881b1fa7ae06fcae75f4f51a089e1d5f61c560d84a1"
+          "after": "77087485b0b82e0c9b549d54e45e9fc04302680d98f69bc089e321ee4b8364d6",
+          "before": "32fc02f185887a31d204b13ecb1d18cfdaff7d1994e4f7c3d8c24ce758811dba"
         }
       }
     },
@@ -900,6 +908,14 @@
         }
       }
     },
+    "profile-telemetry-compose-on-opt-out.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "81087145219fd2e9a735285d3f81fb30a762db7b7071ed0de387a9b7595b39dc",
+          "before": "ee56662e186b7067c6faec67ec3f55eb24aae1a2b2fa65b31336c03ca29d27af"
+        }
+      }
+    },
     "provider-discovery-headers.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js": {
@@ -1001,6 +1017,14 @@
         "node_modules/@deepseek-ai/dsh-tool-schedule/lib/index.js": {
           "after": "171aca26959573cd7906bcd90121d8cc2ae9016f01f64a60a36414f30cf2953c",
           "before": "42988ed17a706b69a190db1117b7acf067a6a0418d778353ce247f874b6e646b"
+        }
+      }
+    },
+    "schedule-task-schema-on-demand.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-schedule/lib/index.js": {
+          "after": "a89c6b8a6aa0e087cbee8df5dcf792629d1452f6838cd16ff7ac813db114e099",
+          "before": "303e9cfbc7f0f9816cfae71169d8a6ab262706b791192f20dc0dea61cbc72a98"
         }
       }
     },
@@ -2361,8 +2385,8 @@
     "zzzzzzzzzzzzzz-ohos-plugin-packages.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "8e3c887434303bc28ea2342d33eb7d5c4c7fb18108061a1811be879a0098d7a0",
-          "before": "ee56662e186b7067c6faec67ec3f55eb24aae1a2b2fa65b31336c03ca29d27af"
+          "after": "9ce2aa14e1ac49d11d85de9f2a35498962c369c144f43e24d1dbf112db7d7280",
+          "before": "81087145219fd2e9a735285d3f81fb30a762db7b7071ed0de387a9b7595b39dc"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "b3de75959b7c463dc952f00c02a9a08a42ff9417a3439cb99767cb6af653756a",
@@ -2828,6 +2852,7 @@
       "client-modules-combo-rebuild.diff",
       "client-modules-manifest-read.diff",
       "client-modules-combo-buffer.diff",
+      "client-chunk-empty-path.diff",
       "schemastery-json-context.diff",
       "session-title-word-prefix.diff",
       "str-editor-view-prefix.diff",
@@ -2987,6 +3012,7 @@
       "config-editor-empty-layer-copy.diff",
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
+      "schedule-task-schema-on-demand.diff",
       "deepseek-refusal.diff",
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
@@ -2995,6 +3021,7 @@
       "profile-sibling-package-lookup.diff",
       "profile-runtime-version-validation.diff",
       "profile-runtime-version-preflight.diff",
+      "profile-telemetry-compose-on-opt-out.diff",
       "messages-usage-evidence.diff",
       "piai-usage-evidence.diff",
       "piai-tool-call-id.diff",
@@ -3039,6 +3066,7 @@
       "client-modules-combo-rebuild.diff",
       "client-modules-manifest-read.diff",
       "client-modules-combo-buffer.diff",
+      "client-chunk-empty-path.diff",
       "schemastery-json-context.diff",
       "session-title-word-prefix.diff",
       "str-editor-view-prefix.diff",
@@ -3198,6 +3226,7 @@
       "config-editor-empty-layer-copy.diff",
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
+      "schedule-task-schema-on-demand.diff",
       "deepseek-refusal.diff",
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
@@ -3206,6 +3235,7 @@
       "profile-sibling-package-lookup.diff",
       "profile-runtime-version-validation.diff",
       "profile-runtime-version-preflight.diff",
+      "profile-telemetry-compose-on-opt-out.diff",
       "messages-usage-evidence.diff",
       "piai-usage-evidence.diff",
       "piai-tool-call-id.diff",

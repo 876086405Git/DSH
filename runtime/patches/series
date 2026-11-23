@@ -17,6 +17,7 @@ client-hmr-closed-response.diff
 client-modules-combo-rebuild.diff
 client-modules-manifest-read.diff
 client-modules-combo-buffer.diff
+client-chunk-empty-path.diff
 schemastery-json-context.diff
 session-title-word-prefix.diff
 str-editor-view-prefix.diff
@@ -176,6 +177,7 @@ config-editor-lock-order.diff
 config-editor-empty-layer-copy.diff
 piai-overflow-output-limit.diff
 schedule-authorization-availability.diff
+schedule-task-schema-on-demand.diff
 deepseek-refusal.diff
 deepseek-unnamed-stream-error.diff
 web-empty-reply-notice.diff
@@ -184,6 +186,7 @@ plugin-compatibility-exact-version.diff
 profile-sibling-package-lookup.diff
 profile-runtime-version-validation.diff
 profile-runtime-version-preflight.diff
+profile-telemetry-compose-on-opt-out.diff
 messages-usage-evidence.diff
 piai-usage-evidence.diff
 piai-tool-call-id.diff
