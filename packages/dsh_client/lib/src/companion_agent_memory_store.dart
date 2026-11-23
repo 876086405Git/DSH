@@ -636,14 +636,17 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           .toList();
       final manual = card['manual'] == 1;
       if (!manual && sources.isEmpty) throw const _AgentMemoryRejected('incomplete_effect_set');
+      final parents = manual ? (basis: 0, sourceAt: 0) : _currentParentSourceValues(card);
       // Preview exactly _refreshSources: manual/control basis is preserved;
-      // other supported cards take the remaining proof maxima, not today's text.
+      // other supported cards combine remaining proofs and current parents.
       refreshedRevisions[id] = (card['row_rev'] as int) + 1;
       refreshedValues[id] = (
         basis: manual || const ['cancelled', 'postponed'].contains(card['plan_state'])
             ? card['current_basis_seq'] as int? ?? 0
-            : sources.map((source) => source['first_seq'] as int).reduce(math.max),
-        sourceAt: manual ? card['source_at_ms'] as int : sources.map((source) => source['at'] as int).reduce(math.max),
+            : math.max(parents.basis, sources.map((source) => source['first_seq'] as int).reduce(math.max)),
+        sourceAt: manual
+            ? card['source_at_ms'] as int
+            : math.max(parents.sourceAt, sources.map((source) => source['at'] as int).reduce(math.max)),
       );
     }
     final planned = {for (final id in revised.keys) id: (originals[id]!['row_rev'] as int) + 1};

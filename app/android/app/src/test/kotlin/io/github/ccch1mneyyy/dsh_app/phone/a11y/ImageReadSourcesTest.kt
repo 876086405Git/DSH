@@ -72,5 +72,63 @@ class ImageReadSourcesTest {
         assertNull(filtered.image)
         val window = result(shot(1))
         assertSame(window, gate.filterScreen(window))
+
+        val goodRoot = UiNode(bounds = box, children = listOf(
+            UiNode(bounds = Box(0, 0, 100, 20), text = "Overview"),
+            UiNode(bounds = Box(0, 30, 100, 50), text = "Summary"),
+            UiNode(bounds = Box(0, 60, 100, 80), text = "Help"),
+            UiNode(bounds = Box(0, 90, 100, 110), text = "Next"),
+            UiNode(bounds = Box(0, 120, 100, 140), text = "Done"),
+        ))
+        val allowed = cap(listOf(CapturedImageWindow(1, app, "example.a")),
+            listOf(UiWindow(1, WindowKind.APP, "example.a", null, box, goodRoot)))
+        val formatted = ScreenFormat.format(ScreenInput("image", "A", "example.a", 100, 200,
+            false, allowed.windows))
+        val card = "4111 1111 1111 1111"
+        assertTrue(formatted.textNodes >= ScreenFormat.POOR_TREE)
+        assertFalse(formatted.poorTree)
+        assertFalse(formatted.text.contains(card))
+        assertFalse(formatted.text.contains("«银行卡"))
+        assertTrue(ScreenMask.mask(card).startsWith("«银行卡"))
+
+        // Controlled recognition at the actual borrowed-frame boundary; no bitmap/engine claim.
+        fun recognized(texts: List<String>) = LocalOcrBoundary.read(true, true, 100, 200, 10L,
+            { 1L }, { false }, {
+                LocalOcrResult.Recognized(texts.mapIndexed { index, text ->
+                    LocalOcrResult.Line(text, 1, index * 20 + 1, 99, index * 20 + 10)
+                })
+            })
+        val pixels = byteArrayOf(1)
+        fun exported(localText: LocalOcrResult, capturedEpoch: Long? = 7L,
+                     currentEpoch: Long? = 7L): ScreenSnapshot {
+            val bytes = companionScreenImage(pixels, "example.a", localText, capturedEpoch, currentEpoch)
+            val candidate = shot(1, bytes = bytes)
+            return gate.filterScreen(ScreenSnapshot("image", formatted.text, "A", "example.a",
+                image = candidate.bytes, imageMime = candidate.mime, readPackages = setOf("example.a"),
+                imageReadPackages = ImageReadSources.knownPackages(allowed, candidate, own)))
+        }
+        val cardOnly = recognized(listOf(card))
+        assertTrue(cardOnly is LocalOcrResult.Recognized)
+        val withoutCardImage = exported(cardOnly)
+        assertNull(withoutCardImage.image)
+        assertEquals(formatted.text, withoutCardImage.text)
+        assertEquals(setOf("example.a"), withoutCardImage.readPackages)
+
+        val lateCard = recognized(listOf("plain ".repeat(501), card))
+        assertTrue(lateCard is LocalOcrResult.Recognized)
+        assertNull(exported(lateCard).image)
+        val clean = recognized(listOf("Ordinary local text"))
+        assertTrue(clean is LocalOcrResult.Recognized)
+        val withCleanImage = exported(clean)
+        assertSame(pixels, withCleanImage.image)
+        assertEquals(formatted.text, withCleanImage.text)
+        assertEquals(setOf("example.a"), withCleanImage.imageReadPackages)
+        assertNull(exported(clean, currentEpoch = 8L).image)
+        assertNull(exported(clean, currentEpoch = null).image)
+        assertNull(exported(clean, capturedEpoch = null, currentEpoch = null).image)
+        assertNull(exported(recognized(emptyList())).image)
+        assertNull(exported(recognized(listOf("   "))).image)
+        assertNull(exported(LocalOcrResult.Unavailable(LocalOcrResult.Reason.DISABLED)).image)
+        assertNull(exported(LocalOcrResult.Failed(LocalOcrResult.Failure.ENGINE)).image)
     }
 }

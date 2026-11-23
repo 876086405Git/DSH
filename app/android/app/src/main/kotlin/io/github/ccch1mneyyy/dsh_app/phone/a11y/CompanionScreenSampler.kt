@@ -47,8 +47,8 @@ internal class CompanionScreenSampler(private val service: PhoneA11yService, ove
             val imageQualified = image && fresh && ocrQualified(cap)
             val shot = shooter.shoot(cap.windows.singleOrNull(), cap.screen, emptyList(), emptyList(), 3500,
                 image = imageQualified, maxImageSide = if (imageQualified) 512 else 1300,
-                readLocalText = readLocal && epoch != null,
-                localTextPrivacyAllowed = readLocal,
+                readLocalText = (readLocal || imageQualified) && epoch != null,
+                localTextPrivacyAllowed = readLocal || imageQualified,
                 localTextCancelled = { !live() || ocr.enabledEpoch() != epoch },
                 frameWanted = { grid ->
                     due = changes.changed(grid, SystemClock.uptimeMillis(), textChanged)
@@ -84,15 +84,17 @@ internal class CompanionScreenSampler(private val service: PhoneA11yService, ove
                 method = "tree"
             }
             val geometry = shot.geometry
-            val imageBytes = shot.bytes?.takeIf { imageQualified && it.isNotEmpty() &&
+            val imageBytes = companionScreenImage(shot.bytes?.takeIf { imageQualified && it.isNotEmpty() &&
                 it.size <= 512 * 512 * 4 && shot.mime == "image/jpeg" &&
-                geometry != null && geometry.width in 1..512 && geometry.height in 1..512 }
+                geometry != null && geometry.width in 1..512 && geometry.height in 1..512 },
+                pkg, shot.localText, epoch, ocr.enabledEpoch())
             val filtered = control.core.safety.filterScreen(ScreenSnapshot(id, text, null, pkg,
                 image = imageBytes, imageMime = if (imageBytes == null) null else shot.mime,
                 readPackages = cap.windows.mapNotNull { it.packageName }.toSet(),
                 imageReadPackages = if (imageBytes == null) emptySet() else setOf(pkg)))
             if (!live() || filtered.text != text) return skipped("protected")
-            val picture = if (imageBytes != null && filtered.image === imageBytes && geometry != null)
+            val picture = if (imageBytes != null && filtered.image === imageBytes && geometry != null &&
+                ocr.enabledEpoch() == epoch)
                 mapOf("mime_type" to "image/jpeg", "width" to geometry.width, "height" to geometry.height,
                     "bytes" to imageBytes) else null
             return mapOf("status" to "observed", "observed_at_ms" to System.currentTimeMillis(),
@@ -154,4 +156,15 @@ internal class CompanionScreenSampler(private val service: PhoneA11yService, ove
     }
 
     private fun skipped(reason: String): Map<String, Any?> = mapOf("status" to reason)
+}
+
+/** Only this frame's enabled OCR can qualify its pixels; tree text stays independent. */
+internal fun companionScreenImage(bytes: ByteArray?, packageName: String, localText: LocalOcrResult,
+                                 capturedEpoch: Long?, currentEpoch: Long?): ByteArray? {
+    if (bytes == null || capturedEpoch == null || currentEpoch != capturedEpoch) return null
+    val lines = (localText as? LocalOcrResult.Recognized)?.lines?.map { it.text } ?: return null
+    if (lines.none { it.isNotBlank() } ||
+        lines.any { SafetyRules.isSecret(it) || ScreenMask.mask(it) != it } ||
+        ProtectedPages.isProtected(packageName, lines.take(8))) return null
+    return bytes
 }
