@@ -30,26 +30,26 @@ class CompanionDrawerRow extends ConsumerWidget {
     final title = name ?? l10n.companionTitle;
     final shape = Squircle.border(AppShape.md);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
       child: Semantics(
         button: true,
         label: [title, if (here) l10n.companionDrawerHere].join(l10n.shellSemanticsSeparator),
         onTap: onTap,
         excludeSemantics: true,
+        // A row on the list's own grid, not a card: the search bar above stays
+        // the drawer's one box, and her seal starts on the 20 line.
         child: Material(
-          color: scheme.onSurface.withValues(alpha: 0.04),
-          shape: shape,
-          clipBehavior: Clip.antiAlias,
+          type: MaterialType.transparency,
           child: InkWell(
             onTap: onTap,
             customBorder: shape,
             child: SizedBox(
-              height: 54,
+              height: 48,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Row(
                   children: [
-                    CompanionSeal(name: name),
+                    CompanionSeal(name: name, size: 30),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
