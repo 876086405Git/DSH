@@ -2092,12 +2092,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   List<CompanionLogEntry> get _visibleLightEntries {
     List<CompanionLogEntry> read(List<CompanionLine> lines, {bool legacy = false, String? speaking}) => [
-      for (final entry in companionLogFromLight(
-        lines,
-        emotions: _moves.emotionLabels,
-        actions: _moves.actionLabels,
-        speaking: speaking,
-      ))
+      for (final entry in companionLogFromLight(lines, speaking: speaking))
         if (legacy && entry.speaker == CompanionLogSpeaker.her)
           CompanionLogEntry.her(entry.text, who: context.l10n.companionLegacyConversation)
         else
@@ -2706,6 +2701,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   /// for 记忆 and 交代的事, which the sections already have as pages.
   List<Widget> _panel(L10n l10n, void Function(VoidCallback action, {bool stage}) run, {required bool tiles}) {
     final light = _light;
+    late final hasLightEntries = _visibleLightEntries.isNotEmpty;
     final credit = [
       if (_character.author case final author?) l10n.companionCreditAuthor(author),
       ?_character.license,
@@ -2723,7 +2719,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
             ),
             (icon: AppIcons.reminder, label: l10n.companionTasksTitle, onTap: () => run(() => unawaited(_openTasks()))),
           ],
-          if (_sessionId != null || _visibleLightEntries.isNotEmpty)
+          if (_sessionId != null || hasLightEntries)
             (icon: AppIcons.history, label: l10n.companionLogTitle, onTap: () => run(_openLog, stage: true)),
           (
             icon: AppIcons.companionVoice,
@@ -2890,7 +2886,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
             title: l10n.companionMemorySearchTitle,
             onTap: () => run(() => unawaited(_openMemorySearch())),
           ),
-          if (_visibleLightEntries.isNotEmpty)
+          if (hasLightEntries)
             SettingsTile(
               icon: AppIcons.newChat,
               tinted: false,
@@ -3053,14 +3049,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   }
 
   Widget _buildSections(BuildContext context) {
-    // The memory and task pages query the store as they build. This page
+    // The memory, task and her pages query the store as they build. This page
     // builds for each of her streamed words and the room for each frame of the
     // keyboard, so they are made again only for another tab, memory or
-    // character. The task page in front still is: its times move.
+    // character. The task and her pages in front still are: times move, and
+    // her settings change under her own page.
     if (widget.sections) _visited.add(_tab);
     if (_sectionPagesKey != _sectionPagesFor) _sectionPages.clear();
     for (final tab in _visited) {
-      if (tab == _CompanionTab.memory || tab == _CompanionTab.tasks && _tab != tab) {
+      if (tab == _CompanionTab.memory || tab != _CompanionTab.room && _tab != tab) {
         _sectionPages.putIfAbsent(tab, () => _sectionPage(context, tab));
       }
     }

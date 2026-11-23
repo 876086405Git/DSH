@@ -943,7 +943,7 @@ void main() {
       expect(rebuilt, [CompanionPage]);
       expect(messageReads, 0);
 
-      await tester.pumpWidget(_app(const SizedBox()));
+      await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 10));
     });
 
