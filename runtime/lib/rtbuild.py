@@ -899,6 +899,8 @@ def dsh_drop_reason(rel, abi, prune_dev):
     if prune_dev:
         if rel.startswith((
                 "node_modules/@mixmark-io/domino/test/",
+                "node_modules/gaxios/build/esm/test/",
+                "node_modules/gaxios/build/cjs/test/",
                 "node_modules/zod/src/v3/tests/",
                 "node_modules/zod/src/v4/classic/tests/",
                 "node_modules/zod/src/v4/core/tests/",
@@ -906,7 +908,7 @@ def dsh_drop_reason(rel, abi, prune_dev):
             return "package-tests"
         if "/typescript/" not in "/" + rel and low.endswith((".d.ts", ".d.mts", ".d.cts", ".tsbuildinfo")):
             return "dev-metadata"
-        if low.endswith((".js.map", ".mjs.map", ".cjs.map", ".ts.map", ".css.map")):
+        if low.endswith((".js.map", ".mjs.map", ".cjs.map", ".ts.map", ".css.map", ".d.mts.map", ".d.cts.map")):
             return "dev-metadata"
         if rel.startswith(TS_SOURCE_DIRS) and low.endswith(".ts"):
             return "package-typescript-source"
