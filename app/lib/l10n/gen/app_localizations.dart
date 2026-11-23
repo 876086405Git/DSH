@@ -13686,6 +13686,48 @@ abstract class L10n {
   /// **'{date} 提醒你'**
   String companionDrawerReminderLater(String date);
 
+  /// No description provided for @companionRawEraseAsk.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{quote}」这句原话也一起删掉吗？删了就找不回来了。'**
+  String companionRawEraseAsk(String quote);
+
+  /// No description provided for @companionRawEraseAskMany.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{quote}」等 {count} 句原话也一起删掉吗？删了就找不回来了。'**
+  String companionRawEraseAskMany(String quote, int count);
+
+  /// No description provided for @companionRawEraseYes.
+  ///
+  /// In zh, this message translates to:
+  /// **'删掉'**
+  String get companionRawEraseYes;
+
+  /// No description provided for @companionRawEraseNo.
+  ///
+  /// In zh, this message translates to:
+  /// **'留着'**
+  String get companionRawEraseNo;
+
+  /// No description provided for @companionRawErased.
+  ///
+  /// In zh, this message translates to:
+  /// **'好，原话也删掉了。'**
+  String get companionRawErased;
+
+  /// No description provided for @companionRawKept.
+  ///
+  /// In zh, this message translates to:
+  /// **'好，原话留着。'**
+  String get companionRawKept;
+
+  /// No description provided for @companionRawEraseGone.
+  ///
+  /// In zh, this message translates to:
+  /// **'这次来不及了，原话还留着。想删的话再跟我说一次。'**
+  String get companionRawEraseGone;
+
   /// No description provided for @automaticDiagnosticsRecover.
   ///
   /// In zh, this message translates to:

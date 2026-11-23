@@ -38,7 +38,8 @@ class CompanionAgentAttachment {
   bool get isAttached => _window.current(_visit);
   bool get preparing => _visit.preparing;
   bool get running => _visit.run?.running ?? false;
-  String? get preparingSignalId => isAttached ? _visit.preparingSignalIdFor(_window.ui) : null;
+  // Retained API: local task speech has no model preparation.
+  String? get preparingSignalId => null;
   String get text => _visit.run?.text ?? '';
   String? get pendingText {
     final request = _visit.run?.request;
@@ -59,6 +60,24 @@ class CompanionAgentAttachment {
   CompanionMemoryOwner? get memory => _visit.memory;
   String? get characterId => _visit.characterId;
   ({int tier, Object? settledDay})? get affinity => _visit.displayAffinity;
+
+  CompanionPendingRawErase? get pendingRawErase => isAttached ? _visit.pendingRawErase : null;
+
+  /// Call only after the actual card or notification actions were provided.
+  CompanionRawEraseResult markRawEraseOffered(String id) {
+    if (!isAttached) throw const DshClosedException('Companion window closed');
+    return _visit.markRawEraseOffered(id);
+  }
+
+  CompanionRawEraseResult confirmRawErase(String id) {
+    if (!isAttached) throw const DshClosedException('Companion window closed');
+    return _visit.confirmRawErase(id);
+  }
+
+  CompanionRawEraseResult declineRawErase(String id) {
+    if (!isAttached) throw const DshClosedException('Companion window closed');
+    return _visit.declineRawErase(id);
+  }
 
   CompanionSnapshot? get vitals => _visit.snapshot;
   bool get light => _visit.light;
@@ -121,7 +140,6 @@ class CompanionAgentAttachment {
     _visit._offerTaskSignal(
       speech,
       target: _window.ui,
-      language: language,
       recipientCurrent: () => isAttached,
       signalCurrent: isCurrent,
       present: present,
@@ -154,6 +172,24 @@ class CompanionAgentResident {
   bool get active => _visit.active && identical(_visit.residentUi, _ui);
   CompanionMemoryOwner? get memory => active ? _visit.memory : null;
   String? get characterId => active ? _visit.characterId : null;
+  CompanionPendingRawErase? get pendingRawErase => active ? _visit.pendingRawErase : null;
+
+  /// Notification and float actions share the room's one Store record.
+  CompanionRawEraseResult markRawEraseOffered(String id) {
+    if (!active) throw const DshClosedException('Companion resident closed');
+    return _visit.markRawEraseOffered(id);
+  }
+
+  CompanionRawEraseResult confirmRawErase(String id) {
+    if (!active) throw const DshClosedException('Companion resident closed');
+    return _visit.confirmRawErase(id);
+  }
+
+  CompanionRawEraseResult declineRawErase(String id) {
+    if (!active) throw const DshClosedException('Companion resident closed');
+    return _visit.declineRawErase(id);
+  }
+
   bool get ownsCurrentRun => active && identical(_visit.runOrigin, _ui) && identical(_visit.run, _visit.agent._run);
 
   Future<bool> deliverReply(String replyId, String text, Future<bool> Function(int? noticeEpoch) deliver) {
@@ -166,9 +202,8 @@ class CompanionAgentResident {
     return run.externalNoticeContent ? Future.value(false) : deliver(null);
   }
 
-  /// Only this signal's actual model request may survive its own busy view.
-  String? get preparingSignalId =>
-      active && identical(_visit.initiativeUi, _ui) ? _visit.preparingSignalIdFor(_ui) : null;
+  /// Retained API: local task speech has no model preparation.
+  String? get preparingSignalId => null;
 
   /// The floating composer reads the same role/cutoff-filtered transcript.
   /// It keeps no second message list or cold replay queue.
@@ -290,8 +325,6 @@ class _CompanionAgentVisit {
   CompanionAgentPhoneTools? activePhoneTools;
   CompanionResidentSignals? residentSignals;
   _VisitNotices? notices;
-  ({String signalId, CompanionAgentModelRequest request, int generation, CompanionAgentRoomUi recipient})?
-  signalPreparation;
   _CompanionAgentRun? run;
   Timer? quietTimer;
   Timer? idleTimer;
@@ -319,21 +352,23 @@ class _CompanionAgentVisit {
       identical(agent._visit, this) &&
       (residentUi != null || (window?.attached == true && window!.ui.mounted));
 
-  // Identity only: a Page reads this while constructing its initiative view.
-  // Reading initiativeUi here would recurse back through that same Page view.
-  String? preparingSignalIdFor(CompanionAgentRoomUi recipient) {
-    final preparation = signalPreparation;
-    if (preparation == null ||
-        !identical(agent._asideRequest, preparation.request) ||
-        agent._asideGeneration != preparation.generation ||
-        !identical(preparation.recipient, recipient) ||
-        agent._run?.running == true) {
-      return null;
-    }
-    return preparation.signalId;
+  DateTime? lastUserInteractionAt;
+
+  CompanionPendingRawErase? get pendingRawErase =>
+      active ? memory?.pendingRawErase(this, characterId: characterId) : null;
+
+  CompanionMemoryOwner get _rawEraseOwner {
+    final owner = memory;
+    if (!active || owner == null) throw const DshClosedException('Companion visit closed');
+    return owner;
   }
 
-  DateTime? lastUserInteractionAt;
+  CompanionRawEraseResult markRawEraseOffered(String id) =>
+      _rawEraseOwner.markRawEraseOffered(this, id, characterId: characterId);
+  CompanionRawEraseResult confirmRawErase(String id) =>
+      _rawEraseOwner.confirmRawErase(this, id, characterId: characterId);
+  CompanionRawEraseResult declineRawErase(String id) =>
+      _rawEraseOwner.declineRawErase(this, id, characterId: characterId);
 
   // Only resident-owned periodic work slows down. User input, the current
   // request and its receipt are unchanged; equal state never resets a timer.
@@ -374,6 +409,9 @@ class _CompanionAgentVisit {
     captured.mapHandoff.close();
     captured.ui.detached();
     if (!identical(window, captured)) return;
+    // This runs inside the Page's dispose: revoke without notifying. The
+    // Visit's own close, or its changed() below, follows right after.
+    if (!replacing) memory?.invalidateRawErase(this, notify: false);
     unawaited(companionMarkSeen(DateTime.now()));
     finishPresence();
     if (identical(enteredRoom, captured.ui.initiativeRoom)) {
@@ -427,6 +465,7 @@ class _CompanionAgentVisit {
     character = next;
     moves = nextMoves;
     if (characterSourceKey == sourceKey) return;
+    memory?.invalidateRawErase(this);
     finishPresence();
     stop(discard: true);
     memory?.cancelWork();
@@ -493,6 +532,15 @@ class _CompanionAgentVisit {
     bindCharacter();
     controlRevision = owner.store.archive['control_revision']! as int;
     owner.addListener(memoryChanged);
+    // Bind this real Visit before either initialization await can outlive its
+    // window. The Owner's ready gate still postpones all maintenance work.
+    owner.enter(
+      this,
+      transport: () => agent._modelTransport(isCurrent: captureCurrent(), forMemory: true),
+      estimateTokens: estimateCompanionMemoryTokens,
+      characterId: characterId,
+      ready: false,
+    );
     await initiative.attachMemory(owner.store);
     try {
       await owner.migrateLocal();
@@ -500,11 +548,7 @@ class _CompanionAgentVisit {
       // The original migration retries on another visit.
     }
     if (!active) return owner;
-    owner.enter(
-      this,
-      transport: () => agent._modelTransport(isCurrent: captureCurrent(), forMemory: true),
-      estimateTokens: estimateCompanionMemoryTokens,
-    );
+    owner.finishOpening(this);
     if (ref.read(operatingSystemProvider) == 'android') {
       notices = _VisitNotices(this, owner, ref.read(companionNoticesProvider));
       unawaited(notices!.start(directory.path));
@@ -525,6 +569,9 @@ class _CompanionAgentVisit {
     final owner = memory;
     if (!active || owner == null) return;
     final revision = owner.store.archive['control_revision']! as int;
+    // Validate the fixed plan against committed changes, including an own
+    // later tool or maintenance commit. This projection does not notify.
+    owner.pendingRawErase(this, characterId: characterId);
     if (revision != controlRevision) {
       agent.cancelScreenObservation();
       final maintenance = owner.acceptsMaintenanceControl(this, revision);
@@ -534,6 +581,7 @@ class _CompanionAgentVisit {
       if (!maintenance) owner.cancelWork();
       quietTimer?.cancel();
       if (!own) {
+        owner.invalidateRawErase(this, notify: false);
         stop(discard: true);
         epoch++;
         keeper = null;
@@ -1329,7 +1377,6 @@ class _CompanionAgentVisit {
     _offerTaskSignal(
       speech,
       target: target,
-      language: 'zh',
       recipientCurrent: () => identical(residentUi, target),
       signalCurrent: signalCurrent,
       present: (display, text) => false,
@@ -1340,7 +1387,6 @@ class _CompanionAgentVisit {
   void _offerTaskSignal(
     CompanionSignalSpeech speech, {
     required CompanionAgentRoomUi target,
-    required String language,
     required bool Function() recipientCurrent,
     required bool Function() signalCurrent,
     required bool Function(CompanionInitiativeDisplay, String) present,
@@ -1356,47 +1402,20 @@ class _CompanionAgentVisit {
       nightKey: speech.nightKey,
     );
     final visitCurrent = captureCurrent();
-    var retired = false;
-    CompanionAgentModelRequest? preparation;
-    String? line;
-    bool current() =>
-        !retired && visitCurrent() && recipientCurrent() && identical(initiativeUi, target) && signalCurrent();
+    bool current() => visitCurrent() && recipientCurrent() && identical(initiativeUi, target) && signalCurrent();
     initiative.requestSignal(
       target.initiativeRoom,
       view,
       candidate,
       isCurrent: current,
-      prepare: () async {
-        line = await agent._prepareTaskSignal(
-          phase: speech.slot.signal.payload['phase']! as String,
-          signalId: candidate.id,
-          recipient: target,
-          language: language,
-          isCurrentSignal: current,
-          onRequest: (request) => preparation = request,
-        );
-        return line != null;
-      },
-      cancelPrepare: () {
-        retired = true;
-        final request = preparation;
-        if (request == null) return;
-        if (identical(signalPreparation?.request, request)) signalPreparation = null;
-        if (request.settled.isCompleted) return;
-        try {
-          request.client?.close();
-        } finally {
-          unawaited(request.drain().catchError((Object _) {}));
-        }
-      },
-      present: (display) => current() && line != null && present(display, line!),
+      present: (display) => current() && present(display, speech.text),
       hide: (_) {},
       nightCareEnabled: speech.nightCare,
       deliver: deliver == null
           ? null
           : (_) async {
-              if (!current() || line == null) return false;
-              return deliver(line!);
+              if (!current()) return false;
+              return deliver(speech.text);
             },
       retainDelivery: owner.retainReceipt,
     );
@@ -1443,7 +1462,8 @@ class _CompanionAgentVisit {
     final host = ref.read(activeHostProvider);
     final client = ref.read(activeConnectionProvider).value?.client;
     final nextLight = light;
-    final differs = nextLight != boundLight ||
+    final differs =
+        nextLight != boundLight ||
         (!nextLight && (generationChanged || host != boundHost || !identical(client, boundClient)));
     boundHost = host;
     boundClient = client;
@@ -1451,6 +1471,7 @@ class _CompanionAgentVisit {
     if (memory case final owner?) unawaited(resumeNotes(owner));
     if (!differs) return;
     notices?.invalidate();
+    memory?.invalidateRawErase(this);
     stop();
     memory?.cancelWork();
     epoch++;
@@ -1610,7 +1631,7 @@ class _CompanionAgentVisit {
     }
     subscriptions.clear();
     memory?.removeListener(memoryChanged);
-    memory?.leave(this);
+    memory?.leave(this, characterId: characterId, actualRoomLeave: oldWindow != null);
     if (enteredRoom case final room?) initiative.leave(room);
     enteredRoom = null;
     window = null;
