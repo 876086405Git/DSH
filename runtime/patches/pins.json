@@ -699,7 +699,7 @@
     "ohos-skill-root-events.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-skill-filesystem/lib/index.js": {
-          "after": "1850d4428432d2b0f1e0ddf237b800b4bf2087a8eed3a466475f56ac32b24ea4",
+          "after": "d8a3894aab75c2ca0d1d062545c6a028c85bc774c4e0b5f7d1324fcf0c1415cc",
           "before": "54d0833039aa6b5875338a259f8f7baa90d9365cd2458a6ce710364ae6ffd4ef"
         }
       }
@@ -3080,7 +3080,9 @@
       "web-table-pipes.diff",
       "ohos-web-converter-lazy.diff",
       "office-converter-lazy.diff",
-      "input-recovery.diff"
+      "input-recovery.diff",
+      "ohos-client-hmr-idle.diff",
+      "ohos-skill-root-events.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -3298,6 +3300,8 @@
       "ohos-web-converter-lazy.diff",
       "office-converter-lazy.diff",
       "input-recovery.diff",
+      "ohos-client-hmr-idle.diff",
+      "ohos-skill-root-events.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
@@ -3330,9 +3334,7 @@
       "ohos-mcp-command-router.diff",
       "ohos-workspace-grant-paths.diff",
       "ohos-workspace-edit.diff",
-      "ohos-client-hmr-idle.diff",
       "ohos-image-codec.diff",
-      "ohos-skill-root-events.diff",
       "ohos-piai-empty-models.diff",
       "ohos-mcp-start-close.diff",
       "ohos-jobs-active.diff",

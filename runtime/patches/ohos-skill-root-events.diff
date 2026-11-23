@@ -3,7 +3,7 @@
 @@ -1,5 +1,5 @@
  import { access, lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
 -import { unwatchFile, watchFile } from "node:fs";
-+import { unwatchFile, watch, watchFile } from "node:fs";
++import { lstatSync, unwatchFile, watch, watchFile } from "node:fs";
  import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
  import chokidar from "chokidar";
  import z from "@deepseek-ai/schemastery";
@@ -32,17 +32,17 @@
  			/* v8 ignore else -- A host path transition between the two probes is timing-dependent. */
  			try {
  				if (sameWatchMode(mode, await resolveRootWatchMode(state.root.path, this.config.followSymlinks))) return watcher;
-@@ -355,33 +362,75 @@
+@@ -355,33 +362,76 @@
  		}
  	}
  	openAncestorWatcher(state, mode) {
 +		let handle;
  		const listener = (_current, _previous) => {
 -			this.handleAncestorWatchEvent(state, mode);
--		};
 +			this.handleAncestorWatchEvent(state, handle);
-+		};
-+		if (!this.config.usePolling && state.nativeFallbackAnchor !== mode.anchor) {
+ 		};
++		// A link already at nextPath can be retargeted without an event in its parent; keep polling it.
++		if (!this.config.usePolling && state.nativeFallbackAnchor !== mode.anchor && lstatSync(mode.nextPath, { throwIfNoEntry: false }) === void 0) {
 +			let watcher;
 +			let closed = false;
 +			try {
@@ -89,10 +89,9 @@
  				unwatchFile(mode.nextPath, listener);
  			}
  		};
--	}
--	async handleAncestorWatchEvent(state, mode) {
 +		return handle;
-+	}
+ 	}
+-	async handleAncestorWatchEvent(state, mode) {
 +	async handleAncestorWatchEvent(state, watcher, renamed = false) {
 +		await settleWatcherOpening(state.opening);
 +		if (watcher === void 0 || this.closing || state.owners.size === 0 || state.watcher !== watcher) return;
@@ -117,7 +116,7 @@
  	}
  	async openRootWatcher(state, mode) {
  		const watcher = chokidar.watch(mode.anchor, {
-@@ -466,7 +515,7 @@
+@@ -466,7 +516,7 @@
  		this.queueInvalidation();
  		this.scheduleRewatch(state);
  	}
@@ -126,7 +125,7 @@
  		const currentOpening = state.opening ?? Promise.resolve();
  		(async () => {
  			await settleWatcherOpening(currentOpening);
-@@ -475,7 +524,7 @@
+@@ -475,7 +525,7 @@
  			} catch {
  				return;
  			}
@@ -135,7 +134,7 @@
  		})();
  	}
  	queueInvalidation() {
-@@ -522,7 +571,8 @@
+@@ -522,7 +572,8 @@
  	let candidate = root;
  	while (true) {
  		try {
@@ -145,7 +144,7 @@
  				const anchor = candidate === root && !followSymlinks && (await lstat(candidate)).isSymbolicLink() ? resolve(candidate) : await canonicalizeWatchPath(candidate);
  				if (candidate === root) return {
  					kind: "root",
-@@ -537,6 +587,8 @@
+@@ -537,6 +588,8 @@
  				return {
  					kind: "ancestor",
  					anchor,
@@ -154,7 +153,7 @@
  					nextPath: join(anchor, firstSegment)
  				};
  			}
-@@ -555,7 +607,7 @@
+@@ -555,7 +608,7 @@
  	}
  }
  function sameWatchMode(left, right) {
