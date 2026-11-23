@@ -9,20 +9,24 @@ import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.os.Build
+import android.os.Bundle
 import android.os.SystemClock
 import android.text.TextUtils
 import android.util.Log
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewOutlineProvider
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import io.github.ccch1mneyyy.dsh_app.R
 import io.github.ccch1mneyyy.dsh_app.pet.SafeArea
 import io.github.ccch1mneyyy.dsh_app.pet.Side
 import kotlin.math.abs
@@ -145,6 +149,16 @@ internal class OverlayScreen(
         var look = MarkLook.RUNNING
             set(v) { if (field != v) { field = v; invalidate() } }
 
+        /** 0–1: the hold-to-stop ring. */
+        var hold = 0f
+            set(v) { if (field != v) { field = v; invalidate() } }
+        private val ringPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            strokeCap = android.graphics.Paint.Cap.ROUND
+            strokeWidth = ctx.dpf(2.5f)
+            color = c.danger
+        }
+
         init {
             isClickable = true
             isFocusable = true
@@ -157,6 +171,23 @@ internal class OverlayScreen(
         }
 
         override fun getAccessibilityClassName(): CharSequence = android.widget.Button::class.java.name
+
+        override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+            super.onInitializeAccessibilityNodeInfo(info)
+            if (state?.stopped != true) info.addAction(AccessibilityNodeInfo.AccessibilityAction(R.id.overlay_action_stop, strings.stop))
+        }
+
+        override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean {
+            if (action == R.id.overlay_action_stop && state?.stopped != true) {
+                actions.stop()
+                return true
+            }
+            return super.performAccessibilityAction(action, arguments)
+        }
+
+        /** Touches are the window's ([watchDrag]): a tap expands, a hold stops, a drag moves. */
+        @android.annotation.SuppressLint("ClickableViewAccessibility")
+        override fun onTouchEvent(event: MotionEvent): Boolean = true
 
         override fun onVisibilityAggregated(isVisible: Boolean) {
             super.onVisibilityAggregated(isVisible)
@@ -181,6 +212,10 @@ internal class OverlayScreen(
                 mark.draw(canvas, r, r, look, c, 1f, 1f)
             }
             painter.drawBeam(canvas, rect, r, c, beam.turn, beam.alpha)
+            if (hold > 0f) {
+                val rr = r - ctx.dpf(3f)
+                canvas.drawArc(r - rr, r - rr, r + rr, r + rr, -90f, 360f * hold, false, ringPaint)
+            }
         }
     }
 
@@ -320,6 +355,7 @@ internal class OverlayScreen(
     fun show(title: CharSequence, hidden: Boolean): Boolean {
         if (attached) return true
         params.title = title
+        removing = false
         syncForm()
         fit()
         root.visibility = if (hidden) View.INVISIBLE else View.VISIBLE
@@ -343,11 +379,18 @@ internal class OverlayScreen(
     /** Goes; [animated]: it fades out first. */
     fun remove(animated: Boolean) {
         if (!attached) return
+        removing = true
         glide?.cancel()
         sizeAnim?.cancel()
+        endHold()
         sub.removeCallbacks(subTick)
+        // A minimise or restore under way must not take the fade over (its end action would never
+        // run and the window would stay): both forms stop, the one showing fades.
+        surface.animate().cancel()
+        mini.animate().cancel()
         if (!animated || !OverlayMotion.on()) { removeNow(); return }
-        face().animate().alpha(0f).scaleX(0.94f).scaleY(0.94f).setDuration(180).setInterpolator(OverlayMotion.emphasized)
+        val f = if (mini.visibility == View.VISIBLE) mini else surface
+        f.animate().alpha(0f).scaleX(0.94f).scaleY(0.94f).setDuration(180).setInterpolator(OverlayMotion.emphasized)
             .withEndAction { removeNow() }.start()
     }
 
@@ -360,6 +403,9 @@ internal class OverlayScreen(
             f.scaleY = 1f
         }
     }
+
+    /** Going away: no minimise or restore starts. */
+    private var removing = false
 
     /** What is on screen: the island with its picture, or the ball. */
     private fun face(): View = if (minimized) mini else surface
@@ -374,7 +420,8 @@ internal class OverlayScreen(
      * height (or the other way), the window resized between the two. Only for this task.
      */
     private fun setMinimized(min: Boolean) {
-        if (min == minimized) return
+        if (min == minimized || removing) return
+        endHold()
         minimized = min
         actions.minimized(min)
         val from = if (min) surface else mini
@@ -393,6 +440,7 @@ internal class OverlayScreen(
         from.pivotX = if (from === mini) ballPx / 2f else if (side == Side.RIGHT) surfaceW().toFloat() else 0f
         from.pivotY = from.height / 2f
         from.animate().alpha(0f).scaleX(0.6f).scaleY(0.6f).setDuration(150).setInterpolator(OverlayMotion.emphasized).withEndAction {
+            if (removing) return@withEndAction
             swap()
             to.alpha = 0f
             to.scaleX = 0.7f
@@ -568,6 +616,29 @@ internal class OverlayScreen(
     private var tracker: VelocityTracker? = null
     private var glide: ValueAnimator? = null
 
+    /** The ball held: the ring fills and the task stops, as on the capsule's ball. */
+    private val hold = HoldToStop()
+    private var onBall = false
+
+    private val holdTick = object : Runnable {
+        override fun run() {
+            val now = SystemClock.uptimeMillis()
+            if (hold.tick(now)) {
+                mini.hold = 1f
+                mini.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                actions.stop()
+                return
+            }
+            mini.hold = hold.progress(now)
+            if (hold.nextAt() != null) mini.postOnAnimation(this)
+        }
+    }
+
+    private fun endHold() {
+        mini.removeCallbacks(holdTick)
+        if (hold.state != HoldToStop.State.FIRED) mini.hold = 0f
+    }
+
     /** Watches every event; true once it is a drag (the root takes the gesture over from the keys and the picture). */
     private fun watchDrag(e: MotionEvent): Boolean {
         when (e.actionMasked) {
@@ -579,6 +650,14 @@ internal class OverlayScreen(
                 dragging = false
                 // 暂停 is a hold too: a finger on it never drags.
                 dragFrom = !on(pause, e) && !on(back, e) && !on(minKey, e)
+                onBall = minimized && on(mini, e)
+                if (onBall) {
+                    endHold()
+                    if (state?.stopped != true) {
+                        hold.down(SystemClock.uptimeMillis())
+                        mini.postOnAnimation(holdTick)
+                    }
+                }
                 glide?.cancel()
                 tracker?.recycle()
                 tracker = VelocityTracker.obtain().also { track(it, e) }
@@ -588,7 +667,10 @@ internal class OverlayScreen(
                 tracker?.let { track(it, e) }
                 val dx = e.rawX - downX
                 val dy = e.rawY - downY
-                if (!dragging && (abs(dx) > slop || abs(dy) > slop)) dragging = true
+                if (!dragging && !(onBall && hold.state == HoldToStop.State.FIRED) && (abs(dx) > slop || abs(dy) > slop)) {
+                    dragging = true
+                    if (onBall) { hold.moved(); endHold() }
+                }
                 if (dragging) {
                     val a = area()
                     params.x = (startX + dx.roundToInt()).coerceIn(-params.width / 2, a.screenW - params.width / 2)
@@ -606,6 +688,17 @@ internal class OverlayScreen(
                         vx = t.xVelocity
                     }
                     settle(vx)
+                }
+                if (onBall) {
+                    if (e.actionMasked == MotionEvent.ACTION_UP) {
+                        val release = if (state?.stopped == true) HoldToStop.Release.TAP else hold.up(SystemClock.uptimeMillis())
+                        endHold()
+                        if (release == HoldToStop.Release.TAP && !dragging) mini.performClick()
+                    } else {
+                        hold.cancel()
+                        endHold()
+                    }
+                    onBall = false
                 }
                 dragging = false
                 dragFrom = false
