@@ -716,27 +716,34 @@ class PhoneStatus {
 // ── 悬浮条 ───────────────────────────────────────────────────────────────────
 
 /// 设置 → 手机操控 → 悬浮条 (`overlayPrefs` / `setOverlayPrefs`): how opaque the
-/// ball is when idle, whether an idle capsule folds into the ball by itself, and
-/// whether the screen's edge glows while DSH works (both on unless the person
-/// turned them off, as OverlayPrefs.kt). A showing overlay follows changes at once.
+/// ball is when idle, whether the island gets out of the way by itself (off
+/// unless the person turns it on), whether the screen's edge glows while DSH
+/// works and whether the phone's own island shows the task instead of the
+/// floating bar (both on unless turned off), as OverlayPrefs.kt. A showing
+/// overlay follows changes at once.
 class PhoneOverlayPrefs {
   const PhoneOverlayPrefs({
     this.idleOpacity = defaultOpacity,
     this.autoCollapse = defaultAutoCollapse,
     this.edgeGlow = defaultEdgeGlow,
+    this.systemIsland = defaultSystemIsland,
   });
 
   factory PhoneOverlayPrefs.fromMap(Map<Object?, Object?> m) => PhoneOverlayPrefs(
     idleOpacity: clampOpacity(m['idleOpacity'] is num ? (m['idleOpacity'] as num).toDouble() : defaultOpacity),
     autoCollapse: _maybeFlag(m['autoCollapse']) ?? defaultAutoCollapse,
     edgeGlow: _maybeFlag(m['edgeGlow']) ?? defaultEdgeGlow,
+    systemIsland: _maybeFlag(m['systemIsland']) ?? defaultSystemIsland,
   );
 
-  /// On: the capsule shows what DSH starts doing, then gets out of the way.
-  static const defaultAutoCollapse = true;
+  /// Off: the island stays as the person left it and folds into the ball only by hand.
+  static const defaultAutoCollapse = false;
 
   /// On: the screen's edge glows while DSH operates the phone.
   static const defaultEdgeGlow = true;
+
+  /// On: where the phone has its own island (HyperOS, ColorOS, MagicOS), the task shows there.
+  static const defaultSystemIsland = true;
 
   /// 70 %: the line reads over light and dark pages alike (see OverlayPrefs.kt).
   static const defaultOpacity = 0.7;
@@ -756,23 +763,29 @@ class PhoneOverlayPrefs {
   /// 屏幕边缘光效.
   final bool edgeGlow;
 
+  /// 用系统灵动岛显示.
+  final bool systemIsland;
+
   int get percent => (idleOpacity * 100).round();
 
-  PhoneOverlayPrefs copyWith({double? idleOpacity, bool? autoCollapse, bool? edgeGlow}) => PhoneOverlayPrefs(
-    idleOpacity: idleOpacity == null ? this.idleOpacity : clampOpacity(idleOpacity),
-    autoCollapse: autoCollapse ?? this.autoCollapse,
-    edgeGlow: edgeGlow ?? this.edgeGlow,
-  );
+  PhoneOverlayPrefs copyWith({double? idleOpacity, bool? autoCollapse, bool? edgeGlow, bool? systemIsland}) =>
+      PhoneOverlayPrefs(
+        idleOpacity: idleOpacity == null ? this.idleOpacity : clampOpacity(idleOpacity),
+        autoCollapse: autoCollapse ?? this.autoCollapse,
+        edgeGlow: edgeGlow ?? this.edgeGlow,
+        systemIsland: systemIsland ?? this.systemIsland,
+      );
 
   @override
   bool operator ==(Object other) =>
       other is PhoneOverlayPrefs &&
       other.idleOpacity == idleOpacity &&
       other.autoCollapse == autoCollapse &&
-      other.edgeGlow == edgeGlow;
+      other.edgeGlow == edgeGlow &&
+      other.systemIsland == systemIsland;
 
   @override
-  int get hashCode => Object.hash(idleOpacity, autoCollapse, edgeGlow);
+  int get hashCode => Object.hash(idleOpacity, autoCollapse, edgeGlow, systemIsland);
 }
 
 // ── Results ──────────────────────────────────────────────────────────────────
@@ -1592,8 +1605,43 @@ class PhoneChannel {
   Future<PhoneOverlayPrefs?> overlayPrefs() => _overlay('overlayPrefs');
 
   /// Writes what is given (the rest stays); the stored result, null without the native side.
-  Future<PhoneOverlayPrefs?> setOverlayPrefs({double? idleOpacity, bool? autoCollapse, bool? edgeGlow}) =>
-      _overlay('setOverlayPrefs', {'idleOpacity': ?idleOpacity, 'autoCollapse': ?autoCollapse, 'edgeGlow': ?edgeGlow});
+  Future<PhoneOverlayPrefs?> setOverlayPrefs({
+    double? idleOpacity,
+    bool? autoCollapse,
+    bool? edgeGlow,
+    bool? systemIsland,
+  }) => _overlay('setOverlayPrefs', {
+    'idleOpacity': ?idleOpacity,
+    'autoCollapse': ?autoCollapse,
+    'edgeGlow': ?edgeGlow,
+    'systemIsland': ?systemIsland,
+  });
+
+  /// Whether this phone has its own island the task can show in (HyperOS 超级岛,
+  /// ColorOS 流体云, MagicOS): `vendor`; and whether it does now (`shows`: the
+  /// live activity is on and the system promotes it). False without the native side.
+  Future<({bool vendor, bool shows})> systemIsland() async {
+    try {
+      final map = await _methods.invokeMapMethod<Object?, Object?>('systemIsland');
+      return (vendor: map?['vendor'] == true, shows: map?['shows'] == true);
+    } on MissingPluginException {
+      return (vendor: false, shows: false);
+    } on PlatformException {
+      return (vendor: false, shows: false);
+    }
+  }
+
+  /// What DSH last said in [sessionId], the conversation driving the phone, for
+  /// the island's card (null forgets it). Best effort: an older native side ignores it.
+  Future<void> setPhoneThought(String sessionId, String? text) async {
+    try {
+      await _methods.invokeMethod<bool>('setPhoneThought', {'sessionId': sessionId, 'text': text});
+    } on MissingPluginException {
+      // An older native module shows no thoughts.
+    } on PlatformException {
+      // Nothing to show then.
+    }
+  }
 
   Future<PhoneOverlayPrefs?> _overlay(String method, [Object? args]) async {
     try {

@@ -72,6 +72,7 @@ const _rows = {
   'phone-confirm',
   'phone-auto-collapse',
   'phone-edge-glow',
+  'phone-system-island',
   'phone-return',
   'phone-background-guide',
   'phone-files',

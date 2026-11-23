@@ -29,6 +29,10 @@ data class LiveContent(
     val eventId: String? = null,
     /** Phone control: the task its 停止操作 stops (never whichever is selected at tap time). */
     val phoneTaskId: Long? = null,
+    /** Phone control: paused, so its key says 继续. */
+    val phonePaused: Boolean = false,
+    /** Phone control: the app whose icon goes with it (the island shows it), once there is one; null: the pet or DSH's own. */
+    val iconApp: String? = null,
 ) {
     enum class Kind(val wire: String) {
         PHONE("phone"),

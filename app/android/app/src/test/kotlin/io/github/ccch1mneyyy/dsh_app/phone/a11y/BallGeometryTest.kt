@@ -301,6 +301,67 @@ class BallGeometryTest {
         assertEquals(2400 - 63, BallGeometry.tucked(WindowPos(0, 0), Side.RIGHT, land, pad, ball).x + pad + ball / 2)
     }
 
+    // ---- 默认顶部居中的岛：卡片向下展开，小球收在正中 -------------------------------------------------------
+
+    @Test fun theDefaultIslandSitsAtTheTopCentreUnderTheStatusBarAndOpensDown() {
+        val spot = CapsuleSpot()
+        assertEquals(CapsuleAnchor.CENTRE, spot.anchor)
+        assertEquals(CapsulePlacement.TOP, spot.fraction)
+        val top = CapsulePlacement.centreY(area, headerH, gap, fraction = spot.fraction)
+        // As high as it goes: its top a gap under the status bar.
+        assertEquals(area.top + gap, top - headerH / 2)
+        assertTrue(CapsulePlacement.opensDown(area, top))
+        // Symmetric: as far from either side.
+        val left = CapsulePlacement.capsuleLeft(CapsuleAnchor.CENTRE, area, capsuleW, edge)
+        assertNear(left, area.screenW - (left + capsuleW))
+        // Hung from the top, the window's surface starts at the capsule's top.
+        assertEquals(top - headerH / 2, CapsulePlacement.windowTopY(top, headerH, padTop) + padTop)
+        // Lower down the card opens up, as before.
+        assertTrue(!CapsulePlacement.opensDown(area, centre))
+    }
+
+    @Test fun aCardOpeningDownGetsTheRoomDownToTheBarOrTheKeyboard() {
+        val top = CapsulePlacement.centreY(area, headerH, gap, fraction = CapsulePlacement.TOP)
+        val capsuleTop = top - headerH / 2
+        assertEquals(area.screenH - area.bottom - gap - capsuleTop, CapsulePlacement.cardRoomBelow(area, top, headerH, gap))
+        val keyboard = 1500
+        assertEquals(keyboard - gap - capsuleTop, CapsulePlacement.cardRoomBelow(area, top, headerH, gap, keyboard))
+    }
+
+    @Test fun aDownwardCardLiftsOverTheKeyboardForItsBodyNotJustTheHeader() {
+        val keyboard = 1500
+        val low = 1300
+        val cardH = 600
+        // Room for the whole card over the keyboard: its bottom a gap above it.
+        val lifted = CapsulePlacement.liftForCard(area, low, headerH, gap, keyboard, cardH)
+        assertEquals(cardH, CapsulePlacement.cardRoomBelow(area, lifted, headerH, gap, keyboard))
+        // Never above the gap under the status bar; with no keyboard it stays put.
+        assertEquals(area.top + gap + headerH / 2, CapsulePlacement.liftForCard(area, low, headerH, gap, keyboard, 5000))
+        assertEquals(low, CapsulePlacement.liftForCard(area, low, headerH, gap, null, cardH))
+    }
+
+    @Test fun anIslandAtTheTopFoldsIntoABallInItsMiddle() {
+        val top = CapsulePlacement.centreY(area, headerH, gap, fraction = CapsulePlacement.TOP)
+        val wx = CapsulePlacement.windowX(CapsulePlacement.capsuleLeft(CapsuleAnchor.CENTRE, area, capsuleW, edge), padX, 0)
+        val wy = CapsulePlacement.windowTopY(top, headerH, padTop)
+        assertEquals((capsuleW - ball) / 2, BallGeometry.circleLeft(0, capsuleW, ball, null))
+        val over = BallGeometry.ballOver(wx, wy, padX, padTop, BallGeometry.circleLeft(0, capsuleW, ball, null), 0, pad)
+        // The circle the island shrinks to is where the ball rests at the top centre: no glide after the fold.
+        val rest = BallGeometry.topCentre(area, size, top)
+        assertNear(rest.x, over.x)
+        assertEquals(rest.y, over.y)
+        assertNear(area.screenW / 2, rest.x + size / 2)
+    }
+
+    @Test fun aBallLetGoNearTheTopCentreGoesBackThere() {
+        val y = area.top + ball / 2
+        assertTrue(BallGeometry.nearTopCentre(area.screenW / 2, y, area, ball))
+        assertTrue(BallGeometry.nearTopCentre(area.screenW / 2 + area.screenW / 8, y, area, ball))
+        // Towards a side, or lower down: a side dock.
+        assertTrue(!BallGeometry.nearTopCentre(area.screenW - ball, y, area, ball))
+        assertTrue(!BallGeometry.nearTopCentre(area.screenW / 2, area.top + 3 * ball, area, ball))
+    }
+
     @Test fun aCapsuleDraggedOffASideBecomesABallLevelWithIt() {
         val at = 900
         for (side in Side.entries) {

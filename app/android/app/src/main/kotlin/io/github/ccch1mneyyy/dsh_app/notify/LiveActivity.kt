@@ -8,6 +8,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Path
+import android.graphics.RectF
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
@@ -20,7 +24,10 @@ import io.github.ccch1mneyyy.dsh_app.R
 import io.github.ccch1mneyyy.dsh_app.i18n.AppStrings
 import io.github.ccch1mneyyy.dsh_app.pet.PetOverlay
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneControl
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.IconPainter
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.StatusLines
 import io.github.ccch1mneyyy.dsh_app.runtime.DshService
+import io.github.ccch1mneyyy.dsh_app.runtime.VendorSettings
 import io.github.ccch1mneyyy.dsh_app.theme.ThemeAccent
 
 /**
@@ -42,7 +49,12 @@ import io.github.ccch1mneyyy.dsh_app.theme.ThemeAccent
  * times out otherwise, so a process that died doesn't leave 「工作中」 behind.
  *
  * Content: [LiveContent]. The agent's part comes from Dart ([update]); phone control's is read
- * here ([PhoneControl.liveTask]) whenever it changes ([refresh]).
+ * here ([PhoneControl.liveTask]) whenever it changes ([refresh]): the app's icon, 「微信 · 点「发送」」,
+ * 暂停 / 继续 and 停止, and a tap that goes back to the chat (pausing a task on the person's own
+ * screen first, as the floating bar's 回到 DSH Go does).
+ *
+ * Where the phone's own island shows it ([islandShows]), the floating bar steps aside for it
+ * (「用系统灵动岛显示」, ControlOverlay).
  */
 object LiveActivity {
     const val CHANNEL = "dsh-live"
@@ -58,6 +70,10 @@ object LiveActivity {
     private const val TIMEOUT_MS = 10 * 60_000L
     private const val ENDING_TIMEOUT_MS = 15_000L
     private const val PORTRAIT_DP = 64
+    private const val ISLAND_TTL_MS = 60_000L
+
+    /** Where SystemUI draws promoted notifications in an island: HyperOS 3.1+, ColorOS 16 (OPPO, OnePlus, realme), MagicOS 10. */
+    private val ISLAND_VENDORS = setOf(VendorSettings.XIAOMI, VendorSettings.OPPO, VendorSettings.HONOR)
 
     private val handler: Handler by lazy { Handler(HandlerThread("dsh-live").apply { start() }.looper) }
 
@@ -74,6 +90,17 @@ object LiveActivity {
     private var phoneSince = 0L
     private var portraitKey: String? = null
     private var portrait: Bitmap? = null
+
+    /** The app DSH works in and its icon as the island shows it (the floating bar found it; [setPhoneIcon]). */
+    @Volatile private var phoneIcon: Pair<String, Bitmap>? = null
+
+    /** Whether the phone's own island shows the live activity; null until checked ([islandShows]). */
+    @Volatile private var island: Boolean? = null
+    @Volatile private var islandAt = 0L
+    @Volatile private var islandChecking = false
+
+    /** Told (on the live thread) when [islandShows] changes. */
+    @Volatile var islandListener: (() -> Unit)? = null
 
     private val applyNow = Runnable { apply() }
     private val repost = Runnable {
@@ -138,6 +165,60 @@ object LiveActivity {
         )
     }
 
+    /**
+     * The phone's own island shows the live activity now: it is on, and either HyperOS takes the
+     * focus template, or the system promotes it on a phone whose SystemUI draws promoted
+     * notifications in an island ([ISLAND_VENDORS]). Read from a cache any thread may use; checked
+     * again on the live thread when stale, [islandListener] hearing a change.
+     */
+    fun islandShows(context: Context): Boolean {
+        val ctx = attach(context)
+        if ((island == null || SystemClock.elapsedRealtime() - islandAt > ISLAND_TTL_MS) && !islandChecking) {
+            islandChecking = true
+            handler.post { checkIsland(ctx) }
+        }
+        return island == true
+    }
+
+    /**
+     * For the settings page: `vendor` (this phone has an island the live activity can use) and
+     * `shows` (it does now). A binder call into SystemUI on HyperOS: call off the main thread.
+     */
+    fun islandSupport(context: Context): Map<String, Any?> {
+        val ctx = attach(context)
+        return mapOf("vendor" to (islandVendor() || XiaomiFocus.allowed(ctx)), "shows" to checkIsland(ctx))
+    }
+
+    private fun islandVendor(): Boolean = VendorSettings.vendorOf(Build.MANUFACTURER, Build.BRAND) in ISLAND_VENDORS
+
+    private fun checkIsland(ctx: Context): Boolean {
+        val shows = enabled(ctx) && posts(ctx) && (XiaomiFocus.allowed(ctx) || (islandVendor() && canPromote(ctx)))
+        islandAt = SystemClock.elapsedRealtime()
+        islandChecking = false
+        if (island != shows) {
+            island = shows
+            islandListener?.invoke()
+        }
+        return shows
+    }
+
+    /**
+     * The icon of the app DSH works in ([label]), as the floating bar draws it: a rounded square,
+     * for the island. Any thread; drawn once per app.
+     */
+    fun setPhoneIcon(context: Context, label: String, icon: Drawable) {
+        if (phoneIcon?.first == label) return
+        val ctx = attach(context)
+        val px = (PORTRAIT_DP * ctx.resources.displayMetrics.density).toInt().coerceIn(96, 256)
+        val bitmap = runCatching {
+            Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888).also { b ->
+                IconPainter().draw(Canvas(b), icon.constantState?.newDrawable(ctx.resources)?.mutate() ?: icon, px / 2f, px / 2f, px.toFloat(), 1f)
+            }
+        }.getOrNull() ?: return
+        phoneIcon = label to bitmap
+        refresh(ctx)
+    }
+
     /** The system page with this app's 「实时活动」 switch (Android 16 QPR1+); check it resolves. */
     @SuppressLint("InlinedApi")
     fun settingsIntent(context: Context): Intent =
@@ -152,8 +233,16 @@ object LiveActivity {
 
     private fun nm(ctx: Context) = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+    /** Notifications are allowed and the live channel is above 最低 (a minimum-importance channel is never promoted to the island). */
+    private fun posts(ctx: Context): Boolean = runCatching {
+        val nm = nm(ctx)
+        nm.areNotificationsEnabled() &&
+            (nm.getNotificationChannel(CHANNEL)?.importance ?: NotificationManager.IMPORTANCE_DEFAULT) > NotificationManager.IMPORTANCE_MIN
+    }.getOrDefault(false)
+
     private fun apply() {
         val ctx = app ?: return
+        checkIsland(ctx)
         val content = if (enabled(ctx) && (canPromote(ctx) || XiaomiFocus.allowed(ctx))) {
             LiveContent.pick(phoneContent(ctx), agent)
         } else {
@@ -182,16 +271,22 @@ object LiveActivity {
             phoneSince = System.currentTimeMillis()
         }
         val title = AppStrings.get(ctx, R.string.phone_running)
+        // 「微信 · 点「发送」」: the line without its 「DSH 正在操作 · 」, after the app.
+        val line = task.line?.let {
+            StatusLines(AppStrings.get(ctx, R.string.phone_waived_status), AppStrings.get(ctx, R.string.phone_acting)).parse(it).text
+        }
         return LiveContent(
             kind = LiveContent.Kind.PHONE,
             title = title,
-            text = task.line ?: task.app.orEmpty(),
+            text = listOfNotNull(task.app, line).joinToString(" · "),
             chip = AppStrings.get(ctx, if (task.paused) R.string.live_chip_paused else R.string.live_chip_phone),
             publicText = title,
             sinceMs = phoneSince,
             packId = packId,
             mood = "working",
             phoneTaskId = task.id,
+            phonePaused = task.paused,
+            iconApp = task.app?.takeIf { it == phoneIcon?.first },
         )
     }
 
@@ -199,7 +294,8 @@ object LiveActivity {
         val nm = nm(ctx)
         ensureChannel(ctx, nm)
         val color = ThemeAccent.notificationColor(ctx)
-        val picture = c.packId?.let { portraitOf(ctx, it, c.mood) }
+        // Phone control shows the app DSH works in; otherwise the pet doing what the activity says.
+        val picture = c.iconApp?.let { app -> phoneIcon?.takeIf { it.first == app }?.second } ?: c.packId?.let { portraitOf(ctx, it, c.mood) }
         val builder = Notification.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_dsh)
             .setColor(color)
@@ -233,6 +329,13 @@ object LiveActivity {
             builder.setStyle(Notification.BigTextStyle().bigText(c.text))
         }
         if (c.kind == LiveContent.Kind.PHONE && c.phoneTaskId != null) {
+            // 暂停 / 继续 first, as on the floating bar; 停止 after it.
+            val pause = PendingIntent.getService(
+                ctx, ID + 1, DshService.phonePauseIntent(ctx, c.phoneTaskId, !c.phonePaused),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            val pauseLabel = AppStrings.get(ctx, if (c.phonePaused) R.string.live_phone_resume else R.string.live_phone_pause)
+            builder.addAction(Notification.Action.Builder(null, pauseLabel, pause).build())
             val stop = PendingIntent.getService(
                 ctx, ID, DshService.phoneStopIntent(ctx, c.phoneTaskId),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
@@ -257,6 +360,10 @@ object LiveActivity {
     }
 
     private fun openIntent(ctx: Context, c: LiveContent): PendingIntent {
+        // Phone control: 回到 DSH Go, pausing a task on the person's own screen first.
+        if (c.kind == LiveContent.Kind.PHONE && c.phoneTaskId != null) {
+            return PendingIntent.getService(ctx, ID + 2, DshService.phoneBackIntent(ctx, c.phoneTaskId), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        }
         val session = c.sessionId
         val host = c.host
         if (session != null && host != null) return ChatNotifier(ctx).sessionIntent(session, host, "live", c.eventId, ID)

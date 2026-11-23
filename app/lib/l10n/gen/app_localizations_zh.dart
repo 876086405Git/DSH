@@ -13830,13 +13830,25 @@ class L10nZh extends L10n {
   String get phoneAutoCollapse => '闲置时自动收起';
 
   @override
-  String get phoneAutoCollapseHint => '收成小球，点按展开';
+  String get phoneAutoCollapseHint => '一会儿不碰就收起卡片、收成小球；关着时只在你点按时收起';
 
   @override
   String get phoneEdgeGlow => '屏幕边缘光效';
 
   @override
   String get phoneEdgeGlowHint => '操控时屏幕四周的流光';
+
+  @override
+  String get phoneSystemIsland => '用系统灵动岛显示';
+
+  @override
+  String get phoneSystemIslandHint => '小米超级岛、ColorOS 流体云、荣耀 MagicOS 上，操作进度放进系统的灵动岛，不再出悬浮条';
+
+  @override
+  String get phoneSystemIslandOff => '要先在通知设置里打开「实时活动」，没打开时仍用悬浮条';
+
+  @override
+  String get phoneSystemIslandUnsupported => '这台手机没有可用的系统灵动岛，用悬浮条';
 
   @override
   String get phoneDeveloperOptions => '开发者选项';
@@ -18769,6 +18781,9 @@ class L10nZh extends L10n {
 
   @override
   String get searchKwPhoneEdgeGlow => '边缘光,光效,流光,特效,边框';
+
+  @override
+  String get searchKwPhoneSystemIsland => '灵动岛,超级岛,流体云,胶囊,实时活动,悬浮条';
 
   @override
   String get searchKwPhoneReturn => '返回,完成后返回';

@@ -289,9 +289,14 @@ class OverlayModelTest {
 
     // ---- 卡片列几步 -----------------------------------------------------------------------------------
 
-    @Test fun aShortScreenListsOneStep() {
+    @Test fun aShortScreenListsOneStepATallOneFive() {
         assertEquals(1, CapsuleMetrics.steps(411f))
-        assertEquals(3, CapsuleMetrics.steps(914f))
+        assertEquals(3, CapsuleMetrics.steps(640f))
+        assertEquals(5, CapsuleMetrics.steps(914f))
+        // Five kept, plus the one the header may be showing.
+        val h = StepHistory()
+        for (i in 1..9) h.add(zh.parse("DSH 正在操作 · 点「$i」"))
+        assertEquals(listOf("点「8」", "点「7」", "点「6」", "点「5」", "点「4」"), h.before(zh.parse("DSH 正在操作 · 点「9」"), 5))
     }
 
     // ---- 确认卡 / 交还卡的窗口宽度 ---------------------------------------------------------------------

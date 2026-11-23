@@ -799,6 +799,13 @@ abstract final class Spots {
     keywords: (l) => l.searchKwPhoneEdgeGlow,
     condition: SpotCondition.phoneControlOn,
   );
+  static final phoneSystemIsland = SettingSpot(
+    'phone-system-island',
+    page: SettingsPageId.phone,
+    title: (l) => l.phoneSystemIsland,
+    keywords: (l) => l.searchKwPhoneSystemIsland,
+    condition: SpotCondition.phoneControlOn,
+  );
   static final phoneReturn = SettingSpot(
     'phone-return',
     page: SettingsPageId.phone,
@@ -1257,6 +1264,7 @@ final _rows = <SettingSpot>[
   Spots.phoneConfirm,
   Spots.phoneAutoCollapse,
   Spots.phoneEdgeGlow,
+  Spots.phoneSystemIsland,
   Spots.phoneReturn,
   Spots.phoneBackgroundGuide,
   Spots.pluginsMarket,

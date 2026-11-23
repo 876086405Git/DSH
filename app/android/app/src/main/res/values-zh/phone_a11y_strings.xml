@@ -14,6 +14,7 @@
     <string name="overlay_fold">收成小球</string>
     <string name="overlay_fold_row">收成小球</string>
     <string name="overlay_hold_hint">按住暂停键或小球 1 秒可直接停止</string>
+    <string name="overlay_thought">DSH 的想法</string>
     <string name="overlay_stop_description">停止 DSH 的操作</string>
     <string name="overlay_back_description">回到 DSH Go</string>
     <string name="overlay_stop_row">停止</string>
@@ -32,7 +33,6 @@
     <string name="overlay_unlock_secrets">密码和验证码</string>
     <string name="overlay_unlock_own_app">DSH Go 自身</string>
     <string name="overlay_list_separator">、</string>
-    <string name="overlay_preview_readonly">后台屏预览，仅供查看</string>
     <string name="overlay_preview_waiting">等待后台屏画面…</string>
     <string name="overlay_preview_protected">受保护的画面，已隐藏预览</string>
     <string name="overlay_preview_unavailable">暂时无法预览后台屏</string>

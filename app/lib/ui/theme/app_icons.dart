@@ -446,6 +446,9 @@ abstract final class AppIcons {
   static const overlayBall = DshGlyphs.radioButton;
   static const edgeGlow = DshGlyphs.sparkle;
 
+  /// 用系统灵动岛显示: the island at the top of the screen.
+  static const systemIsland = DshGlyphs.deviceMobile;
+
   /// 解除限制, its 「已解除限制」 tag, and its three rules.
   static const unlocks = DshGlyphs.lockSimpleOpen;
   static const unlockSystem = DshGlyphs.gearSix;
