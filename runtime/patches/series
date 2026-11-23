@@ -170,6 +170,7 @@ deepseek-refusal.diff
 deepseek-unnamed-stream-error.diff
 web-empty-reply-notice.diff
 profile-root-installation-precedence.diff
+plugin-compatibility-exact-version.diff
 messages-usage-evidence.diff
 piai-usage-evidence.diff
 piai-tool-call-id.diff
