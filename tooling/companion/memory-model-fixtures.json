@@ -56,11 +56,11 @@
     },
     {
       "path": "app/test/companion/companion_page_test.dart",
-      "sha256": "5bf761233391e816ef8e28fe18aa8dfc4252e9871bbf8db2aa1c4e799bf98236"
+      "sha256": "0da7c35072c7fa5902574622c7f50c3564e248a4d43723eb9accb01b4bed6f62"
     },
     {
       "path": "app/test/companion/companion_recall_room_test.dart",
-      "sha256": "c70f73dba5dbfa02b5397af45f746051791f9a92a605c1501e9e3cdba1f64701"
+      "sha256": "9cca44110aba5e724ea99d859b5766d9b6bdd8af5eb2009bc1ccdcf256b932b5"
     },
     {
       "path": "app/test/companion/companion_signal_initiative_test.dart",
@@ -72,7 +72,7 @@
     },
     {
       "path": "app/test/companion/companion_stream_state_test.dart",
-      "sha256": "e4177abfb5debd76be29886366ca2903a60292e11deb403c5c472b28d00b6027"
+      "sha256": "fc854c546023dbf9dde3b5551b5de1c1966b0ad76fe5848fdcc64b7e27bd3e44"
     },
     {
       "path": "app/test/companion/companion_test_settle.dart",
@@ -116,7 +116,7 @@
     },
     {
       "path": "packages/dsh_client/test/companion_auxiliary_api_test.dart",
-      "sha256": "32e2af79ce2979a460050f7d8b4cae6331784007b58e6a580cdd24fbbc331ddc"
+      "sha256": "20b95fc8e110d879f74d890f735f8b5734d56fca1871bf33f00b6e77845bb85b"
     },
     {
       "path": "packages/dsh_client/test/companion_followup_store_test.dart",
@@ -152,7 +152,7 @@
     },
     {
       "path": "packages/dsh_client/test/companion_memory_store_test.dart",
-      "sha256": "11888ac9220b4ec360e4ee2fee8450701d3cc16d3c78a92d7ce95925148e3fa9"
+      "sha256": "012bf37a12b2b110f377d4b81dd75ec7f1feb8d44473aaba0ae79801a2b52fa0"
     },
     {
       "path": "packages/dsh_client/test/companion_migration_recovery_test.dart",

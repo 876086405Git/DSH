@@ -479,7 +479,11 @@ class _CompanionAgentVisit {
       // The original migration retries on another visit.
     }
     if (!active) return owner;
-    owner.enter(this, transport: agent._memoryTransport!, estimateTokens: estimateCompanionMemoryTokens);
+    owner.enter(
+      this,
+      transport: () => agent._modelTransport(isCurrent: captureCurrent(), forMemory: true),
+      estimateTokens: estimateCompanionMemoryTokens,
+    );
     unawaited(ref.read(companionRemindersProvider).recover());
     unawaited(clearWidget());
     unawaited(extract(forceTail: true));
@@ -517,7 +521,7 @@ class _CompanionAgentVisit {
       final background = residentUi;
       if (background != null && !identical(background, foreground)) background.controlChanged(own: own);
       unawaited(clearWidget());
-      unawaited(ref.read(companionSessionsProvider.notifier).forgetAll());
+      ref.read(companionSessionsProvider.notifier).retirePending();
       if (!own && ui.stageReady) unawaited(refreshKeeper());
       queueExtraction();
     }
@@ -1392,18 +1396,20 @@ class _CompanionAgentVisit {
     }
   }
 
-  void connectionChanged() {
+  void connectionChanged({bool generationChanged = false}) {
     if (!active) return;
     final host = ref.read(activeHostProvider);
     final client = ref.read(activeConnectionProvider).value?.client;
     final nextLight = light;
-    final differs = nextLight != boundLight || (!nextLight && (host != boundHost || !identical(client, boundClient)));
+    final differs = nextLight != boundLight ||
+        (!nextLight && (generationChanged || host != boundHost || !identical(client, boundClient)));
     boundHost = host;
     boundClient = client;
     boundLight = nextLight;
     if (memory case final owner?) unawaited(resumeNotes(owner));
     if (!differs) return;
     stop();
+    memory?.cancelWork();
     epoch++;
     keeper = null;
     snapshot = null;

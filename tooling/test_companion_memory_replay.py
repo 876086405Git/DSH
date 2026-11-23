@@ -55,6 +55,78 @@ class ReporterTests(unittest.TestCase):
         self.assertEqual(report.check('good')[0], 'NOT_RUN')
         self.assertEqual(replay.aggregate(['NOT_RUN', 'FAIL']), 'FAIL')
 
+        # Independent Dart processes reuse IDs; only the outer batch owns them.
+        guard = 'offline guard'
+        plan = {'type': 'replayBatchPlan', 'version': 1, 'suite': 'sdk', 'guards': [guard],
+                'batches': [{'id': 1, 'names': ['bad']}, {'id': 2, 'names': ['good']}]}
+        data = {'suites': {'sdk': {'guards': [guard]}}, 'cases': [{'checks': [
+            {'suite': 'sdk', 'name': 'bad'}, {'suite': 'sdk', 'name': 'good'}]}]}
+
+        def encoded(events):
+            return ''.join(json.dumps(event, ensure_ascii=False) + '\n' for event in events).encode('utf-8')
+
+        def result(identifier, name, failed=False, guards=1, code=0):
+            events = [start(1, guard), end(1)] if guards else []
+            if guards == 2:
+                events += [start(3, guard), end(3)]
+            events += [start(2, name), end(2, 'failure' if failed else 'success'),
+                       {'type': 'done', 'success': not failed}]
+            return {'type': 'replayBatchResult', 'id': identifier, 'exit_code': code,
+                    'report_base64': replay.base64.b64encode(encoded(events)).decode('ascii')}
+
+        def read(events, code=0, tail=b''):
+            return replay.dart_report(Path('sdk.jsonl'), encoded(events) + tail, 'sdk', data, code)
+
+        first = result(1, 'bad')
+        second = result(2, 'good')
+        footer = {'type': 'replayBatchesDone'}
+        complete = read([plan, first, second, footer])
+        self.assertIsInstance(complete, replay.BatchReport)
+        self.assertTrue(complete.success)
+        self.assertEqual([complete.check(name)[0] for name in ('bad', 'good', guard)], ['PASS'] * 3)
+        self.assertEqual(replay.unique_test_counts([{'checks': [
+            {'suite': 'sdk', 'test_name': name, 'status': complete.check(name)[0]}
+            for name in ('bad', 'good', guard, guard)]}]), {'PASS': 3})
+
+        failure = result(1, 'bad', failed=True)
+        for events, tail in (([plan, failure, second], b''),
+                             ([plan, failure, second, footer], b'{bad json\n')):
+            interrupted = read(events, tail=tail)
+            self.assertIs(interrupted.success, False)
+            self.assertEqual(interrupted.check('bad')[0], 'FAIL')
+            self.assertEqual(interrupted.check('good')[0], 'NOT_RUN')
+
+        for events in ([plan, first, second], [plan, first, footer],
+                       [plan, first, first, second, footer],
+                       [plan, first, {**second, 'id': 9}, footer],
+                       [plan, first, {**second, 'report_base64': '!not base64'}, footer],
+                       [plan, first, result(2, 'good', guards=0), footer],
+                       [plan, first, result(2, 'good', guards=2), footer],
+                       [plan, first, {**second, 'exit_code': True}, footer]):
+            incomplete = read(events)
+            self.assertIsNone(incomplete.success)
+            self.assertEqual(incomplete.check('bad')[0], 'NOT_RUN')
+        malformed_after_failure = read([plan, failure, {**second, 'report_base64': '!bad'}, footer])
+        self.assertIs(malformed_after_failure.success, False)
+        self.assertEqual(malformed_after_failure.check('bad')[0], 'FAIL')
+        self.assertEqual(malformed_after_failure.check('good')[0], 'NOT_RUN')
+
+        nonzero = [plan, {**first, 'exit_code': 7}, {**second, 'exit_code': 9}, footer]
+        self.assertEqual(replay.batch_exit([7, 9, None]), 7)
+        self.assertIs(read(nonzero, code=7).success, False)
+        mismatch = read(nonzero, code=0)
+        self.assertIs(mismatch.success, False)
+        self.assertEqual(mismatch.check('good')[0], 'NOT_RUN')
+        unknown_exit = read([plan, {**first, 'exit_code': None, 'report_base64': None}, second, footer], code=None)
+        self.assertIsNone(unknown_exit.success)
+        self.assertEqual(unknown_exit.check('good')[0], 'NOT_RUN')
+        invalid_version = read([{**plan, 'version': 2}, first, second, footer])
+        self.assertIsInstance(invalid_version, replay.BatchReport)
+        self.assertIsNone(invalid_version.success)
+        self.assertEqual(invalid_version.check('good')[0], 'NOT_RUN')
+        duplicate_name = {**plan, 'batches': [{'id': 1, 'names': ['bad']}, {'id': 2, 'names': ['bad', 'good']}]}
+        self.assertIsNone(read([duplicate_name, first, second, footer]).success)
+
     def test_duplicate_full_names_cannot_silently_choose_a_passing_instance(self):
         report = self.report([start(1, 'same'), end(1), start(2, 'same'), end(2, skipped=True),
             {'type': 'done', 'success': True}])
@@ -73,6 +145,124 @@ class ReporterTests(unittest.TestCase):
             self.assertEqual(replay.run_suites(root, data, root), {'sdk': None})
             self.assertFalse(old.exists())
             self.assertEqual(replay.Report(old).check('product')[0], 'NOT_RUN')
+
+        # Exercise the Windows boundary directly without changing os.name for
+        # pathlib or the other eleven original test bodies.
+        executable = r'C:\Tools (50%)\中文!\flutter.bat'
+        comspec = r'C:\Windows (system)\cmd.exe'
+        expression = r'^(?:中文|%literal%|a (b)|!|😀|\^\$)$'
+        environment = {'COMSPEC': 'actual-cmd', 'PATH': 'actual-path', 'PATHEXT': '.EXE;.BAT;.CMD'}
+        launch = replay.windows_command([executable, expression], environment, comspec)
+        raw = f'"{comspec}" /d /v:off /s /c ""%DSH_REPLAY_EXE%" "%DSH_REPLAY_ARG_0%""'
+        expanded = f'"{comspec}" /d /v:off /s /c ""{executable}" "{expression}""'
+        self.assertEqual(launch['args'], raw)
+        self.assertEqual(launch['units'], [len(value.encode('utf-16-le')) // 2 + 1 for value in (raw, expanded)])
+        self.assertEqual(launch['limit'], 8191)
+        self.assertEqual(launch['options'], {'executable': comspec, 'shell': False,
+            'env': {**environment, 'DSH_REPLAY_EXE': executable, 'DSH_REPLAY_ARG_0': expression}})
+        self.assertNotIn('DSH_REPLAY_EXE', environment)
+        for unsupported in ('"', '\r', '\n', '\0'):
+            with self.assertRaisesRegex(ValueError, 'not representable'):
+                replay.windows_command([executable, 'name' + unsupported], environment, comspec)
+        direct = [r'C:\Tools (x)\dart.exe', 'a "b" 😀']
+        exe_launch = replay.windows_command(direct, environment)
+        self.assertEqual(exe_launch['args'], direct)
+        self.assertEqual(exe_launch['limit'], 32767)
+        self.assertEqual(exe_launch['units'], [len(subprocess.list2cmdline(direct).encode('utf-16-le')) // 2 + 1])
+
+        with tempfile.TemporaryDirectory(prefix='回放 (space) %literal% ! ') as folder:
+            root = Path(folder)
+            manifest = json.loads(path.with_name('memory-replay-cases.json').read_text(encoding='utf-8'))
+            resolved_comspec = str(root / 'Windows (system)' / 'cmd.exe')
+            resolved = {'dart': str(root / '工具 (50%) 中文!' / 'dart.bat'),
+                        'flutter': str(root / '工具 (50%) 中文!' / 'flutter.cmd'), 'actual-cmd': resolved_comspec}
+            for key in ('sdk', 'app'):
+                suite = manifest['suites'][key]
+                ordinary = {check['name'] for case in manifest['cases'] for check in case['checks']
+                            if check['suite'] == key}.difference(suite['guards'])
+                expected = ordinary.union(suite['guards'])
+                raw_children = []
+
+                def child(command, **kwargs):
+                    self.assertIsInstance(command, str)
+                    self.assertEqual(kwargs['executable'], resolved_comspec)
+                    self.assertIs(kwargs['shell'], False)
+                    self.assertEqual(kwargs['cwd'], root / suite['cwd'])
+                    variables = replay.re.findall(r'"%(DSH_REPLAY_(?:EXE|ARG_\d+))%"', command)
+                    actual = [kwargs['env'][variable] for variable in variables]
+                    self.assertEqual(actual[:len(suite['command'])], [resolved[suite['command'][0]], *suite['command'][1:]])
+                    expanded = f'"{resolved_comspec}" /d /v:off /s /c "' + ' '.join(f'"{value}"' for value in actual) + '"'
+                    self.assertTrue(all(len(value.encode('utf-16-le')) // 2 + 1 <= 8191 for value in (command, expanded)))
+                    self.assertTrue(actual[-1].startswith('json:'))
+                    pattern = actual[actual.index('--name') + 1]
+                    selected = sorted(name for name in expected if replay.re.fullmatch(pattern, name))
+                    self.assertTrue(set(suite['guards']).issubset(selected))
+                    self.assertTrue(all(replay.re.fullmatch(pattern, name + ' extra') is None for name in selected))
+                    events = []
+                    for identifier, name in enumerate(selected, 1):
+                        events += [start(identifier, name), end(identifier)]
+                    events.append({'type': 'done', 'success': True})
+                    raw_child = ''.join(json.dumps(event, ensure_ascii=False) + '\n' for event in events).encode('utf-8')
+                    Path(actual[-1][5:]).write_bytes(raw_child)
+                    raw_children.append(raw_child)
+                    return subprocess.CompletedProcess(command, 0)
+
+                with patch.dict(replay.os.environ, environment), patch.object(replay.shutil, 'which', side_effect=resolved.get) as which, \
+                        patch.object(replay.subprocess, 'run', side_effect=child) as run, \
+                        (root / f'{key}.log').open('w', encoding='utf-8') as log:
+                    code = replay.run_windows_suite(root, key, suite, manifest['cases'], root, log)
+                    self.assertEqual(code, 0)
+                    self.assertEqual([call.args[0] for call in which.call_args_list], [suite['command'][0], 'actual-cmd'])
+                    self.assertGreater(run.call_count, 1)
+                canonical = (root / f'{key}.jsonl').read_bytes()
+                events = [json.loads(line) for line in canonical.splitlines()]
+                planned = [name for batch in events[0]['batches'] for name in batch['names']]
+                self.assertEqual(set(planned), ordinary)
+                self.assertEqual(len(planned), len(ordinary))
+                first_files = {}
+                for case in manifest['cases']:
+                    for check in case['checks']:
+                        if check['suite'] == key:
+                            first_files.setdefault(check['name'], check.get('file'))
+                self.assertTrue(all(len({first_files[name] for name in batch['names']}) <= 1
+                                    for batch in events[0]['batches']))
+                self.assertEqual(events[0]['guards'], suite['guards'])
+                self.assertEqual([replay.base64.b64decode(event['report_base64']) for event in events[1:-1]], raw_children)
+                self.assertEqual(events[-1], {'type': 'replayBatchesDone'})
+                parsed = replay.dart_report(root / f'{key}.jsonl', canonical, key, manifest, code)
+                self.assertIs(parsed.success, True)
+                self.assertTrue(all(parsed.check(name)[0] == 'PASS' for name in expected))
+                self.assertEqual(replay.report_hashes({key: canonical})[f'{key}.jsonl'], sha256(canonical).hexdigest())
+
+            suite = {'cwd': '.', 'command': ['dart', 'test'], 'guards': ['offline guard']}
+            long_names = ['甲' + '字' * 5000, '乙' + '字' * 5000]
+            cases = [{'checks': [{'suite': 'sdk', 'name': name, 'file': 'same.dart'} for name in long_names]}]
+            batches = replay.windows_batches('sdk', suite, cases, root, executable, environment, comspec)
+            self.assertEqual([batch['names'] for batch in batches], [[name] for name in long_names])
+            self.assertTrue(all(max(batch['units']) <= batch['limit'] for batch in batches))
+            self.assertEqual(len(replay.windows_batches('sdk', suite, cases, root, direct[0], environment)), 1)
+            with self.assertRaisesRegex(ValueError, 'one full name'):
+                replay.windows_batches('sdk', suite, [{'checks': [{'suite': 'sdk', 'name': 'x' * 9000}]}],
+                                       root, executable, environment, comspec)
+            guard_only = replay.windows_batches('sdk', suite, [], root, executable, environment, comspec)
+            self.assertEqual([batch['names'] for batch in guard_only], [[]])
+            with patch.dict(replay.os.environ, environment), patch.object(replay.shutil, 'which', return_value=None), \
+                    (root / 'missing.log').open('w', encoding='utf-8') as log:
+                with self.assertRaisesRegex(OSError, 'PATH/PATHEXT'):
+                    replay.run_windows_suite(root, 'sdk', suite, [], root, log)
+            with patch.dict(replay.os.environ, {'COMSPEC': ''}), patch.object(replay.shutil, 'which', return_value=executable), \
+                    (root / 'missing-comspec.log').open('w', encoding='utf-8') as log:
+                with self.assertRaisesRegex(OSError, 'COMSPEC'):
+                    replay.run_windows_suite(root, 'sdk', suite, [], root, log)
+            with patch.dict(replay.os.environ, environment), patch.object(replay.shutil, 'which', side_effect=resolved.get), \
+                    patch.object(replay.subprocess, 'run', side_effect=OSError('launch unavailable')) as run, \
+                    (root / 'failed.log').open('w', encoding='utf-8') as log:
+                self.assertIsNone(replay.run_windows_suite(root, 'sdk', suite, [], root, log))
+                self.assertEqual(run.call_count, 1)
+            unavailable = replay.dart_report(root / 'sdk.jsonl', (root / 'sdk.jsonl').read_bytes(),
+                                            'sdk', {'suites': {'sdk': suite}, 'cases': []}, None)
+            self.assertIsNone(unavailable.success)
+            self.assertEqual(unavailable.check('offline guard')[0], 'NOT_RUN')
 
     def test_node_skips_are_not_engine_passes_even_when_node_exits_zero(self):
         with tempfile.TemporaryDirectory() as folder:

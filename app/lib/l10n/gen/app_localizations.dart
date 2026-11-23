@@ -10121,8 +10121,20 @@ abstract class L10n {
   /// No description provided for @companionNotConnectedTryLight.
   ///
   /// In zh, this message translates to:
-  /// **'现在连不上主机。只想聊天的话，可以在右上角菜单换成轻量模式。'**
+  /// **'现在连不上电脑那边。你可以检查连接，或在「对话方式」里换成轻量模式。'**
   String get companionNotConnectedTryLight;
+
+  /// No description provided for @companionHostModelUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑那边还没选好模型。选好后我们再聊，或在「对话方式」里换成轻量模式。'**
+  String get companionHostModelUnavailable;
+
+  /// No description provided for @companionHostUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑那边暂时接不了这次对话。检查连接和更新后再试，或在「对话方式」里换成轻量模式。'**
+  String get companionHostUnavailable;
 
   /// No description provided for @companionMenuRestartLightHint.
   ///
@@ -13487,12 +13499,6 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'更多'**
   String get companionPanelMore;
-
-  /// No description provided for @companionFullNoKey.
-  ///
-  /// In zh, this message translates to:
-  /// **'电脑上的模型还没接到我这儿，现在先要 DeepSeek API Key 才能聊。在设置里填上就行。'**
-  String get companionFullNoKey;
 
   /// No description provided for @companionDrawerHere.
   ///

@@ -59,7 +59,28 @@ abstract interface class CompanionMemoryTransport {
   });
 }
 
-class CompanionLightMemoryTransport implements CompanionMemoryTransport {
+/// A model round only. Tool execution and continuation remain in the phone's
+/// shared loop; the original followup-only transport contract stays usable.
+abstract interface class CompanionAgentModelTransport implements CompanionMemoryTransport {
+  bool get agentConfigured;
+  bool get current;
+
+  Future<CompanionAgentMessage?> readAgent({
+    required CompanionAgentModelRequest request,
+    required String system,
+    required List<Map<String, Object?>> messages,
+    required List<CompanionAgentTool> tools,
+    required bool Function() isCurrent,
+    required void Function(String) onText,
+    required void Function() onDispatchUncertain,
+    required void Function() onSent,
+    required void Function(Map<String, Object?>) onUsage,
+    void Function(Map<String, Object?>, {required bool partial})? onUsageSettled,
+    int maxTokens = 800,
+  });
+}
+
+class CompanionLightMemoryTransport implements CompanionAgentModelTransport {
   CompanionLightMemoryTransport({required this.apiKey, http.Client Function()? client})
     : _client = client ?? http.Client.new;
 
@@ -74,6 +95,43 @@ class CompanionLightMemoryTransport implements CompanionMemoryTransport {
 
   @override
   bool get configured => apiKey().trim().isNotEmpty;
+
+  @override
+  bool get agentConfigured => configured;
+
+  @override
+  bool get current => true;
+
+  @override
+  Future<CompanionAgentMessage?> readAgent({
+    required CompanionAgentModelRequest request,
+    required String system,
+    required List<Map<String, Object?>> messages,
+    required List<CompanionAgentTool> tools,
+    required bool Function() isCurrent,
+    required void Function(String) onText,
+    required void Function() onDispatchUncertain,
+    required void Function() onSent,
+    required void Function(Map<String, Object?>) onUsage,
+    void Function(Map<String, Object?>, {required bool partial})? onUsageSettled,
+    int maxTokens = 800,
+  }) => request.read(
+    client: _client(),
+    apiKey: apiKey().trim(),
+    system: system,
+    messages: messages,
+    tools: tools,
+    isCurrent: isCurrent,
+    onText: onText,
+    onSent: () {
+      // Light invokes this before client.send; keep its dispatch gate here.
+      if (!isCurrent()) throw const DshClosedException('Companion turn changed');
+      onSent();
+    },
+    onUsage: (usage) => onUsage(usage.toJson()),
+    onUsageSettled: onUsageSettled,
+    maxTokens: maxTokens,
+  );
 
   @override
   Future<CompanionAuxiliaryReply> call({
@@ -138,7 +196,7 @@ class CompanionMemoryWorker {
   });
 
   final CompanionMemoryStore store;
-  final CompanionMemoryTransport? Function() transport;
+  final FutureOr<CompanionMemoryTransport?> Function() transport;
   final int Function() nowMilliseconds;
   final int Function(String) estimateTokens;
   // The original followup-only callers need no maintenance adapter. The real
@@ -193,10 +251,6 @@ class CompanionMemoryWorker {
     if (!current()) {
       return null;
     }
-    final route = transport();
-    if (route == null || !route.configured) {
-      return null;
-    }
     final card = store.cards().singleWhere((row) => row['id'] == captured['card_id']);
     final sources = store.messages();
     Map<String, Object?> evidence(String id, String quote) {
@@ -231,23 +285,27 @@ class CompanionMemoryWorker {
     if (estimateTokens('$companionMemoryFollowupPrompt\n$input') > inputLimit) {
       return null;
     }
-    final requestId = store.reserveRequest(
-      category: 'followup',
-      provider: route.provider,
-      model: route.model,
-      inputTokens: inputLimit,
-      outputTokens: outputLimit,
-      batchId: 'followup:${captured['id']}:${captured['row_rev']}',
-    );
-    if (requestId == null) {
-      return null;
-    }
+    // Own the lane before asynchronous Host discovery. A second opportunity
+    // cannot enter while this one is awaiting its captured route.
     final cancelled = _cancelled = Completer<void>();
     final finished = _finished = Completer<void>();
+    String? reserved;
     var terminal = 'local_error';
     var dispatched = false;
     var uncertain = false;
     try {
+      final route = await transport();
+      if (cancelled.isCompleted || !current() || route == null || !route.configured) return null;
+      final requestId = store.reserveRequest(
+        category: 'followup',
+        provider: route.provider,
+        model: route.model,
+        inputTokens: inputLimit,
+        outputTokens: outputLimit,
+        batchId: 'followup:${captured['id']}:${captured['row_rev']}',
+      );
+      reserved = requestId;
+      if (requestId == null) return null;
       final reply = await route.call(
         requestId: requestId,
         category: 'followup',
@@ -263,7 +321,9 @@ class CompanionMemoryWorker {
           uncertain = true;
         },
         onSent: () {
-          if (cancelled.isCompleted || !current()) {
+          // Before Light dispatch this is a permission gate. After a Host
+          // handoff it records an observed fact, even if the room retired.
+          if (!uncertain && (cancelled.isCompleted || !current())) {
             throw const _MemoryRequestStale();
           }
           store.markRequestSent(requestId);
@@ -288,7 +348,7 @@ class CompanionMemoryWorker {
       return null;
     } finally {
       try {
-        store.finishRequest(requestId, terminal: terminal);
+        if (reserved != null) store.finishRequest(reserved, terminal: terminal);
       } finally {
         if (!cancelled.isCompleted) {
           cancelled.complete();
@@ -320,50 +380,59 @@ class CompanionMemoryWorker {
     if (kind == 'organize' && store.mergeAgentExactDuplicates() > 0) {
       return CompanionMemoryWork.committed;
     }
-    final route = transport();
     final createTools = maintenanceTools;
-    // Both actual room modes inject the phone transport. A legacy Host-only
-    // route remains a receipt/followup reader, not a fabricated tool Session.
-    if (route is! CompanionLightMemoryTransport || !route.configured || createTools == null) {
-      return CompanionMemoryWork.configuration;
-    }
-    // The Store selects whole original sources/cards using this very scope's
-    // complete wire body, including presentation metadata and actual tools.
-    // JSON escaping makes source estimates plus a fixed overhead nonadditive.
-    final claim = store.nextAgentMaintenance(
-      kind: kind,
-      offsetMinutes: offsetMinutes,
-      estimateTokens: estimateTokens,
-      forceTail: forceTail,
-      estimateContextTokens: (context) => _inputTokens([
-        {'role': 'user', 'content': jsonEncode(_maintenanceContext(kind, context))},
-      ], CompanionAgentMemoryTools.definitionsFor(originKind: kind, characterId: context['character_id'] as String?)),
-    );
-    if (claim == null) return CompanionMemoryWork.idle;
-    final completed = (claim['completed_scopes']! as List).cast<String>().toSet();
-    final scopes = (claim['scope_characters']! as List)
-        .cast<String?>()
-        .where((scope) => !completed.contains(scope ?? ''))
-        .toList();
-    if (scopes.isEmpty) return CompanionMemoryWork.idle;
-    final characterId = scopes.first;
-    final claimId = claim['id']! as String;
-    final turn = store.beginAgentMaintenance(kind: kind, claimId: claimId, characterId: characterId);
-    if (turn['closed'] != 0) return CompanionMemoryWork.stale;
-    final turnId = turn['id']! as String;
+    if (createTools == null) return CompanionMemoryWork.configuration;
+    // Discovery can await the Host. Acquire cancellation and the lane first;
+    // neither a second opportunity nor a departed room can take over it.
     final cancelled = _cancelled = Completer<void>();
     final finished = _finished = Completer<void>();
-    _maintenanceTurn = turnId;
-    _maintenanceControl = turn['control_revision']! as int;
-    final exchanges = <CompanionAgentExchange>[];
+    String? ownedTurnId;
+    CompanionAgentModelTransport? activeRoute;
+    CompanionAgentMemoryTools? tools;
+    var complete = false;
     bool current() =>
         identical(_cancelled, cancelled) &&
         !cancelled.isCompleted &&
-        _maintenanceTurn == turnId &&
-        store.isAgentTurnCurrent(turnId);
-    CompanionAgentMemoryTools? tools;
-    var complete = false;
+        ownedTurnId != null &&
+        _maintenanceTurn == ownedTurnId &&
+        store.isAgentTurnCurrent(ownedTurnId) &&
+        (activeRoute?.current ?? false);
     try {
+      final initial = await transport();
+      if (cancelled.isCompleted) return CompanionMemoryWork.stale;
+      if (initial is! CompanionAgentModelTransport || !initial.agentConfigured) {
+        return CompanionMemoryWork.configuration;
+      }
+      if (!initial.current) return CompanionMemoryWork.stale;
+      activeRoute = initial;
+      // The same Store selects whole original sources/cards using this scope's
+      // complete context and real tools. Discovery does not alter its budget.
+      final claim = store.nextAgentMaintenance(
+        kind: kind,
+        offsetMinutes: offsetMinutes,
+        estimateTokens: estimateTokens,
+        forceTail: forceTail,
+        estimateContextTokens: (context) => _inputTokens([
+          {'role': 'user', 'content': jsonEncode(_maintenanceContext(kind, context))},
+        ], CompanionAgentMemoryTools.definitionsFor(originKind: kind, characterId: context['character_id'] as String?)),
+      );
+      if (claim == null) return CompanionMemoryWork.idle;
+      final completed = (claim['completed_scopes']! as List).cast<String>().toSet();
+      final scopes = (claim['scope_characters']! as List)
+          .cast<String?>()
+          .where((scope) => !completed.contains(scope ?? ''))
+          .toList();
+      if (scopes.isEmpty) return CompanionMemoryWork.idle;
+      final characterId = scopes.first;
+      final claimId = claim['id']! as String;
+      final turn = store.beginAgentMaintenance(kind: kind, claimId: claimId, characterId: characterId);
+      if (turn['closed'] != 0) return CompanionMemoryWork.stale;
+      final turnId = turn['id']! as String;
+      ownedTurnId = turnId;
+      _maintenanceTurn = turnId;
+      _maintenanceControl = turn['control_revision']! as int;
+      final exchanges = <CompanionAgentExchange>[];
+      CompanionAgentModelTransport? firstRoute = initial;
       final adapter = tools = createTools(turn, current, ({
         required memory,
         required turnId,
@@ -397,10 +466,18 @@ class CompanionMemoryWorker {
           final messages = <Map<String, Object?>>[
             {'role': 'user', 'content': jsonEncode(_maintenanceContext(kind, fresh))},
             for (final exchange in exchanges) ...[
-              {'role': 'assistant', 'content': exchange.assistant.content},
+              exchange.assistant.toRequest(),
               {'role': 'user', 'content': exchange.results},
             ],
           ];
+          final route = firstRoute ?? await transport();
+          firstRoute = null;
+          if (!current()) return null;
+          if (route is! CompanionAgentModelTransport || !route.agentConfigured) {
+            throw const CompanionAuxiliaryError(configuration: true, notSent: true, terminal: 'preflight');
+          }
+          activeRoute = route;
+          if (!current()) return null;
           return _maintenanceRequest(route, adapter, turnId, messages, current);
         },
       );
@@ -412,18 +489,21 @@ class CompanionMemoryWorker {
     } on DshClosedException {
       return CompanionMemoryWork.stale;
     } on CompanionAuxiliaryError catch (error) {
-      if (!current()) return CompanionMemoryWork.stale;
+      if (cancelled.isCompleted) return CompanionMemoryWork.stale;
       return error.configuration ? CompanionMemoryWork.configuration : CompanionMemoryWork.waiting;
     } on CompanionLightError catch (error) {
-      if (!current()) return CompanionMemoryWork.stale;
-      return const [CompanionLightFailure.noKey, CompanionLightFailure.badKey].contains(error.failure)
+      if (cancelled.isCompleted) return CompanionMemoryWork.stale;
+      return (error is CompanionHostError &&
+              error.hostFailure != CompanionHostFailure.requestFailed &&
+              error.hostFailure != CompanionHostFailure.busy) ||
+          const [CompanionLightFailure.noKey, CompanionLightFailure.badKey].contains(error.failure)
           ? CompanionMemoryWork.configuration
           : CompanionMemoryWork.waiting;
     } finally {
       try {
         // Each physical request has drained and settled before the claim can
         // close. The adapter's later close(false) cannot reopen or undo it.
-        store.finishAgentMaintenance(turnId: turnId, complete: complete);
+        if (ownedTurnId != null) store.finishAgentMaintenance(turnId: ownedTurnId, complete: complete);
       } finally {
         try {
           tools?.close();
@@ -440,14 +520,12 @@ class CompanionMemoryWorker {
   }
 
   Future<CompanionAgentResponse?> _maintenanceRequest(
-    CompanionLightMemoryTransport route,
+    CompanionAgentModelTransport route,
     CompanionAgentMemoryTools tools,
     String turnId,
     List<Map<String, Object?>> messages,
     bool Function() current,
   ) async {
-    final key = route.apiKey().trim();
-    if (key.isEmpty) throw const CompanionLightError(CompanionLightFailure.noKey);
     final definitions = [for (final tool in tools.bindings) tool.definition];
     final inputTokens = _inputTokens(messages, definitions);
     // The first request budgets the whole selected context. A continuation
@@ -466,36 +544,40 @@ class CompanionMemoryWorker {
     );
     if (id == null) throw const _MemoryRequestBudget();
     final request = _request = CompanionAgentModelRequest(id);
-    CompanionUsage? receipt;
+    Map<String, Object?>? receipt;
     try {
-      final message = await request.read(
-        client: route._client(),
-        apiKey: key,
+      final message = await route.readAgent(
+        request: request,
         system: _maintenancePrompt,
         messages: messages,
         tools: definitions,
         isCurrent: current,
         maxTokens: memoryBatchOutputTokens,
         onText: (_) {},
-        onSent: () {
+        onDispatchUncertain: () {
           if (!current()) throw const DshClosedException('Memory maintenance changed');
+          store.markRequestUncertain(id);
+          request.uncertain = true;
+        },
+        onSent: () {
+          // A late Host observation still belongs to this physical request.
           store.markRequestSent(id);
           request.sent = true;
         },
         onUsage: (usage) {
           receipt = usage;
-          store.recordUsage(id, usage.toJson());
-          store.finishRequest(id, terminal: usage.terminal);
+          store.recordUsage(id, usage);
+          store.finishRequest(id, terminal: usage['terminal']! as String);
           request.finalized = true;
         },
       );
       return message == null ? null : (message: message, requestId: id);
     } on CompanionLightError {
-      if (const {400, 404, 413, 422}.contains(receipt?.httpStatus)) {
+      if (const {400, 404, 413, 422}.contains(receipt?['http_status'])) {
         throw CompanionAuxiliaryError(
           configuration: true,
-          notSent: !request.sent,
-          terminal: receipt?.terminal ?? 'preflight',
+          notSent: request.notSentProven || (!request.sent && !request.uncertain),
+          terminal: receipt?['terminal'] as String? ?? 'preflight',
         );
       }
       rethrow;
@@ -505,8 +587,10 @@ class CompanionMemoryWorker {
         await request.drain();
       } finally {
         try {
-          if (!request.finalized) {
-            store.finishRequest(id, terminal: request.sent ? 'cancelled' : 'not_sent');
+          if (request.notSentProven && !request.sent) {
+            store.finishRequest(id, terminal: 'not_sent');
+          } else if (!request.finalized) {
+            store.finishRequest(id, terminal: request.sent || request.uncertain ? 'cancelled' : 'not_sent');
           }
         } finally {
           if (identical(_request, request)) _request = null;

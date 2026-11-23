@@ -1103,6 +1103,126 @@ void main() {
         expect(row['raw_usage'], containsPair('http_status', 200));
         expect(row['raw_usage'], containsPair('complete', true));
       }
+
+      // A real user invitation reaches both fixed and ordinary layers, but
+      // the next ordinary user turn does not inherit that permission. Keep
+      // all eight original HTTP/forget/usage observations above intact.
+      visit.attachment.updateCharacter(
+        const CompanionCharacter(name: '伙伴'), const CompanionMoves(),
+        sourceKey: 'builtin:companion/whale-girl',
+      );
+      expect(await visit.attachment.openMemory(), same(visit.memory));
+      final invitationRole = visit.attachment.characterId!;
+      final invitationSource = store.submitMessage(
+        id: 'wire-fixed-invitation-source',
+        sessionId: originalSource['session_id']! as String,
+        characterId: invitationRole,
+        text: '我们看过玉兰，散步时更自在。',
+        saidAtUtc: _now,
+        offsetMinutes: originalSource['offset_minutes']! as int,
+      );
+      final invitationSetup = store.beginAgentTurn(
+        messageId: invitationSource['id']! as String,
+        expectedSourceRev: invitationSource['source_rev']! as int,
+        shownCardRevisions: {kept.targetId!: keptCard['row_rev']! as int},
+      )['id']! as String;
+      expect(store.applyAgentMemoryTool(
+        turnId: invitationSetup, callId: 'wire-quiet-postcards', toolName: 'quiet',
+        input: {'card': kept.targetId, 'mode': 'never'},
+      ).applied, isTrue);
+      final invitationStory = store.applyAgentMemoryTool(
+        turnId: invitationSetup, callId: 'wire-magnolia-story', toolName: 'remember',
+        input: {'collection': 'our_story', 'text': '我们看过玉兰。', 'keywords': ['玉兰']},
+      );
+      expect(invitationStory.applied, isTrue);
+      expect(store.applyAgentMemoryTool(
+        turnId: invitationSetup, callId: 'wire-quiet-magnolia', toolName: 'quiet',
+        input: {'card': invitationStory.targetId, 'mode': 'never'},
+      ).applied, isTrue);
+      const impressionText = '聊过玉兰之后，散步时彼此更自在。';
+      final invitationImpression = store.applyAgentMemoryTool(
+        turnId: invitationSetup, callId: 'wire-magnolia-impression', toolName: 'impression',
+        input: {'text': impressionText, 'keywords': ['散步']},
+      );
+      expect(invitationImpression.applied, isTrue);
+      store.closeAgentTurn(invitationSetup);
+      final storyRow = store.cards().singleWhere((row) => row['id'] == invitationStory.targetId);
+      final impressionRow = store.cards().singleWhere((row) => row['id'] == invitationImpression.targetId);
+      expect(impressionRow['topic_id'], storyRow['topic_id']);
+      expect(impressionRow['topic_mode'], 'never');
+      final invitationControls = store.topicControls();
+      visit.memory.changed();
+      replies.addAll([
+        _message(calls: [('wire-fixed-related', 'related', {'card': invitationImpression.targetId})]),
+        _message(words: '想起玉兰时，散步也很轻松。'),
+      ]);
+      await visit.attachment.submit('聊聊玉兰');
+      expect(visit.attachment.error, isNull);
+      expect(visit.requests, hasLength(10));
+      for (final body in visit.requests.skip(8).take(2)) {
+        final blocks = <Map>[
+          for (final message in (body['messages']! as List).cast<Map>())
+            if (message['role'] == 'user' && message['content'] is List)
+              for (final block in (message['content']! as List).cast<Map>())
+                if (block['type'] == 'text' && (block['text']! as String).startsWith('{"type":"companion_memory"'))
+                  jsonDecode(block['text']! as String) as Map,
+        ];
+        final items = (blocks.single['items']! as List).cast<Map>();
+        expect(items.map((row) => row['id']), containsAll([invitationStory.targetId, invitationImpression.targetId]));
+        expect(items.singleWhere((row) => row['id'] == invitationImpression.targetId)['text'], impressionText);
+      }
+      final invitedToolResult = <Map>[
+        for (final message in (visit.requests[9]['messages']! as List).cast<Map>())
+          if (message['role'] == 'user' && message['content'] is List)
+            for (final block in (message['content']! as List).cast<Map>())
+              if (block['type'] == 'tool_result') block,
+      ].singleWhere((row) => row['tool_use_id'] == 'wire-fixed-related');
+      expect(jsonDecode(invitedToolResult['content']! as String), containsPair('applied', true));
+
+      replies.addAll([
+        _message(calls: [('wire-explicit-recall', 'recall', {'query': '聊聊玉兰'})]),
+        _message(words: '今天也可以慢慢聊。'),
+      ]);
+      await visit.attachment.submit('今天随便说几句。');
+      expect(visit.attachment.error, isNull);
+      expect(visit.requests, hasLength(12));
+      for (final body in visit.requests.skip(10)) {
+        final fixedBlocks = <Map>[
+          for (final message in (body['messages']! as List).cast<Map>())
+            if (message['role'] == 'user' && message['content'] is List)
+              for (final block in (message['content']! as List).cast<Map>())
+                if (block['type'] == 'text' && (block['text']! as String).startsWith('{"type":"companion_memory"'))
+                  jsonDecode(block['text']! as String) as Map,
+        ];
+        expect(fixedBlocks, isEmpty);
+      }
+      final explicitRecallResult = <Map>[
+        for (final message in (visit.requests[11]['messages']! as List).cast<Map>())
+          if (message['role'] == 'user' && message['content'] is List)
+            for (final block in (message['content']! as List).cast<Map>())
+              if (block['type'] == 'tool_result') block,
+      ].singleWhere((row) => row['tool_use_id'] == 'wire-explicit-recall');
+      final recallPayload = jsonDecode(explicitRecallResult['content']! as String) as Map;
+      expect(recallPayload['applied'], isTrue);
+      expect(((recallPayload['selection']! as Map)['items']! as List).cast<Map>().map((row) => row['id']), [invitationStory.targetId]);
+      expect(store.cards().singleWhere((row) => row['id'] == invitationImpression.targetId), impressionRow);
+      expect(store.cards().singleWhere((row) => row['id'] == invitationStory.targetId), storyRow);
+      expect(store.topicControls(), invitationControls);
+      final afterInvitations = {for (final row in store.requests()) row['id']! as String: row};
+      expect(afterInvitations, hasLength(12));
+      for (final entry in after.entries) {
+        expect(afterInvitations[entry.key], entry.value);
+      }
+      final invitationRequests = afterInvitations.entries.where((entry) => !after.containsKey(entry.key)).map((entry) => entry.value).toList();
+      expect(invitationRequests, hasLength(4));
+      for (final row in invitationRequests) {
+        expect(row['sent_at_ms'], isNotNull);
+        expect(row['terminal'], 'complete');
+        expect(row['state'], 'finished');
+        expect(row['input_uncached'], 12);
+        expect(row['output_tokens'], 8);
+        expect(row['raw_usage'], containsPair('http_status', 200));
+      }
     } finally {
       await visit.close();
     }
@@ -1202,6 +1322,9 @@ void main() {
           opportunities.add(opportunity);
           store.closeAgentTurn(turn);
           visit.memory.changed();
+          // The worker claims its run before it asks for the (async) route;
+          // with no key configured that run ends without a request.
+          await pumpEventQueue();
           expect(visit.memory.working, isFalse);
 
           configured = true;
@@ -1768,6 +1891,111 @@ void main() {
         expect(body.containsKey('tools'), isFalse);
         expect(_context(body)['screenObservation'], context);
       }
+
+      // Observation text can be relevant without being a user's permission
+      // to reopen a never topic. Seed only after the original empty-source
+      // and acknowledgement assertions, using real public Store writes.
+      final store = visit.memory.store;
+      final coffeeSource = store.submitMessage(
+        id: 'screen-coffee-source', sessionId: 'light:screen-test',
+        characterId: resident.characterId,
+        text: '我们聊过咖啡，散步时更轻松。', saidAtUtc: _now, offsetMinutes: 480,
+      );
+      final coffeeTurn = store.beginAgentTurn(
+        messageId: coffeeSource['id']! as String,
+        expectedSourceRev: coffeeSource['source_rev']! as int,
+        shownCardRevisions: const {},
+      )['id']! as String;
+      final coffee = store.applyAgentMemoryTool(
+        turnId: coffeeTurn, callId: 'screen-coffee', toolName: 'remember',
+        input: {'collection': 'our_story', 'text': '我们聊过咖啡。', 'keywords': ['咖啡']},
+      );
+      expect(coffee.applied, isTrue);
+      expect(store.applyAgentMemoryTool(
+        turnId: coffeeTurn, callId: 'screen-coffee-never', toolName: 'quiet',
+        input: {'card': coffee.targetId, 'mode': 'never'},
+      ).applied, isTrue);
+      final coffeeImpression = store.applyAgentMemoryTool(
+        turnId: coffeeTurn, callId: 'screen-coffee-impression', toolName: 'impression',
+        input: {'text': '聊过咖啡之后，散步时更轻松。', 'keywords': ['散步']},
+      );
+      expect(coffeeImpression.applied, isTrue);
+      store.closeAgentTurn(coffeeTurn);
+      final relevanceSource = store.submitMessage(
+        id: 'screen-relevance-source', sessionId: 'light:screen-test',
+        characterId: resident.characterId,
+        text: '我们喜欢聊聊书里的想法，也喜欢聊聊路上的风景。', saidAtUtc: _now, offsetMinutes: 480,
+      );
+      final relevanceTurn = store.beginAgentTurn(
+        messageId: relevanceSource['id']! as String,
+        expectedSourceRev: relevanceSource['source_rev']! as int,
+        shownCardRevisions: const {},
+      )['id']! as String;
+      final normal = store.applyAgentMemoryTool(
+        turnId: relevanceTurn, callId: 'screen-relevant-normal', toolName: 'remember',
+        input: {'collection': 'our_story', 'text': '我们喜欢聊聊书里的想法。', 'keywords': ['聊聊']},
+      );
+      final less = store.applyAgentMemoryTool(
+        turnId: relevanceTurn, callId: 'screen-relevant-less', toolName: 'remember',
+        input: {'collection': 'our_story', 'text': '我们喜欢聊聊路上的风景。', 'keywords': ['聊聊']},
+      );
+      expect(normal.applied, isTrue);
+      expect(less.applied, isTrue);
+      expect(store.applyAgentMemoryTool(
+        turnId: relevanceTurn, callId: 'screen-relevance-less', toolName: 'quiet',
+        input: {'card': less.targetId, 'mode': 'less'},
+      ).applied, isTrue);
+      store.closeAgentTurn(relevanceTurn);
+      final screenCards = store.cards();
+      expect(screenCards.singleWhere((row) => row['id'] == normal.targetId)['topic_mode'], 'normal');
+      expect(screenCards.singleWhere((row) => row['id'] == less.targetId)['topic_mode'], 'less');
+      expect(screenCards.singleWhere((row) => row['id'] == coffee.targetId)['topic_mode'], 'never');
+      expect(screenCards.singleWhere((row) => row['id'] == coffeeImpression.targetId)['topic_id'],
+        screenCards.singleWhere((row) => row['id'] == coffee.targetId)['topic_id']);
+      final screenMessages = store.messages();
+      final screenTasks = store.tasks();
+      final screenControls = store.topicControls();
+      final screenRequests = {for (final row in store.requests()) row['id']! as String: row};
+      visit.memory.changed();
+      visit.replies.add(_message(words: '书里的想法可以慢慢看。'));
+      ambient.entered = null;
+      ambient.acknowledgement = null;
+      final invitingObservation = {...context, 'text': '聊聊咖啡'};
+      expect(await visit.agent.observeScreen(
+        context: invitingObservation, isCurrentObservation: () async => true,
+      ), isTrue);
+      expect(visit.requests, hasLength(3));
+      final observationBody = visit.requests.last;
+      expect(observationBody.containsKey('tools'), isFalse);
+      expect(_context(observationBody)['screenObservation'], invitingObservation);
+      final observationMemory = <Map>[
+        for (final message in (observationBody['messages']! as List).cast<Map>())
+          if (message['role'] == 'user' && message['content'] is List)
+            for (final block in (message['content']! as List).cast<Map>())
+              if (block['type'] == 'text' && (block['text']! as String).startsWith('{"type":"companion_memory"'))
+                jsonDecode(block['text']! as String) as Map,
+      ].single;
+      final observationIds = (observationMemory['items']! as List).cast<Map>().map((row) => row['id']);
+      expect(observationIds, unorderedEquals([normal.targetId, less.targetId]));
+      expect(observationIds, isNot(contains(coffee.targetId)));
+      expect(observationIds, isNot(contains(coffeeImpression.targetId)));
+      expect(ambient.presented, hasLength(2));
+      expect(ambient.presented.last.text, '书里的想法可以慢慢看。');
+      expect(visit.agent.running, isFalse);
+      expect(store.messages(), screenMessages);
+      expect(store.tasks(), screenTasks);
+      expect(store.cards(), screenCards);
+      expect(store.topicControls(), screenControls);
+      final afterObservation = {for (final row in store.requests()) row['id']! as String: row};
+      expect(afterObservation, hasLength(3));
+      for (final entry in screenRequests.entries) {
+        expect(afterObservation[entry.key], entry.value);
+      }
+      final observationReceipt = afterObservation.entries.singleWhere((entry) => !screenRequests.containsKey(entry.key)).value;
+      expect(observationReceipt['sent_at_ms'], isNotNull);
+      expect(observationReceipt['terminal'], 'complete');
+      expect(observationReceipt['input_uncached'], 12);
+      expect(observationReceipt['output_tokens'], 8);
     } finally {
       final acknowledgement = ambient.acknowledgement;
       if (acknowledgement != null && !acknowledgement.isCompleted) acknowledgement.complete(true);

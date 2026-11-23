@@ -1,6 +1,7 @@
 // Her voice: sentences read as they complete, her mouth on the engine's word
 // boundaries, silence the moment the person types.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -158,6 +159,36 @@ void main() {
       addTearDown(tester.view.reset);
       SharedPreferences.setMockInitialValues({});
       final calls = <MethodCall>[];
+      const secureChannel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+      final secureValues = <String, String>{};
+      final release = Completer<void>();
+      var armed = false;
+      var secureEntered = 0;
+      var secureReturned = 0;
+      var heldEntered = 0;
+      var heldReturned = 0;
+      var timerStarted = false;
+      var timerAdvanced = false;
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(secureChannel, (call) async {
+        final args = call.arguments as Map;
+        final storageKey = args['key']! as String;
+        if (call.method == 'read') return secureValues[storageKey];
+        if (call.method != 'write') throw UnsupportedError(call.method);
+        final value = args['value']! as String;
+        secureEntered++;
+        if (armed &&
+            storageKey == 'companion_voice_preset_keys' &&
+            (jsonDecode(value) as Map)['mimo'] == 'mimo-edited') {
+          armed = false;
+          heldEntered++;
+          await release.future;
+          heldReturned++;
+        }
+        secureValues[storageKey] = value;
+        secureReturned++;
+        return null;
+      });
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (call) async {
         calls.add(call);
         return switch (call.method) {
@@ -190,6 +221,18 @@ void main() {
           }),
           200,
         );
+      });
+      addTearDown(() async {
+        // Release while both real controllers and both platform handlers live.
+        armed = false;
+        if (!release.isCompleted) release.complete();
+        await tester.pump();
+        if (timerStarted && !timerAdvanced) {
+          await tester.pump(const Duration(milliseconds: 400));
+        }
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+        messenger.setMockMethodCallHandler(secureChannel, null);
       });
       await tester.pumpWidget(
         ProviderScope(
@@ -230,6 +273,78 @@ void main() {
       expect(sent.single.url.host, 'api.xiaomimimo.com');
       expect(sent.single.headers['api-key'], 'mimo-key');
       expect(((jsonDecode(sent.single.body) as Map)['audio'] as Map)['voice'], '茉莉');
+
+      // The public notifier seeds A/B/C; only the following UI choices are
+      // under the held write. No private Page field or replacement notifier.
+      final container = ProviderScope.containerOf(tester.element(find.byType(CompanionVoicePage)));
+      final notifier = container.read(companionVoiceSettingsProvider.notifier);
+      const seedKeys = {'mimo': 'mimo-key', 'bailian': 'bailian-key', 'openai': 'openai-key'};
+      const voices = {'mimo': '茉莉', 'bailian': 'Cherry', 'openai': 'coral'};
+      final seed = notifier.update(
+        container.read(companionVoiceSettingsProvider)!.copyWith(
+          preset: 'mimo',
+          presetKeys: seedKeys,
+          presetVoices: voices,
+        ),
+      );
+      await tester.pump();
+      await seed;
+      await tester.pump();
+      final prefs = await SharedPreferences.getInstance();
+      expect(container.read(companionVoiceSettingsProvider)!.preset, 'mimo');
+      expect((jsonDecode(prefs.getString('companion_voice_v1')!) as Map)['preset'], 'mimo');
+      expect(jsonDecode(secureValues['companion_voice_preset_keys']!), seedKeys);
+      expect(secureReturned, secureEntered);
+
+      // Arrange visibility before arming; no scroll/focus/rebuild after B
+      // returns may repair the stale snapshot that the timer must expose.
+      await tester.scrollUntilVisible(find.text('OpenAI'), -300, scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(key, 200, scrollable: find.byType(Scrollable).first);
+      await tester.pump();
+      expect(find.text('阿里云百炼').hitTestable(), findsOneWidget);
+      expect(find.text('OpenAI').hitTestable(), findsOneWidget);
+      expect(key.hitTestable(), findsOneWidget);
+      final beforeWrites = secureEntered;
+      const editedKeys = {'mimo': 'mimo-edited', 'bailian': 'bailian-key', 'openai': 'openai-key'};
+      armed = true;
+      timerStarted = true;
+      await tester.enterText(key, 'mimo-edited');
+      await tester.tap(find.text('阿里云百炼'));
+      await tester.pump();
+      expect(heldEntered, 1);
+      expect(heldReturned, 0);
+      expect(secureEntered, beforeWrites + 1);
+      expect(container.read(companionVoiceSettingsProvider)!.preset, 'bailian');
+      expect((jsonDecode(prefs.getString('companion_voice_v1')!) as Map)['preset'], 'bailian');
+
+      await tester.tap(find.text('OpenAI'));
+      await tester.pump();
+      expect(container.read(companionVoiceSettingsProvider)!.preset, 'openai');
+      expect((jsonDecode(prefs.getString('companion_voice_v1')!) as Map)['preset'], 'openai');
+      expect(tester.widget<TextField>(key).controller!.text, 'openai-key');
+      final coral = find.byWidgetPredicate((w) => w is TextField && w.decoration?.hintText == 'coral');
+      expect(tester.widget<TextField>(coral).controller!.text, 'coral');
+      expect(heldReturned, 0);
+      expect(secureEntered, beforeWrites + 1, reason: 'C keeps the already published key map');
+
+      // C's frame has completed. Only the old B storage reply now resumes;
+      // its completion schedules no Page build of its own.
+      release.complete();
+      await tester.pump();
+      expect(heldReturned, 1);
+      expect(secureReturned, secureEntered);
+      expect(jsonDecode(secureValues['companion_voice_preset_keys']!), editedKeys);
+      await tester.pump(const Duration(milliseconds: 400));
+      timerAdvanced = true;
+      await tester.pump();
+      final saved = container.read(companionVoiceSettingsProvider)!;
+      expect(saved.preset, 'openai');
+      expect(saved.presetKeys, editedKeys);
+      expect(saved.presetVoices, voices);
+      expect(jsonDecode(prefs.getString('companion_voice_v1')!), saved.plain());
+      expect(jsonDecode(secureValues['companion_voice_preset_keys']!), editedKeys);
+      expect(secureEntered, beforeWrites + 1, reason: 'the timer has no stale service fields to save');
+      expect(secureReturned, secureEntered);
       await tester.pumpWidget(const SizedBox());
     });
 
@@ -256,6 +371,23 @@ void main() {
         }
       });
       final wav = <int>[...'RIFF'.codeUnits, 36, 0, 0, 0, ...'WAVE'.codeUnits, ...List.filled(64, 0)];
+      final replacementWav = <int>[...wav, 1];
+      late Completer<void> copying;
+      final replacement = StreamController<List<int>>(onListen: () => copying.complete());
+      var picks = 0;
+      addTearDown(() async {
+        // Retire the page before releasing a copy held by a failed assertion.
+        await tester.pumpWidget(const SizedBox());
+        if (!replacement.isClosed) {
+          await tester.runAsync(() async {
+            final listening = replacement.hasListener;
+            replacement.add(replacementWav);
+            final closed = replacement.close();
+            // An unselected single-subscription stream need not have a listener.
+            if (listening) await closed;
+          });
+        }
+      });
       final sent = <http.Request>[];
       final client = MockClient((request) async {
         sent.add(request);
@@ -278,7 +410,12 @@ void main() {
             companionVoiceClientProvider.overrideWithValue(() => client),
             companionVoiceFolderProvider.overrideWithValue(() async => folder),
             companionVoiceSampleFolderProvider.overrideWithValue(() async => folder),
-            companionVoicePickerProvider.overrideWithValue(() async => (Stream.value(wav), wav.length)),
+            companionVoicePickerProvider.overrideWithValue(() async {
+              picks++;
+              return picks == 1
+                  ? (Stream.value(wav), wav.length)
+                  : (replacement.stream, replacementWav.length);
+            }),
           ],
           child: MaterialApp(
             theme: buildDarkTheme(),
@@ -320,6 +457,67 @@ void main() {
       final body = jsonDecode(sent.single.body) as Map;
       expect(body['model'], 'mimo-v2.5-tts-voiceclone');
       expect((body['audio'] as Map)['voice'], startsWith('data:audio/wav;base64,'));
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(CompanionVoicePage)), listen: false);
+      // A public settings write establishes on=true before the tested UI actions.
+      await tester.runAsync(
+        () => container
+            .read(companionVoiceSettingsProvider.notifier)
+            .update(container.read(companionVoiceSettingsProvider)!.copyWith(on: true)),
+      );
+      await tester.pump();
+      expect(container.read(companionVoiceSettingsProvider)!.on, isTrue);
+      expect(container.read(companionVoiceSettingsProvider)!.cloneOn, isTrue);
+
+      await tester.runAsync(() async {
+        copying = Completer<void>();
+        await tester.tap(find.text('换一段'));
+        await copying.future;
+      });
+      // The picker has returned and keep is awaiting this recording's bytes.
+      expect(picks, 2);
+      expect(File('${folder.path}/voice-sample.wav').readAsBytesSync(), wav);
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+      await tester.tap(find.text('预置音色'));
+      await tester.pump();
+      await tester.tap(find.text('OpenAI'));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('voice-source-system')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('voice-source-follow')));
+      await tester.pump();
+      final chosen = container.read(companionVoiceSettingsProvider)!;
+      expect((chosen.on, chosen.cloneOn, chosen.source, chosen.follow, chosen.preset),
+          (false, false, CompanionVoiceSource.system, true, 'openai'));
+
+      // The filename already exists: observe the real settings commit, not exists().
+      await tester.runAsync(() async {
+        final committed = Completer<CompanionVoiceSettings>();
+        final subscription = container.listen(companionVoiceSettingsProvider, (_, next) {
+          if (next != null && !committed.isCompleted) committed.complete(next);
+        });
+        try {
+          replacement.add(replacementWav);
+          await replacement.close();
+          await committed.future;
+          // update entered before this barrier and writes through the same loaded prefs.
+          await SharedPreferences.getInstance();
+        } finally {
+          subscription.close();
+        }
+      });
+      await tester.pump();
+      final saved = container.read(companionVoiceSettingsProvider)!;
+      expect(saved.on, isFalse);
+      expect(saved.plain(), chosen.plain());
+      expect(saved.presetKeys, chosen.presetKeys);
+      expect(saved.cloneSample, '${folder.path}/voice-sample.wav');
+      expect(await tester.runAsync(() => File(saved.cloneSample).readAsBytes()), replacementWav);
+      final prefs = (await tester.runAsync(SharedPreferences.getInstance))!;
+      expect(prefs.getBool('companion_voice_enabled'), isFalse);
+      expect(jsonDecode(prefs.getString('companion_voice_v1')!), saved.plain());
+      expect(sent, hasLength(1));
       await tester.pumpWidget(const SizedBox());
     });
 

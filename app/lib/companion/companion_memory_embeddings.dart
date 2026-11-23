@@ -170,11 +170,14 @@ class CompanionMemoryEmbeddings extends ChangeNotifier {
 
   /// Null means the optional encoder is unavailable. An empty list is a real
   /// empty candidate/result set. Neither result is a model reference grant.
+  /// Query text controls relevance. Only [explicitInput] may supply the existing
+  /// one-selection topic exception; observations leave it null.
   Future<List<MemoryRow>?> rank({
     required CompanionMemoryStore store,
     required String? characterId,
     required String query,
     required bool Function() isCurrent,
+    String? explicitInput,
     int limit = 6,
   }) async {
     if (limit < 1 || limit > 20) throw ArgumentError.value(limit, 'limit');
@@ -186,7 +189,7 @@ class CompanionMemoryEmbeddings extends ChangeNotifier {
     }
 
     current();
-    final candidates = store.memoryRetrievalCandidates(characterId: characterId, input: query);
+    final candidates = store.memoryRetrievalCandidates(characterId: characterId, input: explicitInput);
     if (candidates.isEmpty) return const [];
     if (!await ensureReady()) {
       current();
@@ -243,7 +246,7 @@ class CompanionMemoryEmbeddings extends ChangeNotifier {
       // the same float32 cache representation for old and newly encoded rows.
       final revisions = {for (final card in candidates) card['id']: card['row_rev']};
       final fresh = [
-        for (final card in store.memoryRetrievalCandidates(characterId: characterId, input: query))
+        for (final card in store.memoryRetrievalCandidates(characterId: characterId, input: explicitInput))
           if (revisions[card['id']] == card['row_rev']) card,
       ];
       final vectors = store.memoryEmbeddings(

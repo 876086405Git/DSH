@@ -5806,7 +5806,15 @@ class L10nEn extends L10n {
 
   @override
   String get companionNotConnectedTryLight =>
-      'I can\'t reach the host right now. If you just want to chat, switch to Light in the menu at the top right.';
+      'I can\'t reach your computer right now. Check the connection, or switch to Light in How she talks.';
+
+  @override
+  String get companionHostModelUnavailable =>
+      'There isn\'t a model ready on your computer yet. Choose one so we can talk, or switch to Light in How she talks.';
+
+  @override
+  String get companionHostUnavailable =>
+      'I can\'t start this chat through your computer yet. Check the connection and updates, or switch to Light in How she talks.';
 
   @override
   String get companionMenuRestartLightHint => 'Start a new conversation and keep earlier records';
@@ -7706,10 +7714,6 @@ class L10nEn extends L10n {
 
   @override
   String get companionPanelMore => 'More';
-
-  @override
-  String get companionFullNoKey =>
-      'Your computer\'s model can\'t reach me yet, so for now I need a DeepSeek API key to talk. Add one in Settings.';
 
   @override
   String get companionDrawerHere => 'Always here';

@@ -146,7 +146,7 @@ class CompanionAlwaysOnOwner {
     await lease.openMemory();
     if (_closed || generation != _generation || !lease.active) return;
     // A model change re-routes what she sees; heard only while she can look.
-    _screenRoute ??= ref.listen(modelSelectionScopeProvider, (_, _) => agent.screenRouteChanged());
+    _screenRoute ??= ref.listen(modelSelectionScopeProvider, (_, _) => agent.modelRouteChanged());
     _screen.start();
     _changed();
   }
