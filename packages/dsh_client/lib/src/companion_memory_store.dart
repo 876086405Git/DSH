@@ -2274,7 +2274,16 @@ class CompanionMemoryStore {
     final knownPrice = provider == 'deepseek' && model == 'deepseek-flash';
     final reservedCost = knownPrice ? _costUnits(inputTokens, 0, outputTokens) : null;
     if (category != 'chat') {
-      final rows = _db.select("SELECT * FROM memory_requests WHERE category!='chat' AND state!='released'");
+      // Only rows one of the two windows below can count. Settled rows are
+      // kept forever, so reading them all grew with every request ever made.
+      final rows = _db.select(
+        '''
+        SELECT * FROM memory_requests WHERE category!='chat' AND state!='released'
+          AND (COALESCE(sent_at_ms,uncertain_at_ms,reserved_at_ms)>?
+            OR (sent_at_ms IS NULL AND uncertain_at_ms IS NULL AND state='reserved'))
+      ''',
+        [at - 30 * 86400000],
+      );
       final daily = rows.where((row) {
         final attemptedAt = row['sent_at_ms'] ?? row['uncertain_at_ms'];
         return attemptedAt == null ? row['state'] == 'reserved' : (attemptedAt as int) > at - 86400000;
