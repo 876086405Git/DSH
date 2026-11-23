@@ -37,6 +37,7 @@ glob-card-source-retention.diff
 file-reference-basename-match.diff
 zzzzzzz-input-recovery.diff
 zzzzzzz-job-follow-removal.diff
+search-card-byte-budget.diff
 zzzzzzz-job-ring-trim.diff
 zzzzzzz-jsonl-root-check-retry.diff
 job-release-producer-cancel.diff

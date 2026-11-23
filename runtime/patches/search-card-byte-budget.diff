@@ -1,0 +1,44 @@
+--- a/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js
+@@ -386,27 +386,14 @@
+-function capMetaBytes(meta, maxMetaBytes) {
+-	if (metaBytes(meta) <= maxMetaBytes) return meta;
+-	if (meta.shape === "matches") {
+-		const files = [...meta.files];
+-		while (files.length > 1 && metaBytes({
+-			...meta,
+-			files,
+-			truncated: true
+-		}) > maxMetaBytes) files.pop();
+-		return {
+-			...meta,
+-			files,
+-			truncated: true
+-		};
+-	}
+-	const paths = [...meta.paths];
+-	while (paths.length > 1 && metaBytes({
+-		...meta,
+-		paths,
+-		truncated: true
+-	}) > maxMetaBytes) paths.pop();
+-	return {
+-		...meta,
+-		paths,
+-		truncated: true
+-	};
+-}
++function capMetaBytes(meta, maxMetaBytes) {
++	let bytes = metaBytes(meta);
++	if (bytes <= maxMetaBytes) return meta;
++	const key = meta.shape === "matches" ? "files" : "paths";
++	const items = [...meta[key]];
++	// The JSON literal true is one byte shorter than false.
++	if (!meta.truncated) bytes--;
++	while (items.length > 1 && bytes > maxMetaBytes) bytes -= metaBytes(items.pop()) + 1;
++	return {
++		...meta,
++		[key]: items,
++		truncated: true
++	};
++}
