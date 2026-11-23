@@ -176,6 +176,7 @@ web-empty-reply-notice.diff
 profile-root-installation-precedence.diff
 plugin-compatibility-exact-version.diff
 profile-sibling-package-lookup.diff
+profile-runtime-version-validation.diff
 messages-usage-evidence.diff
 piai-usage-evidence.diff
 piai-tool-call-id.diff
