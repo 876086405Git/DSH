@@ -5422,7 +5422,13 @@ class L10nZh extends L10n {
   String get companionLightBusy => '那边有点忙，等一下再和我说吧。';
 
   @override
-  String get companionNotConnectedTryLight => '现在连不上主机。只想聊天的话，可以在右上角菜单换成轻量模式。';
+  String get companionNotConnectedTryLight => '现在连不上电脑那边。你可以检查连接，或在「对话方式」里换成轻量模式。';
+
+  @override
+  String get companionHostModelUnavailable => '电脑那边还没选好模型。选好后我们再聊，或在「对话方式」里换成轻量模式。';
+
+  @override
+  String get companionHostUnavailable => '电脑那边暂时接不了这次对话。检查连接和更新后再试，或在「对话方式」里换成轻量模式。';
 
   @override
   String get companionMenuRestartLightHint => '开始新对话，保留旧记录';
@@ -7219,9 +7225,6 @@ class L10nZh extends L10n {
 
   @override
   String get companionPanelMore => '更多';
-
-  @override
-  String get companionFullNoKey => '电脑上的模型还没接到我这儿，现在先要 DeepSeek API Key 才能聊。在设置里填上就行。';
 
   @override
   String get companionDrawerHere => '她一直在';
