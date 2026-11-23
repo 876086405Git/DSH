@@ -1,7 +1,7 @@
 // Strictly local import fixture. No node:fs export or global builtin is replaced.
 import { watch as nativeWatch, renameSync, mkdirSync, symlinkSync } from 'node:fs';
 import { stat as nativeStat } from 'node:fs/promises';
-export { watchFile, unwatchFile } from 'node:fs';
+export { lstatSync, watchFile, unwatchFile } from 'node:fs';
 export { access, lstat, readFile, readdir, realpath } from 'node:fs/promises';
 
 export const boundary = {

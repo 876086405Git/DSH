@@ -2,7 +2,7 @@
 
 ## 范围与结果边界
 
-`ohos-skill-root-events.diff` 只加入 `pins.json` 的 `ohos` 目标，在既有公共链与 OH 覆盖之后应用。固定 DSH 版本为 `0.2.2-rc.1`。它修改 `@deepseek-ai/dsh-skill-filesystem` 的缺根监听，不修改 Android 目标、ArkTS、Dart、Node 构建、现有根的 chokidar 参数或技能解析协议。
+`ohos-skill-root-events.diff` 起初只加入 `pins.json` 的 `ohos` 目标；现在它和 `ohos-client-hmr-idle.diff` 一起移到公共链末尾，Android 也应用。下一段路径上已经有东西（例如指向尚不存在目录的符号链接）时仍按原来的 stat polling 监听，因为改链接目标不会在父目录产生事件（`runtime/tests/skill-root-idle.test.mjs`）。固定 DSH 版本为 `0.2.2-rc.1`。它修改 `@deepseek-ai/dsh-skill-filesystem` 的缺根监听，不修改 ArkTS、Dart、Node 构建、现有根的 chokidar 参数或技能解析协议。
 
 此前真实 Host 的 1242 资源证据发现四个存活且未引用事件循环的 `fs_poll`。对应源码对缺失路径无条件调用 `watchFile(..., interval: 100)`，即使 `watchUsePolling=false` 也如此。1242 没有成功取得 syscall 频率，也没有把整进程 CPU 分配给这四个资源。本项同样不报告 CPU 百分比、设备节电量或每秒 stat 次数。
 

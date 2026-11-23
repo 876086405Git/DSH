@@ -1,4 +1,4 @@
-# OH-only: pause bundle stats without SSE clients; reconcile on reconnect and fence retired routes.
+# Pause bundle stats without SSE clients; reconcile on reconnect and fence retired routes.
 --- a/node_modules/@deepseek-ai/dsh-client-hmr/lib/index.js
 +++ b/node_modules/@deepseek-ai/dsh-client-hmr/lib/index.js
 @@ -45,6 +45,13 @@
