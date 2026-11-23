@@ -1,0 +1,13 @@
+--- a/node_modules/@deepseek-ai/dsh-client-modules/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-client-modules/lib/index.js
+@@ -787 +787 @@
+-		const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
++		const pkg = located.manifest ?? JSON.parse(readFileSync(pkgPath, "utf8"));
+@@ -852 +852,2 @@
+-				const name = JSON.parse(readFileSync(candidate, "utf8")).name;
++				const manifest = JSON.parse(readFileSync(candidate, "utf8"));
++				const name = manifest.name;
+@@ -855 +856,2 @@
+-					packageName: name
++					packageName: name,
++					manifest
