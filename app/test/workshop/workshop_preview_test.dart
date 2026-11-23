@@ -162,6 +162,18 @@ void main() {
     }
   });
 
+  test('pet idle downscaling requires an explicitly advertised boolean true', () {
+    WorkshopPreviewCapabilities parse(Map<String, Object?> fields) => WorkshopCapabilities.fromJson({
+      ...workshopCaps(), 'preview': {..._previewContract(), ...fields},
+    }).preview!;
+
+    expect(parse({}).petIdleDownscale, isFalse);
+    for (final value in <Object?>[false, null, 'true', 1]) {
+      expect(parse({'petIdleDownscale': value}).petIdleDownscale, isFalse);
+    }
+    expect(parse({'petIdleDownscale': true}).petIdleDownscale, isTrue);
+  });
+
   group('real client with controlled HTTP and private cache', () {
     late Directory temporary;
     late FakeWorkshopHttp http;

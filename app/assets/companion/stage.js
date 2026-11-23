@@ -18,6 +18,7 @@
   const Fw = window.CubismFw;
   const query = new URLSearchParams(location.search);
   const FLOAT = query.get('mode') === 'float';
+  const COVER = query.get('mode') === 'cover';
   const floatAbort = FLOAT ? new AbortController() : null;
   let floatDisposed = false;
   let loadingModel = null;
@@ -1846,6 +1847,61 @@
     model?.setRenderTargetSize(width, height);
   }
 
+  function drawCharacter(view) {
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    model.draw(view, [0, 0, canvas.width, canvas.height]);
+  }
+
+  // Frame the actual visible drawables, not the room's camera or model canvas.
+  function coverView() {
+    const { core, matrix } = model;
+    let left = Infinity, right = -Infinity, bottom = Infinity, top = -Infinity;
+    for (let i = 0; i < core.getDrawableCount(); i++) {
+      if (core.getDrawableOpacity(i) <= 0 || !core.getDrawableDynamicFlagIsVisible(i)) continue;
+      const vertices = core.getDrawableVertices(i);
+      for (let j = 0; j < vertices.length; j += 2) {
+        const x = matrix.transformX(vertices[j]);
+        const y = matrix.transformY(vertices[j + 1]);
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+        bottom = Math.min(bottom, y);
+        top = Math.max(top, y);
+      }
+    }
+    const span = Math.max(right - left, top - bottom);
+    if (!Number.isFinite(span) || span <= 0) throw new Error('cover bounds');
+    const s = 1.8 / span;
+    return new Float32Array([s, 0, 0, 0, 0, s, 0, 0, 0, 0, 1, 0, -(left + right) * s / 2, -(top + bottom) * s / 2, 0, 1]);
+  }
+
+  async function captureCover() {
+    const framing = coverView();
+    const view = new Fw.CubismMatrix44();
+    const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+    // Cubism loads shaders asynchronously. Probe only this neutral pose, not
+    // an animation, and return the first draw that actually contains pixels.
+    for (let i = 0; i < 25; i++) {
+      if (gl.isContextLost()) throw new Error('cover context');
+      view.setMatrix(framing); // StageModel.draw multiplies in the model matrix.
+      drawCharacter(view);
+      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      if (pixels.some((value, index) => (index & 3) === 3 && value !== 0)) {
+        // It must be serialized in the draw task, before WebGL clears it.
+        const prefix = 'data:image/png;base64,';
+        const image = canvas.toDataURL('image/png');
+        if (!image.startsWith(prefix)) throw new Error('cover png');
+        post({ type: 'cover', png: image.slice(prefix.length) });
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+    throw new Error('cover empty');
+  }
+
   function render(ts) {
     if (FLOAT) return renderFloat(ts);
     if (paused || document.hidden) return;
@@ -1873,12 +1929,7 @@
     life.hop.step(0, dt);
     resize();
     model.tick(dt, animate);
-    gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    model.draw(projection(), [0, 0, canvas.width, canvas.height]);
+    drawCharacter(projection());
     moodMarks(ts);
     scene.step(dt, life.body.x.x + tilt.sx * 0.8);
     parallax(dt);
@@ -1954,12 +2005,7 @@
       resize();
       if (floatGazeUntil && ts > floatGazeUntil) { floatGazeUntil = 0; life.pointer = null; }
       model.tick(dt, animate);
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      model.draw(projection(), [0, 0, canvas.width, canvas.height]);
+      drawCharacter(projection());
       // Read in this draw task; preserveDrawingBuffer is unnecessary. The native
       // viewport is fixed and small, so the buffer stays small at device density.
       const length = canvas.width * canvas.height * 4;
@@ -2209,6 +2255,7 @@
   }
 
   document.addEventListener('visibilitychange', () => {
+    if (COVER) return;
     if (FLOAT) {
       if (document.hidden) releaseFloat();
       else if (floatDisposed) post({ type: 'floatResume' });
@@ -2218,12 +2265,13 @@
   if (FLOAT) window.addEventListener('pagehide', releaseFloat);
 
   canvas.addEventListener('webglcontextlost', (e) => {
+    if (COVER) return;
     e.preventDefault();
     if (FLOAT) {
       if (!floatDisposed) floatFailed('companion_context_lost');
     } else pause();
   });
-  canvas.addEventListener('webglcontextrestored', () => { if (!FLOAT) location.reload(); });
+  canvas.addEventListener('webglcontextrestored', () => { if (!FLOAT && !COVER) location.reload(); });
 
   /** The water follows the hour. */
   function timeOfDay(hour) {
@@ -2250,18 +2298,21 @@
   async function boot() {
     const started = performance.now();
     if (REDUCED) document.documentElement.dataset.motion = 'reduced';
-    applyTimeOfDay();
-    if (!FLOAT) {
+    if (!COVER) applyTimeOfDay();
+    if (!FLOAT && !COVER) {
       scene.resize();
       window.addEventListener('resize', () => scene.resize());
       // The water already where it will be on her first frame.
       water(performance.now());
     }
+    let coverModel = null;
     try {
       const response = await fetch(`${CHARACTER}character.json`, { signal: floatAbort?.signal });
       character = response.ok ? await response.json() : {};
-      adapter = await loadAdapter();
-      applyCharacter();
+      if (!COVER) {
+        adapter = await loadAdapter();
+        applyCharacter();
+      }
       if (floatDisposed) return;
 
       Fw.CubismFramework.startUp(Object.assign(new Fw.Option(), { logFunction: () => {}, loggingLevel: Fw.LogLevel?.LogLevel_Off ?? 5 }));
@@ -2271,15 +2322,26 @@
       // shows little on a dense screen, where the canvas is drawn at 2×.
       const antialias = query.get('antialias') === '1' || (query.get('antialias') !== '0' && (window.devicePixelRatio || 1) < 1.5);
       // Cubism never depth-tests, so no depth buffer.
-      const options = { alpha: true, depth: false, premultipliedAlpha: true, antialias, preserveDrawingBuffer: query.get('capture') === '1' };
+      const options = { alpha: true, depth: false, premultipliedAlpha: true, antialias, preserveDrawingBuffer: !COVER && query.get('capture') === '1' };
       gl = canvas.getContext('webgl2', options) || canvas.getContext('webgl', options);
-      if (!gl || (FLOAT && !gl.getContextAttributes()?.alpha)) throw new Error('webgl');
-      canvas.width = canvas.height = 0;
-      resize();
+      if (!gl || ((FLOAT || COVER) && !gl.getContextAttributes()?.alpha)) throw new Error('webgl');
+      if (COVER) {
+        const side = clamp(Math.floor(Number(query.get('coverSide')) || 512), 1, 512);
+        canvas.width = canvas.height = side;
+      } else {
+        canvas.width = canvas.height = 0;
+        resize();
+      }
 
       const next = new StageModel();
+      if (COVER) coverModel = next;
       if (FLOAT) loadingModel = next;
       await next.load(gl, character);
+      if (COVER) {
+        model = next;
+        await captureCover();
+        return;
+      }
       if (floatDisposed) { loadingModel = null; next.release(); return; }
       next.adapt(character, adapter);
       model = next;
@@ -2321,6 +2383,11 @@
       post({ type: 'error', message: String(error?.message ?? error) });
       document.documentElement.dataset.ready = 'error';
       document.documentElement.dataset.error = String(error?.stack ?? error);
+    } finally {
+      if (COVER) {
+        try { coverModel?.release(); }
+        finally { gl?.getExtension('WEBGL_lose_context')?.loseContext(); }
+      }
     }
   }
 
@@ -2336,6 +2403,7 @@
 
   window.stage = {
     command(message) {
+      if (COVER) return;
       if (FLOAT) {
         if (message?.type === 'dispose' || message?.type === 'pause') releaseFloat();
         else if (!floatDisposed && model && message?.type === 'freeze') pause();

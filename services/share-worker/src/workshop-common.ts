@@ -7,7 +7,7 @@ export const LEGACY_UPLOAD_CAP = 20 * 1024 * 1024;
 export const EXPANDED_CAP = 256 * 1024 * 1024;
 export const MEMBER_CAP = 32 * 1024 * 1024;
 export const PREVIEW_CONTRACT = { schema: 1, sources: ['pet-idle', 'companion-preview', 'theme-preview'], format: 'png',
-  maxWidth: 512, maxHeight: 512, maxPixels: 262144, maxBytes: 2097152 } as const;
+  maxWidth: 512, maxHeight: 512, maxPixels: 262144, maxBytes: 2097152, petIdleDownscale: true } as const;
 export type PreviewSource = typeof PREVIEW_CONTRACT.sources[number];
 export interface PublicPreview { path: string; sha256: string; size: number; width: number; height: number }
 export const KINDS = ['pet', 'companion', 'theme'] as const;

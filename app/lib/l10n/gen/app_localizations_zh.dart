@@ -28979,7 +28979,10 @@ class L10nZh extends L10n {
   String get workshopPublishCoverHelper => '支持 JPEG、PNG、WebP 等，上传前自动缩小。不选就显示名字的第一个字。';
 
   @override
-  String get workshopPublishCoverChosen => '自选封面';
+  String get workshopPublishCoverGenerating => '正在生成封面，也可以自己选。';
+
+  @override
+  String get workshopPublishCoverChosen => '投稿封面';
 
   @override
   String get workshopPublishCoverReplace => '换一张';

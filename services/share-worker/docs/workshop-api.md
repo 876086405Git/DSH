@@ -15,7 +15,7 @@ Worker 校验令牌时只请求 `GET https://api.github.com/user`（15 秒超时
 `GET /api/workshop/v1/capabilities`：
 
 ```json
-{"schema":1,"features":{"uploads":true,"companion":true},"kinds":["pet","companion"],"licenses":["CC0-1.0","CC-BY-4.0","CC-BY-SA-4.0","MIT","Apache-2.0","BSD-2-Clause","BSD-3-Clause","LicenseRef-Author-Permission"],"account":{"origin":"https://github.com","clientId":"Iv23liExample"},"maxMocVersion":6,"preview":{"schema":1,"sources":["pet-idle","companion-preview"],"format":"png","maxWidth":512,"maxHeight":512,"maxPixels":262144,"maxBytes":2097152},"limits":{"archiveBytes":52428800,"expandedBytes":134217728,"companionMemberBytes":16777216,"companionEntries":1000,"petEntries":256}}
+{"schema":1,"features":{"uploads":true,"companion":true},"kinds":["pet","companion"],"licenses":["CC0-1.0","CC-BY-4.0","CC-BY-SA-4.0","MIT","Apache-2.0","BSD-2-Clause","BSD-3-Clause","LicenseRef-Author-Permission"],"account":{"origin":"https://github.com","clientId":"Iv23liExample"},"maxMocVersion":6,"preview":{"schema":1,"sources":["pet-idle","companion-preview"],"format":"png","maxWidth":512,"maxHeight":512,"maxPixels":262144,"maxBytes":2097152,"petIdleDownscale":true},"limits":{"archiveBytes":52428800,"expandedBytes":134217728,"companionMemberBytes":16777216,"companionEntries":1000,"petEntries":256}}
 ```
 
 `account.origin` 固定为 `https://github.com`。`account.clientId` 是 App 发起 GitHub 设备授权所用 OAuth App 的公开 client id，取自 Worker 变量 `WORKSHOP_GITHUB_CLIENT_ID`；只有匹配 `^[A-Za-z0-9._-]{1,64}$` 时才公布，未配置或格式不对时为 `null`，此时 App 无从发起登录，作者请求也就无法进行。Worker 自己不提供任何登录端点。
@@ -38,7 +38,7 @@ Worker 校验令牌时只请求 `GET https://api.github.com/user`（15 秒超时
 
 只接受静态 PNG：字节数 1..2097152，宽高各 1..512，像素数不超过 262144。既有完整 PNG 门继续核 CRC、chunk 顺序、色型 / 位深、zlib / IDAT 和像素，拒绝 APNG；小尺寸 / 字节门先于图片解压。声明后缺图、超限或校验失败会拒绝本次上传，不静默忽略声明，也不改变省略声明时的包接受域。
 
-- `pet-idle`：完整宠物包通过后，取 `states.idle[0]` 指定动画的 `frames[0].i` 那一格，按原 frameW / frameH 裁剪并编码为 RGBA8 PNG，不缩放、不使用整张 sprite 或默认第 0 格。格尺寸超出公开门时拒绝；未声明的合法大格仍可投稿。ZIP 不新增图片成员。
+- `pet-idle`：完整宠物包通过后，取 `states.idle[0]` 指定动画的 `frames[0].i` 那一格，编码为 RGBA8 PNG，不使用整张 sprite 或默认第 0 格。已在公开尺寸内的格不缩放，预览字节和 SHA 保持不变。`capabilities.preview.petIdleDownscale: true` 时，合法大格长边缩到 512，短边按比例四舍五入、至少 1 像素，按目标像素中心最近邻采样。未声明的合法大格仍可无图投稿；旧 Worker 不公布该布尔值时，App 沿用 512 源格门。无论是否缩小，ZIP 原字节不变。
 - `companion-preview`：只取 ZIP 中精确的 `character/preview.png`，完整验证后保持原 PNG 字节。该文件必须由作者明确选择；不接受其他路径、JPEG / WebP、SVG 或由模型推测的肖像。它仍受原 ZIP 成员数、压缩 / 展开大小及完整包验证约束。
 
 客户端仍只创建投稿并上传一个 ZIP，没有第二个图片上传步骤。draft 只有声明；首次成功上传进入 pending 时，`submission.preview` 登记固定的五字段。当前公开目录条目使用相同形状，无图时省略而不是 null：

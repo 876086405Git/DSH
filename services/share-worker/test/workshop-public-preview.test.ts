@@ -5,7 +5,7 @@ import { assetUrl, metadata, PREVIEW_CONTRACT, previewKey, previewUrl, type Subm
 import { STATE_KEY } from '../src/workshop-state';
 import { makeCtx, makeEnv } from './fakes';
 import { PetBucket } from './pet-market-fakes';
-import { companion, metaFor, pet, png, zip } from './workshop-fixtures';
+import { companion, metaFor, pet, petManifest, png, zip } from './workshop-fixtures';
 
 const API = '/api/workshop/v1';
 beforeEach(() => { vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ id: 42, login: 'synthetic-preview-author' }))); });
@@ -35,7 +35,9 @@ function setup() {
 const privatePath = (sid: string) => `${API}/admin/submissions/${sid}/public-preview`;
 
 it('announces the exact optional contract and binds the opt-in to normalized requestId metadata', async () => {
-  const f = setup(); expect((await (await f.call(API + '/capabilities')).json() as any).preview).toEqual(PREVIEW_CONTRACT);
+  const f = setup();
+  const contract = (await (await f.call(API + '/capabilities')).json() as any).preview;
+  expect(contract).toEqual(PREVIEW_CONTRACT); expect(contract.petIdleDownscale).toBe(true);
   const item = await f.create(), changed = { ...item.meta }; delete changed.previewSource;
   const retry = await f.call(API + '/submissions', 'POST', { ...changed, requestId: item.requestId });
   expect(retry.status).toBe(409); expect(await retry.json()).toEqual({ error: 'workshop_request_id_reused' });
@@ -69,6 +71,22 @@ it('shows the registered pending PNG only to an administrator and publishes thos
   expect(catalog.entries[0].preview).toEqual(preview); expect(catalog.entries[0].previewSource).toBe('pet-idle');
   const published = await f.call(preview.path); expect(published.status).toBe(200);
   expect(new Uint8Array(await published.arrayBuffer())).toEqual(shown); expect(f.state().releases[0]).not.toHaveProperty('preview');
+});
+it('publishes a derived large-cell preview while serving the original ZIP unchanged', async () => {
+  const f = setup(), pack = petManifest(), box = { x: 0, y: 0, w: 1024, h: 4 };
+  pack.canvas = { w: box.w, h: box.h }; pack.contentBox = box;
+  pack.animations.idle = { ...pack.animations.idle, frameW: box.w, frameH: box.h, box };
+  const bytes = zip([['pack.json', Buffer.from(JSON.stringify(pack))], ['idle.png', png(box.w, box.h)]]);
+  const item = await f.create(bytes), uploaded = await f.upload(item);
+  expect(uploaded.status).toBe(200);
+  const { submission } = await uploaded.json() as any;
+  expect(submission.preview).toMatchObject({ width: 512, height: 2 });
+  expect((await f.review(item.sid)).status).toBe(200);
+  const published = await f.call(submission.preview.path);
+  expect(published.status).toBe(200); expect(published.headers.get('Content-Type')).toBe('image/png');
+  const archive = await f.call(assetUrl(item.meta));
+  expect(archive.status).toBe(200);
+  expect(new Uint8Array(await archive.arrayBuffer())).toEqual(new Uint8Array(bytes));
 });
 it('returns authorized full PNG and HEAD despite Range/conditional headers and rejects other verbs', async () => {
   const f = setup(), item = await f.publish(), p = item.submission.preview;

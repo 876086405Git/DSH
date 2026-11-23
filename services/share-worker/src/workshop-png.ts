@@ -20,20 +20,32 @@ export function validateTexture(bytes: Uint8Array): void {
   const width = view.getUint32(16), height = view.getUint32(20);
   need(width > 0 && height > 0 && width <= 8192 && height <= 8192, 'png_decoded_size');
 }
-// Reconstruct every source pixel through the same validator; retain only the
-// explicitly requested, bounded cell. No full-source RGBA buffer is created.
-export function cropPng(bytes: Uint8Array, region: PngRegion): Uint8Array { return readPng(bytes, region).rgba!; }
-function readPng(bytes: Uint8Array, region?: PngRegion): PngInfo & { rgba?: Uint8Array } {
+// Reconstruct every source pixel through the same validator; retain only
+// the bounded output, even when the requested cell is larger than it.
+export function cropPng(bytes: Uint8Array, region: PngRegion, width = region.width, height = region.height): Uint8Array {
+  return readPng(bytes, { region, width, height }).rgba!;
+}
+function sampleAxis(start: number, source: number, target: number): Uint16Array {
+  // Map absolute source positions to one-based target positions (zero means
+  // unsampled). Centre sampling also gives an identity map for a plain crop.
+  const positions = new Uint16Array(start + source);
+  for (let i = 0; i < target; i++) positions[start + Math.floor((i + 0.5) * source / target)] = i + 1;
+  return positions;
+}
+function readPng(bytes: Uint8Array, crop?: { region: PngRegion; width: number; height: number }): PngInfo & { rgba?: Uint8Array } {
   need(bytes.length >= 33 && bytes.length <= PET_LIMITS.sheetBytes, 'png_size');
   need([137, 80, 78, 71, 13, 10, 26, 10].every((b, i) => bytes[i] === b), 'png_header');
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
   const width = view.getUint32(16), height = view.getUint32(20), depth = bytes[24]!, color = bytes[25]!, interlace = bytes[28]!;
   need(view.getUint32(8) === 13 && String.fromCharCode(...bytes.subarray(12, 16)) === 'IHDR', 'png_header');
   need(width > 0 && height > 0 && width <= PET_LIMITS.sheetSide && height <= PET_LIMITS.sheetSide && width * height * 4 <= PET_LIMITS.sheetDecodedBytes, 'png_decoded_size');
-  let rgba: Uint8Array | undefined;
-  if (region) {
-    need(previewDimensions(region.width, region.height) && whole(region.x, 0, width - region.width) && whole(region.y, 0, height - region.height), 'preview_dimensions');
-    rgba = new Uint8Array(region.width * region.height * 4);
+  let output: { rgba: Uint8Array; columns: Uint16Array; rows: Uint16Array; width: number } | undefined;
+  if (crop) {
+    const { region, width: targetWidth, height: targetHeight } = crop;
+    need(previewDimensions(targetWidth, targetHeight) && whole(region.width, targetWidth, width) && whole(region.height, targetHeight, height) &&
+      whole(region.x, 0, width - region.width) && whole(region.y, 0, height - region.height), 'preview_dimensions');
+    output = { width: targetWidth, rgba: new Uint8Array(targetWidth * targetHeight * 4),
+      columns: sampleAxis(region.x, region.width, targetWidth), rows: sampleAxis(region.y, region.height, targetHeight) };
   }
   const depths: Record<number, number[]> = { 0: [1, 2, 4, 8, 16], 2: [8, 16], 3: [1, 2, 4, 8], 4: [8, 16], 6: [8, 16] };
   const channels = ({ 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 } as Record<number, number>)[color];
@@ -97,6 +109,8 @@ function readPng(bytes: Uint8Array, region?: PngRegion): PngInfo & { rgba?: Uint
       // original precision before reduction. Palette lookup must be in range.
       const sample = (i: number) => depth === 16 ? row[i * 2]! * 256 + row[i * 2 + 1]! : depth === 8 ? row[i]! : row[(i * depth) >> 3]! >> (8 - depth - i * depth % 8) & (1 << depth) - 1;
       const byte = (n: number) => depth === 16 ? n >> 8 : depth === 8 ? n : Math.round(n * 255 / ((1 << depth) - 1));
+      const targetY = output?.rows[pass.y + y * pass.dy];
+      const targetRow = output && targetY ? (targetY - 1) * output.width * 4 : 0;
       for (let x = 0; x < pass.width; x++) {
         let r: number, g: number, b: number, a = 255;
         const base = x * channels, first = sample(base);
@@ -114,10 +128,11 @@ function readPng(bytes: Uint8Array, region?: PngRegion): PngInfo & { rgba?: Uint
           else if (transparent && first === transparent.getUint16(0) && second === transparent.getUint16(2) && third === transparent.getUint16(4)) a = 0;
         }
         rgbaSum = (rgbaSum + r + g + b + a) >>> 0; pixels++;
-        if (region && rgba) {
-          const imageX = pass.x + x * pass.dx, imageY = pass.y + y * pass.dy;
-          if (imageX >= region.x && imageX < region.x + region.width && imageY >= region.y && imageY < region.y + region.height) {
-            const target = ((imageY - region.y) * region.width + imageX - region.x) * 4;
+        if (output && targetY) {
+          const targetX = output.columns[pass.x + x * pass.dx];
+          if (targetX) {
+            const target = targetRow + (targetX - 1) * 4;
+            const { rgba } = output;
             rgba[target] = r; rgba[target + 1] = g; rgba[target + 2] = b; rgba[target + 3] = a;
           }
         }
@@ -126,7 +141,7 @@ function readPng(bytes: Uint8Array, region?: PngRegion): PngInfo & { rgba?: Uint
     }
   }
   need(cursor === raw.length && pixels === width * height, 'png_decode');
-  return { width, height, pixels, rgbaSum, ...(rgba ? { rgba } : {}) };
+  return { width, height, pixels, rgbaSum, ...(output ? { rgba: output.rgba } : {}) };
 }
 function paeth(a: number, b: number, c: number): number {
   const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);

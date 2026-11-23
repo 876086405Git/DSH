@@ -30556,7 +30556,10 @@ class L10nEn extends L10n {
       'Supports JPEG, PNG, WebP and more, resized before upload. Without one, the first letter of the name is shown.';
 
   @override
-  String get workshopPublishCoverChosen => 'Your cover';
+  String get workshopPublishCoverGenerating => 'Generating a cover. You can also choose your own.';
+
+  @override
+  String get workshopPublishCoverChosen => 'Submission cover';
 
   @override
   String get workshopPublishCoverReplace => 'Replace';

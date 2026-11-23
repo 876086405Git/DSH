@@ -26,11 +26,11 @@ If-Range 的日期按 [RFC 9110 §13.1.5](https://www.rfc-editor.org/rfc/rfc9110
 
 ## 单 ZIP 与公开预览
 
-预览是作者对本次投稿的明确选择。metadata 可选 `previewSource`：pet 对应 `pet-idle`，companion 对应 `companion-preview`；省略时保持原无图行为，既有合法包不用为新功能增加图片或缩小动画格。capabilities 的 `preview` 对象公布 schema 1、两种 source、PNG 格式、宽高各 512、面积 262144、2097152 字节的硬限。App 在 create 之前核能力；缺能力不能把有图意图悄悄按旧协议发送。
+预览是作者对本次投稿的明确选择。metadata 的 `previewSource` 可省略；省略时保持原无图行为，既有合法包不用为预览增加图片或缩小动画格。capabilities 的 `preview` 对象公布 schema 1、支持的 source 和公开 PNG 的硬限：宽高各 512、面积 262144、2097152 字节。`preview.petIdleDownscale: true` 表示能缩小合法的大宠物待机格；新 App 未见明确的布尔 true 时，仍对待机格执行旧的 512 尺寸门。旧 App 不依赖新增字段，仍可按原合同读取预览，投稿沿用旧尺寸门。App 在 create 之前核对应 source；缺能力不能把有图意图悄悄按旧协议发送。
 
-图片仍来自同一份经过 SHA / size 核验的上传 ZIP。宠物选 `states.idle[0]` 的动画，再按 `frames[0].i` 与 cols / frameW / frameH 裁首帧，不假定第 0 格，也不缩放。伙伴只取精确的 `character/preview.png`；其原 PNG 字节即公开内容，不猜模型肖像或公开 texture atlas。只有声明后才执行这套较小尺寸门，超限或缺图明确拒绝，不能自动取消声明。客户端没有独立图片上传、另一个草稿或第二个恢复事务。
+图片仍来自同一份经过 SHA / size 核验的上传 ZIP。`pet-idle` 选 `states.idle[0]` 的动画，再按 `frames[0].i` 与 cols / frameW / frameH 取首格，不假定第 0 格；两边都已不超过 512 时保留原像素、编码与 SHA。否则长边缩到 512，短边按比例四舍五入、至少 1 像素，以目标像素中心在源格中取最近邻。源格仍须通过原宠物包及图集校验，不改写 ZIP。`companion-preview` 只取精确的 `character/preview.png`，原 PNG 字节即公开内容，不猜模型肖像或公开 texture atlas；`theme-preview` 只取 `preview.png`。声明后缺图或校验失败明确拒绝，不能自动取消声明。客户端没有独立图片上传、另一个草稿或第二个恢复事务。
 
-小尺寸 / 文件门先于图像解压，完整包与完整 PNG 校验继续执行；公开格式拒绝 APNG 和其他图像类型。宠物裁剪复用原 PNG 像素重建过程，完整验证源图而只额外保存选中格的 RGBA，最多 1048576 字节，不生成源图的完整 RGBA 副本。输出为 RGBA8、filter 0、非交错、单 IDAT 的确定编码，使用 zlib stored blocks；令 `N = h × (4w + 1)`，PNG 总字节为 `N + 5 × ceil(N / 65535) + 63`，在 512 × 512 时最多 1049236，低于 2MiB 门。这个算术只约束输出，原 ZIP、源 PNG 完整 scanline、压缩缓冲及并发请求仍有独立的内存成本。
+源格和直接上传的预览各自先检查尺寸 / 文件上限，再执行完整包与完整 PNG 校验；公开格式拒绝 APNG 和其他图像类型。宠物取样复用原 PNG 像素重建过程，仍检查所有 chunk 的 CRC，完整解压并还原所有行和像素，包含 Adam7 的各个 pass。只额外缓存目标 RGBA（最多 1048576 字节）和两条取样索引（合计最多 16 KiB），不生成源格或源图的 RGBA 副本。输出为 RGBA8、filter 0、非交错、单 IDAT 的确定编码，使用 zlib stored blocks；令 `N = h × (4w + 1)`，PNG 总字节为 `N + 5 × ceil(N / 65535) + 63`，在 512 × 512 时最多 1049236，低于 2MiB 门。这个算术只约束输出，原 ZIP、源 PNG 完整 scanline、压缩缓冲及并发请求仍有独立的内存成本。
 
 ZIP 通过完整验证后先写原 `workshop/blobs/<ZIP SHA>.zip`；派生图以 `workshop/previews/<PNG SHA>.png` 条件创建，原生摘要与长度必须一致。随后重新读取权威状态，只有仍为 draft 才将 `submittedAt`、包 validation 和 `preview: {path, sha256, size, width, height}` 一起 CAS 为 pending。图片在 pending 登记时固定，重复上传不会重画；上传期间被撤回或其他写入赢得 CAS 时，不覆盖其结果。孤立私有对象不构成公开授权，也不能通过任意成员路径接口取出。
 

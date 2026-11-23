@@ -6,11 +6,15 @@ import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/pets/pet_library.dart';
+import 'package:dsh_app/state/workshop_auth_state.dart';
+import 'package:dsh_app/state/workshop_dependencies.dart';
+import 'package:dsh_app/state/workshop_publish_sources.dart';
 import 'package:dsh_app/workshop/workshop_client.dart';
 import 'package:dsh_app/workshop/workshop_models.dart';
 import 'package:dsh_app/workshop/workshop_preview.dart';
 import 'package:dsh_app/workshop/workshop_receipt.dart';
 import 'package:dsh_app/workshop/workshop_repository.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../state/workshop_state_support.dart' show StatePackages;
@@ -50,6 +54,14 @@ Future<CompanionPackStore> _companion(Directory temp, {String? textureName, bool
   return store;
 }
 
+class _Access extends WorkshopAccessController {
+  _Access(this.capabilities);
+  final WorkshopCapabilities capabilities;
+
+  @override
+  WorkshopAccessState build() => WorkshopAccessState(session: Object(), capabilities: capabilities);
+}
+
 void main() {
   late Directory temp;
   late FakeWorkshopHttp http;
@@ -85,7 +97,7 @@ void main() {
     expect(http.requests, isEmpty);
   });
 
-  test('a 513-pixel idle cell keeps the old export contract but rejects explicit preview', () async {
+  test('a 513-pixel idle cell needs advertised scaling, which leaves the ZIP contents unchanged', () async {
     final pets = PetLibrary(() async => Directory('${temp.path}/pets'));
     final installed = await pets.install(workshopZip(temp, {
       'pack.json': utf8.encode(jsonEncode(_pet(513))), 'idle.png': workshopPng(1026, 1),
@@ -94,7 +106,40 @@ void main() {
     expect(old.metadata.previewSource, isNull);
     await expectLater(repository.preparePet(pets, installed.id,
       File('${temp.path}/opt-in.zip'), _publication('pet', preview: true)), workshopError('workshop_preview_dimensions'));
-    expect(workshopUnzip(old.file)['idle.png'], workshopPng(1026, 1));
+    final originalMembers = workshopUnzip(old.file);
+    expect(originalMembers['idle.png'], workshopPng(1026, 1));
+    for (final downscale in [false, true]) {
+      final caps = WorkshopCapabilities.fromJson({
+        ...workshopCaps(),
+        'preview': {
+          'schema': 1, 'format': 'png', 'sources': ['pet-idle'],
+          'maxWidth': 512, 'maxHeight': 512, 'maxPixels': 262144, 'maxBytes': 2097152,
+          if (downscale) 'petIdleDownscale': true,
+        },
+      });
+      final container = ProviderContainer(overrides: [
+        workshopAccessProvider.overrideWith(() => _Access(caps)),
+        workshopRepositoryProvider.overrideWith((ref) async => repository),
+        workshopDirectoryProvider.overrideWithValue(() async => temp),
+        petLibraryProvider.overrideWithValue(pets),
+      ]);
+      try {
+        final prepared = container.read(workshopPrepareDraftProvider)(WorkshopPublishSource(
+          kind: 'pet', localId: installed.id, preview: const WorkshopPreviewInput.petIdle(),
+        ), _publication('pet', preview: true));
+        if (!downscale) {
+          await expectLater(prepared, workshopError('workshop_preview_dimensions'));
+        } else {
+          final draft = await prepared;
+          expect(draft.upload.metadata.previewSource, 'pet-idle');
+          expect(workshopUnzip(draft.upload.file), originalMembers);
+          expect(draft.upload.metadata.sha256, sha256.convert(draft.upload.file.readAsBytesSync()).toString());
+          await draft.cleanup();
+        }
+      } finally {
+        container.dispose();
+      }
+    }
     expect(http.requests, isEmpty);
   });
 

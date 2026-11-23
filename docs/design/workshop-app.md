@@ -188,7 +188,7 @@ token 的本地格式门与 Worker 一致，为 1–255 个 `[A-Za-z0-9_]` 字�
 
 公开预览图：条目带 `preview` 时，发现页的行、详情（行首方块和一张大图）和已安装页的行显示它；地址只取 `WorkshopClient.publicPreviewUri`，和包同一个来源，页面不自己拼。像素宠物按 `FilterQuality.none` 画，伙伴封面按显示尺寸解码。没有图、还没加载出来或加载失败时退回标题首字的方块，不影响安装和刷新，也不当作包有问题。组件在 `workshop_widgets.dart`（`WorkshopEntryAvatar`、`WorkshopPreviewPanel`）。
 
-投稿时选预览（`workshop_publish_preview.dart`）：工坊的 capabilities 声明收 `pet-idle` 时，宠物默认带预览，表单里一个开关可以关掉；收 `companion-preview` 或 `theme-preview` 时，可以选 JPEG、PNG、WebP 等设备能解码的图片作封面。手机只读不超过 32 MiB 的源文件，最多解码 5000 万像素；按比例缩小首帧并编码成既有协议的静态 PNG。不合格的原因写在封面一行下面，什么也不设。每次改动都交给 `setPreview`，它丢掉已打好的包并收回权利声明，表单里已填的文字不动。打好的包那一步写明会公开的是哪张图，或者不带图。
+投稿时选预览（`workshop_publish_preview.dart`）：工坊的 capabilities 声明收 `pet-idle` 时，宠物默认带预览，表单里一个开关可以关掉；收 `companion-preview` 或 `theme-preview` 时，可以选 JPEG、PNG、WebP 等设备能解码的图片作封面。手机只读不超过 32 MiB 的源文件，最多解码 5000 万像素；按比例缩小首帧并编码成既有协议的静态 PNG。不合格的原因写在封面一行下面，什么也不设。每次改动都交给 `setPreview`，它丢掉已打好的包并收回权利声明，表单里已填的文字不动。选来源时启动一次自动预览：宠物按待机首帧做本地缩略图（Worker 仍从投稿包派生公开图），主题渲染固定示例聊天，伙伴在隔离舞台只抓角色画布。表单和打包确认页可查看生成结果；更换来源、进入打包步骤或手选封面会令晚到结果失效，失败仍可手选或不带图投稿。
 
 放下用不了的本机记录（`workshop_publish_recovery.dart`）：`canRequestPendingAbandonment` 为真时，检查失败、没交完和结果这三步多一个次要的「放下这条记录」。点了先只读本机记录（`requestPendingAbandonment`），拿到 offer 后用对话框说清范围：只是这个账号在这个工坊的一条，还是本机记录整体读不出、要清掉所有账号的未完成记录；并写明工坊不会收到取消。确认时交回的是对话框据以显示的同一个 offer 对象；过期的确认显示成文字，让用户再点一次。
 

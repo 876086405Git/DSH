@@ -1,11 +1,9 @@
 // The picture a submission shows in the workshop, on the 投稿 form.
 //
 // A pixel pet's is cut by the workshop from the first frame of its idle
-// animation, so the form only asks whether to have one. Companion and theme
-// covers are picked and normalized locally before being handed to the state layer
-// at once (setPreview): it drops the packed result and takes the rights tick
-// back, because the picture is part of what is sent. The form's text is not
-// touched by it.
+// animation; the form can show the matching local thumbnail. Companion and
+// theme covers are generated locally or picked by the person. setPreview drops
+// the packed result and takes back the rights tick, but leaves form text alone.
 //
 // The state layer keeps a cover's bytes to itself, so the page holds its own
 // copy just to draw the thumbnail ([WorkshopCover]); that copy is only shown
@@ -32,8 +30,7 @@ import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import 'workshop_publish_text.dart';
 
-/// A cover the person picked: what the state layer was given, and the same
-/// bytes for the thumbnail.
+/// The input given to the publisher and the same bytes for the thumbnail.
 typedef WorkshopCover = ({WorkshopPreviewInput input, Uint8List bytes});
 
 /// Picks an image and returns its upload-ready PNG, or null on cancellation.
@@ -63,10 +60,11 @@ bool workshopPublishSetPreview(BuildContext context, WidgetRef ref, WorkshopPrev
 /// [bytes] — the page was opened again and no longer has them — or when they
 /// cannot be drawn, a picture glyph stands in.
 class WorkshopCoverThumb extends StatelessWidget {
-  const WorkshopCoverThumb({super.key, required this.bytes, this.size = 64});
+  const WorkshopCoverThumb({super.key, required this.bytes, this.size = 64, this.pixelArt = false});
 
   final Uint8List? bytes;
   final double size;
+  final bool pixelArt;
 
   @override
   Widget build(BuildContext context) {
@@ -90,8 +88,8 @@ class WorkshopCoverThumb extends StatelessWidget {
                 ? glyph
                 : Image.memory(
                     bytes!,
-                    fit: BoxFit.cover,
-                    filterQuality: FilterQuality.medium,
+                    fit: pixelArt ? BoxFit.contain : BoxFit.cover,
+                    filterQuality: pixelArt ? FilterQuality.none : FilterQuality.medium,
                     cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).ceil(),
                     gaplessPlayback: true,
                     excludeFromSemantics: true,
@@ -113,6 +111,7 @@ class WorkshopPublishPreviewGroup extends ConsumerStatefulWidget {
     required this.source,
     required this.cover,
     required this.onCover,
+    this.generatingCover = false,
     this.enabled = true,
   });
 
@@ -124,7 +123,7 @@ class WorkshopPublishPreviewGroup extends ConsumerStatefulWidget {
 
   /// The state layer took another cover, or none.
   final ValueChanged<WorkshopCover?> onCover;
-  final bool enabled;
+  final bool generatingCover, enabled;
 
   @override
   ConsumerState<WorkshopPublishPreviewGroup> createState() => _WorkshopPublishPreviewGroupState();
@@ -195,6 +194,10 @@ class _WorkshopPublishPreviewGroupState extends ConsumerState<WorkshopPublishPre
         MergeSemantics(
           child: ListPageRow(
             title: l10n.workshopPublishPreviewSwitch,
+            leading: on && widget.cover != null
+                ? WorkshopCoverThumb(bytes: widget.cover!.bytes, size: 40, pixelArt: true)
+                : null,
+            leadingWidth: 40,
             titleMaxLines: 2,
             subtitle: l10n.workshopPublishPreviewIdle,
             subtitleMaxLines: 2,
@@ -214,7 +217,8 @@ class _WorkshopPublishPreviewGroupState extends ConsumerState<WorkshopPublishPre
     final theme = Theme.of(context);
     final colors = DshColors.of(context);
     final problem = _problem == null ? null : workshopCoverProblemText(l10n, _problem!);
-    final line = problem ?? (preview == null ? l10n.workshopPublishCoverHelper : null);
+    final helper = widget.generatingCover ? l10n.workshopPublishCoverGenerating : l10n.workshopPublishCoverHelper;
+    final line = problem ?? (preview == null ? helper : null);
     final action = TextButton.styleFrom(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       minimumSize: const Size(44, 36),
@@ -301,7 +305,12 @@ class WorkshopPublishPreviewRow extends StatelessWidget {
     final title = l10n.workshopPublishSectionPreview;
     if (source == null) return ListPageRow(title: title, value: l10n.workshopPublishReviewPreviewNone);
     if (source == workshopPreviewSources['pet']) {
-      return ListPageRow(title: title, value: l10n.workshopPublishReviewPreviewIdle);
+      return ListPageRow(
+        title: title,
+        value: l10n.workshopPublishReviewPreviewIdle,
+        leading: cover == null ? null : WorkshopCoverThumb(bytes: cover!.bytes, size: 40, pixelArt: true),
+        leadingWidth: 40,
+      );
     }
     if (cover == null) return ListPageRow(title: title, value: l10n.workshopPublishCoverChosen);
     return ListPageRow(title: title, trailing: WorkshopCoverThumb(bytes: cover!.bytes, size: 40));

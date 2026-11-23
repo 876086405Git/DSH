@@ -102,9 +102,10 @@ final class WorkshopPreviewInput {
   int? get size => _png?.length;
 }
 
-/// The export already passed its full pet gate. Here only the requested preview
-/// domain is narrower: the main idle cell, not the sheet or authored canvas.
-void workshopCheckPetPreview(Archive archive) {
+/// Older Workers also require the primary idle cell to fit the public image
+/// envelope. New Workers fit it after the full pet gate, without changing ZIP.
+void workshopCheckPetPreview(Archive archive, {bool petIdleDownscale = false}) {
+  if (petIdleDownscale) return;
   final member = archive.files.where((file) => file.isFile && file.name == 'pack.json').single;
   if (member.size > petJsonCap) {
     workshopInvalid('workshop_body_too_large');

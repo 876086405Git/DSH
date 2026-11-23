@@ -291,7 +291,7 @@ class WorkshopCatalog {
 }
 
 class WorkshopPreviewCapabilities {
-  WorkshopPreviewCapabilities._(this.sources);
+  WorkshopPreviewCapabilities._(this.sources, this.petIdleDownscale);
   factory WorkshopPreviewCapabilities.fromJson(Object? value) {
     final m = workshopMap(value), sources = m['sources'];
     if (m['schema'] != 1 || m['format'] != 'png' ||
@@ -301,9 +301,12 @@ class WorkshopPreviewCapabilities {
         sources.toSet().length != sources.length) {
       workshopInvalid();
     }
-    return WorkshopPreviewCapabilities._(Set.unmodifiable(sources.cast<String>()));
+    return WorkshopPreviewCapabilities._(
+      Set.unmodifiable(sources.cast<String>()), m['petIdleDownscale'] == true,
+    );
   }
   final Set<String> sources;
+  final bool petIdleDownscale;
 }
 
 /// Where authors sign in. A null [clientId] means this deployment has not

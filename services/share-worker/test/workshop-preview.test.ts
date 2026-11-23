@@ -1,4 +1,4 @@
-import { inflateSync } from 'node:zlib';
+import { deflateSync, inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { WorkshopArchive } from '../src/workshop-archive';
 import { metadata, PREVIEW_CONTRACT, previewUrl, validPreview } from '../src/workshop-common';
@@ -15,6 +15,9 @@ describe('public preview pixel reconstruction', () => {
       const image = samplePng(color, depth, interlaced), expected = expectedCrop(image.expected, image.width, region.x, region.y, region.width, region.height);
       expect(validatePng(image.bytes)).toMatchObject({ pixels: 63, rgbaSum: image.expected.reduce((sum, b) => sum + b, 0) });
       expect(cropPng(image.bytes, region)).toEqual(expected);
+      const sampled = Uint8Array.from([1, 3, 5].flatMap(y => [3, 5].flatMap(x =>
+        [...expectedCrop(image.expected, image.width, x, y, 1, 1)])));
+      expect(cropPng(image.bytes, region, 2, 3)).toEqual(sampled);
       // Include the first Adam7 passes and the adjacent 16-bit samples that
       // share an 8-bit value but differ in their exact tRNS comparison.
       expect(cropPng(image.bytes, { x: 0, y: 0, width: image.width, height: 1 })).toEqual(image.expected.subarray(0, image.width * 4));
@@ -38,6 +41,23 @@ describe('public preview pixel reconstruction', () => {
     }
     expect(validatePublicPng(encoded).pixels).toBe(width * height);
   });
+});
+
+it('still validates CRC, zlib and unsampled Adam7 rows when downscaling', () => {
+  const image = samplePng(6, 16, true).bytes;
+  const region = { x: 2, y: 1, width: 4, height: 5 };
+  const badCrc = Buffer.from(image); badCrc[badCrc.length - 1] ^= 1;
+  expect(() => cropPng(badCrc, region, 2, 3)).toThrow('png_crc');
+
+  const idat = 33, size = image.readUInt32BE(idat);
+  const stream = image.subarray(idat + 8, idat + 8 + size);
+  const replaceIdat = (data: Uint8Array) => Buffer.concat([
+    image.subarray(0, idat), previewChunk('IDAT', data), image.subarray(idat + 12 + size),
+  ]);
+  const badAdler = Buffer.from(stream); badAdler[badAdler.length - 1] ^= 1;
+  expect(() => cropPng(replaceIdat(badAdler), region, 2, 3)).toThrow('zlib_adler');
+  const raw = inflateSync(stream); raw[0] = 5; // Pass 1 lies outside the requested rows.
+  expect(() => cropPng(replaceIdat(deflateSync(raw)), region, 2, 3)).toThrow('png_filter');
 });
 
 it('keeps the full 512-by-512 envelope and rejects larger dimensions before pixel allocation', () => {
@@ -70,14 +90,21 @@ it('selects idle primary animation and its nonzero first cell in a wrapped multi
   const preview = (await derivePreview(bytes, meta))!;
   expect(preview.descriptor).toMatchObject({ path: previewUrl(meta, preview.descriptor.sha256), size: preview.bytes.length, width: 2, height: 1 });
   expect(cropPng(preview.bytes, { x: 0, y: 0, width: 2, height: 1 })).toEqual(expectedCrop(rgba, 4, 2, 1, 2, 1));
+  expect(preview.descriptor.sha256).toBe('0790eeef1af5dc3320901cd078bb1066e4949c29d54265a9884a54c788bdae7a');
 });
-it('leaves an otherwise legal large legacy pet frame accepted without opt-in', async () => {
-  const pack = petManifest(), box = { x: 0, y: 0, w: 513, h: 1 };
-  const manifest = { ...pack, canvas: { w: 513, h: 1 }, contentBox: box, animations: { idle: { ...pack.animations.idle, frameW: 513, box } } };
-  const bytes = zip([['pack.json', Buffer.from(JSON.stringify(manifest))], ['idle.png', png(513, 1)]]), meta = metaFor(bytes);
-  expect(validatePack(bytes, meta, 6).sheets).toBe(1); checkPreviewRequest(bytes, meta); expect(await derivePreview(bytes, meta)).toBeUndefined();
-  expect(() => checkPreviewRequest(bytes, { ...meta, previewSource: 'pet-idle' })).toThrow('preview_dimensions');
-});
+it.each([[513, 1, 512, 1], [4096, 1, 512, 1], [3, 700, 2, 512], [768, 512, 512, 341]])(
+  'fits a %ix%i idle frame to %ix%i without changing the no-preview path', async (frameW, frameH, width, height) => {
+    const pack = petManifest(), box = { x: 0, y: 0, w: frameW, h: frameH };
+    const manifest = { ...pack, canvas: { w: frameW, h: frameH }, contentBox: box,
+      animations: { idle: { ...pack.animations.idle, frameW, frameH, box } } };
+    const bytes = zip([['pack.json', Buffer.from(JSON.stringify(manifest))], ['idle.png', png(frameW, frameH)]]), meta = metaFor(bytes);
+    expect(validatePack(bytes, meta, 6).sheets).toBe(1);
+    checkPreviewRequest(bytes, meta); expect(await derivePreview(bytes, meta)).toBeUndefined();
+    const withPreview = { ...meta, previewSource: 'pet-idle' as const };
+    checkPreviewRequest(bytes, withPreview);
+    expect((await derivePreview(bytes, withPreview))?.descriptor).toMatchObject({ width, height });
+  },
+);
 it('extracts only the explicitly selected fixed companion member, preserving its exact bytes', async () => {
   const original = new WorkshopArchive(companion(), 1000), image = samplePng(3, 4, true).bytes;
   const bytes = zip([...original.files.keys()].map(path => [path, original.read(path, 1024 * 1024)] as [string, Uint8Array]).concat([['character/preview.png', image]]));

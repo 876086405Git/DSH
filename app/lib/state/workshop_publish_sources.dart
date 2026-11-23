@@ -13,6 +13,7 @@ import '../themes/theme_pack.dart';
 import '../workshop/workshop_models.dart';
 import '../workshop/workshop_preview.dart';
 import '../workshop/workshop_repository.dart';
+import 'workshop_auth_state.dart';
 import 'workshop_dependencies.dart';
 import 'workshop_preferences.dart';
 import 'workshop_publication.dart';
@@ -264,6 +265,8 @@ final workshopPrepareDraftProvider = Provider<WorkshopPrepareDraft>((ref) {
           source.previewSource != null && source.previewSource != workshopPreviewSources[source.kind]) {
         workshopInvalid('workshop_bad_metadata');
       }
+      final petIdleDownscale = source.previewSource == 'pet-idle' &&
+          ref.read(workshopAccessProvider).capabilities?.preview?.petIdleDownscale == true;
       final repo = await repository;
       final root = Directory('${(await directory()).path}/exports');
       await root.create(recursive: true);
@@ -272,7 +275,8 @@ final workshopPrepareDraftProvider = Provider<WorkshopPrepareDraft>((ref) {
       final file = File('${draft.path}/archive.zip');
       final WorkshopPreparedUpload upload;
       if (source.kind == 'pet') {
-        upload = await repo.preparePet(source.library ?? pets, source.localId, file, publication);
+        upload = await repo.preparePet(source.library ?? pets, source.localId, file, publication,
+          petIdleDownscale: petIdleDownscale);
       } else if (source.kind == 'theme') {
         upload = await repo.prepareTheme(
           source.themeLibrary ?? themes,

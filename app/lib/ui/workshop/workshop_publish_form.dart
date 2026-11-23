@@ -301,14 +301,16 @@ class WorkshopPublishForm extends ConsumerStatefulWidget {
     required this.onNext,
     required this.onCover,
     this.cover,
+    this.generatingCover = false,
     this.notes = const [],
   });
 
   final WorkshopPublishSource source;
   final WorkshopPublicationInput seed;
 
-  /// The page's copy of the companion cover in [source], for its thumbnail.
+  /// The page's copy of the cover in [source], for its thumbnail.
   final WorkshopCover? cover;
+  final bool generatingCover;
 
   /// Another cover was taken by the state layer, or none.
   final ValueChanged<WorkshopCover?> onCover;
@@ -501,6 +503,7 @@ class _WorkshopPublishFormState extends ConsumerState<WorkshopPublishForm> {
                   source: widget.source,
                   cover: widget.cover,
                   onCover: widget.onCover,
+                  generatingCover: widget.generatingCover,
                   enabled: !busy,
                 ),
                 SettingsSection(
