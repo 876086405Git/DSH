@@ -3303,7 +3303,28 @@ class CompanionMemoryStore {
       if (at < 0 || at > 8640000000000000) {
         throw const DshRemoteException('companion/unavailable', 'Companion clock is unavailable', {'status': 503});
       }
-      final topic = previous?['topic_id'] ?? _createId();
+      final controlled = previous == null
+          ? _controlledTopics(
+              {'text': memory.text, 'evidence': const <MemoryRow>[]},
+              controls: [
+                for (final row in _db.select(
+                  "SELECT id,control_anchors FROM memory_topics WHERE character_id IS NULL AND mode IN ('less','never')",
+                ))
+                  {
+                    'topic_id': row['id'],
+                    'anchors': (jsonDecode(row['control_anchors'] as String) as List<Object?>).cast<String>(),
+                  },
+              ],
+            )
+          : const <String>[];
+      if (controlled.length > 1) {
+        throw const DshRemoteException(
+          'companion/invalid-request',
+          'Manual memory matches multiple controlled topics',
+          {'status': 400, 'reason': 'ambiguous_controlled_topic'},
+        );
+      }
+      final topic = previous?['topic_id'] ?? (controlled.isEmpty ? _createId() : controlled.single);
       final changedText = previous == null || previous['text'] != memory.text;
       final changedContext =
           previous == null ||
@@ -3324,7 +3345,7 @@ class CompanionMemoryStore {
           ).where((card) => card['character_id'] == previous['character_id']).toList(),
         );
       }
-      if (previous == null) _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
+      if (previous == null && controlled.isEmpty) _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
       final revision = previous == null ? 1 : (previous['row_rev'] as int) + 1;
       _db.execute(
         '''

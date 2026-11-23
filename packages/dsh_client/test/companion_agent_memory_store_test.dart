@@ -321,6 +321,105 @@ void main() {
     expect(actualCard(afterRestore.targetId!)['topic_mode'], 'normal');
     expect(store.topicControls(), otherControls);
     expect(store.requests(), isEmpty, reason: 'these are public SDK transactions, not HTTP request receipts');
+
+    // The real editor creates a new shared manual card with no keywords. A
+    // new fact is not permission to reopen an existing expression control.
+    store.closeAgentTurn(liveTurn);
+    const coffeeText = '我最近的咖啡甜度是无糖';
+    final coffeeSource = begin(say('manual-coffee-source', coffeeText));
+    final coffee = call(coffeeSource, 'remember-coffee', 'remember', {
+      'text': coffeeText,
+      'keywords': ['咖啡'],
+    }).targetId!;
+    store.closeAgentTurn(coffeeSource);
+    final coffeeControl = begin(say('manual-coffee-control', '以后不要提咖啡了。'), [actualCard(coffee)]);
+    expect(call(coffeeControl, 'quiet-coffee', 'quiet', {'card': coffee, 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(coffeeControl);
+    final coffeeBefore = actualCard(coffee);
+    final controlsBeforeManual = store.topicControls();
+    final manualCoffee = seed(coffeeText);
+    expect(manualCoffee['collection'], 'about_you');
+    expect(manualCoffee['character_id'], isNull);
+    expect(manualCoffee['manual'], isTrue);
+    expect(manualCoffee['keywords'], isEmpty);
+    expect(manualCoffee['topic_id'], coffeeBefore['topic_id']);
+    expect(manualCoffee['topic_mode'], 'never');
+    expect(actualCard(coffee), coffeeBefore);
+    expect(store.topicControls(), controlsBeforeManual);
+    expect(explicitMemoryTopics('最近', store.cards()), isEmpty);
+    final ordinary = selectMemoryContext(
+      store.memoryRetrievalCandidates(characterId: null),
+      input: '最近',
+      nowMs: now,
+      controlRevision: store.archive['control_revision']! as int,
+    );
+    expect(ordinary.ids, isNot(contains(manualCoffee['id'])));
+    expect(ordinary.block, isNot(contains(coffeeText)));
+
+    // The existing clinic control belongs to a, while its shared card remains
+    // normal. A manual shared card must not inherit a private role's control.
+    final privateBefore = actualCard(saved.targetId!);
+    final sharedBefore = actualCard(sharedCard.targetId!);
+    final manualShared = seed('我们周六一起复诊。', keywords: ['复诊']);
+    expect(manualShared['character_id'], isNull);
+    expect(manualShared['topic_id'], isNot(privateTopic));
+    expect(manualShared['topic_mode'], 'normal');
+    expect(actualCard(saved.targetId!), privateBefore);
+    expect(actualCard(sharedCard.targetId!), sharedBefore);
+    final unrelatedManual = seed('今天想折一架纸飞机。');
+    expect(unrelatedManual['topic_mode'], 'normal');
+    expect(store.topicControls(), controlsBeforeManual);
+
+    final manualCardsBefore = store.cards(includeInactive: true);
+    final manualArchiveBefore = store.archive;
+    expect(
+      () => seed('修琴和陶杯都准备好了。'),
+      throwsA(
+        isA<DshRemoteException>()
+            .having((error) => error.code, 'code', 'companion/invalid-request')
+            .having((error) => error.details['status'], 'status', 400)
+            .having((error) => error.details['reason'], 'reason', 'ambiguous_controlled_topic'),
+      ),
+    );
+    expect(store.cards(includeInactive: true), manualCardsBefore);
+    expect(store.archive, manualArchiveBefore);
+    expect(store.topicControls(), controlsBeforeManual);
+
+    // Create both normal topics before quieting either. Public merge then
+    // normal of its result leaves one actual empty less control, not a fake ID.
+    const windText = '我最近买的风铃是蓝色。';
+    final windTurn = begin(say('manual-empty-source', windText));
+    final windFirst = call(windTurn, 'wind-first', 'remember', {'text': windText, 'keywords': ['风铃']}).targetId!;
+    final windSecond = call(windTurn, 'wind-second', 'remember', {'text': windText, 'keywords': ['风铃']}).targetId!;
+    final windFirstTopic = actualCard(windFirst)['topic_id'];
+    final windEmptyTopic = actualCard(windSecond)['topic_id'];
+    expect(windFirstTopic, isNot(windEmptyTopic));
+    expect(call(windTurn, 'less-wind-first', 'quiet', {'card': windFirst, 'mode': 'less'}).applied, isTrue);
+    expect(call(windTurn, 'less-wind-second', 'quiet', {'card': windSecond, 'mode': 'less'}).applied, isTrue);
+    store.closeAgentTurn(windTurn);
+    final windMerge = begin(
+      say('manual-empty-merge', '把两条相同的风铃记忆合并，现在可以聊合并的这条。'),
+      [actualCard(windFirst), actualCard(windSecond)],
+    );
+    expect(call(windMerge, 'merge-wind', 'merge', {'card': windFirst, 'from': [windSecond]}).applied, isTrue);
+    expect(call(windMerge, 'normal-wind-result', 'quiet', {'card': windFirst, 'mode': 'normal'}).applied, isTrue);
+    store.closeAgentTurn(windMerge);
+    final windTargetBefore = actualCard(windFirst);
+    expect(windTargetBefore['topic_id'], windFirstTopic);
+    expect(windTargetBefore['topic_mode'], 'normal');
+    expect(store.cards(includeInactive: true).where((row) => row['topic_id'] == windEmptyTopic), isEmpty);
+    final windControls = store.topicControls();
+    expect(windControls.singleWhere((row) => row['topic_id'] == windEmptyTopic), {
+      'topic_id': windEmptyTopic,
+      'mode': 'less',
+      'anchors': ['风铃'],
+    });
+    final manualEmpty = seed('我最近喜欢听风铃的声音。');
+    expect(manualEmpty['topic_id'], windEmptyTopic);
+    expect(manualEmpty['topic_mode'], 'less');
+    expect(manualEmpty['keywords'], isEmpty);
+    expect(store.topicControls(), windControls);
+    expect(actualCard(windFirst), windTargetBefore);
   });
 
   for (final mode in const ['less', 'never']) {
@@ -1560,8 +1659,10 @@ void main() {
       'aliases': ['小周', '周老师'],
       'keywords': ['朋友', '小周'],
     }).targetId!;
+    expect(call(turn, 'quiet-person-editor', 'quiet', {'card': person, 'mode': 'never'}).applied, isTrue);
     store.closeAgentTurn(turn);
     final row = store.memoryPageCards(characterId: role).single;
+    expect(row['topic_mode'], 'never');
     // This is the editor's public-row contract and its actual save API. A
     // List<dynamic> containing strings still fails this List<String> cast.
     final keywords = row['keywords'] as List<String>;
@@ -1586,6 +1687,8 @@ void main() {
     expect(saved['collection'], 'person');
     expect(saved['keywords'] as List<String>, unorderedEquals(keywords));
     expect(store.messages().single['text'], original['text']);
+    expect(saved['topic_id'], row['topic_id']);
+    expect(saved['topic_mode'], 'never');
   });
 
   test('person aliases stay shared while stories and model history keep their captured character', () {
