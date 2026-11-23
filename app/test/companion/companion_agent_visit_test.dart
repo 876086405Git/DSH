@@ -1448,7 +1448,7 @@ void main() {
       expect(visit.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
       expect(resident.preparingSignalId, isNull);
 
-      await signals.emit(visit.container, reason: 'failed');
+      await signals.emit(visit.container, reason: 'error');
       wall += 46000;
       mono += 46000;
       reopened.observe(background.initiativeView);
