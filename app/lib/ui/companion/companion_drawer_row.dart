@@ -1,16 +1,49 @@
 // 伙伴小屋's fixed place in the conversations drawer: under the search bar, above
 // every list and filter, so she is one tap away whichever workspace or host is
-// showing, and even with no host at all. It goes by her name.
+// showing, and even with no host at all. It goes by her name, on the list's
+// text line, and keeps its right side for what she has in hand: the next thing
+// she'll remind you of, else that she's always here.
 
+import 'dart:async';
+
+import 'package:dsh_client/companion.dart' show CompanionTaskStore;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../companion/companion_float.dart';
+import '../../companion/companion_memory.dart';
 import '../../companion/companion_residency.dart';
 import '../../companion/companion_state.dart';
 import '../../l10n/l10n.dart';
 import '../common/status_dot.dart';
+import '../theme/app_icons.dart';
 import '../theme/theme.dart';
+
+/// When her next reminder is due (epoch ms), or null. Only read once she has a
+/// pack: the drawer never creates her memory for someone who never met her.
+final companionNextReminderProvider = FutureProvider.autoDispose<int?>((ref) async {
+  if (await ref.watch(companionPackNameProvider.future) == null) return null;
+  final root = '${(await getApplicationSupportDirectory()).path}/companion';
+  final memory = await ref.watch(companionMemoryOwnerProvider(root).future);
+  // Her memory says when a reminder is added, changed or done.
+  memory.addListener(ref.invalidateSelf);
+  ref.onDispose(() => memory.removeListener(ref.invalidateSelf));
+  final now = DateTime.now().millisecondsSinceEpoch;
+  int? next;
+  for (final task in memory.store.tasks(limit: 100)) {
+    final due = task['epoch_ms'];
+    if (task['kind'] != 'phone.reminder' || due is! int || due <= now) continue;
+    if (!const {'queued', 'waiting'}.contains(task['state']) || task['cancel_requested'] == 1) continue;
+    if (next == null || due < next) next = due;
+  }
+  // Due passes by itself: look again then.
+  if (next != null) {
+    final timer = Timer(Duration(milliseconds: next - now + 1000), ref.invalidateSelf);
+    ref.onDispose(timer.cancel);
+  }
+  return next;
+});
 
 class CompanionDrawerRow extends ConsumerWidget {
   const CompanionDrawerRow({super.key, required this.onTap});
@@ -27,57 +60,68 @@ class CompanionDrawerRow extends ConsumerWidget {
     final name = ref.watch(companionNameProvider) ?? ref.watch(companionPackNameProvider).value;
     final status = ref.watch(companionResidencyProvider);
     final here = status.available && status.enabled && status.running;
+    final reminder = ref.watch(companionNextReminderProvider).value;
     final title = name ?? l10n.companionTitle;
+    final note = switch (reminder) {
+      final due? => _reminderText(context, DateTime.fromMillisecondsSinceEpoch(due)),
+      _ when here => l10n.companionDrawerHere,
+      _ => null,
+    };
     final shape = Squircle.border(AppShape.md);
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
       child: Semantics(
         button: true,
-        label: [title, if (here) l10n.companionDrawerHere].join(l10n.shellSemanticsSeparator),
+        label: [title, ?note].join(l10n.shellSemanticsSeparator),
         onTap: onTap,
         excludeSemantics: true,
         // A row on the list's own grid, not a card: the search bar above stays
-        // the drawer's one box, and her seal starts on the 20 line.
+        // the drawer's one box, and her name sits on the 20 line.
         child: Material(
           type: MaterialType.transparency,
           child: InkWell(
             onTap: onTap,
             customBorder: shape,
             child: SizedBox(
-              height: 48,
+              height: 44,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Row(
                   children: [
-                    CompanionSeal(name: name, size: 30),
-                    const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: 15,
-                              height: 1.3,
-                              color: scheme.onSurface,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          if (here)
-                            Text(
-                              l10n.companionDrawerHere,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.labelMedium?.copyWith(color: colors.textTertiary, height: 1.3),
-                            ),
-                        ],
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          fontSize: 15,
+                          height: 1.4,
+                          color: scheme.onSurface,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                    if (here) ...[const SizedBox(width: 10), const StatusDot(tone: StatusTone.ok, size: 7)],
+                    if (note != null) ...[
+                      const SizedBox(width: 10),
+                      if (reminder != null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 5),
+                          child: Icon(AppIcons.reminder, size: 14, color: colors.textTertiary),
+                        )
+                      else
+                        const Padding(
+                          padding: EdgeInsets.only(right: 7),
+                          child: StatusDot(tone: StatusTone.ok, size: 6),
+                        ),
+                      Text(
+                        note,
+                        maxLines: 1,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: colors.textTertiary,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -87,61 +131,19 @@ class CompanionDrawerRow extends ConsumerWidget {
       ),
     );
   }
-}
 
-/// Her seal: the first character of her name on a disc of deep water, lit
-/// from above with a thin rim, the way a name is carved rather than drawn.
-/// With no name yet, a small crescent of light stands in for it.
-class CompanionSeal extends StatelessWidget {
-  const CompanionSeal({super.key, this.name, this.size = 34});
-
-  final String? name;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final mark = name?.trim().characters.firstOrNull;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF2E6C9E), Color(0xFF0B2643)],
-        ),
-        border: Border.all(color: const Color(0x33CDEBFA), width: 0.8),
-        boxShadow: const [BoxShadow(color: Color(0x260B2643), blurRadius: 6, offset: Offset(0, 2))],
-      ),
-      alignment: Alignment.center,
-      child: mark == null
-          ? CustomPaint(size: Size.square(size * 0.42), painter: const _Crescent())
-          : Text(
-              mark,
-              textScaler: TextScaler.noScaling,
-              style: TextStyle(
-                fontSize: size * 0.46,
-                height: 1,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFFE4F3FB),
-              ),
-            ),
-    );
+  /// 「19:00 提醒你」 today, 「明天 9:00」, then the date.
+  static String _reminderText(BuildContext context, DateTime due) {
+    final l10n = context.l10n;
+    final now = DateTime.now();
+    final time = MaterialLocalizations.of(
+      context,
+    ).formatTimeOfDay(TimeOfDay.fromDateTime(due), alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context));
+    final days = DateTime(due.year, due.month, due.day).difference(DateTime(now.year, now.month, now.day)).inDays;
+    return switch (days) {
+      0 => l10n.companionDrawerReminderToday(time),
+      1 => l10n.companionDrawerReminderTomorrow(time),
+      _ => l10n.companionDrawerReminderLater(l10n.monthDay(due)),
+    };
   }
-}
-
-class _Crescent extends CustomPainter {
-  const _Crescent();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = size.width / 2;
-    final moon = Path()..addOval(Rect.fromCircle(center: Offset(r, r), radius: r));
-    final bite = Path()..addOval(Rect.fromCircle(center: Offset(r * 1.45, r * 0.75), radius: r * 0.85));
-    canvas.drawPath(Path.combine(PathOperation.difference, moon, bite), Paint()..color = const Color(0xFFE4F3FB));
-  }
-
-  @override
-  bool shouldRepaint(_Crescent oldDelegate) => false;
 }

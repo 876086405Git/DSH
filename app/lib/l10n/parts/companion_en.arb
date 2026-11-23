@@ -1064,5 +1064,29 @@
   "companionTabRoom": "Room",
   "companionTabMemory": "Memories",
   "companionTabTasks": "Errands",
-  "companionTabHer": "Her"
+  "companionTabHer": "Her",
+  "companionDrawerReminderToday": "Reminder at {time}",
+  "@companionDrawerReminderToday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionDrawerReminderTomorrow": "Tomorrow {time}",
+  "@companionDrawerReminderTomorrow": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionDrawerReminderLater": "Reminder {date}",
+  "@companionDrawerReminderLater": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  }
 }

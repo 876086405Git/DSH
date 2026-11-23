@@ -10,6 +10,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:dsh_app/companion/companion_float.dart';
 import 'package:dsh_app/companion/companion_keeper.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
@@ -148,7 +149,15 @@ void main() {
       tester.view.physicalSize = const Size(320 * 2, 200 * 2);
       tester.view.devicePixelRatio = 2;
       addTearDown(tester.view.reset);
-      for (final (dark, name) in [(false, '鲸鱼娘'), (true, '鲸鱼娘'), (false, null)]) {
+      final today = DateTime.now();
+      final at7 = DateTime(today.year, today.month, today.day, 19);
+      final tomorrow9 = DateTime(today.year, today.month, today.day + 1, 9);
+      for (final (dark, name, due, file) in [
+        (false, '鲸鱼娘', at7.isAfter(today) ? at7 : tomorrow9, 'reminder'),
+        (true, '鲸鱼娘', tomorrow9, 'tomorrow'),
+        (false, '鲸鱼娘', null, 'quiet'),
+        (false, null, null, 'unnamed'),
+      ]) {
         SharedPreferences.setMockInitialValues({'companion_name': ?name});
         final shot = GlobalKey();
         final base = dark ? buildDarkTheme() : buildLightTheme();
@@ -156,6 +165,10 @@ void main() {
           RepaintBoundary(
             key: shot,
             child: ProviderScope(
+              overrides: [
+                companionNextReminderProvider.overrideWith((ref) async => due?.millisecondsSinceEpoch),
+                companionPackNameProvider.overrideWith((ref) async => null),
+              ],
               child: MaterialApp(
                 debugShowCheckedModeBanner: false,
                 theme: withTestFonts(
@@ -175,7 +188,7 @@ void main() {
           ),
         );
         await _settle(tester, 4);
-        await _dump(tester, shot, 'drawer-${dark ? 'dark' : 'light'}${name == null ? '-unnamed' : ''}.png');
+        await _dump(tester, shot, 'drawer-$file-${dark ? 'dark' : 'light'}.png');
       }
     });
   });

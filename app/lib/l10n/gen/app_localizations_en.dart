@@ -7690,6 +7690,21 @@ class L10nEn extends L10n {
   String get companionTabHer => 'Her';
 
   @override
+  String companionDrawerReminderToday(String time) {
+    return 'Reminder at $time';
+  }
+
+  @override
+  String companionDrawerReminderTomorrow(String time) {
+    return 'Tomorrow $time';
+  }
+
+  @override
+  String companionDrawerReminderLater(String date) {
+    return 'Reminder $date';
+  }
+
+  @override
   String get automaticDiagnosticsRecover => 'Recover local records';
 
   @override

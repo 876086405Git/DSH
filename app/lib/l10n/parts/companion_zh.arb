@@ -1158,5 +1158,29 @@
   "companionTabRoom": "小屋",
   "companionTabMemory": "记忆",
   "companionTabTasks": "交代",
-  "companionTabHer": "她"
+  "companionTabHer": "她",
+  "companionDrawerReminderToday": "{time} 提醒你",
+  "@companionDrawerReminderToday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionDrawerReminderTomorrow": "明天 {time}",
+  "@companionDrawerReminderTomorrow": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionDrawerReminderLater": "{date} 提醒你",
+  "@companionDrawerReminderLater": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  }
 }

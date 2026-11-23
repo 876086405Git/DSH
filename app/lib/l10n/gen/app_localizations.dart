@@ -13458,6 +13458,24 @@ abstract class L10n {
   /// **'她'**
   String get companionTabHer;
 
+  /// No description provided for @companionDrawerReminderToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'{time} 提醒你'**
+  String companionDrawerReminderToday(String time);
+
+  /// No description provided for @companionDrawerReminderTomorrow.
+  ///
+  /// In zh, this message translates to:
+  /// **'明天 {time}'**
+  String companionDrawerReminderTomorrow(String time);
+
+  /// No description provided for @companionDrawerReminderLater.
+  ///
+  /// In zh, this message translates to:
+  /// **'{date} 提醒你'**
+  String companionDrawerReminderLater(String date);
+
   /// No description provided for @automaticDiagnosticsRecover.
   ///
   /// In zh, this message translates to:

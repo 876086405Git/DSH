@@ -7242,6 +7242,21 @@ class L10nZh extends L10n {
   String get companionTabHer => '她';
 
   @override
+  String companionDrawerReminderToday(String time) {
+    return '$time 提醒你';
+  }
+
+  @override
+  String companionDrawerReminderTomorrow(String time) {
+    return '明天 $time';
+  }
+
+  @override
+  String companionDrawerReminderLater(String date) {
+    return '$date 提醒你';
+  }
+
+  @override
   String get automaticDiagnosticsRecover => '恢复本地记录';
 
   @override
