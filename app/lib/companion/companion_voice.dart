@@ -335,7 +335,14 @@ class CompanionSpeaker {
         if (line.generation != _generation) continue;
         final cut = _cut.future;
         CompanionVoiceAudio? audio;
-        await Future.any([line.audio.then((a) => audio = a), cut]);
+        // Complete with nothing: the long-lived cut keeps every race's result
+        // until the next stop, and the audio bytes shouldn't stay with it.
+        await Future.any([
+          line.audio.then<void>((a) {
+            audio = a;
+          }),
+          cut,
+        ]);
         if (line.generation != _generation) continue;
         final end = _ends[line.id] = Completer<void>();
         try {
