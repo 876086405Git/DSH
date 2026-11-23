@@ -806,6 +806,28 @@ class TavernEngine implements Tavern, TavernSPresetLogApi, TavernSPresetPageLife
     if (_characterDetails.length > _detailCacheCapacity) _characterDetails.remove(_characterDetails.keys.first);
   }
 
+  void _cacheCharacterRecord(String id, StoredCharacter stored) =>
+      _cacheCharacterDetail(id, Future.value(_detailCopy(stored)));
+
+  /// [record] as the detail cache keeps it: nothing reads the original
+  /// container from there (exports and edits read their own), so no copy of it.
+  static StoredCharacter _detailCopy(StoredCharacter record) {
+    final card = record.card;
+    return StoredCharacter(
+      id: record.id,
+      card: TavernCard(
+        json: card.json,
+        assets: card.assets,
+        png: card.png,
+        avatar: card.avatar,
+        sourceFormat: card.sourceFormat,
+      ),
+      importedAt: record.importedAt,
+      avatarPath: record.avatarPath,
+      directoryPath: record.directoryPath,
+    );
+  }
+
   Future<StoredCharacter?> _record(String id) {
     if (!CharacterLibrary.isValidId(id)) return Future.value(null);
     final cached = _characterDetails.remove(id);
@@ -816,8 +838,11 @@ class TavernEngine implements Tavern, TavernSPresetLogApi, TavernSPresetPageLife
     late final Future<StoredCharacter?> result;
     result = Future<StoredCharacter?>.sync(() => _library.read(id)).then(
       (record) {
-        if (record == null && identical(_characterDetails[id], result)) _characterDetails.remove(id);
-        return record;
+        if (record == null) {
+          if (identical(_characterDetails[id], result)) _characterDetails.remove(id);
+          return null;
+        }
+        return _detailCopy(record);
       },
       onError: (Object error, StackTrace stack) {
         if (identical(_characterDetails[id], result)) _characterDetails.remove(id);
@@ -924,7 +949,7 @@ class TavernEngine implements Tavern, TavernSPresetLogApi, TavernSPresetPageLife
     return _libraryOperation(() async {
       final stored = await _library.updateFields(characterId, patch);
       _characterCache = null;
-      _cacheCharacterDetail(characterId, Future.value(stored));
+      _cacheCharacterRecord(characterId, stored);
       _notifyLists();
       final stats = _store.characterChatStats()[characterId];
       return stored.toCharacter(chatCount: stats?.count ?? 0, lastChatAt: stats?.lastAt);
@@ -963,7 +988,7 @@ class TavernEngine implements Tavern, TavernSPresetLogApi, TavernSPresetPageLife
     return _libraryOperation(() async {
       final stored = await save();
       _characterCache = null;
-      _cacheCharacterDetail(characterId, Future.value(stored));
+      _cacheCharacterRecord(characterId, stored);
       _notifyLists();
       final stats = _store.characterChatStats()[characterId];
       return stored.toCharacter(chatCount: stats?.count ?? 0, lastChatAt: stats?.lastAt);
@@ -1178,7 +1203,7 @@ class TavernEngine implements Tavern, TavernSPresetLogApi, TavernSPresetPageLife
       },
     );
     _characterCache = null;
-    _cacheCharacterDetail(stored.id, Future.value(stored));
+    _cacheCharacterRecord(stored.id, stored);
     _notifyLists();
     return stored.toCharacter(regexDiagnostics: diagnostics);
   });

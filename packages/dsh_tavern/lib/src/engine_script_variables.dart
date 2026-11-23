@@ -601,7 +601,7 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
         },
       );
       engine._characterCache = null;
-      engine._cacheCharacterDetail(id, Future.value(record));
+      engine._cacheCharacterRecord(id, record);
       engine._notifyLists();
     } catch (error, stack) {
       // card.json can commit before its derived summary fails. Evict and read
@@ -615,7 +615,7 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
         /* Preserve the original storage issue. */
       }
       if (actual != null) {
-        engine._cacheCharacterDetail(id, Future.value(actual));
+        engine._cacheCharacterRecord(id, actual);
       }
       final reported = _scriptReportedFailure(error);
       if (reported != null) Error.throwWithStackTrace(reported, stack);

@@ -585,6 +585,7 @@ class _TavernCanvasViewState extends ConsumerState<TavernCanvasView> {
     widget.streaming.removeListener(_onStream);
     _streamTimer?.cancel();
     _guard.dispose();
+    WebViewGuard.release(_controller);
     _toasts.dispose();
     super.dispose();
   }
