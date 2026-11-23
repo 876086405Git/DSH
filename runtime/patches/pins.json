@@ -212,6 +212,14 @@
         }
       }
     },
+    "cordis-reflect-empty-notify.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/cordis/lib/index.js": {
+          "after": "845d74f2353a3089c7e174cb8bdd860bf32f51be4b78a9e8ff93f2653e4dbcf6",
+          "before": "88d38fb02b95162246aeb13d6e421be9d16680b0bcbcde59a6de09d7229ea140"
+        }
+      }
+    },
     "credentials-decimal-refs.diff": {
       "0.2.1-rc.4": {
         "node_modules/@deepseek-ai/dsh-credentials-local/lib/index.js": {
