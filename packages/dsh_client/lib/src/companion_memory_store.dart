@@ -467,10 +467,18 @@ class CompanionMemoryStore {
             }
             continue;
           }
+          final controlled = _bodyControlledTopics(memory.text, characterId: null);
+          if (controlled.length > 1) {
+            throw const DshRemoteException(
+              'companion/invalid-request',
+              'Legacy memory matches multiple controlled topics',
+              {'status': 400, 'reason': 'ambiguous_controlled_topic'},
+            );
+          }
           final id = _createId();
-          final topic = _createId();
+          final topic = controlled.isEmpty ? _createId() : controlled.single;
           final real = realIds.contains(oldId);
-          _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
+          if (controlled.isEmpty) _db.execute('INSERT INTO memory_topics(id) VALUES(?)', [topic]);
           _db.execute(
             '''
         INSERT INTO memory_cards(id, row_rev, kind, text, keywords, pinned, eligible,
@@ -1219,17 +1227,19 @@ class CompanionMemoryStore {
     _db.execute("UPDATE memory_events SET state='done',reason=? WHERE seq=?", [reason, message['event_seq']]);
   }
 
-  void _deleteCards(Iterable<String> ids) {
+  void _deleteCards(Iterable<String> ids, {Set<String> retainTopics = const {}}) {
     for (final id in ids) {
       final rows = _db.select('SELECT topic_id FROM memory_cards WHERE id=?', [id]);
       if (rows.isEmpty) continue;
       _db.execute("UPDATE memory_migrations SET result='forgotten' WHERE local_card_id=?", [id]);
       _forgetNoticeCard(id);
       _db.execute('DELETE FROM memory_cards WHERE id=?', [id]);
-      _db.execute('DELETE FROM memory_topics WHERE id=? AND NOT EXISTS(SELECT 1 FROM memory_cards WHERE topic_id=?)', [
-        rows.single['topic_id'],
-        rows.single['topic_id'],
-      ]);
+      if (!retainTopics.contains(rows.single['topic_id'])) {
+        _db.execute('DELETE FROM memory_topics WHERE id=? AND NOT EXISTS(SELECT 1 FROM memory_cards WHERE topic_id=?)', [
+          rows.single['topic_id'],
+          rows.single['topic_id'],
+        ]);
+      }
     }
   }
 
@@ -1262,13 +1272,14 @@ class CompanionMemoryStore {
   Set<String> _removeFactRelations(
     Set<String> roots, {
     String? retainTargetId,
+    Set<String> retainTopics = const {},
     bool deleteChat = false,
     void Function(Set<String> changedCardIds)? beforeWrite,
     List<MemoryRow>? domainSnapshot,
   }) {
     final plan = _planFactRelations(roots, deleteChat: deleteChat, domainSnapshot: domainSnapshot);
     beforeWrite?.call(plan.cards);
-    _applyFactRemoval(plan, retainIds: {?retainTargetId});
+    _applyFactRemoval(plan, retainIds: {?retainTargetId}, retainTopics: retainTopics);
     return plan.cards;
   }
 
@@ -1397,8 +1408,12 @@ class CompanionMemoryStore {
     return _MemoryRemovalPlan(deleting, rawSources);
   }
 
-  void _applyFactRemoval(_MemoryRemovalPlan plan, {Set<String> retainIds = const {}}) {
-    _deleteCards(plan.cards.where((id) => !retainIds.contains(id)));
+  void _applyFactRemoval(
+    _MemoryRemovalPlan plan, {
+    Set<String> retainIds = const {},
+    Set<String> retainTopics = const {},
+  }) {
+    _deleteCards(plan.cards.where((id) => !retainIds.contains(id)), retainTopics: retainTopics);
     for (final id in plan.rawSources) {
       final rows = _db.select('SELECT * FROM memory_messages WHERE id=?', [id]);
       if (rows.isEmpty) {
@@ -1821,6 +1836,21 @@ class CompanionMemoryStore {
         if ((topic['anchors'] as List<String>).any((word) => _containsAnchor(text, word))) topic['topic_id'] as String,
     }.toList()..sort();
   }
+
+  // Match the final card body, not other source clauses or another role's controls.
+  List<String> _bodyControlledTopics(String text, {required String? characterId}) => _controlledTopics(
+    {'text': text, 'evidence': const <MemoryRow>[]},
+    controls: [
+      for (final row in _db.select(
+        "SELECT id,control_anchors FROM memory_topics WHERE character_id IS ? AND mode IN ('less','never')",
+        [characterId],
+      ))
+        {
+          'topic_id': row['id'],
+          'anchors': (jsonDecode(row['control_anchors'] as String) as List<Object?>).cast<String>(),
+        },
+    ],
+  );
 
   void recordInvalidProposal(MemoryBatch batch) => _transaction(() {
     if (!isBatchCurrent(batch)) return;
@@ -3347,19 +3377,9 @@ class CompanionMemoryStore {
       if (at < 0 || at > 8640000000000000) {
         throw const DshRemoteException('companion/unavailable', 'Companion clock is unavailable', {'status': 503});
       }
-      final controlled = previous == null
-          ? _controlledTopics(
-              {'text': memory.text, 'evidence': const <MemoryRow>[]},
-              controls: [
-                for (final row in _db.select(
-                  "SELECT id,control_anchors FROM memory_topics WHERE character_id IS NULL AND mode IN ('less','never')",
-                ))
-                  {
-                    'topic_id': row['id'],
-                    'anchors': (jsonDecode(row['control_anchors'] as String) as List<Object?>).cast<String>(),
-                  },
-              ],
-            )
+      final changedText = previous == null || previous['text'] != memory.text;
+      final controlled = changedText
+          ? _bodyControlledTopics(memory.text, characterId: previous?['character_id'] as String?)
           : const <String>[];
       if (controlled.length > 1) {
         throw const DshRemoteException(
@@ -3368,8 +3388,7 @@ class CompanionMemoryStore {
           {'status': 400, 'reason': 'ambiguous_controlled_topic'},
         );
       }
-      final topic = previous?['topic_id'] ?? (controlled.isEmpty ? _createId() : controlled.single);
-      final changedText = previous == null || previous['text'] != memory.text;
+      final topic = controlled.isEmpty ? (previous?['topic_id'] as String?) ?? _createId() : controlled.single;
       final changedContext =
           previous == null ||
           changedText ||
@@ -3384,6 +3403,7 @@ class CompanionMemoryStore {
         _removeFactRelations(
           {id},
           retainTargetId: id,
+          retainTopics: controlled.toSet(),
           domainSnapshot: _memoryDomainCards(previous['character_id'] as String?)
               .where((card) => card['character_id'] == previous['character_id'])
               .toList(),
@@ -3397,7 +3417,7 @@ class CompanionMemoryStore {
           topic_id, current_basis_seq, source_at_ms, created_at_ms, updated_at_ms, expires_at_ms, status,
           cleanup_history_complete)
         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET row_rev=excluded.row_rev, kind=excluded.kind,
+        ON CONFLICT(id) DO UPDATE SET row_rev=excluded.row_rev, kind=excluded.kind, topic_id=excluded.topic_id,
           text=excluded.text, keywords=excluded.keywords, pinned=excluded.pinned,
           eligible=excluded.eligible, manual=excluded.manual, current_basis_seq=excluded.current_basis_seq,
           source_at_ms=excluded.source_at_ms, updated_at_ms=excluded.updated_at_ms,

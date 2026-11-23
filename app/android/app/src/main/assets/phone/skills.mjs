@@ -33,7 +33,8 @@ export function nativeBridge() {
       child.kill();
     };
     child.on('error', connection.fail);
-    child.on('exit', connection.fail);
+    // close, not exit: a reply written just before exiting is still read from stdout first.
+    child.on('close', connection.fail);
     child.stdin.on('error', connection.fail);
     child.stdout.setEncoding('utf8').on('data', data => {
       connection.buffer += data;

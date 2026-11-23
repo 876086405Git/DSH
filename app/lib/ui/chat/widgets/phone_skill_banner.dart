@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/l10n.dart';
 import '../../../state/phone_skills_state.dart';
 import '../../../state/phone_state.dart';
+import '../../common/brief_notice.dart';
 import '../../phone/phone_skills_page.dart';
 
 /// Above the composer of the chat a phone task ran in (docs/design/phone-skills.md
@@ -47,16 +48,23 @@ class _PhoneSkillBannerState extends ConsumerState<PhoneSkillBanner> {
     final suspended = event.change == PhoneSkillChange.suspended;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
-        persist: false,
+        // A screen reader needs the time to reach 「恢复」.
+        persist: MediaQuery.of(context).accessibleNavigation,
+        showCloseIcon: MediaQuery.of(context).accessibleNavigation,
         content: Text(suspended ? l10n.phoneSkillSuspended(event.display) : l10n.phoneSkillPromoted(event.display)),
         action: suspended
-            ? SnackBarAction(
-                label: l10n.phoneSkillTurnOn,
-                onPressed: () => unawaited(ref.read(phoneSkillsProvider.notifier).setEnabled(event.name, true)),
-              )
+            ? SnackBarAction(label: l10n.phoneSkillTurnOn, onPressed: () => unawaited(_turnOn(event.name)))
             : null,
       ),
     );
+  }
+
+  Future<void> _turnOn(String name) async {
+    try {
+      await ref.read(phoneSkillsProvider.notifier).setEnabled(name, true);
+    } on PhoneSkillException catch (e) {
+      if (mounted) showBriefNotice(context, skillErrorText(context, e));
+    }
   }
 
   @override

@@ -16,6 +16,7 @@ class PhoneSkillsController extends AsyncNotifier<PhoneSkillListing> {
     // Without the native side (other platforms, widget tests) the listing fails here and
     // nothing subscribes to the event channel, which has no handler there either.
     final listing = await _channel.listSkills();
+    if (!ref.mounted) return listing;
     final sub = _channel.skillEvents.listen((_) => unawaited(reload()));
     ref.onDispose(sub.cancel);
     return listing;

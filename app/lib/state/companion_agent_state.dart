@@ -1,5 +1,5 @@
-// Every companion window shares the phone model loop. Host availability only
-// determines which real computer tools a new turn can offer.
+// Every companion window shares the phone model/tool loop. Full mode resolves
+// each model round through its Host; Light retains the direct phone route.
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,8 +43,8 @@ final companionAgentProvider = Provider<CompanionAgent>((ref) {
   return agent;
 });
 
-/// Until the background manager uses the tool loop too, both modes keep the
-/// existing worker on the same phone transport, without a stale host Session.
+/// Light mode keeps its existing phone transport, including the unset offline default.
+/// Full-mode chat and maintenance resolve their captured Host asynchronously.
 final companionAgentMemoryTransportProvider = Provider<CompanionMemoryTransport>((ref) {
   return CompanionLightMemoryTransport(
     apiKey: () => ref.read(settingsProvider).apiKey,

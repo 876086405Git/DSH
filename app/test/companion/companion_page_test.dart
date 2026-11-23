@@ -240,7 +240,7 @@ class _RoomMemory2 extends _ReceiptMemory {
   @override
   void enter(
     Object room, {
-    required CompanionMemoryTransport? Function() transport,
+    required FutureOr<CompanionMemoryTransport?> Function() transport,
     required int Function(String) estimateTokens,
   }) {
     this.room = room;
@@ -2029,6 +2029,8 @@ void main() {
               }, status: 404);
             }
           };
+          // The full room asks its Host for each model round.
+          peer.hostModel.model = () => model.client;
           await openLight(
             tester,
             apiKey: 'sk-test',
@@ -2641,6 +2643,8 @@ void main() {
               }, status: 404);
             }
           };
+          // The full room asks its Host for each model round.
+          peer.hostModel.model = () => model.client;
           await openLight(
             tester,
             apiKey: 'sk-test',
@@ -3283,6 +3287,8 @@ void main() {
             }
           };
           try {
+            // The full room asks its Host for each model round.
+            peer.hostModel.model = () => model.client;
             await openLight(
               tester,
               apiKey: 'sk-test',
@@ -3820,6 +3826,8 @@ void main() {
               }, status: 404);
             }
           };
+          // The full room asks its Host for each model round.
+          peer.hostModel.model = () => model.client;
           await openLight(
             tester,
             apiKey: 'sk-test',
@@ -3929,6 +3937,8 @@ void main() {
             // This does not claim to exercise the restart-menu gesture.
             memory.store.startLightConversation();
             expect(memory.store.lightSessionId, isNot(sourceRoom));
+            // The full room asks its Host for each model round.
+            peer.hostModel.model = () => model.client;
             await openLight(
               tester,
               apiKey: 'sk-test',

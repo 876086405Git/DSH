@@ -296,6 +296,88 @@ test('tool output is never executed and length termination remains distinguishab
     assert.equal(last.error.code, code); assert.equal(last.terminal, 'provider_error');
     assert.equal(last.dispatched, true); assert.equal(last.usage.output_tokens, 7);
   }
+
+  // Only this phase advertises the new runtime contract. Keep every old
+  // fixture default above, including extract's prohibition on tool output.
+  const g = await fixture(t, { generic: true });
+  const llm = g.agent.ctx.get('llm');
+  const agentCapability = { v: 1, tools: 'return-only', streaming: true };
+  llm.companionAuxiliaryCapability = () => ({ ...genericCapability, agent: agentCapability });
+  const source = { kind: 'model', provider: 'selected-provider', model: 'selected-model' };
+  const completedContent = [
+    { type: 'reasoning', text: 'Private planning.' },
+    { type: 'text', text: 'Planning. Complete details.' },
+    { type: 'tool-call', id: 'phone-call', name: 'sample', arguments: '{"n":1}' },
+  ];
+  llm.prepareCompanionAuxiliaryCall = async (config, signal, observer) => {
+    g.state.prepares++; g.state.config = config; g.state.signal = signal;
+    observer.guard();
+    let message;
+    return { config, get agentMessage() { return message; }, stream: async function* (payload) {
+      g.state.payload = payload;
+      observer.guard(); signal.throwIfAborted();
+      g.state.invocations++;
+      observer.observe({ type: 'handoff', atMs: 1795280000123, boundary: 'adapter-invoked' });
+      yield { type: 'reasoning-delta', index: 0, text: 'Private planning.' };
+      yield { type: 'text-delta', index: 1, text: 'Planning.' };
+      yield { type: 'block-end', index: 1, block: completedContent[1] };
+      yield { type: 'block-start', index: 2, blockType: 'tool-call' };
+      yield { type: 'tool-call-delta', index: 2, id: 'phone-call', name: 'sample', argumentsDelta: '{"n":' };
+      yield { type: 'tool-call-delta', index: 2, id: 'phone-call', argumentsDelta: '1}' };
+      yield { type: 'block-end', index: 2, block: completedContent[2] };
+      yield { type: 'usage', usage: { inputTokens: 12, outputTokens: 4 } };
+      yield { type: 'finish', reason: { kind: 'tool-calls' } };
+      // Same completed neutral shape as the runtime getter; this adapter
+      // double does not stand in for the pinned BlockAssembler/provider hook.
+      message = { id: 'model-message', role: 'assistant', source, content: completedContent };
+    } };
+  };
+  const info = await g.http();
+  assert.deepEqual(info.body.agent, agentCapability);
+  assert.equal(info.body.capability.noTools, true, 'the old auxiliary contract stays separate');
+  const previous = [
+    { type: 'thinking', thinking: 'Earlier private planning.' },
+    { type: 'text', text: 'I will check.' },
+    { type: 'tool_use', id: 'previous-call', name: 'sample', input: { n: 0 } },
+  ];
+  const tools = [{ name: 'sample', description: 'Executed by the phone.',
+    input_schema: { type: 'object', properties: { n: { type: 'integer' } }, required: ['n'] } }];
+  const { input, ...body } = g.body({ requestId: 'agent-round', kind: 'agent', maxTokens: 4000 });
+  const response = await g.http({ method: 'POST', body: { ...body, messages: [
+    { role: 'user', content: 'Check the next item.' },
+    { role: 'assistant', source, content: previous },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'previous-call', is_error: true,
+      content: [{ type: 'text', text: 'Not applied.' }] }] },
+  ], tools } });
+  assert.equal(response.status, 200);
+  assert.equal(g.state.prepares, 1); assert.equal(g.state.invocations, 1);
+  assert.deepEqual(g.state.config, { provider: source.provider, model: source.model, maxTokens: 4000 });
+  assert.equal(Object.hasOwn(g.state.payload, 'input'), false);
+  assert.deepEqual(g.state.payload.tools, [{ name: 'sample', description: 'Executed by the phone.', parameters: tools[0].input_schema }]);
+  assert.deepEqual(g.state.payload.messages.map(({ id, ...message }) => message), [
+    { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'Check the next item.' }] },
+    { role: 'assistant', source, content: [
+      { type: 'reasoning', text: 'Earlier private planning.' }, { type: 'text', text: 'I will check.' },
+      { type: 'tool-call', id: 'previous-call', name: 'sample', arguments: '{"n":0}' },
+    ] },
+    { role: 'tool', source: { kind: 'tool', callId: 'previous-call' }, toolCallId: 'previous-call',
+      content: [{ type: 'text', text: 'Not applied.' }], isError: true },
+  ]);
+  assert.deepEqual(response.body.map(event => event.type), ['accepted', 'text', 'runtime-usage', 'message', 'finish']);
+  assert.equal(response.body.find(event => event.type === 'text').text, 'Planning.');
+  assert.deepEqual(response.body.find(event => event.type === 'message').message, {
+    content: [{ type: 'thinking', thinking: 'Private planning.' },
+      { type: 'text', text: 'Planning. Complete details.' },
+      { type: 'tool_use', id: 'phone-call', name: 'sample', input: { n: 1 } }],
+    stopReason: 'tool_use', source,
+  });
+  const finished = response.body.at(-1);
+  assert.equal(finished.terminal, 'tool-calls'); assert.equal(finished.complete, true);
+  assert.equal(finished.dispatched, null); assert.equal(finished.usage.usage_semantics, 'unknown');
+  assert.equal(finished.usage.output_tokens, null);
+  assert.equal(finished.usage.runtime_normalized_usage[0].outputTokens, 4);
+  // The real route returned calls without a Host executor or Session history
+  // access. Actual phone execution/continuation is exercised in the Dart case.
 });
 
 // The adapter above is explicit: this proves route behavior and exact payload,

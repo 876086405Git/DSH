@@ -63,6 +63,8 @@ class NoticeInboxTest {
 
     @Test fun traditionalVerificationCodeIsDroppedBeforeTheInbox() {
         assertNull(NoticeFilter.segment(listOf("您的驗證碼為 １２３４５６")))
+        // Split across title and text, each harmless alone.
+        assertNull(NoticeFilter.segment(listOf("Your code", "123456")))
     }
 
     @Test fun traditionalPasswordIsDroppedEvenWithAnInvisibleSeparator() {

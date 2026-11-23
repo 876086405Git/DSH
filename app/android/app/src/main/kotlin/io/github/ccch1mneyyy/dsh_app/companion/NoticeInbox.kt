@@ -46,6 +46,10 @@ internal object NoticeFilter {
         }
         val text = parts.joinToString(" · ")
         if (text.isEmpty()) return null
+        // A code can be split across fields (title 「你的验证码」, text 「123456」): check them together too.
+        val joined = separators.replace(text, "")
+        if (SensitiveWords.secretHit(text, joined, null) != null ||
+            secretTerms.any { joined.contains(it) } || credential.containsMatchIn(text)) return null
         val length = text.codePointCount(0, text.length).coerceAtMost(500)
         return text.substring(0, text.offsetByCodePoints(0, length))
     }

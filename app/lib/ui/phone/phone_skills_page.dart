@@ -12,6 +12,7 @@ import '../common/list_page_row.dart';
 import '../common/segmented_pill.dart';
 import '../shell/page_frame.dart';
 import '../features/feature_kit.dart';
+import '../features/feature_widgets.dart' show openSessionInChat;
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import 'phone_skill_detail_page.dart';
@@ -393,6 +394,13 @@ class _PhoneSkillDraftCardState extends ConsumerState<PhoneSkillDraftCard> {
                   child: Text(l10n.phoneSkillEditDraft),
                 ),
                 const Spacer(),
+                if (widget.showSource)
+                  TextButton(
+                    key: const ValueKey('phone-skill-draft-source'),
+                    style: TextButton.styleFrom(foregroundColor: scheme.onSurfaceVariant),
+                    onPressed: () => openSessionInChat(context, ref, _draft.from.sessionId),
+                    child: Text(l10n.phoneSkillOpenSource),
+                  ),
                 TextButton(
                   key: const ValueKey('phone-skill-draft-discard'),
                   style: TextButton.styleFrom(foregroundColor: scheme.onSurfaceVariant),
@@ -438,7 +446,9 @@ class _PhoneSkillDraftCardState extends ConsumerState<PhoneSkillDraftCard> {
     final hidden = HiddenSkillDrafts.of(ref)..hide(_draft.id);
     final bar = messenger?.showSnackBar(
       SnackBar(
-        persist: false,
+        // A screen reader needs the time to reach 「撤销」; closing it discards.
+        persist: MediaQuery.of(context).accessibleNavigation,
+        showCloseIcon: MediaQuery.of(context).accessibleNavigation,
         content: Text(l10n.phoneSkillDiscarded),
         duration: const Duration(seconds: 5),
         action: SnackBarAction(

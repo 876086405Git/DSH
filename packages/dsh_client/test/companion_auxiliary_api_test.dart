@@ -1125,7 +1125,11 @@ void main() {
     }, status: 404);
     await expectLater(
       client.readCompanionAuxiliaryCapability(_session),
-      throwsA(isA<DshHttpException>().having((e) => e.statusCode, 'status', 404)),
+      throwsA(
+        isA<CompanionAuxiliaryFailure>()
+            .having((e) => e.httpStatus, 'status', 404)
+            .having((e) => e.code, 'code', 'companion/auxiliary-invalid-request'),
+      ),
     );
     expect(host.paths, hasLength(1));
   });

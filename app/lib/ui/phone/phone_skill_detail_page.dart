@@ -41,11 +41,31 @@ class PhoneSkillDetailPage extends ConsumerWidget {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final skill = ref.watch(phoneSkillDetailProvider(name)).value;
+    final detail = ref.watch(phoneSkillDetailProvider(name));
+    final skill = detail.value;
     if (skill == null) {
       return AppPage.list(
         title: l10n.phoneSkillsTitle,
-        children: const [QuietSpinner(padding: EdgeInsets.symmetric(vertical: 32))],
+        children: [
+          if (detail.error case final PhoneSkillException e)
+            ListPageCard(
+              children: [
+                ListPageRow(
+                  icon: AppIcons.error,
+                  title: skillErrorText(context, e),
+                  titleMaxLines: 3,
+                  trailing: TextButton(
+                    onPressed: () => ref.invalidate(phoneSkillDetailProvider(name)),
+                    child: Text(l10n.commonRetry),
+                  ),
+                ),
+              ],
+            )
+          else if (detail.hasError)
+            PageFootnote(l10n.phoneSkillErrorUnavailable)
+          else
+            const QuietSpinner(padding: EdgeInsets.symmetric(vertical: 32)),
+        ],
       );
     }
     final sections = skill.sections;

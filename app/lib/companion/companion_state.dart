@@ -130,13 +130,23 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     await _loaded.future;
     checkCurrent();
     final existing = of(host);
+    var gone = false;
     if (existing != null &&
         existing.full &&
         (memoryArchiveId == null ||
             (existing.memoryArchiveId == memoryArchiveId && existing.memoryControlRevision == memoryControlRevision))) {
-      final gone = await _gone(conn.client, existing.sessionId);
+      gone = await _gone(conn.client, existing.sessionId);
       checkCurrent();
       if (!gone) return existing;
+    }
+
+    if (existing != null && !gone) {
+      try {
+        await conn.client.archiveSession(existing.sessionId, stopActivity: false);
+      } on DshRemoteException catch (error) {
+        if (error.code != 'session/not-found') rethrow;
+      }
+      checkCurrent();
     }
 
     final sessions = owner.read(sessionsProvider.notifier);
@@ -180,6 +190,11 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     } on DshRemoteException catch (error) {
       return error.code == 'session/not-found';
     }
+  }
+
+  /// Retires pending session checks without discarding the selected model.
+  void retirePending() {
+    _ownershipEpoch++;
   }
 
   /// Starts over on the active host: the next message opens a new conversation.

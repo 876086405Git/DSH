@@ -10,7 +10,7 @@ internal object PhoneSkillValidation {
     private val quoted = Regex("""“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|『[^』\n]*』|"[^"\n]*"|(?<![\p{L}\p{N}])'[^'\n]*'(?![\p{L}\p{N}])""")
     private val url = Regex("""(?i)\b(?:[a-z][a-z0-9+.\-]*://|www\.)[^\s<>]+""")
     private val email = Regex("""[\w.+%-]+@[\w.-]+\.[A-Za-z]{2,}""")
-    private val amount = Regex("""(?i)(?:\p{Sc}|USD|CNY|RMB|EUR|GBP|HKD)\s*[-+]?\s*\p{Nd}[\p{Nd}.,]*|(?<![\p{Nd}.,])[-+]?\p{Nd}[\p{Nd}.,]*\s*(?:\p{Sc}|(?:美元|人民币|港元|欧元|英镑|元|块钱|块|角|毛|分)|(?:USD|CNY|RMB|EUR|GBP|HKD|dollars?|yuan|euros?|pounds?)\b)|[零〇一二两三四五六七八九十百千万亿点壹贰叁肆伍陆柒捌玖拾佰仟萬億]+(?:美元|欧元|英镑|港元|块钱|块|元|角|毛|分)""")
+    private val amount = Regex("""(?i)(?:\p{Sc}|USD|CNY|RMB|EUR|GBP|HKD)\s*[-+]?\s*\p{Nd}[\p{Nd}.,]*|(?<![\p{Nd}.,])[-+]?\p{Nd}[\p{Nd}.,]*\s*(?:\p{Sc}|(?:美元|人民币|港元|欧元|英镑|元|块钱|块|角|毛|分(?!钟))|(?:USD|CNY|RMB|EUR|GBP|HKD|dollars?|yuan|euros?|pounds?)\b)|[零〇一二两三四五六七八九十百千万亿点壹贰叁肆伍陆柒捌玖拾佰仟萬億]+(?:美元|欧元|英镑|港元|块钱|块|元|角|毛|分(?!钟))""")
     private val numberGroup = Regex("""\+?\p{Nd}(?:[ ().-]*\p{Nd}){3,14}""")
     private val digits = Regex("""\p{Nd}+(?:[.,]\p{Nd}+)+|\p{Nd}{2,}""")
     private val assignedCredential = Regex("""(?im)(?<![\w])(?:[a-z]+[_-])*(?:api[_ -]?key|secret|token|password|passwd|authorization|(?:set-)?cookie|密钥|令牌|密码)["']?[ \t]*[:=][ \t]*[^\r\n]+""")

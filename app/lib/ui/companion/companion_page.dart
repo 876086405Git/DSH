@@ -2044,10 +2044,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   String _failureText(Object error) {
     final l10n = context.l10n;
     return switch (error) {
-      // Full mode still reaches her model straight from the phone for now:
-      // say so, instead of naming a mode the person didn't pick.
-      CompanionLightError(failure: CompanionLightFailure.noKey) =>
-        _light ? l10n.companionLightNoKey : l10n.companionFullNoKey,
+      CompanionHostError(hostFailure: CompanionHostFailure.disconnected) => l10n.companionNotConnectedTryLight,
+      CompanionHostError(hostFailure: CompanionHostFailure.modelUnavailable) => l10n.companionHostModelUnavailable,
+      CompanionHostError(hostFailure: CompanionHostFailure.unavailable) => l10n.companionHostUnavailable,
+      CompanionLightError(failure: CompanionLightFailure.noKey) => l10n.companionLightNoKey,
       CompanionLightError(failure: CompanionLightFailure.badKey) => l10n.companionLightBadKey,
       CompanionLightError(failure: CompanionLightFailure.busy) => l10n.companionLightBusy,
       DshRemoteException(code: 'companion/agent-retry-closed') => l10n.companionAgentRetryClosed,

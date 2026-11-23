@@ -49,7 +49,7 @@ class _CompanionNoticesPageState extends ConsumerState<CompanionNoticesPage> {
   StreamSubscription<int>? _signals;
   CompanionNoticeStatus? _status;
   List<CompanionNoticeApp> _apps = const [];
-  bool _loading = false, _again = false, _busy = false;
+  bool _loading = false, _again = false, _busy = false, _failed = false;
 
   @override
   void initState() {
@@ -83,10 +83,12 @@ class _CompanionNoticesPageState extends ConsumerState<CompanionNoticesPage> {
         setState(() {
           _status = status;
           _apps = apps;
+          _failed = false;
         });
       } while (_again && mounted);
     } on Object {
       // The last mirrored state stays; the next resume or signal reads again.
+      if (mounted && _status == null) setState(() => _failed = true);
     } finally {
       _loading = false;
     }
@@ -180,7 +182,19 @@ class _CompanionNoticesPageState extends ConsumerState<CompanionNoticesPage> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final status = _status;
-    if (status == null) return AppPage.list(title: l10n.companionNotices, children: const []);
+    if (status == null) {
+      return AppPage.list(
+        title: l10n.companionNotices,
+        children: [
+          if (_failed)
+            SettingsSection(
+              children: [
+                SettingsTile(icon: AppIcons.error, title: l10n.companionNoticesFailed, onTap: () => unawaited(_load())),
+              ],
+            ),
+        ],
+      );
+    }
     final needsGrant = status.enabled && !status.granted;
     final apps = _ordered(status);
     final levels = {for (final (level, title, _) in _levels(l10n)) level: title};

@@ -27,6 +27,7 @@ import 'companion_agent_task_tools.dart';
 import 'companion_agent_task_ui.dart';
 import 'companion_agent_tools.dart';
 import 'companion_context.dart';
+import 'companion_host_memory_transport.dart';
 import 'companion_light.dart';
 import 'companion_memory.dart';
 import 'companion_notice_triage.dart';
@@ -238,13 +239,85 @@ class CompanionAgent extends ChangeNotifier {
     run.noticeDeliveryEpoch = _visit?.notices?.readableEpoch;
   }
 
-  bool _current(_CompanionAgentRun run) =>
+  bool _current(_CompanionAgentRun run) => _turnCurrent(run) && (run.modelCurrent?.call() ?? true);
+
+  bool _turnCurrent(_CompanionAgentRun run) =>
       !_disposed &&
       identical(_run, run) &&
       run.running &&
       !run.cancelled &&
       run.isCurrent() &&
       run.memory.store.archive['control_revision'] == run.controlRevision;
+
+  /// Resolve before reserving a physical request. The Session supplies only
+  /// the selected model; this stateless route never reads its old transcript
+  /// or starts its AgentLoop. Every round uses the phone's current context.
+  Future<CompanionMemoryTransport?> _modelTransport({
+    required bool Function() isCurrent,
+    bool forMemory = false,
+  }) async {
+    if (!isCurrent()) throw const DshClosedException('Companion turn changed');
+    final ref = _ref;
+    if (ref == null) {
+      final route = _memoryTransport?.call();
+      if (forMemory || route is CompanionHostMemoryTransport) {
+        return route ?? CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
+      }
+      return CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
+    }
+    final mode = ref.read(companionModeProvider);
+    final connection = ref.read(activeConnectionProvider).value;
+    if (mode == CompanionMode.light || (mode == null && connection == null)) {
+      // The existing background route may deliberately be unconfigured while
+      // chat has its own valid key/client. Keep those Light contracts separate.
+      return forMemory
+          ? _memoryTransport?.call() ?? CompanionLightMemoryTransport(apiKey: _apiKey, client: _client)
+          : CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
+    }
+    // Full keeps its source and tools when only this model round uses the phone.
+    final phone = CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
+    if (connection == null) {
+      if (phone.configured) return phone;
+      throw const CompanionHostError(CompanionHostFailure.disconnected);
+    }
+    final host = ref.read(activeHostProvider);
+    final client = connection.client;
+    final scope = ref.read(modelSelectionScopeProvider);
+    bool current() =>
+        !_disposed &&
+        ref.mounted &&
+        isCurrent() &&
+        ref.read(companionModeProvider) == mode &&
+        ref.read(activeHostProvider) == host &&
+        identical(ref.read(activeConnectionProvider).value?.client, client) &&
+        identical(ref.read(modelSelectionScopeProvider), scope);
+    CompanionMemoryTransport phoneOrFail(CompanionHostError error) {
+      if (!current()) throw const DshClosedException('Companion Host route changed');
+      if (phone.configured) return phone;
+      throw error;
+    }
+
+    try {
+      // Resolve the current full Session each round. A phone tool may retire
+      // its previous binding without cancelling this same logical turn.
+      final selected = await ref.read(companionSessionsProvider.notifier).ensure();
+      if (!current()) throw const DshClosedException('Companion Host route changed');
+      final capability = await client.readCompanionAuxiliaryCapability(selected.sessionId);
+      if (capability == null || !capability.supported) {
+        return phoneOrFail(const CompanionHostError(CompanionHostFailure.unavailable));
+      }
+      if (!current()) throw const DshClosedException('Companion Host route changed');
+      if (!capability.agentSupported && phone.configured) return phone;
+      // Without a phone key, legacy auxiliary can still serve no-tool followup.
+      return CompanionHostMemoryTransport(client: client, capability: capability, isCurrent: current);
+    } on CompanionAuxiliaryFailure catch (error) {
+      return phoneOrFail(CompanionHostError(companionHostFailure(error.code), error.code));
+    } on DshClosedException {
+      return phoneOrFail(const CompanionHostError(CompanionHostFailure.disconnected));
+    } on DshException catch (error) {
+      return phoneOrFail(CompanionHostError(CompanionHostFailure.unavailable, '$error'));
+    }
+  }
 
   // Only the explicitly allowed additive/read paths remain after web data.
   // These names are the current memory adapter's mutators, not task commands.
@@ -327,6 +400,7 @@ class CompanionAgent extends ChangeNotifier {
       request: () async {
         final selection = await run.memory.selectForAgent(
           run.source['text'] as String,
+          explicitUserInput: run.source['text'] as String,
           characterId: run.source['character_id'] as String?,
           offsetMinutes: run.source['offset_minutes']! as int,
           isCurrent: () => _current(run),
@@ -358,7 +432,7 @@ class CompanionAgent extends ChangeNotifier {
           assistantPage: run.assistantPage,
         );
         for (final exchange in run.exchanges) {
-          messages.add({'role': 'assistant', 'content': exchange.assistant.content});
+          messages.add(exchange.assistant.toRequest());
           messages.add({'role': 'user', 'content': exchange.results});
         }
 
@@ -371,14 +445,23 @@ class CompanionAgent extends ChangeNotifier {
     _CompanionAgentRun run,
     List<Map<String, Object?>> messages,
   ) async {
-    final key = _apiKey().trim();
-    if (key.isEmpty) throw const CompanionLightError(CompanionLightFailure.noKey);
+    final route = await _modelTransport(isCurrent: () => _turnCurrent(run));
+    if (!_current(run)) return null;
+    if (route is! CompanionAgentModelTransport) {
+      throw const CompanionHostError(CompanionHostFailure.unavailable);
+    }
+    if (!route.agentConfigured) {
+      if (route is CompanionLightMemoryTransport) throw const CompanionLightError(CompanionLightFailure.noKey);
+      throw const CompanionHostError(CompanionHostFailure.unavailable);
+    }
+    run.modelCurrent = () => route.current;
+    if (!_current(run)) return null;
     final system = '${run.system}${run.memory.relationshipContext(run.source['character_id'] as String?)}';
     final definitions = _definitions(run);
     final requestId = run.memory.store.reserveRequest(
       category: 'chat',
-      provider: 'deepseek',
-      model: companionLightModel,
+      provider: route.provider,
+      model: route.model,
       inputTokens: estimateTokens(
         jsonEncode({
           'system': system,
@@ -391,11 +474,10 @@ class CompanionAgent extends ChangeNotifier {
     final request = _CompanionAgentRequest(requestId);
     run.request = request;
     run.memory.retainReceipt(request.settled.future);
+    final priorText = run.text;
     try {
-      final client = request.client = _client();
-      final message = await request.read(
-        client: client,
-        apiKey: key,
+      final message = await route.readAgent(
+        request: request,
         system: system,
         messages: messages,
         tools: definitions,
@@ -406,32 +488,47 @@ class CompanionAgent extends ChangeNotifier {
           run.text += delta;
           notifyListeners();
         },
-        onSent: () {
+        onDispatchUncertain: () {
           if (!_current(run)) throw const DshClosedException('Companion turn changed');
+          run.memory.store.markRequestUncertain(requestId);
+          request.uncertain = true;
+        },
+        onSent: () {
+          // Host callbacks report an observed dispatch, even after this turn
+          // retires. Light checks its permission before sending instead.
           run.memory.store.markRequestSent(requestId);
           request.sent = true;
         },
         onUsage: (usage) {
           // These identities never come from current UI/turn fields.
-          run.memory.store.recordUsage(requestId, usage.toJson());
-          run.memory.store.finishRequest(requestId, terminal: usage.terminal);
+          run.memory.store.recordUsage(requestId, usage);
+          run.memory.store.finishRequest(requestId, terminal: usage['terminal']! as String);
           request.finalized = true;
           run.memory.changed();
-          if (!_disposed) _onUsage?.call(usage);
+          if (!_disposed) _onUsage?.call(CompanionUsage.fromReceipt(usage));
         },
         onUsageSettled: (usage, {required partial}) {
           if (!_disposed) _onUsageSettled?.call(usage, partial: partial);
         },
       );
+      if (message != null && route is CompanionHostMemoryTransport && _current(run)) {
+        // Some adapters emit complete block text only at block-end. Keep the
+        // real deltas live, then seal this request with the validated message.
+        request.text = message.text;
+        run.text = [if (priorText.isNotEmpty) priorText, if (request.text.isNotEmpty) request.text].join('\n');
+        notifyListeners();
+      }
       return message == null ? null : (message: message, requestId: requestId);
     } finally {
       request.client?.close();
       try {
-        if (request.stream != null) await request.drain();
+        await request.drain();
       } finally {
         try {
-          if (!request.finalized) {
-            run.memory.store.finishRequest(requestId, terminal: request.sent ? 'cancelled' : 'not_sent');
+          if (request.notSentProven && !request.sent) {
+            run.memory.store.finishRequest(requestId, terminal: 'not_sent');
+          } else if (!request.finalized) {
+            run.memory.store.finishRequest(requestId, terminal: request.sent || request.uncertain ? 'cancelled' : 'not_sent');
           }
           _saveReply(run, request);
         } finally {
@@ -504,6 +601,11 @@ class CompanionAgent extends ChangeNotifier {
     onScreenRouteChanged?.call();
   }
 
+  void modelRouteChanged() {
+    screenRouteChanged();
+    _visit?.connectionChanged(generationChanged: true);
+  }
+
   void stop({bool discard = false}) {
     cancelScreenObservation();
     if (_visit?.residentUi case final CompanionAgentAmbientUi background) background.stopSpeech();
@@ -521,12 +623,9 @@ class CompanionAgent extends ChangeNotifier {
         run.error = CompanionLightError(CompanionLightFailure.server, '$error');
       }
       request.client?.close();
-      final stream = request.stream;
-      if (stream != null) {
-        // StreamIterator clears its subscription on the first cancel. A second
-        // call can finish early, so both paths must await this original drain.
-        unawaited(request.drain().catchError((Object _) {}));
-      }
+      // Both transports retain the first drain. Host cancellation waits for
+      // its SDK receipt/finally just as Light waits for iterator cancellation.
+      unawaited(request.drain().catchError((Object _) {}));
     }
     if (discard) run.text = '';
     if (!_disposed) notifyListeners();
@@ -569,6 +668,7 @@ class _CompanionAgentRun {
   >
   tools;
   final bool Function() isCurrent;
+  bool Function()? modelCurrent;
   final void Function(MemorySelection)? onSelected;
   final settled = Completer<void>();
   final exchanges = <CompanionAgentExchange>[];

@@ -73,6 +73,25 @@ List<CompanionLine> companionLightContext(Iterable<CompanionLine> lines, {int wi
 
 enum CompanionLightFailure { noKey, badKey, busy, network, server }
 
+enum CompanionHostFailure { disconnected, modelUnavailable, unavailable, busy, requestFailed }
+
+// Host failures keep their route identity through the Agent's existing error
+// channel. In particular they never ask for a phone-only DeepSeek key.
+CompanionHostFailure companionHostFailure(String? code, {int? httpStatus}) => switch (code) {
+  _ when httpStatus == 429 => CompanionHostFailure.busy,
+  'RATE_LIMIT' || 'companion/auxiliary-busy' => CompanionHostFailure.busy,
+  'companion/auxiliary-model-unavailable' || 'UNKNOWN_MODEL' || 'MISSING_MODEL' =>
+    CompanionHostFailure.modelUnavailable,
+  'transport-error' || 'cancelled' => CompanionHostFailure.disconnected,
+  'route-unavailable' ||
+  'companion/auxiliary-unavailable' ||
+  'companion/auxiliary-session-unavailable' ||
+  'companion/auxiliary-forbidden' ||
+  'COMPANION_AUXILIARY_UNAVAILABLE' ||
+  'CLIENT_UPGRADE_REQUIRED' => CompanionHostFailure.unavailable,
+  _ => CompanionHostFailure.requestFailed,
+};
+
 class CompanionLightError implements Exception {
   const CompanionLightError(this.failure, [this.detail]);
 
@@ -81,6 +100,18 @@ class CompanionLightError implements Exception {
 
   @override
   String toString() => 'CompanionLightError(${failure.name}${detail == null ? '' : ': $detail'})';
+}
+
+/// Fits the existing Agent error channel without widening Light's enum or
+/// losing the Host reason when the Agent retains a failed turn.
+class CompanionHostError extends CompanionLightError {
+  const CompanionHostError(this.hostFailure, [String? detail])
+    : super(
+        hostFailure == CompanionHostFailure.busy ? CompanionLightFailure.busy : CompanionLightFailure.server,
+        detail,
+      );
+
+  final CompanionHostFailure hostFailure;
 }
 
 /// One sent request's usage receipt. The raw objects retain the provider's
@@ -105,6 +136,31 @@ class CompanionUsage {
     required this.complete,
     required this.httpStatus,
   });
+
+  /// A view for the existing token UI. The caller records the original Host
+  /// map first, including runtime-normalized fields absent from this view.
+  factory CompanionUsage.fromReceipt(Map<String, Object?> receipt) {
+    int? count(String key) => receipt[key] is int && (receipt[key]! as int) >= 0 ? receipt[key] as int : null;
+    Map<String, Object?>? map(String key) =>
+        receipt[key] is Map<String, Object?> ? receipt[key] as Map<String, Object?> : null;
+    return CompanionUsage(
+      provider: receipt['provider']! as String,
+      model: receipt['model']! as String,
+      startUsage: map('start_usage'),
+      finalUsage: map('final_usage'),
+      startEvent: receipt['start_event'] as String?,
+      finalEvent: receipt['final_event'] as String?,
+      semantics: receipt['usage_semantics'] as String? ?? 'unknown',
+      inputUncached: count('input_uncached'),
+      inputCacheRead: count('input_cache_read'),
+      inputCacheWrite: count('input_cache_write'),
+      outputTokens: count('output_tokens'),
+      stopReason: receipt['stop_reason'] as String?,
+      terminal: receipt['terminal'] as String? ?? 'incomplete',
+      complete: receipt['complete'] == true,
+      httpStatus: count('http_status'),
+    );
+  }
 
   final String provider;
   final String model;
@@ -217,11 +273,24 @@ class CompanionAgentToolResult {
 }
 
 class CompanionAgentMessage {
-  CompanionAgentMessage({required List<Map<String, Object?>> content, required this.stopReason})
-    : content = List.unmodifiable(content.map(Map<String, Object?>.unmodifiable));
+  CompanionAgentMessage({required List<Map<String, Object?>> content, required this.stopReason, Map<String, Object?>? source})
+    : content = List.unmodifiable(content.map(Map<String, Object?>.unmodifiable)),
+      source = source == null ? null : Map<String, Object?>.unmodifiable(source);
 
   final List<Map<String, Object?>> content;
   final String? stopReason;
+
+  /// Request-local Host provenance/replay, never persisted as phone memory.
+  /// Rebuilding a retired message deliberately does not inherit this field.
+  final Map<String, Object?>? source;
+
+  String get text => [for (final block in content) if (block['type'] == 'text') block['text']! as String].join();
+
+  Map<String, Object?> toRequest() => {
+    'role': 'assistant',
+    'content': content,
+    if (source != null) 'source': source,
+  };
 
   List<CompanionAgentToolCall> get calls => [
     for (final block in content)
