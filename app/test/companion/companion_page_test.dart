@@ -779,6 +779,45 @@ void main() {
       await tester.pump(const Duration(seconds: 10));
     });
 
+    testWidgets('the section: her room, what she remembers and her own page share one bar', (tester) async {
+      SharedPreferences.setMockInitialValues({'companion_touch_hint_done': true, 'companion_home_hint_done': true});
+      CompanionStageEvents? stageEvents;
+      await tester.pumpWidget(
+        _app(
+          CompanionPage(
+            storeOverride: installedStore(),
+            sections: true,
+            stageBuilder: (controller, events) {
+              stageEvents = events;
+              return const SizedBox.expand();
+            },
+          ),
+        ),
+      );
+      await _stageUp(tester, () => stageEvents);
+      stageEvents!.onReady();
+      // The bar comes with her room, once she's there.
+      await _until2(tester, () => find.text('和鲸鱼娘说点什么').evaluate().isNotEmpty);
+      await _settle(tester);
+      // The bar has her page, so the room keeps no ⋯ of its own.
+      expect(find.byIcon(AppIcons.more), findsNothing);
+
+      await tester.tap(find.text('记忆'));
+      await _until2(tester, () => find.byType(CompanionMemoryPage).evaluate().isNotEmpty);
+      expect(find.text('还没有记下什么'), findsOneWidget);
+
+      await tester.tap(find.text('她').last);
+      await _until2(tester, () => find.text('她多主动').evaluate().isNotEmpty);
+      expect(find.text('她的声音'), findsOneWidget);
+
+      await tester.tap(find.text('小屋'));
+      await _settle(tester);
+      expect(find.text('和鲸鱼娘说点什么'), findsOneWidget);
+
+      await tester.pumpWidget(_app(const SizedBox()));
+      await tester.pump(const Duration(seconds: 10));
+    });
+
     testWidgets('a key builds the composer, not her stage; the gate still hears the room is busy', (tester) async {
       SharedPreferences.setMockInitialValues({'companion_touch_hint_done': true, 'companion_home_hint_done': true});
       final clock = _Clock();

@@ -675,7 +675,13 @@
   "companionMapNoTarget": "这次没选地图，还没有打开。",
   "companionMapSaveFailed": "这次没能确认地图是否打开；不会自动再试。",
   "companionMapTarget": "所选地图：{label}",
-  "@companionMapTarget": {"placeholders": {"label": {"type": "String"}}},
+  "@companionMapTarget": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "companionMapCopy": "复制原地址",
   "companionMapView": "查看地址",
   "companionMapReopen": "再打开一次",
@@ -1141,5 +1147,16 @@
         "type": "String"
       }
     }
-  }
+  },
+  "companionPanelCompany": "陪伴",
+  "companionPanelHer": "她",
+  "companionPanelTalk": "对话",
+  "companionPanelMore": "更多",
+  "companionFullNoKey": "电脑上的模型还没接到我这儿，现在先要 DeepSeek API Key 才能聊。在设置里填上就行。",
+  "companionDrawerHere": "她一直在",
+  "companionDrawerRoom": "伙伴小屋",
+  "companionTabRoom": "小屋",
+  "companionTabMemory": "记忆",
+  "companionTabTasks": "交代",
+  "companionTabHer": "她"
 }

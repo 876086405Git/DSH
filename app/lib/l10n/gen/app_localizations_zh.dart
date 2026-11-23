@@ -7209,6 +7209,39 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get companionPanelCompany => '陪伴';
+
+  @override
+  String get companionPanelHer => '她';
+
+  @override
+  String get companionPanelTalk => '对话';
+
+  @override
+  String get companionPanelMore => '更多';
+
+  @override
+  String get companionFullNoKey => '电脑上的模型还没接到我这儿，现在先要 DeepSeek API Key 才能聊。在设置里填上就行。';
+
+  @override
+  String get companionDrawerHere => '她一直在';
+
+  @override
+  String get companionDrawerRoom => '伙伴小屋';
+
+  @override
+  String get companionTabRoom => '小屋';
+
+  @override
+  String get companionTabMemory => '记忆';
+
+  @override
+  String get companionTabTasks => '交代';
+
+  @override
+  String get companionTabHer => '她';
+
+  @override
   String get automaticDiagnosticsRecover => '恢复本地记录';
 
   @override

@@ -4304,6 +4304,17 @@
       }
     }
   },
+  "companionPanelCompany": "陪伴",
+  "companionPanelHer": "她",
+  "companionPanelTalk": "对话",
+  "companionPanelMore": "更多",
+  "companionFullNoKey": "电脑上的模型还没接到我这儿，现在先要 DeepSeek API Key 才能聊。在设置里填上就行。",
+  "companionDrawerHere": "她一直在",
+  "companionDrawerRoom": "伙伴小屋",
+  "companionTabRoom": "小屋",
+  "companionTabMemory": "记忆",
+  "companionTabTasks": "交代",
+  "companionTabHer": "她",
   "automaticDiagnosticsRecover": "恢复本地记录",
   "automaticDiagnosticsRecoverHint": "仅在本机恢复分析记录，跳过已留存故障，不重新发送旧请求。",
   "automaticDiagnosticsTitle": "自动故障分析",

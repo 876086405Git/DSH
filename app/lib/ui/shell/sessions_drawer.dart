@@ -27,6 +27,8 @@ import '../../state/read_list_identity.dart';
 import '../../state/workspaces_state.dart';
 import '../bots/bots_page.dart' show BotsPage, UnreadBadge;
 import '../chat/media/media_format.dart' show chatTitleShown;
+import '../companion/companion_drawer_row.dart';
+import '../companion/companion_page.dart';
 import '../common/app_sheet.dart';
 import '../common/empty_view.dart';
 import '../common/pressable.dart';
@@ -188,6 +190,14 @@ class SessionsDrawer extends ConsumerWidget {
         onDetails: () => onOpen(DrawerDestination.engine),
       ),
       SessionSearchBar(onClose: onClose),
+      // 伙伴小屋 has a fixed place here, whatever list or host is showing.
+      CompanionDrawerRow(
+        onTap: () {
+          Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CompanionPage(sections: true)));
+          // Close once the page covers us, so "back" lands on the chat.
+          Future<void>.delayed(AppMotion.slow, onClose);
+        },
+      ),
       // The workspace switcher (once the host's workspace list has
       // arrived) and the list's options, then the status filters.
       SmoothSize(

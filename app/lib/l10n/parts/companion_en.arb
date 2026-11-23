@@ -581,7 +581,13 @@
   "companionMapNoTarget": "No map was selected, so nothing has opened.",
   "companionMapSaveFailed": "I could not confirm whether the map opened. I will not retry automatically.",
   "companionMapTarget": "Selected map: {label}",
-  "@companionMapTarget": {"placeholders": {"label": {"type": "String"}}},
+  "@companionMapTarget": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "companionMapCopy": "Copy original address",
   "companionMapView": "View address",
   "companionMapReopen": "Open again",
@@ -1047,5 +1053,16 @@
         "type": "String"
       }
     }
-  }
+  },
+  "companionPanelCompany": "Company",
+  "companionPanelHer": "Her",
+  "companionPanelTalk": "Conversation",
+  "companionPanelMore": "More",
+  "companionFullNoKey": "Your computer's model can't reach me yet, so for now I need a DeepSeek API key to talk. Add one in Settings.",
+  "companionDrawerHere": "Always here",
+  "companionDrawerRoom": "Companion room",
+  "companionTabRoom": "Room",
+  "companionTabMemory": "Memories",
+  "companionTabTasks": "Errands",
+  "companionTabHer": "Her"
 }

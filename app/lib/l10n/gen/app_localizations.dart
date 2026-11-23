@@ -13392,6 +13392,72 @@ abstract class L10n {
   /// **'今天大概花了 ¥{amount}'**
   String companionScreenCost(String amount);
 
+  /// No description provided for @companionPanelCompany.
+  ///
+  /// In zh, this message translates to:
+  /// **'陪伴'**
+  String get companionPanelCompany;
+
+  /// No description provided for @companionPanelHer.
+  ///
+  /// In zh, this message translates to:
+  /// **'她'**
+  String get companionPanelHer;
+
+  /// No description provided for @companionPanelTalk.
+  ///
+  /// In zh, this message translates to:
+  /// **'对话'**
+  String get companionPanelTalk;
+
+  /// No description provided for @companionPanelMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多'**
+  String get companionPanelMore;
+
+  /// No description provided for @companionFullNoKey.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑上的模型还没接到我这儿，现在先要 DeepSeek API Key 才能聊。在设置里填上就行。'**
+  String get companionFullNoKey;
+
+  /// No description provided for @companionDrawerHere.
+  ///
+  /// In zh, this message translates to:
+  /// **'她一直在'**
+  String get companionDrawerHere;
+
+  /// No description provided for @companionDrawerRoom.
+  ///
+  /// In zh, this message translates to:
+  /// **'伙伴小屋'**
+  String get companionDrawerRoom;
+
+  /// No description provided for @companionTabRoom.
+  ///
+  /// In zh, this message translates to:
+  /// **'小屋'**
+  String get companionTabRoom;
+
+  /// No description provided for @companionTabMemory.
+  ///
+  /// In zh, this message translates to:
+  /// **'记忆'**
+  String get companionTabMemory;
+
+  /// No description provided for @companionTabTasks.
+  ///
+  /// In zh, this message translates to:
+  /// **'交代'**
+  String get companionTabTasks;
+
+  /// No description provided for @companionTabHer.
+  ///
+  /// In zh, this message translates to:
+  /// **'她'**
+  String get companionTabHer;
+
   /// No description provided for @automaticDiagnosticsRecover.
   ///
   /// In zh, this message translates to:

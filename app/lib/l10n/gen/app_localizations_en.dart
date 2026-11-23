@@ -7656,6 +7656,40 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get companionPanelCompany => 'Company';
+
+  @override
+  String get companionPanelHer => 'Her';
+
+  @override
+  String get companionPanelTalk => 'Conversation';
+
+  @override
+  String get companionPanelMore => 'More';
+
+  @override
+  String get companionFullNoKey =>
+      'Your computer\'s model can\'t reach me yet, so for now I need a DeepSeek API key to talk. Add one in Settings.';
+
+  @override
+  String get companionDrawerHere => 'Always here';
+
+  @override
+  String get companionDrawerRoom => 'Companion room';
+
+  @override
+  String get companionTabRoom => 'Room';
+
+  @override
+  String get companionTabMemory => 'Memories';
+
+  @override
+  String get companionTabTasks => 'Errands';
+
+  @override
+  String get companionTabHer => 'Her';
+
+  @override
   String get automaticDiagnosticsRecover => 'Recover local records';
 
   @override
