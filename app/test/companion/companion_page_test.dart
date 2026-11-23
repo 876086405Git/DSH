@@ -875,24 +875,19 @@ void main() {
       expect(find.text('已附当前页面文字'), findsOneWidget);
       expect(find.text('和鲸鱼娘说点什么'), findsOneWidget);
 
-      // The keyboard moves her room; the pages kept behind it aren't made again.
-      final behind = [
-        find.byType(CompanionMemoryPage, skipOffstage: false),
-        find.byType(CompanionTasksPage, skipOffstage: false),
-      ];
-      var pages = [for (final page in behind) tester.widget(page)];
-      final remade = [0, 0];
+      // The keyboard moves her room; the pages kept behind it (which query
+      // the store as they build) don't build again.
+      final rebuilt = <Type>[];
+      debugOnRebuildDirtyWidget = (element, _) {
+        if (element.widget case CompanionMemoryPage() || CompanionTasksPage()) rebuilt.add(element.widget.runtimeType);
+      };
       addTearDown(tester.view.resetViewInsets);
       for (final inset in [120.0, 240.0]) {
         tester.view.viewInsets = FakeViewPadding(bottom: inset);
         await tester.pump();
-        final next = [for (final page in behind) tester.widget(page)];
-        for (var i = 0; i < 2; i++) {
-          if (!identical(pages[i], next[i])) remade[i]++;
-        }
-        pages = next;
       }
-      expect(remade, [0, 0]);
+      debugOnRebuildDirtyWidget = null;
+      expect(rebuilt, isEmpty);
 
       await tester.pumpWidget(_app(const SizedBox()));
       await tester.pump(const Duration(seconds: 10));
