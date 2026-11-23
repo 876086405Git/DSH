@@ -412,8 +412,8 @@ class _NotificationUi extends _RoomUi implements CompanionAgentNotificationUi {
   CompanionInitiativeView get initiativeView => CompanionInitiativeView(
     visible: false,
     resumed: false,
-    // Match the production notification port: only this resident's exact
-    // in-flight signal preparation may pass its own busy observation.
+    // Match the production notification port. Local task speech has no
+    // preparation, so ordinary Agent work still blocks this recipient.
     blocked: agent.running && resident?.preparingSignalId == null,
     enabled: available && enabled(),
     accessible: false,
@@ -1674,26 +1674,18 @@ void main() {
   test('resident lease preserves the original turn across window detach and reattachment', () async {
     final entered = Completer<void>();
     final release = Completer<void>();
-    final signalEntered = Completer<void>();
-    final signalRelease = Completer<void>();
     final signals = await _TerminalSignals.open();
     var wall = _now;
     var mono = 1000000;
     var physical = 0;
-    const eventLine = '那边暂时没跑完，方便时再看看吧。';
     final visit = await _Visit.open(
       [
         _message(words: '我还在这儿。'),
-        _message(words: jsonEncode({'action': 'silent'})),
-        _message(words: jsonEncode({'action': 'line', 'text': eventLine})),
       ],
       beforeReply: (_) async {
         if (++physical == 1) {
           if (!entered.isCompleted) entered.complete();
           await release.future;
-        } else if (physical == 3) {
-          signalEntered.complete();
-          await signalRelease.future;
         }
       },
       connection: signals.connection,
@@ -1802,88 +1794,63 @@ void main() {
       expect(visit.calls('clock'), 1);
 
       // The original lifecycle/source assertions above remain independent of
-      // optional event speech. Now enable the real public consent and ingress.
+      // optional local event speech. Enable the real consent and ingress.
       await visit.container.read(companionInitiativeEnabledProvider.notifier).set(true);
       visit.container.read(companionSignalConsentProvider);
       await _until(() => visit.container.read(companionSignalConsentProvider) != null);
       await visit.container
           .read(companionSignalConsentProvider.notifier)
-          .set(const CompanionSignalConsent(state: true, optionalSpeech: true));
+          .set(const CompanionSignalConsent(state: true, optionalSpeech: false));
       final turnsBeforeEvents = visit.database.select('SELECT * FROM memory_agent_turns');
       final callsBeforeEvents = visit.database.select('SELECT * FROM memory_agent_calls');
-      final firstReceiptId = visit.memory.store.requests().single['id'];
+      final receiptsBeforeEvents = [
+        for (final row in visit.memory.store.requests()) Map<String, Object?>.from(row),
+      ];
       reopened.observe(background.initiativeView);
       await signals.emit(visit.container);
       wall += 46000;
       mono += 46000;
       reopened.observe(background.initiativeView);
-      await _until(
-        () =>
-            visit.requests.length == 2 &&
-            !visit.agent.running &&
-            visit.memory.store.requests().every((row) => row['state'] == 'finished'),
-      );
       await Future<void>.delayed(Duration.zero);
-      final silent = visit.memory.store.requests().singleWhere((row) => row['id'] != firstReceiptId);
-      expect(silent['terminal'], 'complete');
-      expect(silent['sent_at_ms'], isNotNull);
-      expect(silent['input_uncached'], 12);
-      expect(silent['output_tokens'], 8);
-      expect(silent['raw_usage'], isNotNull);
+      expect(visit.requests, hasLength(1));
+      expect(visit.memory.store.requests(), receiptsBeforeEvents);
       expect(background.delivered, isEmpty);
       expect(visit.database.select('SELECT * FROM memory_initiative_spends'), isEmpty);
       expect(visit.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
       expect(resident.preparingSignalId, isNull);
 
+      await visit.container
+          .read(companionSignalConsentProvider.notifier)
+          .set(const CompanionSignalConsent(state: true, optionalSpeech: true));
       await signals.emit(visit.container, reason: 'error');
       wall += 46000;
       mono += 46000;
       reopened.observe(background.initiativeView);
-      await signalEntered.future.timeout(const Duration(seconds: 5));
-      final preparingId = resident.preparingSignalId;
-      expect(preparingId, isNotNull);
-      expect(visit.agent.running, isTrue);
-      expect(background.initiativeView.blocked, isFalse);
-      // The same public observation as the periodic resident check must not
-      // mistake its own model preparation for a different busy operation.
-      reopened.observe(background.initiativeView);
-      await Future<void>.delayed(Duration.zero);
-      expect(resident.preparingSignalId, preparingId);
-      expect(visit.agent.running, isTrue);
-      expect(background.delivered, isEmpty);
-      expect(visit.database.select('SELECT * FROM memory_initiative_spends'), isEmpty);
-      signalRelease.complete();
       await background.entered.future.timeout(const Duration(seconds: 5));
-      expect(background.delivered.single.text, eventLine);
+      expect(background.delivered.single.text, '这一轮未能完成。');
       expect(background.delivered.single.id, 'task:${signals.deliveries.last.signal.id}');
+      expect(background.delivered, hasLength(1));
       expect(visit.agent.running, isFalse);
       expect(resident.preparingSignalId, isNull);
-      final lineReceipt = visit.memory.store.requests().singleWhere(
-        (row) => row['id'] != firstReceiptId && row['id'] != silent['id'],
-      );
-      expect(lineReceipt['state'], 'finished');
-      expect(lineReceipt['terminal'], 'complete');
-      expect(lineReceipt['output_tokens'], 8);
+      expect(background.initiativeView.blocked, isFalse);
+      expect(visit.requests, hasLength(1));
+      expect(visit.memory.store.requests(), receiptsBeforeEvents);
+      expect(visit.database.select('SELECT state FROM memory_initiative_spends').single['state'], 'reserved');
+      // A same-view observation during the real native ACK cannot manufacture
+      // a second delivery or a model request. The reservation is still held.
+      reopened.observe(background.initiativeView);
+      await Future<void>.delayed(Duration.zero);
+      expect(background.delivered, hasLength(1));
+      expect(visit.agent.running, isFalse);
       expect(visit.database.select('SELECT state FROM memory_initiative_spends').single['state'], 'reserved');
       background.acknowledgement.complete(true);
       await _until(
         () => visit.database.select('SELECT state FROM memory_initiative_spends').single['state'] == 'shown',
       );
       expect(visit.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
-
-      expect(visit.requests, hasLength(3));
-      for (var index = 1; index < visit.requests.length; index++) {
-        final body = visit.requests[index];
-        expect(body.containsKey('tools'), isFalse);
-        expect(body['max_tokens'], 800);
-        expect(_context(body)['window'], 'notification');
-        expect(_context(body)['taskObservation'], {
-          'kind': 'task.terminal',
-          'phase': index == 1 ? 'completed' : 'failed',
-        });
-        expect(jsonEncode(body), isNot(contains('s-photos')));
-        expect(jsonEncode(body), isNot(contains('整理照片')));
-      }
+      expect(background.delivered, hasLength(1));
+      expect(visit.requests, hasLength(1));
+      expect(visit.memory.store.requests(), receiptsBeforeEvents);
       expect(visit.memory.store.messages(), history);
       expect(visit.database.select('SELECT * FROM memory_agent_turns'), turnsBeforeEvents);
       expect(visit.database.select('SELECT * FROM memory_agent_calls'), callsBeforeEvents);
@@ -1893,7 +1860,6 @@ void main() {
       expect(visit.calls('clock'), 1);
     } finally {
       if (!release.isCompleted) release.complete();
-      if (!signalRelease.isCompleted) signalRelease.complete();
       if (!background.acknowledgement.isCompleted) background.acknowledgement.complete(false);
       await work;
       reopened?.detach();
@@ -1906,8 +1872,6 @@ void main() {
   test('a newer resident input cancels a held request and a late reply cannot replace the new source', () async {
     final entered = Completer<void>();
     final release = Completer<void>();
-    final signalEntered = Completer<void>();
-    final signalRelease = Completer<void>();
     final signals = await _TerminalSignals.open();
     var wall = _now;
     var mono = 1000000;
@@ -1916,16 +1880,12 @@ void main() {
       [
         _message(words: '迟到的旧回答。'),
         _message(words: '我听见新的话了。'),
-        _message(words: jsonEncode({'action': 'line', 'text': '迟到的任务提示。'})),
         _message(words: '先听你这件事。'),
       ],
       beforeReply: (_) async {
         if (++physical == 1) {
           entered.complete();
           await release.future;
-        } else if (physical == 3) {
-          signalEntered.complete();
-          await signalRelease.future;
         }
       },
       connection: signals.connection,
@@ -1981,26 +1941,25 @@ void main() {
       await visit.container
           .read(companionSignalConsentProvider.notifier)
           .set(const CompanionSignalConsent(state: true, optionalSpeech: true));
-      final receiptIds = visit.memory.store.requests().map((row) => row['id']).toSet();
+      final receiptsBeforeEvent = [
+        for (final row in visit.memory.store.requests()) Map<String, Object?>.from(row),
+      ];
+      final receiptIds = receiptsBeforeEvent.map((row) => row['id']).toSet();
       final turnsBeforeEvent = visit.database.select('SELECT * FROM memory_agent_turns');
       visit.attachment.observe(background.initiativeView);
       await signals.emit(visit.container);
-      wall += 46000;
-      mono += 46000;
-      visit.attachment.observe(background.initiativeView);
-      await signalEntered.future.timeout(const Duration(seconds: 5));
-      final pendingReceipt = visit.memory.store.requests().singleWhere((row) => !receiptIds.contains(row['id']));
-      expect(pendingReceipt['sent_at_ms'], isNotNull);
-      expect(resident.preparingSignalId, isNotNull);
-      expect(visit.agent.running, isTrue);
+      // The live event is waiting for quiet, not a held model response.
+      expect(resident.preparingSignalId, isNull);
+      expect(visit.agent.running, isFalse);
+      expect(background.delivered, isEmpty);
+      expect(visit.requests, hasLength(2));
+      expect(visit.memory.store.requests(), receiptsBeforeEvent);
       expect(visit.memory.store.messages(), history);
       expect(visit.database.select('SELECT * FROM memory_agent_turns'), turnsBeforeEvent);
       expect(visit.database.select('SELECT * FROM memory_initiative_spends'), isEmpty);
-      expect(visit.requests[2].containsKey('tools'), isFalse);
-      expect(_context(visit.requests[2])['taskObservation'], {'kind': 'task.terminal', 'phase': 'completed'});
 
-      // A real later user submission, not a test-only cancel callback, retires
-      // the held event request and owns both the source and visible answer.
+      // The real user submission activates the original owner and cancels its
+      // pending local signal before quiet; only this chat sends a new request.
       visit.clockAt = wall;
       await resident.submit('先听我这件事。', fromFloat: true);
       final finalSourceId = visit.agent.sourceId;
@@ -2008,16 +1967,25 @@ void main() {
       expect(finalSourceId, isNot(newSourceId));
       expect(visit.agent.text, '先听你这件事。');
       expect(resident.preparingSignalId, isNull);
-      signalRelease.complete();
       await _until(() => !visit.agent.running && visit.memory.store.requests().every((row) => row['terminal'] != null));
+      wall += 46000;
+      mono += 46000;
+      visit.attachment.observe(background.initiativeView);
       await Future<void>.delayed(Duration.zero);
-      final cancelled = visit.memory.store.requests().singleWhere((row) => row['id'] == pendingReceipt['id']);
-      expect(cancelled['state'], 'finished');
-      expect(cancelled['terminal'], 'cancelled');
-      expect(cancelled['sent_at_ms'], isNotNull);
-      expect(visit.requests, hasLength(4));
-      expect(visit.memory.store.requests(), hasLength(4));
-      expect(_context(visit.requests[3])['window'], 'floating');
+      final newReceipt = visit.memory.store.requests().singleWhere((row) => !receiptIds.contains(row['id']));
+      expect(newReceipt['state'], 'finished');
+      expect(newReceipt['terminal'], 'complete');
+      expect(newReceipt['sent_at_ms'], isNotNull);
+      expect(newReceipt['input_uncached'], 12);
+      expect(newReceipt['output_tokens'], 8);
+      expect(newReceipt['raw_usage'], isNotNull);
+      expect(
+        {for (final row in visit.memory.store.requests()) if (receiptIds.contains(row['id'])) row['id']: row},
+        {for (final row in receiptsBeforeEvent) row['id']: row},
+      );
+      expect(visit.requests, hasLength(3));
+      expect(visit.memory.store.requests(), hasLength(3));
+      expect(_context(visit.requests[2])['window'], 'floating');
       expect(visit.agent.sourceId, finalSourceId);
       expect(visit.agent.replyId, finalReplyId);
       expect(visit.agent.text, '先听你这件事。');
@@ -2032,7 +2000,6 @@ void main() {
       expect(visit.calls('clock'), 3);
     } finally {
       if (!release.isCompleted) release.complete();
-      if (!signalRelease.isCompleted) signalRelease.complete();
       if (!background.acknowledgement.isCompleted) background.acknowledgement.complete(false);
       await old;
       resident.close();

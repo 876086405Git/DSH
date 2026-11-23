@@ -1061,8 +1061,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     );
   }
 
-  /// Night care keeps its local line. Task phases supply the original visual
-  /// style only; their words above come from the Agent, with no template fallback.
+  /// Task and night-care words stay local. Task phases supply the original
+  /// visual style; the admitted signal supplies its local speech text.
   ({String line, String emotion, String action})? _signalLine(CompanionSignalV1 signal) {
     final l10n = context.l10n;
     return switch (signal.kind) {
