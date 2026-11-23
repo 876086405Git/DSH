@@ -184,9 +184,10 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
               ..addAll(candidate);
           }
         }
-        // No source of yesterday, every card checked, and no parent left a
-        // private role unserved: no scope can have work. Skip the whole
-        // history and domain read that an idle tick would otherwise repeat.
+        // No source of yesterday, every card checked, and no private role a
+        // parent left unserved still has a current captured source that no
+        // parent serving that role examined: no scope can have work. Skip the
+        // whole history and domain read that an idle tick would repeat.
         if (sources.isEmpty &&
             _db
                 .select("SELECT 1 FROM memory_cards WHERE status!='withdrawn' AND maintenance_row_rev!=row_rev LIMIT 1")
@@ -194,13 +195,22 @@ extension CompanionMemoryMaintenanceStore on CompanionMemoryStore {
             _db
                 .select(
                   '''
-              SELECT 1 FROM memory_agent_maintenance_claims p
-              WHERE p.kind='organize' AND p.archive_id=? AND p.state!='not_sent' AND EXISTS(
-                SELECT value FROM json_each(p.scope_characters) WHERE type='text'
-                EXCEPT SELECT value FROM json_each(p.completed_scopes)
-              ) LIMIT 1
+              SELECT 1 FROM memory_agent_maintenance_claims p, json_each(p.scope_characters) r,
+                json_each(p.source_revisions) s JOIN memory_messages m ON m.id=s.key AND m.source_rev=s.value
+              WHERE p.kind='organize' AND p.archive_id=?1 AND p.state!='not_sent' AND EXISTS(
+                  SELECT value FROM json_each(p.scope_characters) WHERE type='text'
+                  EXCEPT SELECT value FROM json_each(p.completed_scopes)
+                )
+                AND r.type='text' AND NOT EXISTS(SELECT 1 FROM json_each(p.completed_scopes) c WHERE c.value=r.value)
+                AND m.scope='real' AND m.first_seq>?2 AND m.character_id=r.value AND NOT EXISTS(
+                  SELECT 1 FROM memory_agent_maintenance_claims q, json_each(q.completed_scopes) c,
+                    json_each(q.source_revisions) qs
+                  WHERE q.kind='organize' AND q.archive_id=?1 AND q.state!='not_sent' AND c.value=r.value
+                    AND qs.key=s.key AND qs.value=s.value
+                )
+              LIMIT 1
             ''',
-                  [meta['id']],
+                  [meta['id'], meta['history_after_seq']],
                 )
                 .isEmpty) {
           return null;
