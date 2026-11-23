@@ -2452,6 +2452,8 @@ void main() {
     );
     final validationTerminals = <Object?>[];
     Future<bool>? pending;
+    final validationEntered = Completer<void>();
+    final validationRelease = Completer<bool>();
     final context = <String, Object?>{
       'type': 'screen_observation',
       'observed_at_ms': _now,
@@ -2467,7 +2469,9 @@ void main() {
       final rejected = await visit.agent.observeScreen(
         context: context,
         isCurrentObservation: () async {
-          validationTerminals.add(visit.memory.store.requests().single['terminal']);
+          final receipt = visit.memory.store.requests().single;
+          if (receipt['state'] == 'reserved' && receipt['terminal'] == null) return true;
+          if (receipt['terminal'] == 'complete') validationTerminals.add(receipt['terminal']);
           return false;
         },
       );
@@ -2487,7 +2491,9 @@ void main() {
         context: context,
         isCurrentObservation: () async {
           final receipts = visit.memory.store.requests();
-          validationTerminals.add(receipts.singleWhere((row) => row['id'] != rejectedReceipt['id'])['terminal']);
+          final receipt = receipts.singleWhere((row) => row['id'] != rejectedReceipt['id']);
+          if (receipt['state'] == 'reserved' && receipt['terminal'] == null) return true;
+          if (receipt['terminal'] == 'complete') validationTerminals.add(receipt['terminal']);
           return true;
         },
       );
@@ -2680,7 +2686,90 @@ void main() {
       expect(store.modelMessages(
         sessionId: store.lightSessionId, characterId: resident.characterId, limit: 6,
       ), history);
+
+      // These checks follow the original chat/image/text phases. The actual
+      // observation route is Phone; the existing image request is separate.
+      final beforePresend = {for (final row in store.requests()) row['id']! as String: row};
+      final presendMessages = store.messages();
+      final presendCards = store.cards();
+      final presendTasks = store.tasks();
+      final presendControls = store.topicControls();
+      final presendPresentations = [...ambient.presented];
+      final knownRequests = beforePresend.keys.toSet();
+      final presendReceipts = <MemoryRow>[];
+      expect(await visit.agent.observeScreen(
+        context: context,
+        isCurrentObservation: () async {
+          final receipt = store.requests().singleWhere((row) => !knownRequests.contains(row['id']));
+          presendReceipts.add(receipt);
+          knownRequests.add(receipt['id']! as String);
+          return false;
+        },
+      ), isFalse);
+      expect(presendReceipts, hasLength(1));
+      expect([visit.requests.length, visionRequests.length], [5, 1]);
+      expect(visit.agent.running, isFalse);
+
+      expect(await visit.agent.observeScreen(
+        context: context,
+        isCurrentObservation: () async {
+          final receipt = store.requests().singleWhere((row) => !knownRequests.contains(row['id']));
+          presendReceipts.add(receipt);
+          knownRequests.add(receipt['id']! as String);
+          throw StateError('The current screen observation could not be validated');
+        },
+      ), isFalse);
+      expect(presendReceipts, hasLength(2));
+      expect([visit.requests.length, visionRequests.length], [5, 1]);
+      expect(visit.agent.running, isFalse);
+
+      pending = visit.agent.observeScreen(
+        context: context,
+        isCurrentObservation: () async {
+          final receipt = store.requests().singleWhere((row) => !knownRequests.contains(row['id']));
+          presendReceipts.add(receipt);
+          knownRequests.add(receipt['id']! as String);
+          if (!validationEntered.isCompleted) validationEntered.complete();
+          return validationRelease.future;
+        },
+      );
+      // Missing pre-send validation may finish without entering this gate;
+      // keep that regression observable without stranding test cleanup.
+      await Future.any<void>([validationEntered.future, pending.then((_) {})]);
+      expect(validationEntered.isCompleted, isTrue);
+      expect(presendReceipts, hasLength(3));
+      expect([visit.requests.length, visionRequests.length], [5, 1]);
+      expect(visit.agent.running, isTrue);
+      ambient.mounted = false;
+      validationRelease.complete(true);
+      expect(await pending, isFalse);
+      expect(visit.agent.running, isFalse);
+      expect([visit.requests.length, visionRequests.length], [5, 1]);
+      expect(ambient.presented, presendPresentations);
+
+      final afterPresend = {for (final row in store.requests()) row['id']! as String: row};
+      expect([beforePresend.length, afterPresend.length], [6, 9]);
+      expect(afterPresend.keys.toSet(), knownRequests);
+      for (final entry in beforePresend.entries) {
+        expect(afterPresend[entry.key], entry.value);
+      }
+      for (final receipt in presendReceipts) {
+        expect(receipt['state'], 'reserved');
+        expect(receipt['terminal'], isNull);
+        final settled = afterPresend[receipt['id']]!;
+        expect(settled['state'], 'released');
+        expect(settled['terminal'], 'not_sent');
+        expect(settled['sent_at_ms'], isNull);
+        expect(settled['uncertain_at_ms'], isNull);
+        expect(settled['raw_usage'], isNull);
+        expect(settled['estimated_cny'], isNull);
+      }
+      expect(store.messages(), presendMessages);
+      expect(store.cards(), presendCards);
+      expect(store.tasks(), presendTasks);
+      expect(store.topicControls(), presendControls);
     } finally {
+      if (!validationRelease.isCompleted) validationRelease.complete(false);
       final acknowledgement = ambient.acknowledgement;
       if (acknowledgement != null && !acknowledgement.isCompleted) acknowledgement.complete(true);
       await pending;
