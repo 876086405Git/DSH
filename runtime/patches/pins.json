@@ -464,6 +464,18 @@
         }
       }
     },
+    "mime-database-first-use.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
+          "after": "ae5a3643aadc304bdbe641c6ea3600724f5a415f497488c117baaa2098d0c04f",
+          "before": "5e14c333b6e401448f17205b5afc4abfcd52b8ed706ff9253a43215a061c73cd"
+        },
+        "node_modules/compressible/index.js": {
+          "after": "cbdedb6272d4c71e657f393e494039c6b890900e4e103ad7014ad4ae59de3160",
+          "before": "95c3bfff3e8e1719d93c7784adb4f24dc1ed3371ac2446067a58717bd9ad8bcd"
+        }
+      }
+    },
     "office-converter-lazy.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js": {
@@ -773,6 +785,30 @@
         "node_modules/@deepseek-ai/dsh-otel/lib/index.js": {
           "after": "a0fc967c148bfa896a0252f19078a7c8f75731cc770afa8928028149e2f10e01",
           "before": "0728ddddf76c16193fc92a76d67863d4c0879e1d369e4b6ec4ded78efde53c70"
+        }
+      }
+    },
+    "otel-stable-attributes-imports.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@opentelemetry/core/build/src/platform/node/sdk-info.js": {
+          "after": "6d72b14827a35ea64d7a712dc4b0abeab379079ec105f996cae9bac153ffb79f",
+          "before": "653cee1e33ac6198c8dc794000224a7328288e9445abd82f915fecff39a32cd9"
+        },
+        "node_modules/@opentelemetry/resources/build/src/ResourceImpl.js": {
+          "after": "e05a077f05aa48d05362bc9c3bb9609baf7c9d71fa058d0693b51226caa912e6",
+          "before": "f6ce6fd1d68d8aac655dbfc26449fffa8f1c5351731eb5d136eae3381322d31f"
+        },
+        "node_modules/@opentelemetry/resources/build/src/detectors/EnvDetector.js": {
+          "after": "f4639c3781604ecf64771dd0197ce6cb1e786b70ccbfb99616287421562795cc",
+          "before": "069615dda8ece45208708cb49a5f682c81db77893b09e6e1b40763c6141761d3"
+        },
+        "node_modules/@opentelemetry/sdk-logs/build/src/LogRecordImpl.js": {
+          "after": "4ae740e0752a817cfe801e395a558ba4e417813ec4c3ab58da8218ba45d0e010",
+          "before": "525183b7b85f5b3e35f00248a76bb792272f24b59e70ac52935b18db8fe45d9d"
+        },
+        "node_modules/@opentelemetry/semantic-conventions/package.json": {
+          "after": "40463f0821a8b1900cce89a7c51cfa3cf2fe07e426ca5bd5add51b27776c5205",
+          "before": "c79fb41efe3195b401b2757c2907c54b0f05231dc78e3db53e9a778b66550844"
         }
       }
     },
@@ -1187,6 +1223,14 @@
         "node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js": {
           "after": "74d06fece2b46e0b9637a90f1c5682270a22ea743a37b753f5e869140ef83a71",
           "before": "d02f0d8f36878313b0dae3a1bba5b77f7db4cffc77a0b72772048a36bacf2cf0"
+        }
+      }
+    },
+    "tool-schema-local-intrinsic-identity.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js": {
+          "after": "43d3e2794284f4506480172d44cf07daa3df44acae68e873ec22a0bb7698ae8f",
+          "before": "c5fcbb4478265adde30a0fd898c7c934cff8ee5886a7a8a14ea1352c2c352dee"
         }
       }
     },
@@ -2923,6 +2967,7 @@
       "zzzzzzz-reference-encoding.diff",
       "otel-product-transport-lazy.diff",
       "otel-log-transformer-imports.diff",
+      "otel-stable-attributes-imports.diff",
       "zzzzzzz-retainer-decode-copy.diff",
       "zzzzzzz-settings-local-redaction.diff",
       "zzzzzzz-skill-watcher-recheck.diff",
@@ -3022,6 +3067,7 @@
       "tool-schema-keyword-types.diff",
       "tool-schema-intrinsic-source.diff",
       "tool-schema-rule-pair-fields.diff",
+      "tool-schema-local-intrinsic-identity.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-schema.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-retry.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-live-retry.diff",
@@ -3040,6 +3086,7 @@
       "web-search-key-write-result.diff",
       "deepseek-attachment-error.diff",
       "fork-default-effort.diff",
+      "mime-database-first-use.diff",
       "config-editor-lock-order.diff",
       "config-editor-empty-layer-copy.diff",
       "piai-overflow-output-limit.diff",
@@ -3140,6 +3187,7 @@
       "zzzzzzz-reference-encoding.diff",
       "otel-product-transport-lazy.diff",
       "otel-log-transformer-imports.diff",
+      "otel-stable-attributes-imports.diff",
       "zzzzzzz-retainer-decode-copy.diff",
       "zzzzzzz-settings-local-redaction.diff",
       "zzzzzzz-skill-watcher-recheck.diff",
@@ -3239,6 +3287,7 @@
       "tool-schema-keyword-types.diff",
       "tool-schema-intrinsic-source.diff",
       "tool-schema-rule-pair-fields.diff",
+      "tool-schema-local-intrinsic-identity.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-schema.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-retry.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-live-retry.diff",
@@ -3257,6 +3306,7 @@
       "web-search-key-write-result.diff",
       "deepseek-attachment-error.diff",
       "fork-default-effort.diff",
+      "mime-database-first-use.diff",
       "config-editor-lock-order.diff",
       "config-editor-empty-layer-copy.diff",
       "piai-overflow-output-limit.diff",

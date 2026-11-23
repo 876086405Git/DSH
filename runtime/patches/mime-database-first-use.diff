@@ -1,0 +1,19 @@
+--- a/node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js
+@@ -27 +26,0 @@
+-import mime from "mime-types";
+@@ -3254,2 +3253,3 @@
+-		const headers = {
+-			...VERSIONED,
++		const { default: mime } = await import("mime-types");
++		const headers = {
++			...VERSIONED,
+--- a/node_modules/compressible/index.js
++++ b/node_modules/compressible/index.js
+@@ -16 +16 @@
+-var db = require('mime-db')
++var db
+@@ -49 +49,2 @@
+-  var data = db[mime]
++  db = db || require('mime-db')
++  var data = db[mime]

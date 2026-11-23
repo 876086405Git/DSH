@@ -1,0 +1,26 @@
+--- a/node_modules/@opentelemetry/semantic-conventions/package.json
++++ b/node_modules/@opentelemetry/semantic-conventions/package.json
+@@ -7 +7,2 @@
+-  "exports": {
++  "exports": {
++    "./stable-attributes": "./dist/stable_attributes.cjs",
+--- a/node_modules/@opentelemetry/core/build/src/platform/node/sdk-info.js
++++ b/node_modules/@opentelemetry/core/build/src/platform/node/sdk-info.js
+@@ -9 +9 @@
+-const semantic_conventions_1 = require("@opentelemetry/semantic-conventions");
++const semantic_conventions_1 = require("@opentelemetry/semantic-conventions/stable-attributes");
+--- a/node_modules/@opentelemetry/resources/build/src/ResourceImpl.js
++++ b/node_modules/@opentelemetry/resources/build/src/ResourceImpl.js
+@@ -10 +10 @@
+-const semantic_conventions_1 = require("@opentelemetry/semantic-conventions");
++const semantic_conventions_1 = require("@opentelemetry/semantic-conventions/stable-attributes");
+--- a/node_modules/@opentelemetry/resources/build/src/detectors/EnvDetector.js
++++ b/node_modules/@opentelemetry/resources/build/src/detectors/EnvDetector.js
+@@ -9 +9 @@
+-const semantic_conventions_1 = require("@opentelemetry/semantic-conventions");
++const semantic_conventions_1 = require("@opentelemetry/semantic-conventions/stable-attributes");
+--- a/node_modules/@opentelemetry/sdk-logs/build/src/LogRecordImpl.js
++++ b/node_modules/@opentelemetry/sdk-logs/build/src/LogRecordImpl.js
+@@ -10 +10 @@
+-const semantic_conventions_1 = require("@opentelemetry/semantic-conventions");
++const semantic_conventions_1 = require("@opentelemetry/semantic-conventions/stable-attributes");
