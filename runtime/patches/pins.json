@@ -24,6 +24,14 @@
         }
       }
     },
+    "client-modules-combo-rebuild.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-client-modules/lib/index.js": {
+          "after": "696b0ae85af12fef557031a427d42ae4d100070644158bf78662673038ab54f3",
+          "before": "255da235e1bf5783d8e7addc74b04370e75c472e7045039914ad3e289dc0e116"
+        }
+      }
+    },
     "companion-auxiliary-single-request.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
@@ -169,6 +177,14 @@
         "node_modules/@deepseek-ai/cordis/lib/index.js": {
           "after": "b8b87360ebc67df2d0aabea214b8ed30d4bde3767e354ebb1b85fc6c15b45a05",
           "before": "627409afa06a265f7253200d3bc4648e88805c39fd3768568eb9b9518a31fe8f"
+        }
+      }
+    },
+    "cordis-inspect-catalog-on-query.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-cordis/lib/types/providers.js": {
+          "after": "d03cb1f3c28eca98d500d51467ed2491510a0d18cf5c0caf8fe576a8ecb7a428",
+          "before": "24269ddf75dbf6fdbbe2fb4b4a8ee6bf27af649be6ad0a1399a420aa383cbdb8"
         }
       }
     },
@@ -368,6 +384,14 @@
         }
       }
     },
+    "office-converter-lazy.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js": {
+          "after": "8e31e10148751a10fd0d750793f01d1514e4cfc0aca901ff5710dc9a0eab27dc",
+          "before": "74cf9df9ab605a7675797ee1304d7af7059e97e90c3728ce4e40fbd2333fd7b8"
+        }
+      }
+    },
     "ohos-api-gateway-idle.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js": {
@@ -397,14 +421,6 @@
         "node_modules/@deepseek-ai/dsh-client-hmr/lib/index.js": {
           "after": "93a6da0f44cbd32926f3cdf8cbcd99bbafdf8e4f70e80bb8ed8da80800ccea18",
           "before": "b5abcec230011f25b6ab8eab9c1da41eddc9e050ce4ca57d8bda5715982edd30"
-        }
-      }
-    },
-    "ohos-cordis-catalog-lazy.diff": {
-      "0.2.2-rc.1": {
-        "node_modules/@deepseek-ai/dsh-tool-cordis/lib/types/providers.js": {
-          "after": "d03cb1f3c28eca98d500d51467ed2491510a0d18cf5c0caf8fe576a8ecb7a428",
-          "before": "24269ddf75dbf6fdbbe2fb4b4a8ee6bf27af649be6ad0a1399a420aa383cbdb8"
         }
       }
     },
@@ -539,8 +555,8 @@
           "before": "dd947bf10aa09247f469cfa8f8332a705040a852eecd243411057ff318844ae1"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
-          "after": "7caff988b77c08a3da2b31f1d0c05dd2ad372af58c0bdd1a8d5a43a461da1c10",
-          "before": "373ed95b0a5ee0aabdd5a0fb5c15c2b4163bbee41edf67c436dafaa8fb7e79e0"
+          "after": "3ee700fc06ab7f0a357231337f7f33bed885290f26fe7226945a42d189680020",
+          "before": "b3de75959b7c463dc952f00c02a9a08a42ff9417a3439cb99767cb6af653756a"
         }
       }
     },
@@ -575,8 +591,8 @@
     "ohos-plugin-remove-rollback.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
-          "after": "c48a0946ae9639be69b66fa079393def779e78cd6b4299b6c53fb5bf53a43164",
-          "before": "7caff988b77c08a3da2b31f1d0c05dd2ad372af58c0bdd1a8d5a43a461da1c10"
+          "after": "23ee2e3cd534ef2ed45972cf11d1618874be8b23d4959f0bdc1b4bc41159d4d3",
+          "before": "3ee700fc06ab7f0a357231337f7f33bed885290f26fe7226945a42d189680020"
         }
       }
     },
@@ -661,6 +677,22 @@
         "node_modules/@deepseek-ai/dsh-workspace/lib/index.js": {
           "after": "6413e6c3a6d14a5518e3121ab936b599a2a46f40ab603eab39fd383c4067b72a",
           "before": "97d891ee0bc2ee8a1867a3c2420cf3ea8787b8000293771244f923de3b362658"
+        }
+      }
+    },
+    "otel-log-transformer-imports.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-otel/lib/index.js": {
+          "after": "cdd9ca183f7b93009d34bbfe58731b41c846ad86edafea14e3dd7a84f9699264",
+          "before": "a0fc967c148bfa896a0252f19078a7c8f75731cc770afa8928028149e2f10e01"
+        }
+      }
+    },
+    "otel-product-transport-lazy.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-otel/lib/index.js": {
+          "after": "a0fc967c148bfa896a0252f19078a7c8f75731cc770afa8928028149e2f10e01",
+          "before": "0728ddddf76c16193fc92a76d67863d4c0879e1d369e4b6ec4ded78efde53c70"
         }
       }
     },
@@ -764,6 +796,14 @@
         }
       }
     },
+    "plugin-manager-execa-lazy.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
+          "after": "21443937d2e1116b58ba142dfc27fbad526e3b2006940817d64536b4fec955cf",
+          "before": "b3aae8aed987887d9c43c1f9c0ddd0c70e69d084fc35780589dd2d59fdfafe76"
+        }
+      }
+    },
     "preset-legacy-delegation.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-agent-preset/lib/index.js": {
@@ -817,6 +857,14 @@
         "node_modules/@deepseek-ai/dsh-llm/lib/types/types.d.ts": {
           "after": "29ea5d2268eee5da763bd324be45b661bd5bb0b41b78d76a44b902a231ce9510",
           "before": "456d2f417065b73ea3308437c0c23cb12c895d371a6e669ec8610d032a5ff6e3"
+        }
+      }
+    },
+    "read-window-source-retention.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-fs/lib/index.js": {
+          "after": "5539df22bdb630266f9c673351d26ac4c62b2af1cd9cedda87f565e9491711bd",
+          "before": "7272a6bfd420207046882ad93de64fd70146965e39b7f9c6ceefc6d1f64cc70e"
         }
       }
     },
@@ -2078,7 +2126,7 @@
         },
         "node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js": {
           "after": "3cc19074929316c8d511ab757fbfd76eb6019de7e13de8dea0999b371c593f0e",
-          "before": "74cf9df9ab605a7675797ee1304d7af7059e97e90c3728ce4e40fbd2333fd7b8"
+          "before": "8e31e10148751a10fd0d750793f01d1514e4cfc0aca901ff5710dc9a0eab27dc"
         },
         "node_modules/@deepseek-ai/dsh-skill-office/lib/index.js": {
           "after": "906e88075e67bdda47d9d5e13686d44dc3a1d332eef2c3df4af1d1be5f15df42",
@@ -2141,8 +2189,8 @@
     "zzzzzzzzzzzzz-ohos-plugin-install-refusal.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
-          "after": "05d053691fec7658d22e2f59a1cc6ccc0cb71b9c4803e48f523e10cd119a5fcb",
-          "before": "b3aae8aed987887d9c43c1f9c0ddd0c70e69d084fc35780589dd2d59fdfafe76"
+          "after": "804c987ee8dda20a8d3fe86525bb88429be69fa6c3034400669c3a9fbca23ae6",
+          "before": "21443937d2e1116b58ba142dfc27fbad526e3b2006940817d64536b4fec955cf"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/types/operations.js": {
           "after": "7cad04583f2f3b68375acf06b6e9cfb5ff746fb5177a4f69c4e5269fdd355650",
@@ -2189,8 +2237,8 @@
           "before": "94cfe0db086613da4c84cd321b98c19ca2d8c95e654300d02c3dd5ea1025193d"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
-          "after": "373ed95b0a5ee0aabdd5a0fb5c15c2b4163bbee41edf67c436dafaa8fb7e79e0",
-          "before": "05d053691fec7658d22e2f59a1cc6ccc0cb71b9c4803e48f523e10cd119a5fcb"
+          "after": "b3de75959b7c463dc952f00c02a9a08a42ff9417a3439cb99767cb6af653756a",
+          "before": "804c987ee8dda20a8d3fe86525bb88429be69fa6c3034400669c3a9fbca23ae6"
         },
         "node_modules/@deepseek-ai/dsh/lib/profile-boot-e2mS45fC.js": {
           "after": "5554f9d72f9095c627980344cdaddd064a0db9a429483110b1985043bffdf3f3",
@@ -2635,6 +2683,7 @@
   "targetSets": {
     "android": [
       "cordis-effect-dispose-completion.diff",
+      "cordis-inspect-catalog-on-query.diff",
       "credentials-decimal-refs.diff",
       "fs-create-exclusive.diff",
       "install-log-redaction.diff",
@@ -2646,6 +2695,7 @@
       "preset-legacy-delegation.diff",
       "route-guard.diff",
       "client-hmr-closed-response.diff",
+      "client-modules-combo-rebuild.diff",
       "schemastery-json-context.diff",
       "session-title-word-prefix.diff",
       "str-editor-view-prefix.diff",
@@ -2680,6 +2730,8 @@
       "zzzzzzz-query-open-retry.diff",
       "zzzzzzz-reference-drop-size.diff",
       "zzzzzzz-reference-encoding.diff",
+      "otel-product-transport-lazy.diff",
+      "otel-log-transformer-imports.diff",
       "zzzzzzz-retainer-decode-copy.diff",
       "zzzzzzz-settings-local-redaction.diff",
       "zzzzzzz-skill-watcher-recheck.diff",
@@ -2724,9 +2776,11 @@
       "zzzzzzzzzzzzz-plan-failed-command-pending.diff",
       "zzzzzzzzzzzzz-plugin-update-hmr-precondition.diff",
       "zzzzzzzzzzzzzz-plugin-manager-lock-lifetime.diff",
+      "plugin-manager-execa-lazy.diff",
       "zzzzzzzzzzzzzzz-read-line-surrogate.diff",
       "zzzzzzzzzzzzzzz-workflow-result-unicode.diff",
       "zzzzzzzzzzzzzzzz-read-line-cr-truncation.diff",
+      "read-window-source-retention.diff",
       "zzzzzzzzzzzzzzzzz-web-fetch-unicode.diff",
       "zzzzzzzzzzzzzzzzzz-skill-catalog-unicode.diff",
       "zzzzzzzzzzzzzzzzzzz-fs-text-bom.diff",
@@ -2819,10 +2873,12 @@
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
       "ohos-web-converter-lazy.diff",
+      "office-converter-lazy.diff",
       "input-recovery.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
+      "cordis-inspect-catalog-on-query.diff",
       "credentials-decimal-refs.diff",
       "fs-create-exclusive.diff",
       "install-log-redaction.diff",
@@ -2834,6 +2890,7 @@
       "preset-legacy-delegation.diff",
       "route-guard.diff",
       "client-hmr-closed-response.diff",
+      "client-modules-combo-rebuild.diff",
       "schemastery-json-context.diff",
       "session-title-word-prefix.diff",
       "str-editor-view-prefix.diff",
@@ -2868,6 +2925,8 @@
       "zzzzzzz-query-open-retry.diff",
       "zzzzzzz-reference-drop-size.diff",
       "zzzzzzz-reference-encoding.diff",
+      "otel-product-transport-lazy.diff",
+      "otel-log-transformer-imports.diff",
       "zzzzzzz-retainer-decode-copy.diff",
       "zzzzzzz-settings-local-redaction.diff",
       "zzzzzzz-skill-watcher-recheck.diff",
@@ -2912,9 +2971,11 @@
       "zzzzzzzzzzzzz-plan-failed-command-pending.diff",
       "zzzzzzzzzzzzz-plugin-update-hmr-precondition.diff",
       "zzzzzzzzzzzzzz-plugin-manager-lock-lifetime.diff",
+      "plugin-manager-execa-lazy.diff",
       "zzzzzzzzzzzzzzz-read-line-surrogate.diff",
       "zzzzzzzzzzzzzzz-workflow-result-unicode.diff",
       "zzzzzzzzzzzzzzzz-read-line-cr-truncation.diff",
+      "read-window-source-retention.diff",
       "zzzzzzzzzzzzzzzzz-web-fetch-unicode.diff",
       "zzzzzzzzzzzzzzzzzz-skill-catalog-unicode.diff",
       "zzzzzzzzzzzzzzzzzzz-fs-text-bom.diff",
@@ -3007,6 +3068,7 @@
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
       "ohos-web-converter-lazy.diff",
+      "office-converter-lazy.diff",
       "input-recovery.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
@@ -3042,7 +3104,6 @@
       "ohos-workspace-edit.diff",
       "ohos-client-hmr-idle.diff",
       "ohos-image-codec.diff",
-      "ohos-cordis-catalog-lazy.diff",
       "ohos-skill-root-events.diff",
       "ohos-piai-empty-models.diff",
       "ohos-mcp-start-close.diff",

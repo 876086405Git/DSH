@@ -1,5 +1,6 @@
 # One patch per line, in application order. Keep every .diff exactly once.
 cordis-effect-dispose-completion.diff
+cordis-inspect-catalog-on-query.diff
 credentials-decimal-refs.diff
 fs-create-exclusive.diff
 install-log-redaction.diff
@@ -11,6 +12,7 @@ plugin-manager-cancel-tree-confirmation.diff
 preset-legacy-delegation.diff
 route-guard.diff
 client-hmr-closed-response.diff
+client-modules-combo-rebuild.diff
 schemastery-json-context.diff
 session-title-word-prefix.diff
 str-editor-view-prefix.diff
@@ -45,6 +47,8 @@ zzzzzzz-prompt-tool-order.diff
 zzzzzzz-query-open-retry.diff
 zzzzzzz-reference-drop-size.diff
 zzzzzzz-reference-encoding.diff
+otel-product-transport-lazy.diff
+otel-log-transformer-imports.diff
 zzzzzzz-retainer-decode-copy.diff
 zzzzzzz-settings-local-redaction.diff
 zzzzzzz-skill-watcher-recheck.diff
@@ -89,9 +93,11 @@ zzzzzzzzzzzz-plugin-update-hmr-selection.diff
 zzzzzzzzzzzzz-plan-failed-command-pending.diff
 zzzzzzzzzzzzz-plugin-update-hmr-precondition.diff
 zzzzzzzzzzzzzz-plugin-manager-lock-lifetime.diff
+plugin-manager-execa-lazy.diff
 zzzzzzzzzzzzzzz-read-line-surrogate.diff
 zzzzzzzzzzzzzzz-workflow-result-unicode.diff
 zzzzzzzzzzzzzzzz-read-line-cr-truncation.diff
+read-window-source-retention.diff
 zzzzzzzzzzzzzzzzz-web-fetch-unicode.diff
 zzzzzzzzzzzzzzzzzz-skill-catalog-unicode.diff
 zzzzzzzzzzzzzzzzzzz-fs-text-bom.diff
@@ -186,6 +192,7 @@ companion-compare-output-window.diff
 companion-receipt-file-bytes.diff
 web-table-pipes.diff
 ohos-web-converter-lazy.diff
+office-converter-lazy.diff
 input-recovery.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
@@ -222,7 +229,6 @@ ohos-workspace-grant-paths.diff
 ohos-workspace-edit.diff
 ohos-client-hmr-idle.diff
 ohos-image-codec.diff
-ohos-cordis-catalog-lazy.diff
 ohos-skill-root-events.diff
 ohos-piai-empty-models.diff
 ohos-mcp-start-close.diff

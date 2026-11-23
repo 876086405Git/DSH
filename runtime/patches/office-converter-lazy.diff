@@ -1,0 +1,8 @@
+--- a/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js
+@@ -5 +4,0 @@
+-import { createConverter } from "@deepseek-ai/libreoffice-kit";
+@@ -9 +8,2 @@
+-import { constants } from "node:fs";
++import { constants } from "node:fs";
++const createConverter = async (options) => (await import("@deepseek-ai/libreoffice-kit")).createConverter(options);
