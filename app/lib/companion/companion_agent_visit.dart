@@ -409,7 +409,9 @@ class _CompanionAgentVisit {
     captured.mapHandoff.close();
     captured.ui.detached();
     if (!identical(window, captured)) return;
-    if (!replacing) memory?.invalidateRawErase(this);
+    // This runs inside the Page's dispose: revoke without notifying. The
+    // Visit's own close, or its changed() below, follows right after.
+    if (!replacing) memory?.invalidateRawErase(this, notify: false);
     unawaited(companionMarkSeen(DateTime.now()));
     finishPresence();
     if (identical(enteredRoom, captured.ui.initiativeRoom)) {
