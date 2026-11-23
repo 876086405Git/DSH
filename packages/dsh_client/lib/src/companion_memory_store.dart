@@ -1938,11 +1938,15 @@ class CompanionMemoryStore {
   }
 
   /// Only cards that share all five exact-merge fields with another card can
-  /// pair, so evidence is loaded once, for those alone.
+  /// pair, so evidence is loaded once, for those alone. Notice summaries
+  /// (`recent`) never merge, so they are not materialized at all.
   List<MemoryRow> _exactMergeCards() {
     Record key(MemoryRow card) =>
         (card['collection'], card['character_id'], card['local_day'], card['day_zone_id'], card['text']);
-    final cards = [for (final row in _cardRows(false)) _card(row, includeEvidence: false)];
+    final cards = [
+      for (final row in _cardRows(false))
+        if (row['collection'] != 'recent') _card(row, includeEvidence: false),
+    ];
     final counts = <Record, int>{};
     for (final card in cards) {
       counts.update(key(card), (n) => n + 1, ifAbsent: () => 1);
