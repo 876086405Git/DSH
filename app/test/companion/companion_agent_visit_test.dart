@@ -1322,6 +1322,9 @@ void main() {
           opportunities.add(opportunity);
           store.closeAgentTurn(turn);
           visit.memory.changed();
+          // The worker claims its run before it asks for the (async) route;
+          // with no key configured that run ends without a request.
+          await pumpEventQueue();
           expect(visit.memory.working, isFalse);
 
           configured = true;
