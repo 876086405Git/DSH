@@ -305,7 +305,9 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     final owner = _db.select('SELECT * FROM memory_messages WHERE id=?', [pending.messageId]);
     if (owner.isEmpty || owner.single['source_rev'] != pending.sourceRev ||
         owner.single['character_id'] != pending.characterId || owner.single['role'] != 'user' ||
-        owner.single['scope'] != 'real') return 'invalidated';
+        owner.single['scope'] != 'real') {
+      return 'invalidated';
+    }
     return _rawEraseFingerprint(pending.plan!, characterId, pending.messageId) == pending.fingerprint
         ? pending.state : 'invalidated';
   }
