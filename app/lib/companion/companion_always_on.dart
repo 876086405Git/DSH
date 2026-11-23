@@ -237,10 +237,36 @@ class CompanionAlwaysOnOwner {
       _spokenReplies.remove(_spokenReplies.first);
     }
     unawaited(_presentLine(id: reply, text: visible, emotion: 'neutral', speak: speak));
-    _post(id: reply, text: visible);
+    _postReply(reply, visible);
+  }
+
+  /// The reply update still waiting in [_notificationQueue].
+  _ReplyUpdate? _replyUpdate;
+
+  /// A streaming reply reaches the notification a few times a second, its
+  /// latest text each time: Android drops updates to a notification beyond
+  /// about five a second (the last one too), and each update holds the
+  /// platform thread for two file locks and several system calls.
+  void _postReply(String id, String text) {
+    final waiting = _replyUpdate;
+    if (waiting != null &&
+        waiting.id == id &&
+        waiting.generation == _outputGeneration &&
+        waiting.epoch == _status.epoch) {
+      waiting.text = text;
+      return;
+    }
+    final update = _replyUpdate = _ReplyUpdate(id, text, _outputGeneration, _status.epoch);
+    _notificationQueue = _notificationQueue.catchError((Object _) {}).then((_) async {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (identical(_replyUpdate, update)) _replyUpdate = null;
+      if (!active || update.generation != _outputGeneration || update.epoch != _status.epoch) return;
+      await channel.update(epoch: update.epoch, name: _name, text: update.text, id: update.id);
+    });
   }
 
   void _post({required String id, required String text, bool user = false}) {
+    _replyUpdate = null;
     final generation = _outputGeneration;
     final epoch = _status.epoch;
     _notificationQueue = _notificationQueue.catchError((Object _) {}).then((_) async {
@@ -488,4 +514,12 @@ class _ResidentTaskUi implements CompanionAgentTaskUi {
   void accepted(MemoryRow task) {}
   @override
   void startForeground(List<CompanionNotesForegroundCapture> captures, {required bool Function() isCurrent}) {}
+}
+
+final class _ReplyUpdate {
+  _ReplyUpdate(this.id, this.text, this.generation, this.epoch);
+  final String id;
+  String text;
+  final int generation;
+  final int epoch;
 }

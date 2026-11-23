@@ -279,6 +279,11 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
       _callConnect = null;
       _callSession?.call(why == CallEnd.failed ? UsageOutcome.failed : UsageOutcome.ready);
       _callSession = null;
+      // The captions' recognizer (its models) goes with the call, not with the
+      // page: in the background the page only leaves once the app is back.
+      final live = _live;
+      _live = null;
+      unawaited(live?.stop());
     }
     if (phase != _shown) {
       _arrived(phase);
