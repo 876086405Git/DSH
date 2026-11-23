@@ -362,6 +362,18 @@ class CompanionMemoryStore {
       _card(row),
   ];
 
+  /// The current `row_rev` of each of [ids] that is a card and not withdrawn.
+  Map<String, int> cardRevisions(Iterable<String> ids) => {
+    for (final row in _db.select(
+      '''
+      SELECT c.id, c.row_rev FROM memory_cards c JOIN memory_topics t ON t.id = c.topic_id
+      WHERE c.status != 'withdrawn' AND c.id IN (SELECT value FROM json_each(?))
+    ''',
+      [jsonEncode(ids.toList())],
+    ))
+      row['id'] as String: row['row_rev'] as int,
+  };
+
   MemoryRow _card(Row row, {bool includeEvidence = true}) => {
     ...row,
     'layer': _memoryLayer(row.containsKey('collection') ? row['collection'] as String : 'about_you'),
