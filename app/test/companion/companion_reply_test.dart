@@ -128,7 +128,9 @@ void main() {
       final expected = parseCompanionReply('[动作:点头]乙');
       expect(sealed.words, expected.words);
       expect(sealed.marks, expected.marks);
-      expect(sealed.wordRangesFrom(0, 8), expected.wordRangesFrom(0, 8));
+      for (var i = 0; i < 8; i++) {
+        expect(sealed.wordRangesFrom(i, i + 1), expected.wordRangesFrom(i, i + 1));
+      }
     });
 
     test('the same text gives the same marks on every streaming update', () {
