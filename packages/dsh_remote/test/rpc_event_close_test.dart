@@ -89,6 +89,7 @@ void main() {
     final payload = '界' * 90000;
     final received = <Object?>[];
     f.rpc.events.listen((event) => received.add(event.data));
+    unawaited(result.then(received.add));
     final codec = SecureMessageCodec();
     for (final message in [
       RemoteMessage('event', {'event': 'large', 'data': payload}),
@@ -103,7 +104,7 @@ void main() {
     expect(await result, 'ok');
     await f.streamDone.future;
     expect(f.events, ['large', 'small']);
-    expect(received, [payload, 2]);
+    expect(received, [payload, 2, 'ok']);
   });
   test('listener can cancel itself and request close twice', () async {
     final closes = Completer<List<Object?>>();

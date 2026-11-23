@@ -95,16 +95,24 @@ class RemoteRpcClient {
     final request = RemoteMessage.rpcRequest(method, params);
     final completer = Completer<Object?>();
     final deadline = timeout ?? defaultTimeout;
+    void expire() => _reject(
+      request.id,
+      RemoteRpcException(
+        'RPC_TIMEOUT',
+        'RPC $method timed out after ${deadline.inMilliseconds} ms.',
+        retryable: true,
+        isLocal: true,
+      ),
+    );
+    // A reply that arrived before the deadline may still be queued behind a
+    // background decode; let it be dispatched first.
     final timer = Timer(deadline, () {
-      _reject(
-        request.id,
-        RemoteRpcException(
-          'RPC_TIMEOUT',
-          'RPC $method timed out after ${deadline.inMilliseconds} ms.',
-          retryable: true,
-          isLocal: true,
-        ),
-      );
+      final tail = _receiveTail;
+      if (tail == null) {
+        expire();
+      } else {
+        tail.then((_) => expire());
+      }
     });
     _pending[request.id] = _Pending(method, completer, timer);
     final Uint8List encoded;
