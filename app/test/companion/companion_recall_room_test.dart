@@ -526,9 +526,7 @@ void main() {
     await room.open(tester);
     try {
       await room.say(tester, '现况这句');
-      // Through the Host (ADD67) a provider 429 is that request's failure; the
-      // light-only "busy" wording is not mapped for a Host route.
-      expect(find.text('这句话没送出去，要不要再说一次？'), findsOneWidget);
+      expect(find.text('那边有点忙，等一下再和我说吧。'), findsOneWidget);
       await tester.pump(const Duration(seconds: 30));
       await room.settle(tester);
       expect(room.asked, hasLength(1));
