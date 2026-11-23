@@ -605,8 +605,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   void _syncAffinity() {
     final role = _attachment.characterId;
     final affinity = _attachment.affinity;
-    final tier = affinity?['tier'] as int? ?? 0;
-    final settledDay = affinity?['settled_through_day'];
+    final tier = affinity?.tier ?? 0;
+    final settledDay = affinity?.settledDay;
     final previousRole = _affinityCharacter;
     final previousTier = _bondTier;
     final previousDay = _affinitySettledDay;
