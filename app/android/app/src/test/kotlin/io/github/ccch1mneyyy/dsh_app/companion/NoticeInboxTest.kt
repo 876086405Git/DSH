@@ -68,6 +68,8 @@ class NoticeInboxTest {
         assertNull(NoticeFilter.segment(listOf("Your code is 123 456")))
         assertNull(NoticeFilter.segment(listOf("Your code is A1B2C3")))
         assertEquals("Promo code SPRING", NoticeFilter.segment(listOf("Promo code SPRING")))
+        // A date near 「code」 is not a code.
+        assertEquals("Dress code for 11-24 is casual", NoticeFilter.segment(listOf("Dress code for 11-24 is casual")))
     }
 
     @Test fun traditionalPasswordIsDroppedEvenWithAnInvisibleSeparator() {

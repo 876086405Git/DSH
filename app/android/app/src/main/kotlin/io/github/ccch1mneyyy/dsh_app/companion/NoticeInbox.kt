@@ -27,7 +27,7 @@ internal object NoticeFilter {
     private val secretTerms = listOf("驗證碼", "密碼", "校驗碼", "動態碼", "安全碼", "登入碼", "登录码", "認證碼", "认证码")
     private val separators = Regex("[\\t\\n\\r]+")
     // Split format/control characters must not hide credential labels.
-    private val credential = Regex("""(?i)\b(?:security|login|sign[ -]?in|authentication|confirmation)\s+code\b|\bone\s+time\b|\bcode\b.{0,24}\b\d{4,8}\b|\b\d{4,8}\b.{0,24}\b(?:code|verify)\b|\bcode\b.{0,24}\b\d{2,4}[ -]\d{2,4}\b|\bcode\b.{0,24}\b(?=[a-z0-9]{4,10}\b)(?=[a-z]*\d)[a-z\d]*[a-z][a-z\d]*\b""")
+    private val credential = Regex("""(?i)\b(?:security|login|sign[ -]?in|authentication|confirmation)\s+code\b|\bone\s+time\b|\bcode\b.{0,24}\b\d{4,8}\b|\b\d{4,8}\b.{0,24}\b(?:code|verify)\b|\bcode\b.{0,24}\b\d{3}[ -]\d{3}\b|\bcode\b.{0,24}\b(?=[a-z0-9]{4,10}\b)(?=[a-z]*\d)[a-z\d]*[a-z][a-z\d]*\b""")
 
     fun acceptsCategory(category: String?, ongoing: Boolean, foreground: Boolean) =
         !ongoing && !foreground && category !in blocked
