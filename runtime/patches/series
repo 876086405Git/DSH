@@ -152,6 +152,8 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-signals.diff
 tool-author-annotation-keys.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end.diff
 tool-schema-keyword-types.diff
+tool-schema-intrinsic-source.diff
+tool-schema-rule-pair-fields.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-schema.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-retry.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-live-retry.diff
@@ -171,6 +173,7 @@ web-search-key-write-result.diff
 deepseek-attachment-error.diff
 fork-default-effort.diff
 config-editor-lock-order.diff
+config-editor-empty-layer-copy.diff
 piai-overflow-output-limit.diff
 schedule-authorization-availability.diff
 deepseek-refusal.diff

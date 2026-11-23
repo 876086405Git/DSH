@@ -1,0 +1,5 @@
+--- a/node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js
++++ b/node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js
+@@ -275 +275 @@
+-		for (const [key, types] of KEYWORD_TYPES) if (Object.hasOwn(node, key) && !types.includes(schemaType)) violations.push(`${path}.${key} is not supported on type "${schemaType}"`);
++		for (const { 0: key, 1: types } of KEYWORD_TYPES) if (Object.hasOwn(node, key) && !types.includes(schemaType)) violations.push(`${path}.${key} is not supported on type "${schemaType}"`);

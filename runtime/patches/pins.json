@@ -180,6 +180,14 @@
         }
       }
     },
+    "config-editor-empty-layer-copy.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-config-editor/lib/index.js": {
+          "after": "8607bb319cdb73e88887bc2a89230502696d5ea84a3312b24c10edefb73bff47",
+          "before": "5afb26351f03086d97f5c3028bf80c49c495c367dd68f26473a1da0424601427"
+        }
+      }
+    },
     "config-editor-lock-order.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-config-editor/lib/index.js": {
@@ -1110,11 +1118,27 @@
         }
       }
     },
+    "tool-schema-intrinsic-source.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js": {
+          "after": "4cb442983513b52a8fc7447b6f597191201379a1fac19b3a4f1e7c049328ff03",
+          "before": "74d06fece2b46e0b9637a90f1c5682270a22ea743a37b753f5e869140ef83a71"
+        }
+      }
+    },
     "tool-schema-keyword-types.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js": {
           "after": "74d06fece2b46e0b9637a90f1c5682270a22ea743a37b753f5e869140ef83a71",
           "before": "d02f0d8f36878313b0dae3a1bba5b77f7db4cffc77a0b72772048a36bacf2cf0"
+        }
+      }
+    },
+    "tool-schema-rule-pair-fields.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js": {
+          "after": "c5fcbb4478265adde30a0fd898c7c934cff8ee5886a7a8a14ea1352c2c352dee",
+          "before": "4cb442983513b52a8fc7447b6f597191201379a1fac19b3a4f1e7c049328ff03"
         }
       }
     },
@@ -2939,6 +2963,8 @@
       "tool-author-annotation-keys.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end.diff",
       "tool-schema-keyword-types.diff",
+      "tool-schema-intrinsic-source.diff",
+      "tool-schema-rule-pair-fields.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-schema.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-retry.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-live-retry.diff",
@@ -2958,6 +2984,7 @@
       "deepseek-attachment-error.diff",
       "fork-default-effort.diff",
       "config-editor-lock-order.diff",
+      "config-editor-empty-layer-copy.diff",
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
       "deepseek-refusal.diff",
@@ -3147,6 +3174,8 @@
       "tool-author-annotation-keys.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end.diff",
       "tool-schema-keyword-types.diff",
+      "tool-schema-intrinsic-source.diff",
+      "tool-schema-rule-pair-fields.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-schema.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-retry.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-live-retry.diff",
@@ -3166,6 +3195,7 @@
       "deepseek-attachment-error.diff",
       "fork-default-effort.diff",
       "config-editor-lock-order.diff",
+      "config-editor-empty-layer-copy.diff",
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
       "deepseek-refusal.diff",
