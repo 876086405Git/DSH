@@ -464,18 +464,6 @@
         }
       }
     },
-    "mime-database-first-use.diff": {
-      "0.2.2-rc.1": {
-        "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
-          "after": "ae5a3643aadc304bdbe641c6ea3600724f5a415f497488c117baaa2098d0c04f",
-          "before": "5e14c333b6e401448f17205b5afc4abfcd52b8ed706ff9253a43215a061c73cd"
-        },
-        "node_modules/compressible/index.js": {
-          "after": "cbdedb6272d4c71e657f393e494039c6b890900e4e103ad7014ad4ae59de3160",
-          "before": "95c3bfff3e8e1719d93c7784adb4f24dc1ed3371ac2446067a58717bd9ad8bcd"
-        }
-      }
-    },
     "office-converter-lazy.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js": {
@@ -3086,7 +3074,6 @@
       "web-search-key-write-result.diff",
       "deepseek-attachment-error.diff",
       "fork-default-effort.diff",
-      "mime-database-first-use.diff",
       "config-editor-lock-order.diff",
       "config-editor-empty-layer-copy.diff",
       "piai-overflow-output-limit.diff",
@@ -3306,7 +3293,6 @@
       "web-search-key-write-result.diff",
       "deepseek-attachment-error.diff",
       "fork-default-effort.diff",
-      "mime-database-first-use.diff",
       "config-editor-lock-order.diff",
       "config-editor-empty-layer-copy.diff",
       "piai-overflow-output-limit.diff",
