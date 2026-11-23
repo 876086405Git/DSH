@@ -455,8 +455,8 @@ RunActivity? runActivityOf(ChatState s) {
           since: openSince((sp) => sp.callId == item.callId) ?? openSince((sp) => sp.kind == TraceKind.model),
         );
       case AssistantChatItem(:final streaming, :final text, :final reasoning) when streaming:
-        final writing = text.trim().isNotEmpty;
-        final thinking = reasoning.trim().isNotEmpty;
+        final writing = text.trimLeft().isNotEmpty;
+        final thinking = reasoning.trimLeft().isNotEmpty;
         return make(
           writing
               ? ActivityKind.writing
@@ -509,7 +509,7 @@ RunActivity compactionActivity(ChatState s, DateTime since) {
 String? narrationOf(List<ChatItem> items) {
   for (final item in items.reversed) {
     if (item is UserChatItem) return null;
-    if (item is AssistantChatItem && item.text.trim().isNotEmpty) {
+    if (item is AssistantChatItem && item.text.trimLeft().isNotEmpty) {
       return extractNarration(item.text);
     }
   }
