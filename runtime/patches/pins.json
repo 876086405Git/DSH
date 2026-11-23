@@ -2793,6 +2793,18 @@
           "after": "4bb17cac3768f19be0f9ea303cfdfb0ce78424003a12ab5a3179ee41b4aa0feb"
         }
       }
+    },
+    "companion-screen-piai-image.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm/lib/index.js": {
+          "before": "86704e2345ee881d7a3aab97243910ab03f3d0fc621699fdb36399975e6a3c44",
+          "after": "57ab66a66ae807b9fcc8c4818a1761cfcbfccfefa99cade79e25efd9a048d11b"
+        },
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "before": "8fe83590a9b92beaac3bae171c979822f1373502182ada51a0bd53799ade0200",
+          "after": "c8072bf4b2f636c53524a1cb57e7c28f820a99a324dee8e1ba6644fd41471d32"
+        }
+      }
     }
   },
   "schema": 2,
@@ -3000,6 +3012,7 @@
       "companion-read-file-capacity.diff",
       "companion-compare-output-window.diff",
       "companion-screen-image.diff",
+      "companion-screen-piai-image.diff",
       "companion-receipt-file-bytes.diff",
       "web-table-pipes.diff",
       "ohos-web-converter-lazy.diff",

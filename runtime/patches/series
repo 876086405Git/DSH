@@ -203,6 +203,7 @@ companion-find-drafts-files.diff
 companion-read-file-capacity.diff
 companion-compare-output-window.diff
 companion-screen-image.diff
+companion-screen-piai-image.diff
 companion-receipt-file-bytes.diff
 web-table-pipes.diff
 ohos-web-converter-lazy.diff

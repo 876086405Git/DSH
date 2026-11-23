@@ -253,7 +253,7 @@ extension CompanionAuxiliaryApi on DshClient {
     if (supported && (detail == null || detail['noTools'] != true ||
         detail['transientImage'] != 'jpeg-512-inline' ||
         detail['physicalDispatch'] != 'fetch-invoked' ||
-        detail['rawUsage'] != 'deepseek-messages-cumulative' ||
+        !const {'deepseek-messages-cumulative', 'unavailable'}.contains(detail['rawUsage']) ||
         detail['maxPhysicalRequests'] != 1)) {
       throw const DshProtocolException('invalid screen observation capability');
     }
