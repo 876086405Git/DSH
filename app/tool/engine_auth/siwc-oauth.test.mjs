@@ -50,11 +50,14 @@ const rotation = (fields = {}) => Response.json({
   access_token: 'rotated-access', refresh_token: 'rotated-refresh', token_type: 'Bearer', expires_in: 3600, ...fields,
 })
 
-function fixture({ exchange, revoke = () => new Response(null), keys = () => Response.json({ keys: [jwk] }), initial = null, discovery, save, onClear, onGrantLost } = {}) {
+function fixture({ exchange, revoke = () => new Response(null), keys = () => Response.json({ keys: [jwk] }), initial = null, discovery, save, onLoad, onClear, onGrantLost } = {}) {
   let record = initial
   const saves = [], calls = []
   const store = {
-    async load() { return structuredClone(record) },
+    async load() {
+      await onLoad?.()
+      return structuredClone(record)
+    },
     async save(value) {
       await save?.(value)
       saves.push(structuredClone(value))
@@ -221,6 +224,23 @@ test('reconnect reuses the saved client, and switching requires explicit intent 
   assert.deepEqual(await f.open().status(), { ...IN, account: otherAccount })
 })
 
+test('only retrying a denied verified registration requests consent', async () => {
+  let nonce
+  const f = fixture({ initial: META, exchange: () => Response.json(tokens(nonce)) })
+  const denied = { code: null, error: 'access_denied' }
+  const inspect = (client, prompt) => (auth) => {
+    assert.equal(auth.searchParams.get('client_id'), client)
+    assert.equal(auth.searchParams.get('prompt'), prompt)
+    nonce = auth.searchParams.get('nonce')
+  }
+  await assert.rejects(signInAs(f.oauth, inspect('dynamic_agent_client', null), denied, true), { code: 'siwc_access_denied' })
+  await assert.rejects(signInAs(f.oauth, inspect(CLIENT, null), denied), { code: 'siwc_access_denied' })
+  assert.deepEqual(f.record(), META)
+  assert.equal(f.calls.length, 0)
+  assert.deepEqual(await signInAs(f.oauth, inspect(CLIENT, 'consent'), {}), IN)
+  assert.deepEqual(await signInAs(f.oauth, inspect(CLIENT, null), {}), IN)
+})
+
 test('invalid_grant restarts only once with the issued client and a new verifier', async () => {
   const auths = []
   const f = fixture({ exchange: () => Response.json({ error: 'invalid_grant' }, { status: 400 }) })
@@ -301,6 +321,43 @@ test('cancel closes loopback and never leaks a caller-supplied cancellation reas
   })
   await assert.rejects(hit(callbackOf(auth)))
   assert.deepEqual(await f.oauth.status(), OUT)
+})
+
+test('only rejection of the current access token forces a shared refresh on the next request', async () => {
+  let attempts = 0
+  const f = fixture({ initial: { ...expired(), expiresAt: Date.now() + 3_600_000 }, exchange: (form) => {
+    assert.equal(form.refresh_token, 'old-refresh')
+    if (++attempts === 1) throw new Error('mock network failure')
+    return rotation()
+  } })
+  f.oauth.rejectAccess('old-access') // Not loaded yet: do not affect the saved grant.
+  assert.equal(await f.oauth.token(), 'old-access')
+  f.oauth.rejectAccess('unrelated-access')
+  assert.equal(await f.oauth.token(), 'old-access')
+  f.oauth.rejectAccess('old-access')
+  assert.equal(f.calls.length, 0)
+  await assert.rejects(f.oauth.token(), { code: 'siwc_network' })
+  assert.equal(f.record().refreshToken, 'old-refresh')
+  assert.deepEqual(await f.oauth.status(), IN)
+  assert.deepEqual(await Promise.all([f.oauth.token(), f.oauth.token()]), ['rotated-access', 'rotated-access'])
+  f.oauth.rejectAccess('old-access') // Late response from the original request.
+  assert.equal(await f.oauth.token(), 'rotated-access')
+  assert.equal(attempts, 2)
+})
+
+test('rejects an unchanged access token after refresh and clears only when refresh is terminal', async () => {
+  let attempts = 0
+  const f = fixture({ initial: { ...expired(), expiresAt: Date.now() + 3_600_000 }, exchange: (form) => {
+    if (++attempts === 1) return rotation({ access_token: 'old-access' })
+    assert.equal(form.refresh_token, 'rotated-refresh')
+    return Response.json({ error: 'invalid_grant' }, { status: 400 })
+  } })
+  f.oauth.rejectAccess(await f.oauth.token())
+  await assert.rejects(f.oauth.token(), { code: 'siwc_access_rejected' })
+  assert.equal(attempts, 1)
+  assert.equal(f.record().refreshToken, 'rotated-refresh')
+  await assert.rejects(f.oauth.token(), { code: 'siwc_session_expired' })
+  assert.deepEqual(f.record(), META)
 })
 
 test('one refresh for concurrent readers; one cancellation does not cancel rotation', async () => {
@@ -529,6 +586,30 @@ test('failed local sign-out is visible and a retry can revoke without re-enablin
   assert.deepEqual(f.record(), META)
   assert.deepEqual(await f.oauth.status(), RECONNECT)
   await assert.rejects(f.oauth.token(), { code: 'siwc_sign_in_required' })
+})
+
+test('only explicit sign-out clears an unreadable vault and warns that revocation is unknown', async () => {
+  const initial = expired()
+  const f = fixture({ initial, onLoad: () => { throw new Error('mock vault unreadable') } })
+  await assert.rejects(f.oauth.status(), { code: 'siwc_store_failed' })
+  assert.deepEqual(f.record(), initial)
+  await assert.rejects(f.oauth.signOut(), { code: 'siwc_revocation_unconfirmed' })
+  assert.equal(f.record(), null)
+  assert.deepEqual(f.calls, [])
+  assert.deepEqual(await f.oauth.status(), OUT)
+})
+
+test('failed clearing of an unreadable vault can be retried once it is readable', async () => {
+  let blocked = true
+  const checkVault = () => { if (blocked) throw new Error('mock vault blocked') }
+  const f = fixture({ initial: expired(), onLoad: checkVault, onClear: checkVault })
+  await assert.rejects(f.oauth.signOut(), { code: 'siwc_sign_out_incomplete' })
+  assert.deepEqual(await f.oauth.status(), { ...OUT, signOutPending: true })
+  await assert.rejects(f.oauth.token(), { code: 'siwc_sign_out_incomplete' })
+  blocked = false
+  await f.oauth.signOut()
+  assert.equal(f.calls.at(-1).form.token, 'old-refresh')
+  assert.deepEqual(f.record(), META)
 })
 
 test('unconfirmed revocation still clears tokens and refuses an untrusted discovered endpoint', async () => {
