@@ -816,8 +816,26 @@ class TavernEngine implements Tavern, TavernSPresetLogApi, TavernSPresetPageLife
     late final Future<StoredCharacter?> result;
     result = Future<StoredCharacter?>.sync(() => _library.read(id)).then(
       (record) {
-        if (record == null && identical(_characterDetails[id], result)) _characterDetails.remove(id);
-        return record;
+        if (record == null) {
+          if (identical(_characterDetails[id], result)) _characterDetails.remove(id);
+          return null;
+        }
+        // Nothing reads the original container from here (exports and edits
+        // read their own), so the cached record doesn't keep a copy of it.
+        final card = record.card;
+        return StoredCharacter(
+          id: record.id,
+          card: TavernCard(
+            json: card.json,
+            assets: card.assets,
+            png: card.png,
+            avatar: card.avatar,
+            sourceFormat: card.sourceFormat,
+          ),
+          importedAt: record.importedAt,
+          avatarPath: record.avatarPath,
+          directoryPath: record.directoryPath,
+        );
       },
       onError: (Object error, StackTrace stack) {
         if (identical(_characterDetails[id], result)) _characterDetails.remove(id);
