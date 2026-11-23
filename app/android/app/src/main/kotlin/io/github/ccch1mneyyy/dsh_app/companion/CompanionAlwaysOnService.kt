@@ -18,20 +18,25 @@ class CompanionAlwaysOnService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // startForegroundService obliges a startForeground call within seconds on
+        // every path, including the ones that stop at once; skipping it, or a
+        // notification the system rejects, kills the whole app, and the app asks
+        // for this service again on every launch. So: satisfy the contract first,
+        // and if even that fails, switch the feature off instead of looping.
+        if (!startForegroundSafely()) {
+            CompanionAlwaysOnState.set(this, false)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         // This feature needs a visible conversation notification. Android itself
         // can run an FGS without POST_NOTIFICATIONS; do not mistake that for
         // permission to show a reply surface, or request permission on restore.
         if (!CompanionAlwaysOnState.read(this).enabled || !CompanionConversationNotification.available(this)) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
         try {
-            val notification = CompanionConversationNotification.build(this)
-            if (Build.VERSION.SDK_INT >= 34) {
-                startForeground(CompanionConversationNotification.ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-            } else {
-                startForeground(CompanionConversationNotification.ID, notification)
-            }
             running = true
             if (wakeLock == null) {
                 wakeLock = getSystemService(PowerManager::class.java)
@@ -52,10 +57,32 @@ class CompanionAlwaysOnService : Service() {
         } catch (error: Throwable) {
             running = false
             CompanionAlwaysOnPlugin.failure = error.javaClass.simpleName
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
         // No input Intent is redelivered. A killed/unknown turn is never auto-submitted again.
         return if (running) START_STICKY else START_NOT_STICKY
+    }
+
+    /** The conversation notification, or a plain one when it can't be built. */
+    private fun startForegroundSafely(): Boolean {
+        val notification = try {
+            CompanionConversationNotification.build(this)
+        } catch (error: Throwable) {
+            CompanionAlwaysOnPlugin.failure = error.javaClass.simpleName
+            CompanionConversationNotification.fallback(this)
+        }
+        return try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(CompanionConversationNotification.ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(CompanionConversationNotification.ID, notification)
+            }
+            true
+        } catch (error: Throwable) {
+            CompanionAlwaysOnPlugin.failure = error.javaClass.simpleName
+            false
+        }
     }
 
     override fun onDestroy() {
