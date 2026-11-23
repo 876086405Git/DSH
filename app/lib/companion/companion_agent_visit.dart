@@ -58,10 +58,7 @@ class CompanionAgentAttachment {
 
   CompanionMemoryOwner? get memory => _visit.memory;
   String? get characterId => _visit.characterId;
-  MemoryRow? get affinity {
-    final role = _visit.characterId;
-    return !_visit.active || role == null ? null : _visit.memory?.store.companionAffinity(characterId: role);
-  }
+  ({int tier, Object? settledDay})? get affinity => _visit.displayAffinity;
 
   CompanionSnapshot? get vitals => _visit.snapshot;
   bool get light => _visit.light;
@@ -242,6 +239,20 @@ class _CompanionAgentVisit {
   String? characterId;
   _CompanionPresence? presence;
   int? affinitySettledDay;
+  ({CompanionMemoryOwner owner, String role, ({int tier, Object? settledDay}) display})? _affinityDisplay;
+
+  ({int tier, Object? settledDay})? get displayAffinity {
+    final owner = memory;
+    final role = characterId;
+    if (!active || owner == null || role == null) return null;
+    final cached = _affinityDisplay;
+    if (cached != null && identical(cached.owner, owner) && cached.role == role) return cached.display;
+    final row = owner.store.companionAffinity(characterId: role);
+    final display = (tier: row?['tier'] as int? ?? 0, settledDay: row?['settled_through_day']);
+    _affinityDisplay = (owner: owner, role: role, display: display);
+    return display;
+  }
+
   HostRef boundHost;
   DshClient? boundClient;
   late bool boundLight;
@@ -479,6 +490,7 @@ class _CompanionAgentVisit {
   }
 
   void memoryChanged() {
+    _affinityDisplay = null;
     final owner = memory;
     if (!active || owner == null) return;
     final revision = owner.store.archive['control_revision']! as int;

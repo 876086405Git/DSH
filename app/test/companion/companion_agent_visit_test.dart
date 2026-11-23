@@ -1373,6 +1373,40 @@ void main() {
       final role = resident.characterId;
       expect(role, isNotNull);
       expect(source['character_id'], role);
+      expect(visit.attachment.affinity?.tier, 0);
+      var affinityReads = 0;
+      visit.database.trace = SqliteTraceCallback((event) {
+        if (event is SqliteTraceStatement &&
+            (event.sql?.startsWith('SELECT * FROM memory_affinity WHERE character_id=') ?? false)) {
+          affinityReads++;
+        }
+        return 0;
+      });
+      try {
+        for (var i = 0; i < 2; i++) {
+          visit.agent.changed();
+          expect(visit.attachment.affinity?.tier, 0);
+        }
+        expect(affinityReads, 0);
+        expect(
+          visit.memory.store.importCompanionAffinity(
+            characterId: role!,
+            sourceKind: 'host',
+            sourceId: 'held-turn-affinity',
+            closeness: 1,
+            observedAtMs: _now,
+            offsetMinutes: 480,
+          ),
+          isTrue,
+        );
+        affinityReads = 0; // Exclude the import's own read.
+        visit.memory.changed();
+        expect(visit.attachment.affinity?.tier, 5);
+        expect(affinityReads, 1);
+        expect(visit.agent.running, isTrue);
+      } finally {
+        visit.database.trace = null;
+      }
       visit.attachment.detach();
       expect(visit.attachment.isAttached, isFalse);
       expect(resident.active, isTrue);
@@ -1397,6 +1431,7 @@ void main() {
       );
       expect(await reopened.openMemory(), same(visit.memory));
       expect(reopened.characterId, role);
+      expect(reopened.affinity?.tier, 5);
       expect(reopened.text, '我还在这儿。');
       await visit.attachment.submit('旧窗口迟到的提交。');
       expect(visit.requests, hasLength(1));
