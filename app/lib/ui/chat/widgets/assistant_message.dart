@@ -124,7 +124,8 @@ class _AssistantMessageState extends State<AssistantMessage> {
     final old = oldWidget.item;
     final item = widget.item;
     _waited = _waited || _waiting(item);
-    if (old.streaming &&
+    if (!_textAfterThinking &&
+        old.streaming &&
         old.text.trimRight().isEmpty &&
         old.reasoning.trim().isNotEmpty &&
         item.text.trimRight().isNotEmpty) {
