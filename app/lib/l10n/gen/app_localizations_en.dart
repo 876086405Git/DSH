@@ -7851,8 +7851,7 @@ class L10nEn extends L10n {
   String get companionRawKept => 'Okay, the original words stay.';
 
   @override
-  String get companionRawEraseGone =>
-      'Too late this time; the original words are still here. Ask me again if you want them gone.';
+  String get companionRawEraseGone => 'Too late this time; the original words are still here.';
 
   @override
   String get automaticDiagnosticsRecover => 'Recover local records';

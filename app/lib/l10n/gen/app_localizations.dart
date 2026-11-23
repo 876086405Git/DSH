@@ -13725,7 +13725,7 @@ abstract class L10n {
   /// No description provided for @companionRawEraseGone.
   ///
   /// In zh, this message translates to:
-  /// **'这次来不及了，原话还留着。想删的话再跟我说一次。'**
+  /// **'这次来不及了，原话还留着。'**
   String get companionRawEraseGone;
 
   /// No description provided for @automaticDiagnosticsRecover.

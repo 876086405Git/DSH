@@ -576,7 +576,7 @@ class CompanionAgent extends ChangeNotifier {
       // Drain and settle the Host attempt before reserving a separate phone
       // request. A thrown finalizer or a retired selection cannot start it.
       if (!_current(run)) return null;
-      route = fallback!;
+      route = fallback;
     }
   }
 

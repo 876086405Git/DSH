@@ -3139,7 +3139,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _ => null,
     };
     // Her question about erasing original words, while her room is what's on screen.
-    final rawErase = showStage && _stageReady && _routeShown && _attachment.isAttached
+    final rawErase = showStage && _stageReady && _routeShown && !_logOpen && _attachment.isAttached
         ? _attachment.pendingRawErase
         : null;
     if (rawErase != null && _rawEraseOffered != rawErase.id) _offerRawErase(rawErase.id);
