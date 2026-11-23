@@ -266,6 +266,7 @@ class CompanionAlwaysOnOwner {
   }
 
   void _post({required String id, required String text, bool user = false}) {
+    _replyUpdate = null;
     final generation = _outputGeneration;
     final epoch = _status.epoch;
     _notificationQueue = _notificationQueue.catchError((Object _) {}).then((_) async {
