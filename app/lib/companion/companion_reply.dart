@@ -1,8 +1,8 @@
 // What the companion's reply text carries besides words: `[表情:开心]` and
 // `[动作:点头]` marks, written by the model as the persona asks
 // (runtime/bridge/dsh-go-bridge/cordis.patch.yml). The page shows the words and
-// hands the marks to the stage. Pure, and fed the whole text so far on every
-// streaming update.
+// hands the marks to the stage. Pure full-text parsing, with a reader that
+// keeps the safe prefixes of one growing Agent reply.
 
 import 'package:flutter/foundation.dart';
 
@@ -100,16 +100,17 @@ class CompanionReply {
 
   // Each displayed UTF-16 unit still belongs to its original whole-turn text.
   // Removed marks, held partial marks and trimmed whitespace have no entry.
-  final List<int> _rawOffsets;
+  final Iterable<int> _rawOffsets;
 
   /// The non-blank word ranges contributed by one saved raw source range.
   /// Parse the whole turn first: a mark can cross a model-round boundary.
   List<({int start, int end})> wordRangesFrom(int rawStart, int rawEnd) {
     final ranges = <({int start, int end})>[];
+    final offsets = _rawOffsets.iterator;
     int? start;
     for (var i = 0; i <= words.length; i++) {
       final belongs =
-          i < _rawOffsets.length && _rawOffsets[i] >= rawStart && _rawOffsets[i] < rawEnd && words[i].trim().isNotEmpty;
+          offsets.moveNext() && offsets.current >= rawStart && offsets.current < rawEnd && words[i].trim().isNotEmpty;
       if (belongs) {
         start ??= i;
       } else if (start != null) {
@@ -155,6 +156,53 @@ CompanionReply parseCompanionReply(
   bool streaming = false,
   Map<String, String> emotions = const {},
   Map<String, String> actions = const {},
+}) => _parseReplyPart(text, streaming: streaming, emotions: emotions, actions: actions).reply;
+
+/// Reads growing prefixes of one Agent run with a fixed move directory.
+/// A replacement run or directory starts a new reader.
+class CompanionReplyStream {
+  CompanionReplyStream({this.emotions = const {}, this.actions = const {}});
+
+  final Map<String, String> emotions;
+  final Map<String, String> actions;
+  final _offsets = <int>[];
+  var _end = 0;
+  var _committed = const CompanionReply('', []);
+
+  CompanionReply read(String text, {required bool streaming}) {
+    if (text.length == _end) return _committed;
+    final part = _parseReplyPart(
+      text.substring(_end),
+      streaming: streaming,
+      emotions: emotions,
+      actions: actions,
+      base: _end,
+      hasWords: _committed.words.isNotEmpty,
+      findCut: true,
+    );
+    final tail = part.reply;
+    final words = tail.words.isEmpty ? _committed.words : _committed.words + tail.words;
+    final marks = tail.marks.isEmpty
+        ? _committed.marks
+        : List<CompanionMark>.unmodifiable([..._committed.marks, ...tail.marks]);
+    if (part.canCommit) {
+      _end = text.length;
+      _offsets.addAll(tail._rawOffsets);
+      // A frame may still hold an older reply. Its take count never changes.
+      return _committed = CompanionReply(words, marks, _offsets.take(_offsets.length));
+    }
+    return CompanionReply(words, marks, _offsets.take(_offsets.length).followedBy(tail._rawOffsets));
+  }
+}
+
+({CompanionReply reply, bool canCommit}) _parseReplyPart(
+  String text, {
+  required bool streaming,
+  required Map<String, String> emotions,
+  required Map<String, String> actions,
+  int base = 0,
+  bool hasWords = false,
+  bool findCut = false,
 }) {
   final marks = <CompanionMark>[];
   final kept = StringBuffer();
@@ -162,7 +210,7 @@ CompanionReply parseCompanionReply(
   var cursor = 0;
   for (final m in _mark.allMatches(text)) {
     kept.write(text.substring(cursor, m.start));
-    rawOffsets.addAll([for (var i = cursor; i < m.start; i++) i]);
+    rawOffsets.addAll([for (var i = cursor; i < m.start; i++) base + i]);
     cursor = m.end;
     final kind = m[1]!.toLowerCase();
     final name = m[2]!;
@@ -179,8 +227,12 @@ CompanionReply parseCompanionReply(
     }
   }
   kept.write(text.substring(cursor));
-  rawOffsets.addAll([for (var i = cursor; i < text.length; i++) i]);
+  rawOffsets.addAll([for (var i = cursor; i < text.length; i++) base + i]);
   var words = kept.toString();
+  // Any open raw mark still able to cross the cut starts after the last
+  // complete mark, in the literal tail of kept. Kept can also have a partial
+  // mark assembled across removed marks. Check it before hiding or trimming.
+  final canCommit = findCut && _safeReplyEnd(words);
   if (streaming) {
     final partial = _partialMark.firstMatch(words);
     if (partial != null) {
@@ -203,9 +255,27 @@ CompanionReply parseCompanionReply(
   normalized.write(words.substring(cursor));
   offsets.addAll(rawOffsets.getRange(cursor, rawOffsets.length));
   final untrimmed = normalized.toString();
-  final start = untrimmed.length - untrimmed.trimLeft().length;
-  final visible = untrimmed.trim();
-  return CompanionReply(visible, marks, List<int>.unmodifiable(offsets.sublist(start, start + visible.length)));
+  final start = hasWords ? 0 : untrimmed.length - untrimmed.trimLeft().length;
+  final visible = hasWords ? untrimmed.trimRight() : untrimmed.trim();
+  return (
+    reply: CompanionReply(visible, marks, List<int>.unmodifiable(offsets.sublist(start, start + visible.length))),
+    canCommit: canCommit,
+  );
+}
+
+bool _safeReplyEnd(String kept) {
+  if (kept.isEmpty) return true;
+  if (kept[kept.length - 1].trim().isEmpty) return false;
+  // Both kinds of closer terminate either kind of opener.
+  for (var i = kept.length - 1; i >= 0; i--) {
+    switch (kept.codeUnitAt(i)) {
+      case 0x5b || 0x3010: // [ 【
+        return false;
+      case 0x5d || 0x3011: // ] 】
+        return true;
+    }
+  }
+  return true;
 }
 
 /// What goes in front of a message the person sends: the small facts the model
