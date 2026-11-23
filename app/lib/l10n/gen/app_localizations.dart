@@ -13290,6 +13290,54 @@ abstract class L10n {
   /// **'允许录屏'**
   String get companionScreenAllowProjection;
 
+  /// No description provided for @companionScreenVision.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许发送屏幕图片'**
+  String get companionScreenVision;
+
+  /// No description provided for @companionScreenVisionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'把最长边不超过 512 像素的屏幕图片发给你选的模型；图片不会保存'**
+  String get companionScreenVisionHint;
+
+  /// No description provided for @companionScreenVisionTextOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前截图方式只能提供文字；图片需要能核实窗口来源的无障碍截图'**
+  String get companionScreenVisionTextOnly;
+
+  /// No description provided for @companionScreenVisionModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'看图使用的模型'**
+  String get companionScreenVisionModel;
+
+  /// No description provided for @companionScreenVisionChoose.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择支持图片的模型'**
+  String get companionScreenVisionChoose;
+
+  /// No description provided for @companionScreenVisionAvailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'所选模型可接收通过检查、最长边不超过 512 像素的屏幕图片；图片不会保存'**
+  String get companionScreenVisionAvailable;
+
+  /// No description provided for @companionScreenVisionChecking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检查所选模型，屏幕图片尚未启用'**
+  String get companionScreenVisionChecking;
+
+  /// No description provided for @companionScreenVisionUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前连接或模型不能接收图片，看屏时继续使用文字'**
+  String get companionScreenVisionUnavailable;
+
   /// No description provided for @companionScreenFrequency.
   ///
   /// In zh, this message translates to:
@@ -13343,6 +13391,90 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'今天大概花了 ¥{amount}'**
   String companionScreenCost(String amount);
+
+  /// No description provided for @companionPanelCompany.
+  ///
+  /// In zh, this message translates to:
+  /// **'陪伴'**
+  String get companionPanelCompany;
+
+  /// No description provided for @companionPanelHer.
+  ///
+  /// In zh, this message translates to:
+  /// **'她'**
+  String get companionPanelHer;
+
+  /// No description provided for @companionPanelTalk.
+  ///
+  /// In zh, this message translates to:
+  /// **'对话'**
+  String get companionPanelTalk;
+
+  /// No description provided for @companionPanelMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多'**
+  String get companionPanelMore;
+
+  /// No description provided for @companionFullNoKey.
+  ///
+  /// In zh, this message translates to:
+  /// **'电脑上的模型还没接到我这儿，现在先要 DeepSeek API Key 才能聊。在设置里填上就行。'**
+  String get companionFullNoKey;
+
+  /// No description provided for @companionDrawerHere.
+  ///
+  /// In zh, this message translates to:
+  /// **'她一直在'**
+  String get companionDrawerHere;
+
+  /// No description provided for @companionDrawerRoom.
+  ///
+  /// In zh, this message translates to:
+  /// **'伙伴小屋'**
+  String get companionDrawerRoom;
+
+  /// No description provided for @companionTabRoom.
+  ///
+  /// In zh, this message translates to:
+  /// **'小屋'**
+  String get companionTabRoom;
+
+  /// No description provided for @companionTabMemory.
+  ///
+  /// In zh, this message translates to:
+  /// **'记忆'**
+  String get companionTabMemory;
+
+  /// No description provided for @companionTabTasks.
+  ///
+  /// In zh, this message translates to:
+  /// **'交代'**
+  String get companionTabTasks;
+
+  /// No description provided for @companionTabHer.
+  ///
+  /// In zh, this message translates to:
+  /// **'她'**
+  String get companionTabHer;
+
+  /// No description provided for @companionDrawerReminderToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'{time} 提醒你'**
+  String companionDrawerReminderToday(String time);
+
+  /// No description provided for @companionDrawerReminderTomorrow.
+  ///
+  /// In zh, this message translates to:
+  /// **'明天 {time}'**
+  String companionDrawerReminderTomorrow(String time);
+
+  /// No description provided for @companionDrawerReminderLater.
+  ///
+  /// In zh, this message translates to:
+  /// **'{date} 提醒你'**
+  String companionDrawerReminderLater(String date);
 
   /// No description provided for @automaticDiagnosticsRecover.
   ///

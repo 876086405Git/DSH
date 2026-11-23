@@ -109,7 +109,7 @@ internal class CompanionReminderRunner(
         val claim = ledger.claimNotification(key, executorId, now()) ?: return
         val current = ledger.revision(key)
         if (current == null || !current.current || current.executorId != executorId ||
-            current.cancelRequested || current.operation == "cancel" || current.epochMs!! > now()) {
+            current.cancelRequested || current.operation == "cancel") {
             ledger.notificationResult(key, claim, executorId, now(), "skipped", "not_performed", "revision_changed")
             return
         }

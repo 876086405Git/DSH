@@ -35,6 +35,39 @@ GlassStyle companionDeepGlass(BuildContext context) =>
         .glass(GlassTier.sheet)
         .copyWith(fill: const Color(0xC40E2740), fallbackFill: const Color(0xF20E2740), blurSigma: 22, saturation: 1.3);
 
+/// The room's glass: everything over her (top bar, sheets, their cards) takes
+/// the water's blue instead of the app's grey, and floats without a heavy drop.
+DshSurfaces companionWaterSurfaces(DshSurfaces base) {
+  const deep = Color(0xFF0B2440);
+  const white = Color(0xFFFFFFFF);
+  return base.copyWith(
+    // Her other pages stand in the same water as her room.
+    backdropTop: const Color(0xFF15426B),
+    backdropBottom: const Color(0xFF071A30),
+    glowPrimary: const Color(0x332C8BD0),
+    glowSecondary: const Color(0x1F2AA198),
+    chrome: base.chrome.copyWith(
+      fill: const Color(0x8C123A63),
+      fallbackFill: const Color(0xF2123A63),
+      hairline: white.withValues(alpha: 0.12),
+      rim: white.withValues(alpha: 0.16),
+      shadows: const [BoxShadow(color: Color(0x2E000814), blurRadius: 18, offset: Offset(0, 6))],
+    ),
+    sheet: base.sheet.copyWith(
+      fill: deep.withValues(alpha: 0.9),
+      fallbackFill: deep,
+      hairline: white.withValues(alpha: 0.10),
+      rim: white.withValues(alpha: 0.14),
+    ),
+    card: base.card.copyWith(
+      fill: const Color(0x14A9D6FF),
+      fallbackFill: const Color(0xFF12304F),
+      hairline: white.withValues(alpha: 0.08),
+      rim: white.withValues(alpha: 0.08),
+    ),
+  );
+}
+
 /// What she's doing, for the line under her name.
 enum CompanionActivity { idle, listening, thinking, speaking, sleeping, away, snacking, playing, resting }
 

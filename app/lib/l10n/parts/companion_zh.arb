@@ -675,7 +675,13 @@
   "companionMapNoTarget": "这次没选地图，还没有打开。",
   "companionMapSaveFailed": "这次没能确认地图是否打开；不会自动再试。",
   "companionMapTarget": "所选地图：{label}",
-  "@companionMapTarget": {"placeholders": {"label": {"type": "String"}}},
+  "@companionMapTarget": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "companionMapCopy": "复制原地址",
   "companionMapView": "查看地址",
   "companionMapReopen": "再打开一次",
@@ -1118,6 +1124,14 @@
   "companionScreenHint": "隔一会儿看一眼屏幕，有值得说的才开口；看到的不会记下来",
   "companionScreenNeedsAccess": "要先打开手机操控的无障碍，或者允许她录屏",
   "companionScreenAllowProjection": "允许录屏",
+  "companionScreenVision": "允许发送屏幕图片",
+  "companionScreenVisionHint": "把最长边不超过 512 像素的屏幕图片发给你选的模型；图片不会保存",
+  "companionScreenVisionTextOnly": "当前截图方式只能提供文字；图片需要能核实窗口来源的无障碍截图",
+  "companionScreenVisionModel": "看图使用的模型",
+  "companionScreenVisionChoose": "选择支持图片的模型",
+  "companionScreenVisionAvailable": "所选模型可接收通过检查、最长边不超过 512 像素的屏幕图片；图片不会保存",
+  "companionScreenVisionChecking": "正在检查所选模型，屏幕图片尚未启用",
+  "companionScreenVisionUnavailable": "当前连接或模型不能接收图片，看屏时继续使用文字",
   "companionScreenFrequency": "多久开口",
   "companionScreenQuiet": "安静",
   "companionScreenQuietHint": "很少开口，只说要紧的",
@@ -1130,6 +1144,41 @@
   "@companionScreenCost": {
     "placeholders": {
       "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "companionPanelCompany": "陪伴",
+  "companionPanelHer": "她",
+  "companionPanelTalk": "对话",
+  "companionPanelMore": "更多",
+  "companionFullNoKey": "电脑上的模型还没接到我这儿，现在先要 DeepSeek API Key 才能聊。在设置里填上就行。",
+  "companionDrawerHere": "她一直在",
+  "companionDrawerRoom": "伙伴小屋",
+  "companionTabRoom": "小屋",
+  "companionTabMemory": "记忆",
+  "companionTabTasks": "交代",
+  "companionTabHer": "她",
+  "companionDrawerReminderToday": "{time} 提醒你",
+  "@companionDrawerReminderToday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionDrawerReminderTomorrow": "明天 {time}",
+  "@companionDrawerReminderTomorrow": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "companionDrawerReminderLater": "{date} 提醒你",
+  "@companionDrawerReminderLater": {
+    "placeholders": {
+      "date": {
         "type": "String"
       }
     }

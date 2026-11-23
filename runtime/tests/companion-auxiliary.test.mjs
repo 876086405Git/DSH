@@ -20,6 +20,10 @@ async function fixture(t, configure = {}) {
   const listeners = new Map();
   const llm = {
     companionAuxiliaryCapability(provider) { assert.equal(provider, state.selected.provider); return state.supported ? state.generic ? genericCapability : capability : undefined; },
+    async companionScreenCapability(provider, model) {
+      assert.equal(provider, 'screen-provider'); assert.equal(model, 'screen-model');
+      return state.screenSupported ? { ...capability, transientImage: 'jpeg-512-inline' } : undefined;
+    },
     async prepareCompanionAuxiliaryCall(config, signal, observer) {
       state.prepares++; state.config = config; state.signal = signal;
       await state.prepareGate?.promise;
@@ -81,7 +85,11 @@ async function fixture(t, configure = {}) {
     provider: state.selected.provider, model: state.selected.model, kind: 'extract', system: 'Fixed extraction instructions',
     input: 'A synthetic versioned source with its original time.', maxTokens: 512, ...extra });
   const post = extra => http({ method: 'POST', body: body(extra) });
-  return { state, http, post, body, info, agent, listeners, route, origin };
+  const screenBody = extra => ({ v: 1, instanceId: info.body.instanceId, requestId: 'screen-request',
+    provider: 'screen-provider', model: 'screen-model', kind: 'screen', system: 'Classify this external screen data.',
+    input: 'Synthetic accessibility text.', maxTokens: 220,
+    image: { mediaType: 'image/jpeg', width: 1, height: 1, data: '/9j/wAALCAABAAEBAREA/9k=' }, ...extra });
+  return { state, http, post, body, screenBody, info, agent, listeners, route, origin };
 }
 
 test('owner authentication and exact input validation run before model preparation', async t => {
@@ -97,6 +105,13 @@ test('owner authentication and exact input validation run before model preparati
     const r = await f.http({ method: 'POST', body, type }); assert.equal(r.status, status); assert.equal(r.body.dispatched, false);
   }
   assert.equal(f.state.resolves, baseline); assert.equal(f.state.prepares, 0);
+  for (const auth of ['reader', 'anonymous']) {
+    assert.equal((await f.http({ path: `${PATH}/screen`, method: 'POST', auth, body: f.screenBody() })).body.dispatched, false);
+  }
+  for (const extra of [{ sessionId: 'session' }, { tools: [] }, { image: { mediaType: 'image/jpeg', width: 513, height: 1, data: '/9j/2Q==' } }]) {
+    assert.equal((await f.http({ path: `${PATH}/screen`, method: 'POST', body: f.screenBody(extra) })).status, 400);
+  }
+  assert.equal(f.state.prepares, 0); assert.equal(f.state.invocations, 0);
 });
 
 test('full mode follows the explicit current route and keeps provider raw usage separate from normalized usage', async t => {
@@ -114,6 +129,26 @@ test('full mode follows the explicit current route and keeps provider raw usage 
   assert.deepEqual(Object.keys(f.state.payload), ['system', 'input']);
   assert.deepEqual(f.state.config, { provider: 'selected-provider', model: 'selected-model', reasoningEffort: 'off', maxTokens: 512 });
   assert.equal(f.state.invocations, 1);
+  f.state.screenSupported = true;
+  const resolves = f.state.resolves;
+  const selected = { ...f.state.selected };
+  const screenInfo = await f.http({ path: `${PATH}?kind=screen&provider=screen-provider&model=screen-model&reasoningEffort=off` });
+  assert.equal(screenInfo.body.supported, true); assert.equal(screenInfo.body.kind, 'screen');
+  assert.equal(screenInfo.body.capability.transientImage, 'jpeg-512-inline');
+  const screen = await f.http({ path: `${PATH}/screen`, method: 'POST', body: f.screenBody({ reasoningEffort: 'off' }) });
+  assert.equal(screen.body.at(-1).terminal, 'complete'); assert.equal(screen.body.at(-1).complete, true);
+  assert.equal(screen.body.at(-1).usage.provider, 'screen-provider');
+  assert.equal(screen.body.at(-1).usage.output_tokens, 7);
+  assert.deepEqual(f.state.payload.screenImage, f.screenBody().image);
+  assert.deepEqual(f.state.config, { provider: 'screen-provider', model: 'screen-model', reasoningEffort: 'off', maxTokens: 220 });
+  assert.equal(f.state.resolves, resolves, 'screen classification never resolves a Session');
+  assert.deepEqual(f.state.selected, selected, 'the ordinary conversation selection is untouched');
+  assert.equal(f.state.invocations, 2);
+  f.state.streamError = Object.assign(new Error('synthetic image transport'), { code: 'TRANSPORT' });
+  const failed = await f.http({ path: `${PATH}/screen`, method: 'POST', body: f.screenBody({ requestId: 'screen-failed' }) });
+  assert.equal(failed.body.at(-1).complete, false);
+  assert.equal(failed.body.at(-1).dispatched, true);
+  assert.equal(f.state.invocations, 3, 'an image failure cannot dispatch a text fallback');
 });
 
 test('an absent callable transport and a different requested model never fall back to DeepSeek', async t => {
@@ -125,6 +160,11 @@ test('an absent callable transport and a different requested model never fall ba
   const mismatch = await f.post({ requestId: 'changed-model', model: 'other' });
   assert.equal(mismatch.body.at(-1).dispatched, false);
   assert.equal(mismatch.body.at(-1).error.code, 'companion/auxiliary-selection-changed');
+  assert.equal(f.state.prepares, 0); assert.equal(f.state.invocations, 0);
+  const unavailable = await f.http({ path: `${PATH}?kind=screen&provider=screen-provider&model=screen-model` });
+  assert.equal(unavailable.body.supported, false);
+  const screen = await f.http({ path: `${PATH}/screen`, method: 'POST', body: f.screenBody() });
+  assert.equal(screen.body.at(-1).dispatched, false);
   assert.equal(f.state.prepares, 0); assert.equal(f.state.invocations, 0);
 });
 

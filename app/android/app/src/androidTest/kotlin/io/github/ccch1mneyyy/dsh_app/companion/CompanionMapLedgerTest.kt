@@ -302,7 +302,7 @@ class CompanionMapLedgerTest : AndroidTestCase() {
             sql.rawQuery("PRAGMA busy_timeout=5000", null).use { check(it.moveToFirst()) }
             sql.execSQL("""INSERT INTO companion_tasks(task_id,archive_id,source_message_id,source_session_id,
                 item_no,kind,room_mode,current_rev,created_at_ms,updated_at_ms)
-                VALUES('t','archive','original',?,0,'phone.map_open','light',1,?,?)""", arrayOf(ROOM, NOW, NOW))
+                VALUES('t','archive','original',?,0,'phone.map_open','light',1,?,?)""", arrayOf<Any?>(ROOM, NOW, NOW))
             ledger = CompanionMapLedger.open(isolated)
         }
 
@@ -313,14 +313,14 @@ class CompanionMapLedgerTest : AndroidTestCase() {
                     command_source_rev,command_item_no,request_fingerprint,source_said_at_utc,source_zone_id,
                     source_offset_minutes,source_offset_seconds,executor_id,state,wait_reason,cancel_requested,
                     created_at_ms,updated_at_ms)
-                    VALUES('t',?,?,?,1,0,?,?,'Asia/Shanghai',480,28800,?,?,?,?,?,?)""", arrayOf(revision,
+                    VALUES('t',?,?,?,1,0,?,?,'Asia/Shanghai',480,28800,?,?,?,?,?,?)""", arrayOf<Any?>(revision,
                     if (cancelled) "cancel" else if (revision == 1L) "create" else "amend",
                     "command-$revision", "fingerprint-$revision", NOW, EXECUTOR,
                     if (cancelled) "cancelled" else if (choice) "waiting" else "queued",
                     if (choice && !cancelled) "map_target_choice" else null, if (cancelled) 1 else 0, NOW, NOW))
                 sql.execSQL("""INSERT INTO companion_map_revisions(task_id,task_rev,address,place_name,target_kind,
                     package_name,component_name,package_uid,target_label,reopens_task_id)
-                    VALUES('t',?,?,?, ?,?,?,?, ?,NULL)""", arrayOf(revision, ADDRESS, "东门",
+                    VALUES('t',?,?,?, ?,?,?,?, ?,NULL)""", arrayOf<Any?>(revision, ADDRESS, "东门",
                     if (choice) "choice" else "selected", if (choice) null else "example.maps",
                     if (choice) null else "example.maps.GeoActivity", if (choice) null else 10234,
                     if (choice) null else "测试地图"))

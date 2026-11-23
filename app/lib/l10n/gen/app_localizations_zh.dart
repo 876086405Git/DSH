@@ -7156,6 +7156,30 @@ class L10nZh extends L10n {
   String get companionScreenAllowProjection => '允许录屏';
 
   @override
+  String get companionScreenVision => '允许发送屏幕图片';
+
+  @override
+  String get companionScreenVisionHint => '把最长边不超过 512 像素的屏幕图片发给你选的模型；图片不会保存';
+
+  @override
+  String get companionScreenVisionTextOnly => '当前截图方式只能提供文字；图片需要能核实窗口来源的无障碍截图';
+
+  @override
+  String get companionScreenVisionModel => '看图使用的模型';
+
+  @override
+  String get companionScreenVisionChoose => '选择支持图片的模型';
+
+  @override
+  String get companionScreenVisionAvailable => '所选模型可接收通过检查、最长边不超过 512 像素的屏幕图片；图片不会保存';
+
+  @override
+  String get companionScreenVisionChecking => '正在检查所选模型，屏幕图片尚未启用';
+
+  @override
+  String get companionScreenVisionUnavailable => '当前连接或模型不能接收图片，看屏时继续使用文字';
+
+  @override
   String get companionScreenFrequency => '多久开口';
 
   @override
@@ -7182,6 +7206,54 @@ class L10nZh extends L10n {
   @override
   String companionScreenCost(String amount) {
     return '今天大概花了 ¥$amount';
+  }
+
+  @override
+  String get companionPanelCompany => '陪伴';
+
+  @override
+  String get companionPanelHer => '她';
+
+  @override
+  String get companionPanelTalk => '对话';
+
+  @override
+  String get companionPanelMore => '更多';
+
+  @override
+  String get companionFullNoKey => '电脑上的模型还没接到我这儿，现在先要 DeepSeek API Key 才能聊。在设置里填上就行。';
+
+  @override
+  String get companionDrawerHere => '她一直在';
+
+  @override
+  String get companionDrawerRoom => '伙伴小屋';
+
+  @override
+  String get companionTabRoom => '小屋';
+
+  @override
+  String get companionTabMemory => '记忆';
+
+  @override
+  String get companionTabTasks => '交代';
+
+  @override
+  String get companionTabHer => '她';
+
+  @override
+  String companionDrawerReminderToday(String time) {
+    return '$time 提醒你';
+  }
+
+  @override
+  String companionDrawerReminderTomorrow(String time) {
+    return '明天 $time';
+  }
+
+  @override
+  String companionDrawerReminderLater(String date) {
+    return '$date 提醒你';
   }
 
   @override

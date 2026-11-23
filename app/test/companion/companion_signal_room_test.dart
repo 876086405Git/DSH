@@ -1,24 +1,30 @@
 // Signals in her room (Pro C902): another conversation's end reaches her only
-// through the gate and the invitation owner, as a local line; nothing when the
-// person said no. The consents themselves: defaults and what is kept.
+// through the gate and the invitation owner, then the shared Agent decides
+// whether to say a line; nothing when the person said no. The consents
+// themselves: defaults and what is kept.
 //
 // The host is the SDK's loopback signal host (real HTTP, real mux), the alert
 // tracker is the real one, and its deliveries go on the real pet event bus.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dsh_app/companion/companion_agent.dart';
 import 'package:dsh_app/companion/companion_initiative.dart';
 import 'package:dsh_app/companion/companion_initiative_owner.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_signal_consent.dart';
 import 'package:dsh_app/companion/companion_signals.dart';
+import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/notify/chat_alerts.dart';
 import 'package:dsh_app/pets/pet_mood.dart';
 import 'package:dsh_app/pets/pet_signals.dart';
+import 'package:dsh_app/state/companion_agent_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/settings_state.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
@@ -27,12 +33,77 @@ import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../packages/dsh_client/test/support/companion_signal_host.dart';
 import 'initiative_memory.dart';
 
 const _done = '你那边的任务跑完啦。';
+
+http.Response _signalReply(Map<String, Object?> decision) {
+  final events = <Map<String, Object?>>[
+    {
+      'type': 'message_start',
+      'message': {
+        'id': 'controlled-signal-message',
+        'role': 'assistant',
+        'content': <Object?>[],
+        'usage': {'input_tokens': 12, 'output_tokens': 0},
+      },
+    },
+    {
+      'type': 'content_block_start',
+      'index': 0,
+      'content_block': {'type': 'text', 'text': ''},
+    },
+    {
+      'type': 'content_block_delta',
+      'index': 0,
+      'delta': {'type': 'text_delta', 'text': jsonEncode(decision)},
+    },
+    {'type': 'content_block_stop', 'index': 0},
+    {
+      'type': 'message_delta',
+      'delta': {'stop_reason': 'end_turn'},
+      'usage': {'input_tokens': 12, 'cache_read_input_tokens': 0, 'cache_creation_input_tokens': 0, 'output_tokens': 8},
+    },
+    {'type': 'message_stop'},
+  ];
+  return http.Response.bytes(
+    utf8.encode([for (final event in events) 'event: ${event['type']}\ndata: ${jsonEncode(event)}\n\n'].join()),
+    200,
+    headers: {'content-type': 'text/event-stream; charset=utf-8'},
+  );
+}
+
+Map _context(Map<String, Object?> request) {
+  final texts = <String>[
+    for (final message in (request['messages']! as List).cast<Map>())
+      if (message['role'] == 'user' && message['content'] is List)
+        for (final block in (message['content']! as List).cast<Map>())
+          if (block['type'] == 'text') block['text']! as String,
+  ];
+  final text = texts.singleWhere((text) => text.startsWith('<companion_context>'));
+  return jsonDecode(text.substring('<companion_context>'.length, text.length - '</companion_context>'.length)) as Map;
+}
+
+class _ModelSettings extends SettingsController {
+  @override
+  AppSettings build() => AppSettings(loaded: true, apiKey: 'controlled-test-key');
+}
+
+class _ObservedModelClient extends MockClient {
+  _ObservedModelClient(super.fn);
+  var closeCalls = 0;
+
+  @override
+  void close() {
+    closeCalls++;
+    super.close();
+  }
+}
 
 class _Loopback extends HttpOverrides {}
 
@@ -63,9 +134,10 @@ class _Source extends DshAlertSource {
 }
 
 class _Room {
-  _Room(this.tester, this.root);
+  _Room(this.tester, this.root, {this.modelClient});
   final WidgetTester tester;
   final Directory root;
+  final http.Client? modelClient;
   late CompanionSignalTestHost host;
   late DshClient client;
   late HostConnection connection;
@@ -123,6 +195,10 @@ class _Room {
           activeConnectionProvider.overrideWithValue(AsyncData(connection)),
           companionInitiativeClockProvider.overrideWithValue(clock),
           initiativeMemory(clock),
+          if (modelClient != null) ...[
+            settingsProvider.overrideWith(_ModelSettings.new),
+            companionLightClientProvider.overrideWithValue(() => modelClient!),
+          ],
         ],
         child: MaterialApp(
           theme: buildDarkTheme(),
@@ -168,6 +244,17 @@ class _Room {
     for (var waited = Duration.zero; waited <= most; waited += const Duration(seconds: 1)) {
       if (finder.evaluate().isNotEmpty) return waited;
       await tester.pump(const Duration(seconds: 1));
+    }
+    return null;
+  }
+
+  // Model preparation also awaits real local I/O. Reuse the existing mixed
+  // settle, and measure the fake clock instead of rushing through the TTL.
+  Future<Duration?> untilReady(bool Function() ready, Duration most) async {
+    final started = tester.binding.clock.now();
+    while (tester.binding.clock.now().difference(started) <= most) {
+      if (ready()) return tester.binding.clock.now().difference(started);
+      await settle();
     }
     return null;
   }
@@ -323,32 +410,117 @@ void main() {
   });
 
   testWidgets('another conversation ends: she holds it until you have been quiet, then says it once', (tester) async {
-    final room = _Room(tester, root);
+    const modelLine = '这边告一段落啦，等你有空再看。';
+    final posts = <Map<String, Object?>>[];
+    final release = Completer<void>();
+    final model = MockClient((request) async {
+      posts.add(Map<String, Object?>.from(jsonDecode(request.body) as Map));
+      if (posts.length == 1) return _signalReply({'action': 'silent'});
+      if (posts.length == 2) {
+        await release.future;
+        return _signalReply({'action': 'line', 'text': modelLine});
+      }
+      return http.Response('Unexpected extra model request', 503);
+    });
+    addTearDown(model.close);
+    final room = _Room(tester, root, modelClient: model);
     await room.open();
     try {
       // A touch first: this visit then has no invitation, which would share the allowance.
       room.events!.onTouch('head', 'pat');
       await room.wait(const Duration(seconds: 6));
       room.commands.clear();
+      final agent = room.container.read(companionAgentProvider);
+      final pageUi = tester.state(find.byType(CompanionPage)) as CompanionAgentRoomUi;
+      final history = room.memory.store.messages();
+      expect(posts, isEmpty);
+      expect(room.memory.store.requests(), isEmpty);
       await room.otherConversationEnds();
       await tester.pump(const Duration(milliseconds: 300));
       // Not quiet long enough yet: nothing said; the pill is there at once and
       // does not drop what she is holding.
       expect(find.text(_done), findsNothing);
       expect(find.text('去看看 · 整理照片'), findsOneWidget);
-      final heldFor = await room.until(find.text(_done), const Duration(seconds: 70));
+      expect(posts, isEmpty);
+      // Quiet gates the actual preparation now; this first model decision is
+      // silence, so a template appearing cannot satisfy the waiting oracle.
+      final heldFor = await room.untilReady(() => posts.isNotEmpty, const Duration(seconds: 70));
       expect(heldFor, greaterThan(const Duration(seconds: 35)));
+      expect(
+        await room.untilReady(
+          () => !agent.running && room.memory.store.requests().every((row) => row['state'] == 'finished'),
+          const Duration(seconds: 5),
+        ),
+        isNotNull,
+      );
+      expect(posts, hasLength(1));
+      final silent = room.memory.store.requests().single;
+      expect(silent['terminal'], 'complete');
+      expect(silent['sent_at_ms'], isNotNull);
+      expect(silent['input_uncached'], 12);
+      expect(silent['output_tokens'], 8);
+      expect(silent['raw_usage'], isNotNull);
+      expect(find.text(_done), findsNothing);
+      expect(find.text(modelLine), findsNothing);
+      expect(room.commands.where((c) => c.$1 == 'say'), isEmpty);
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+
+      // A distinct live sequence may prepare a line; silence did not spend
+      // the shared display allowance. The real Page remains the recipient.
+      await room.otherConversationEnds();
+      expect(await room.untilReady(() => posts.length == 2, const Duration(seconds: 70)), isNotNull);
+      expect(agent.running, isTrue);
+      expect(pageUi.initiativeView.blocked, isFalse);
+      room.container.read(companionInitiativeProvider).observe(pageUi.initiativeRoom, pageUi.initiativeView);
+      await tester.pump();
+      await tester.pump();
+      expect(agent.running, isTrue, reason: 'its own preparation must survive a same-view observation');
+      expect(posts, hasLength(2));
+      expect(room.memory.store.requests().where((row) => row['id'] != silent['id']).single['terminal'], isNull);
+      expect(find.text(modelLine), findsNothing);
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+      release.complete();
+      expect(
+        await room.untilReady(() => find.text(modelLine).evaluate().isNotEmpty, const Duration(seconds: 5)),
+        isNotNull,
+      );
+      expect(find.text(modelLine), findsOneWidget);
+      expect(find.text(_done), findsNothing, reason: 'the Agent line, not the old fixed template, is presented');
+      expect(agent.running, isFalse);
       expect(room.commands.where((c) => c.$1 == 'emotion').single.$2['name'], 'happy');
       // Her voice was not allowed for it: her mouth keeps the text's rhythm.
       expect(room.commands.where((c) => c.$1 == 'say'), isNotEmpty);
       final ledger = room.memory.store.initiativeRecord()!;
       expect(ledger['signalAtMs'], hasLength(1));
+      final lineReceipt = room.memory.store.requests().singleWhere((row) => row['id'] != silent['id']);
+      expect(lineReceipt['state'], 'finished');
+      expect(lineReceipt['terminal'], 'complete');
+      expect(lineReceipt['sent_at_ms'], isNotNull);
+      expect(lineReceipt['input_uncached'], 12);
+      expect(lineReceipt['output_tokens'], 8);
+      for (final body in posts) {
+        expect(body.containsKey('tools'), isFalse);
+        expect(body['max_tokens'], 800);
+        expect(_context(body)['window'], 'room');
+        expect(_context(body)['taskObservation'], {'kind': 'task.terminal', 'phase': 'completed'});
+        expect(jsonEncode(body), isNot(contains('s-photos')));
+        expect(jsonEncode(body), isNot(contains('整理照片')));
+      }
+      expect(room.memory.store.messages(), history);
+      expect(agent.sourceId, isNull);
+      expect(agent.replyId, isNull);
+      expect(agent.text, isEmpty);
+      expect(room.memory.store.tasks(), isEmpty);
 
       // The allowance is shared and spent: the next one is not said.
       await room.wait(const Duration(seconds: 10));
       await room.otherConversationEnds(reason: 'error');
       expect(await room.until(find.textContaining('出错了'), const Duration(seconds: 70)), isNull);
+      expect(posts, hasLength(2));
+      expect(room.memory.store.requests(), hasLength(2));
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], hasLength(1));
     } finally {
+      if (!release.isCompleted) release.complete();
       await room.close();
     }
   });
@@ -364,7 +536,17 @@ void main() {
         'nightCare': false,
       }),
     });
-    final room = _Room(tester, root);
+    const lateLine = '迟到的任务提示不该出现在这里。';
+    final posts = <Map<String, Object?>>[];
+    final release = Completer<void>();
+    final model = _ObservedModelClient((request) async {
+      posts.add(Map<String, Object?>.from(jsonDecode(request.body) as Map));
+      if (posts.length != 1) return http.Response('Unexpected extra model request', 503);
+      await release.future;
+      return _signalReply({'action': 'line', 'text': lateLine});
+    });
+    addTearDown(model.close);
+    final room = _Room(tester, root, modelClient: model);
     await room.open();
     try {
       room.events!.onTouch('head', 'pat');
@@ -372,7 +554,78 @@ void main() {
       await room.otherConversationEnds();
       expect(await room.until(find.text(_done), const Duration(seconds: 70)), isNull);
       expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+      expect(posts, isEmpty);
+      expect(room.memory.store.requests(), isEmpty);
+
+      // Keep the original denial above, then change the actual public consent.
+      // A fresh live event starts a model request through this same Page.
+      final agent = room.container.read(companionAgentProvider);
+      final pageUi = tester.state(find.byType(CompanionPage)) as CompanionAgentRoomUi;
+      final history = room.memory.store.messages();
+      final consent = room.container.read(companionSignalConsentProvider.notifier);
+      await consent.set(
+        const CompanionSignalConsent(state: true, optionalSpeech: true, voice: false, nightCare: false),
+      );
+      await room.settle();
+      room.commands.clear();
+      await room.otherConversationEnds();
+      expect(await room.untilReady(() => posts.isNotEmpty, const Duration(seconds: 70)), isNotNull);
+      expect(posts, hasLength(1));
+      final pendingReceipt = room.memory.store.requests().single;
+      expect(pendingReceipt['sent_at_ms'], isNotNull);
+      expect(pendingReceipt['terminal'], isNull);
+      expect(agent.running, isTrue);
+      expect(pageUi.initiativeView.blocked, isFalse);
+      expect(_context(posts.single)['window'], 'room');
+      expect(_context(posts.single)['taskObservation'], {'kind': 'task.terminal', 'phase': 'completed'});
+      expect(posts.single.containsKey('tools'), isFalse);
+      expect(jsonEncode(posts.single), isNot(contains('s-photos')));
+      expect(jsonEncode(posts.single), isNot(contains('整理照片')));
+
+      // The Page's consent listener invalidates its real gate and observes the
+      // changed room. Closing MockClient need not interrupt a held handler:
+      // physical settlement is checked only after that old response is released.
+      final closesBeforeRevoke = model.closeCalls;
+      expect(closesBeforeRevoke, 0);
+      await consent.set(
+        const CompanionSignalConsent(state: false, optionalSpeech: true, voice: false, nightCare: false),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(room.container.read(companionSignalConsentProvider)!.state, isFalse);
+      expect(model.closeCalls, greaterThan(closesBeforeRevoke));
+      expect(find.text(lateLine), findsNothing);
+      expect(find.text(_done), findsNothing);
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+      release.complete();
+      expect(
+        await room.untilReady(
+          () => !agent.running && room.memory.store.requests().every((row) => row['state'] == 'finished'),
+          const Duration(seconds: 5),
+        ),
+        isNotNull,
+      );
+      final cancelled = room.memory.store.requests().single;
+      expect(cancelled['id'], pendingReceipt['id']);
+      expect(cancelled['state'], 'finished');
+      expect(cancelled['terminal'], 'cancelled');
+      expect(cancelled['sent_at_ms'], pendingReceipt['sent_at_ms']);
+      expect(agent.running, isFalse);
+      expect(pageUi.initiativeView.visible, isTrue);
+      expect(pageUi.initiativeView.resumed, isTrue);
+      expect(pageUi.initiativeView.blocked, isFalse);
+      expect(find.text(lateLine), findsNothing);
+      expect(find.text(_done), findsNothing);
+      expect(room.commands.where((c) => c.$1 == 'say'), isEmpty);
+      expect(room.memory.store.initiativeRecord()!['signalAtMs'], isEmpty);
+      expect(posts, hasLength(1));
+      expect(room.memory.store.messages(), history);
+      expect(agent.sourceId, isNull);
+      expect(agent.replyId, isNull);
+      expect(agent.text, isEmpty);
+      expect(room.memory.store.tasks(), isEmpty);
     } finally {
+      if (!release.isCompleted) release.complete();
       await room.close();
     }
   });

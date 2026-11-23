@@ -7,6 +7,8 @@ import android.database.sqlite.SQLiteException
 import android.test.AndroidTestCase
 import java.io.Closeable
 import java.io.File
+import java.io.RandomAccessFile
+import java.nio.channels.OverlappingFileLockException
 import java.time.Instant
 import java.util.TimeZone
 import java.util.UUID
@@ -51,6 +53,33 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         assertEquals(1L, f.count("event_kind='active_observed'"))
         assertEquals(1L, f.count("step_key='notification' AND event_kind='returned'"))
         assertEquals(listOf(ReminderKey("t", 1)), f.effects.notified)
+
+        // The real display read/render and its final platform-call boundary
+        // share one lock. This callback observes that boundary; it does not
+        // post a notification or simulate a second Android process.
+        val displayLock = File(f.isolated.noBackupFilesDir, "companion-resident/display.lock")
+        check(displayLock.parentFile!!.mkdirs() || displayLock.parentFile!!.isDirectory)
+        RandomAccessFile(displayLock, "rw").use { probe ->
+            var submitted = 0
+            CompanionConversationNotification.startForeground(f.isolated) {
+                submitted++
+                var held = false
+                val unexpected = try {
+                    probe.channel.tryLock()
+                } catch (_: OverlappingFileLockException) {
+                    held = true
+                    null
+                }
+                unexpected?.release()
+                assertTrue("The display lock must remain held through the foreground submission", held)
+            }
+            assertEquals(1, submitted)
+            val released = probe.channel.tryLock()
+            assertNotNull("The display lock must be released after submission returns", released)
+            released?.release()
+            // Keep this probe open throughout the production lock: closing a
+            // second channel early can release process locks on some systems.
+        }
     }
 
     fun testFailedClaimTransactionsCannotCallRegisterOrNotify() {
@@ -173,6 +202,32 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         assertEquals(0, f.effects.notified.size)
         assertEquals("failed", f.ledger.current("t")!!.state)
         assertEquals("time_passed", f.ledger.current("t")!!.waitReason)
+
+        f.now = DUE - 1
+        f.revision(3)
+        assertTrue(f.runner().resume("t"))
+        val key = ReminderKey("t", 3)
+        f.runner().alarm(key)
+        assertNull(f.ledger.revision(key)!!.notificationClaim)
+        assertEquals(0, f.effects.notified.size)
+
+        // Move the injected wall clock back only after the real claim commits.
+        // No call-count schedule or replacement ledger decides that boundary.
+        val clock = {
+            if (f.ledger.revision(key)!!.notificationClaim == null) DUE else DUE - 1
+        }
+        f.effects.afterNotify = { assertEquals(DUE - 1, clock()) }
+        CompanionReminderRunner(f.ledger, f.effects, EXECUTOR, clock).alarm(key)
+        assertEquals(listOf(key), f.effects.notified)
+        assertEquals(1L, f.count("task_rev=3 AND step_key='notification' AND event_kind='returned' AND outcome='succeeded'"))
+        assertEquals(0L, f.count("task_rev=3 AND step_key='notification' AND event_kind='skipped'"))
+
+        f.reopen()
+        f.now = DUE + 1
+        assertTrue(f.runner().resume("t"))
+        f.runner().alarm(key)
+        assertEquals(listOf(key), f.effects.notified)
+        assertEquals(1L, f.count("task_rev=3 AND step_key='notification' AND event_kind='claimed'"))
     }
 
     fun testLookupUpgradeKeepsReminderRecoveryAndDoesNotExecuteTheLookupTask() {
@@ -186,7 +241,7 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
             executor_id,local_date,zone_id,state,created_at_ms,updated_at_ms,
             lookup_place_name,lookup_question,lookup_deadline_ms)
             VALUES('q',1,'create','lookup-source',1,1,'lookup-fingerprint',?,480,?,'2026-11-22',
-            'Asia/Singapore','running',0,0,'青桥美术馆','今天开不开',?)""", arrayOf(f.now, EXECUTOR, DUE))
+            'Asia/Singapore','running',0,0,'青桥美术馆','今天开不开',?)""", arrayOf<Any?>(f.now, EXECUTOR, DUE))
         f.reopen()
         assertEquals(12, f.sql.version)
         assertEquals(listOf("t"), f.ledger.recoveryBatch(EXECUTOR, f.now, "", 50))
@@ -253,12 +308,12 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
             command_source_rev,command_item_no,request_fingerprint,source_said_at_utc,source_offset_minutes,
             executor_id,state,wait_reason,created_at_ms,updated_at_ms)
             VALUES('m',1,'create','map-source',1,3,'map-fingerprint',?,480,?,
-            'unknown','map_handoff_pending',0,0)""", arrayOf(f.now, EXECUTOR))
+            'unknown','map_handoff_pending',0,0)""", arrayOf<Any?>(f.now, EXECUTOR))
         f.sql.execSQL("""INSERT INTO companion_map_revisions(task_id,task_rev,address,target_kind)
             VALUES('m',1,'科创路 18 号 & 东门','choice')""")
         f.sql.execSQL("""INSERT INTO companion_task_receipts(task_id,task_rev,step_key,attempt_id,
             event_kind,executor_id,occurred_at_ms) VALUES('m',1,'map.handoff','original-map',
-            'claimed',?,?)""", arrayOf(EXECUTOR, f.now))
+            'claimed',?,?)""", arrayOf<Any?>(EXECUTOR, f.now))
         f.reopen()
         assertEquals(14, f.sql.version)
         assertEquals(listOf("t"), f.ledger.recoveryBatch(EXECUTOR, f.now, "", 50))
@@ -316,7 +371,10 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
 
     private class Fixture(context: Context) : Closeable {
         val directory = File(context.cacheDir, "companion-ledger-test-${UUID.randomUUID()}").apply { check(mkdirs()) }
-        private val isolated = object : ContextWrapper(context) { override fun getFilesDir() = directory }
+        val isolated = object : ContextWrapper(context) {
+            override fun getFilesDir() = directory
+            override fun getNoBackupFilesDir() = directory
+        }
         val sql: SQLiteDatabase
         var ledger: CompanionReminderLedger
         val effects = Effects()
@@ -340,7 +398,7 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
                 source_offset_minutes,source_offset_seconds,executor_id,reminder_text,local_date,local_time,
                 zone_id,offset_seconds,epoch_ms,state,wait_reason,created_at_ms,updated_at_ms)
                 VALUES('t',?,?,?,1,0,?,?,'Asia/Singapore',480,28800,?,'带伞','2026-11-22',?,
-                'Asia/Singapore',?,?,?,?,?,?)""", arrayOf(revision, operation, "command-$revision",
+                'Asia/Singapore',?,?,?,?,?,?)""", arrayOf<Any?>(revision, operation, "command-$revision",
                 "fingerprint-$revision", now, EXECUTOR, if (resolved) "09:00" else null,
                 if (resolved) 28800 else null, if (resolved) DUE else null,
                 if (resolved) "queued" else "waiting", if (resolved) null else "time_missing", now, now))
