@@ -13,6 +13,7 @@ preset-legacy-delegation.diff
 route-guard.diff
 client-hmr-closed-response.diff
 client-modules-combo-rebuild.diff
+client-modules-manifest-read.diff
 schemastery-json-context.diff
 session-title-word-prefix.diff
 str-editor-view-prefix.diff
@@ -33,9 +34,11 @@ zzzzzzz-file-query-normalization.diff
 zzzzzzz-file-reference-owner-dispose.diff
 file-reference-hidden-paths.diff
 zzzzzzz-grep-retention-preview.diff
+glob-card-source-retention.diff
 file-reference-basename-match.diff
 zzzzzzz-input-recovery.diff
 zzzzzzz-job-follow-removal.diff
+search-card-byte-budget.diff
 zzzzzzz-job-ring-trim.diff
 zzzzzzz-jsonl-root-check-retry.diff
 job-release-producer-cancel.diff
@@ -52,6 +55,7 @@ otel-log-transformer-imports.diff
 zzzzzzz-retainer-decode-copy.diff
 zzzzzzz-settings-local-redaction.diff
 zzzzzzz-skill-watcher-recheck.diff
+skill-catalog-frontmatter-retention.diff
 zzzzzzz-spill-write-cleanup.diff
 zzzzzzz-terminal-byte-length.diff
 zzzzzzz-time-zone-dedup.diff
@@ -142,7 +146,9 @@ attachment-direct-boundary.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-recall-gates.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-caller.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-signals.diff
+tool-author-annotation-keys.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end.diff
+tool-schema-keyword-types.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-schema.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-retry.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-live-retry.diff
@@ -168,6 +174,9 @@ deepseek-refusal.diff
 deepseek-unnamed-stream-error.diff
 web-empty-reply-notice.diff
 profile-root-installation-precedence.diff
+plugin-compatibility-exact-version.diff
+profile-sibling-package-lookup.diff
+profile-runtime-version-validation.diff
 messages-usage-evidence.diff
 piai-usage-evidence.diff
 piai-tool-call-id.diff

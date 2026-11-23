@@ -32,6 +32,14 @@
         }
       }
     },
+    "client-modules-manifest-read.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-client-modules/lib/index.js": {
+          "after": "8c8288cb4ecafcbc0271eaf2656a716384d5fb74543c147a2c10d3d496d48bc4",
+          "before": "696b0ae85af12fef557031a427d42ae4d100070644158bf78662673038ab54f3"
+        }
+      }
+    },
     "companion-auxiliary-single-request.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js": {
@@ -298,6 +306,14 @@
         }
       }
     },
+    "glob-card-source-retention.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
+          "after": "172de9c766c51d80c1eeef486888f29d009efd9b2f525e424d53db21143fea2f",
+          "before": "0429499bcac92b481d769dbe2164bb48c08bcd215df0dd6195d44699d2d258ce"
+        }
+      }
+    },
     "input-recovery.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js": {
@@ -551,8 +567,8 @@
     "ohos-plugin-hmr-transaction.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "3f95216bd77292275e05a3b14df6b28214c9281ef116826a03c18f3f93016bb1",
-          "before": "dd947bf10aa09247f469cfa8f8332a705040a852eecd243411057ff318844ae1"
+          "after": "aef4ea832662917ca5b1bcb3867d33aa884e50805d6f926df06e09d27949de1e",
+          "before": "72e6598bb443cdcb9bb471fc013d313b972d6b5f384c1596d5c06e8b479d9d41"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "3ee700fc06ab7f0a357231337f7f33bed885290f26fe7226945a42d189680020",
@@ -563,8 +579,8 @@
     "ohos-plugin-linkless.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "60479860a33d568c63bd89932a21c2f8808d6e450d7eeaad74deed91e672aac5",
-          "before": "495504fd918ba94b9179ca06efa11f447029a213c3fbe1cf284c5ff140a5626a"
+          "after": "669afca1174235ec421be7dd61df70e96e8626b9350a823172978321ee46adc1",
+          "before": "6fac7ace58fbba9b17e730a50bfb3d3193bc2d674d0b05511655065f67734490"
         },
         "node_modules/@deepseek-ai/dsh-app-boot/lib/worker/profile-resolution-bootstrap.js": {
           "after": "82e895216414eaa3a8f29d5d7aad31366272c8a6382e2ab4fe00fe30601e13c4",
@@ -575,16 +591,16 @@
     "ohos-plugin-locale-bom.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "495504fd918ba94b9179ca06efa11f447029a213c3fbe1cf284c5ff140a5626a",
-          "before": "d6c70c26797ad2f0ad862ba9dada6279447c016cc0e5ab4f9989791226a2a68e"
+          "after": "6fac7ace58fbba9b17e730a50bfb3d3193bc2d674d0b05511655065f67734490",
+          "before": "0c30d73925ee84060dc029f4d076244449a2778fc07227c53e08fb3641b9e889"
         }
       }
     },
     "ohos-plugin-manifest-bom.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "d6c70c26797ad2f0ad862ba9dada6279447c016cc0e5ab4f9989791226a2a68e",
-          "before": "3f95216bd77292275e05a3b14df6b28214c9281ef116826a03c18f3f93016bb1"
+          "after": "0c30d73925ee84060dc029f4d076244449a2778fc07227c53e08fb3641b9e889",
+          "before": "aef4ea832662917ca5b1bcb3867d33aa884e50805d6f926df06e09d27949de1e"
         }
       }
     },
@@ -619,8 +635,8 @@
     "ohos-skill-root-events.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-skill-filesystem/lib/index.js": {
-          "after": "50e84da42c878ee5da57032b8766309c00d18d1e676deb43071c0da4aece2353",
-          "before": "5000e40f6eb3b6416c741c8a7300d8427fb10a9a995649d3ed3cbe2e7d8bff5d"
+          "after": "1850d4428432d2b0f1e0ddf237b800b4bf2087a8eed3a466475f56ac32b24ea4",
+          "before": "54d0833039aa6b5875338a259f8f7baa90d9365cd2458a6ce710364ae6ffd4ef"
         }
       }
     },
@@ -631,8 +647,8 @@
           "before": "7f5a2c438a9b32eb5c7beac97a6e589e1908b3df79b18abebb22ea192300cad1"
         },
         "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
-          "after": "30ca4f076ea12e9b2fbaadd2f0e555186a56e495993db9bd401a1c2e4d7aaffc",
-          "before": "0429499bcac92b481d769dbe2164bb48c08bcd215df0dd6195d44699d2d258ce"
+          "after": "dae4bbd4895f2643e91ccd74e6407abeb76f5019d7b4403795a257f157d43b2b",
+          "before": "d9ca49fb96f7f65adef05eee37c75508eddf8ee3a4ddbaa2f72cabe21407730a"
         }
       }
     },
@@ -768,6 +784,14 @@
         }
       }
     },
+    "plugin-compatibility-exact-version.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "e74cff3dff5c88a136c33a9761d8372a3a102f36ced6fa0b60a1f20f54581855",
+          "before": "94cfe0db086613da4c84cd321b98c19ca2d8c95e654300d02c3dd5ea1025193d"
+        }
+      }
+    },
     "plugin-manager-active-run-guard.diff": {
       "0.2.1-rc.4": {
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
@@ -817,6 +841,22 @@
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
           "after": "94cfe0db086613da4c84cd321b98c19ca2d8c95e654300d02c3dd5ea1025193d",
           "before": "0efe3b6c4be30e101982c0740b55d3e035fb754e32ad366a197a9b7ec5be6cdb"
+        }
+      }
+    },
+    "profile-runtime-version-validation.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "4c5500b2b961fffacb85dffc5cbe05fff4ad69976e53046ccd0f4cee4cbb24f1",
+          "before": "f6a2b824fafe48f6d065cc4f054fd647aafd8e92b7a29b3ad8f88fde65fe247e"
+        }
+      }
+    },
+    "profile-sibling-package-lookup.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
+          "after": "f6a2b824fafe48f6d065cc4f054fd647aafd8e92b7a29b3ad8f88fde65fe247e",
+          "before": "e74cff3dff5c88a136c33a9761d8372a3a102f36ced6fa0b60a1f20f54581855"
         }
       }
     },
@@ -946,6 +986,14 @@
         }
       }
     },
+    "search-card-byte-budget.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
+          "after": "d9ca49fb96f7f65adef05eee37c75508eddf8ee3a4ddbaa2f72cabe21407730a",
+          "before": "172de9c766c51d80c1eeef486888f29d009efd9b2f525e424d53db21143fea2f"
+        }
+      }
+    },
     "session-cold-unused-fingerprint.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-session-query-sqlite/lib/index.js": {
@@ -984,6 +1032,14 @@
         }
       }
     },
+    "skill-catalog-frontmatter-retention.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-skill-filesystem/lib/index.js": {
+          "after": "54d0833039aa6b5875338a259f8f7baa90d9365cd2458a6ce710364ae6ffd4ef",
+          "before": "5000e40f6eb3b6416c741c8a7300d8427fb10a9a995649d3ed3cbe2e7d8bff5d"
+        }
+      }
+    },
     "str-editor-view-prefix.diff": {
       "0.2.1-rc.4": {
         "node_modules/@deepseek-ai/dsh-tool-str-replace-editor/lib/index.js": {
@@ -1011,6 +1067,22 @@
         "node_modules/@deepseek-ai/dsh-tool-terminal/lib/index.js": {
           "after": "64c970e2ad8e78b09aee7b377ca18320d696be8c98bff3069660224ef5bbb3cd",
           "before": "65e58b624d4ab5d0bc8416faa3de664b2fdc34c600f5ee94e29e6f4e5bd08fbe"
+        }
+      }
+    },
+    "tool-author-annotation-keys.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tools/lib/index.js": {
+          "after": "c0962008b6accafc500f009a50286c12d6523c3e09d0ddecb2dc0d0fb0463791",
+          "before": "8ae46512081dde3af5a12b7c3d37c2d7a89f48e344c15e2fdc2887f4176c8bf0"
+        }
+      }
+    },
+    "tool-schema-keyword-types.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tools/lib/shared-DTdn5dXO.js": {
+          "after": "74d06fece2b46e0b9637a90f1c5682270a22ea743a37b753f5e869140ef83a71",
+          "before": "d02f0d8f36878313b0dae3a1bba5b77f7db4cffc77a0b72772048a36bacf2cf0"
         }
       }
     },
@@ -1855,8 +1927,8 @@
     "zzzzzzzzz-ohos-search-confinement.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
-          "after": "d73a434a74ee2a74aa2f0662350cd95c8211bf852ea17a24bc378a0bf871746e",
-          "before": "30ca4f076ea12e9b2fbaadd2f0e555186a56e495993db9bd401a1c2e4d7aaffc"
+          "after": "02585d4274a8ce32dcdbd6018bfee66b56101baaa8f054406b7fae1301fd1ecf",
+          "before": "dae4bbd4895f2643e91ccd74e6407abeb76f5019d7b4403795a257f157d43b2b"
         }
       }
     },
@@ -2093,8 +2165,8 @@
     "zzzzzzzzzzz-ohos-search-ignore-description.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
-          "after": "42ab78974030a7287b73d02700a914225fb3cfad0fc7dc8d62b35d66864ea3ee",
-          "before": "d73a434a74ee2a74aa2f0662350cd95c8211bf852ea17a24bc378a0bf871746e"
+          "after": "0ddd2b2fe82241455fefbf7ab61d6305d5553997433277de9e22a1b08b60595e",
+          "before": "02585d4274a8ce32dcdbd6018bfee66b56101baaa8f054406b7fae1301fd1ecf"
         }
       }
     },
@@ -2177,8 +2249,8 @@
           "before": "f9a79fd5194bb4d6321e6d2d5b5eb72f99c683452e1defbb75fad52f76aed667"
         },
         "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
-          "after": "ffdac06d530134e35a4ea2182f09ace344fcf48e2fa0e312419f69e3e73db255",
-          "before": "42ab78974030a7287b73d02700a914225fb3cfad0fc7dc8d62b35d66864ea3ee"
+          "after": "3c1ae6b6eb3765e21e2fe1197c9bd3bf779d38627473257c6aae0b3a2834d0f6",
+          "before": "0ddd2b2fe82241455fefbf7ab61d6305d5553997433277de9e22a1b08b60595e"
         },
         "node_modules/@deepseek-ai/dsh-tools/lib/pipeline.js": {
           "after": "541f5c565369f4a7cf9e6df8bfc380341e0727e4dde8ddf5333d6caf2719d830",
@@ -2233,8 +2305,8 @@
     "zzzzzzzzzzzzzz-ohos-plugin-packages.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-app-boot/lib/index.js": {
-          "after": "dd947bf10aa09247f469cfa8f8332a705040a852eecd243411057ff318844ae1",
-          "before": "94cfe0db086613da4c84cd321b98c19ca2d8c95e654300d02c3dd5ea1025193d"
+          "after": "72e6598bb443cdcb9bb471fc013d313b972d6b5f384c1596d5c06e8b479d9d41",
+          "before": "4c5500b2b961fffacb85dffc5cbe05fff4ad69976e53046ccd0f4cee4cbb24f1"
         },
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "b3de75959b7c463dc952f00c02a9a08a42ff9417a3439cb99767cb6af653756a",
@@ -2696,6 +2768,7 @@
       "route-guard.diff",
       "client-hmr-closed-response.diff",
       "client-modules-combo-rebuild.diff",
+      "client-modules-manifest-read.diff",
       "schemastery-json-context.diff",
       "session-title-word-prefix.diff",
       "str-editor-view-prefix.diff",
@@ -2716,9 +2789,11 @@
       "zzzzzzz-file-reference-owner-dispose.diff",
       "file-reference-hidden-paths.diff",
       "zzzzzzz-grep-retention-preview.diff",
+      "glob-card-source-retention.diff",
       "file-reference-basename-match.diff",
       "zzzzzzz-input-recovery.diff",
       "zzzzzzz-job-follow-removal.diff",
+      "search-card-byte-budget.diff",
       "zzzzzzz-job-ring-trim.diff",
       "zzzzzzz-jsonl-root-check-retry.diff",
       "job-release-producer-cancel.diff",
@@ -2735,6 +2810,7 @@
       "zzzzzzz-retainer-decode-copy.diff",
       "zzzzzzz-settings-local-redaction.diff",
       "zzzzzzz-skill-watcher-recheck.diff",
+      "skill-catalog-frontmatter-retention.diff",
       "zzzzzzz-spill-write-cleanup.diff",
       "zzzzzzz-terminal-byte-length.diff",
       "zzzzzzz-time-zone-dedup.diff",
@@ -2825,7 +2901,9 @@
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-recall-gates.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-caller.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-signals.diff",
+      "tool-author-annotation-keys.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end.diff",
+      "tool-schema-keyword-types.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-schema.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-retry.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-live-retry.diff",
@@ -2851,6 +2929,9 @@
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
       "profile-root-installation-precedence.diff",
+      "plugin-compatibility-exact-version.diff",
+      "profile-sibling-package-lookup.diff",
+      "profile-runtime-version-validation.diff",
       "messages-usage-evidence.diff",
       "piai-usage-evidence.diff",
       "piai-tool-call-id.diff",
@@ -2891,6 +2972,7 @@
       "route-guard.diff",
       "client-hmr-closed-response.diff",
       "client-modules-combo-rebuild.diff",
+      "client-modules-manifest-read.diff",
       "schemastery-json-context.diff",
       "session-title-word-prefix.diff",
       "str-editor-view-prefix.diff",
@@ -2911,9 +2993,11 @@
       "zzzzzzz-file-reference-owner-dispose.diff",
       "file-reference-hidden-paths.diff",
       "zzzzzzz-grep-retention-preview.diff",
+      "glob-card-source-retention.diff",
       "file-reference-basename-match.diff",
       "zzzzzzz-input-recovery.diff",
       "zzzzzzz-job-follow-removal.diff",
+      "search-card-byte-budget.diff",
       "zzzzzzz-job-ring-trim.diff",
       "zzzzzzz-jsonl-root-check-retry.diff",
       "job-release-producer-cancel.diff",
@@ -2930,6 +3014,7 @@
       "zzzzzzz-retainer-decode-copy.diff",
       "zzzzzzz-settings-local-redaction.diff",
       "zzzzzzz-skill-watcher-recheck.diff",
+      "skill-catalog-frontmatter-retention.diff",
       "zzzzzzz-spill-write-cleanup.diff",
       "zzzzzzz-terminal-byte-length.diff",
       "zzzzzzz-time-zone-dedup.diff",
@@ -3020,7 +3105,9 @@
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-recall-gates.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-caller.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-companion-signals.diff",
+      "tool-author-annotation-keys.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end.diff",
+      "tool-schema-keyword-types.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-schema.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-retry.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-phone-run-end-live-retry.diff",
@@ -3046,6 +3133,9 @@
       "deepseek-unnamed-stream-error.diff",
       "web-empty-reply-notice.diff",
       "profile-root-installation-precedence.diff",
+      "plugin-compatibility-exact-version.diff",
+      "profile-sibling-package-lookup.diff",
+      "profile-runtime-version-validation.diff",
       "messages-usage-evidence.diff",
       "piai-usage-evidence.diff",
       "piai-tool-call-id.diff",

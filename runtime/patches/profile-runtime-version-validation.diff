@@ -1,0 +1,7 @@
+--- a/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+@@ -1129,2 +1129,2 @@
+-function evaluatePluginCompatibility(manifest, exemptions = {}, runtimeVersion = getDshRuntimeVersion()) {
+-	runtimeVersionOf(runtimeVersion);
++function evaluatePluginCompatibility(manifest, exemptions = {}, runtimeVersion) {
++	runtimeVersion = runtimeVersion === void 0 ? getDshRuntimeVersion() : runtimeVersionOf(runtimeVersion);

@@ -1,0 +1,17 @@
+--- a/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js
+@@ -1514,2 +1514,2 @@
+-		if (links.has(dep)) continue;
+-		const dir = packageDirFromAnchor(next.anchor, dep);
++		if (links.has(dep)) continue;
++		const dir = packageDirFromAnchor(next.anchor, dep, next);
+@@ -1659,1 +1659,1 @@
+-			const dir = packageDirFromAnchor(next.anchor, dep);
++			const dir = packageDirFromAnchor(next.anchor, dep, next);
+@@ -1758,1 +1758,1 @@
+-function packageDirFromAnchor(anchor, packageName) {
++function packageDirFromAnchor(anchor, packageName, parent = {}) {
+@@ -1760,1 +1760,2 @@
+-	for (const searchPath of createRequire(anchor).resolve.paths(packageName) ?? []) {
++	const resolvePaths = parent.resolvePaths ??= createRequire(anchor).resolve.paths;
++	for (const searchPath of resolvePaths(packageName) ?? []) {
