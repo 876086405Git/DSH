@@ -207,7 +207,7 @@ class CompanionAgent extends ChangeNotifier {
       onStop: onStop,
       controlRevision: memory.store.archive['control_revision'] as int,
     );
-    run.externalNoticeContent = context?.data['noticeReply'] != null;
+    if (context?.data['noticeReply'] != null) _markNoticeContent(run);
     _run = run;
     memory.retainReceipt(run.settled.future);
     notifyListeners();
@@ -222,6 +222,14 @@ class CompanionAgent extends ChangeNotifier {
       if (!_disposed && identical(_run, run)) notifyListeners();
       run.settled.complete();
     }
+  }
+
+  // A reply keeps the permission generation in which it first received
+  // notice content, including when that content came from a memory tool.
+  void _markNoticeContent(_CompanionAgentRun run) {
+    if (run.externalNoticeContent) return;
+    run.externalNoticeContent = true;
+    run.noticeDeliveryEpoch = _visit?.notices?.readableEpoch;
   }
 
   bool _current(_CompanionAgentRun run) =>
@@ -299,7 +307,7 @@ class CompanionAgent extends ChangeNotifier {
               if (call.name == 'public_lookup') run.externalWebContent = true;
               final result = await binding.execute(call);
               if (result.externalWebContent) run.externalWebContent = true;
-              if (result.externalNoticeContent) run.externalNoticeContent = true;
+              if (result.externalNoticeContent) _markNoticeContent(run);
               return result;
             },
           ),
@@ -318,7 +326,7 @@ class CompanionAgent extends ChangeNotifier {
           isCurrent: () => _current(run),
         );
         if (!_current(run)) return null;
-        if (companionSelectionHasNotice(selection)) run.externalNoticeContent = true;
+        if (companionSelectionHasNotice(selection)) _markNoticeContent(run);
         run.onSelected?.call(selection);
 
         // Current control has already filtered the historical raw lines. The
@@ -562,6 +570,7 @@ class _CompanionAgentRun {
   bool externalWebContent = false;
   // Monotonic for this logical user turn, including later HTTP continuations.
   bool externalNoticeContent = false;
+  int? noticeDeliveryEpoch;
   int savedRows = 0;
   String text = '';
   CompanionLightError? error;

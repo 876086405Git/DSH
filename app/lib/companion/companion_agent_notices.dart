@@ -61,6 +61,7 @@ class _VisitNotices {
   _CompanionAgentRun? _replyRun;
   String? failure;
   bool get current => !_closed && visit.active && identical(visit.memory, owner);
+  int? get readableEpoch => _status?.readable == true ? _status!.epoch : null;
   List<_PendingNotice> get pending => visit.agent._noticePending;
 
   Future<void> start(String path) async {
@@ -369,17 +370,19 @@ class _VisitNotices {
   ) async {
     if (!current || !identical(visit.run, run)) return false;
     if (!run.externalNoticeContent) return deliver(null);
+    final epoch = run.noticeDeliveryEpoch;
+    if (epoch == null) return false;
     final raw = run.text;
     await refresh();
     if (!current ||
         !identical(visit.run, run) ||
         run.text != raw ||
         raw.trim() != text.trim() ||
-        _status?.readable != true) {
+        readableEpoch != epoch) {
       return false;
     }
-    final shown = await deliver(_status!.epoch);
-    if (shown && current && identical(visit.run, run) && run.text == raw) {
+    final shown = await deliver(epoch);
+    if (shown && current && identical(visit.run, run) && run.text == raw && readableEpoch == epoch) {
       presentedReply(run, raw, presentationRanges(run).keys.toSet());
     }
     return shown;

@@ -588,6 +588,37 @@ void main() {
     expect(messages.where((row) => row['role'] == 'user').map((row) => row['text']), containsAll(['帮我回复', '确认发送']));
   });
 
+  test('notice visit rejects delayed resident draft delivery after its app is switched off', () async {
+    const draft = '我会先看看行程，再告诉你。';
+    final visit = await _shownOffer([_message(words: draft)]);
+    final resident = visit.agent.retainAlwaysOn(
+      root: Future.value(visit.root),
+      character: const CompanionCharacter(name: '伙伴'),
+      moves: const CompanionMoves(),
+      sourceKey: null,
+      ui: _RoomUi(),
+      mapHandoff: CompanionMapHandoff(visit.container.read(companionMapsProvider)),
+    );
+    addTearDown(resident.close);
+    await resident.submit('帮我回复');
+    expect(resident.ownsCurrentRun, isTrue);
+    expect((_context(visit.requests.last)['noticeReply'] as Map)['phase'], 'draft');
+    expect(visit.attachment.error, isNull);
+    expect(visit.attachment.running, isFalse);
+    final id = visit.attachment.replyId!;
+    expect(visit.attachment.text, draft);
+    final inbox = visit.container.read(companionNoticesProvider);
+    final status = await inbox.setLevel('a', CompanionNoticeLevel.off);
+    expect(status.readable, isTrue);
+    var delivered = false;
+    final shown = await resident.deliverReply(id, draft, (_) async {
+      delivered = true;
+      return true;
+    });
+    expect(shown, isFalse);
+    expect(delivered, isFalse);
+  });
+
   test('notice visit remembers a 48-hour event and discards a model result after lock', () async {
     final inbox = _NoticeInbox();
     addTearDown(inbox.events.close);
