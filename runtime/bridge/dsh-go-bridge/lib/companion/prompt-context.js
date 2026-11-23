@@ -167,6 +167,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
   const owner = message => message?.source?.kind === 'user' && message.source.principal === undefined;
   const expired = lease => highWater - lease.at > RECENT_MS;
   function prune(value) {
+    usage.expireUnclaimed(value.session, highWater - RECENT_MS);
     for (const map of [value.pending, value.parked]) {
       for (const [id, lease] of map) if (expired(lease)) map.delete(id);
     }
@@ -304,6 +305,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
       if (value.phoneMemory && usageSupported(agent)) usage.prepare(current.session, {
         sessionId: value.sessionId, requestId: value.requestId, archiveId: value.phoneMemory.archiveId,
         controlRevision: value.phoneMemory.controlRevision, historyAfterSeq: value.phoneMemory.historyAfterSeq,
+        preparedAt: receipt?.at ?? highWater,
       });
       return { ...describe(current), ...(value.profile ? {
         profileAccepted: JSON.stringify(current.profile) === JSON.stringify(value.profile) } : {}) };

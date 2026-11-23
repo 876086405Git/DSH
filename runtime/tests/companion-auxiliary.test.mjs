@@ -43,6 +43,9 @@ async function fixture(t, configure = {}) {
           observer.observe({ type: 'usage', event: 'message_delta', raw: state.finalUsage ?? { output_tokens: 7 } });
           observer.observe({ type: 'stop', stopReason: state.stopReason ?? 'end_turn' });
           observer.observe({ type: 'complete' });
+          state.providerCompleted = true;
+          await state.completeGate?.promise;
+          if (state.completeError) throw state.completeError;
         }
         yield { type: 'usage', usage: { inputTokens: 99999, cacheReadTokens: 99999, outputTokens: 99999 } };
         yield { type: 'finish', reason: { kind: state.finishKind ?? 'stop' } };
@@ -169,6 +172,33 @@ test('a pending request reports unknown, busy rejects another, and model changes
   const busy = await f.post({ requestId: 'another' }); assert.equal(busy.status, 409); assert.equal(busy.body.dispatched, false);
   f.state.selected = { provider: 'changed', model: 'changed' }; prepareGate.resolve();
   const r = await pending; assert.equal(r.body.at(-1).dispatched, false); assert.equal(f.state.invocations, 0);
+
+  // The provider can finish before the bridge sees its final chunks or a
+  // content-only error. Neither observation overrides the current owner guard.
+  for (const [change, code] of [['model', undefined], ['model', 'EMPTY_RESPONSE'], ['cancel', 'REFUSAL']]) {
+    const completeGate = defer();
+    const g = await fixture(t, { completeGate,
+      ...(code ? { completeError: Object.assign(new Error('Synthetic completed content'), { code }) } : {}) });
+    const late = g.post();
+    let response;
+    try {
+      await until(() => g.state.providerCompleted === true);
+      if (change === 'model') g.state.selected = { ...g.state.selected, model: 'changed-after-complete' };
+      else g.listeners.get('session/event')(g.agent.session, { type: 'model/selection' });
+    } finally {
+      completeGate.resolve();
+      response = await late;
+    }
+    const last = response.body.at(-1);
+    assert.equal(last.complete, false); assert.equal(last.usage.complete, false);
+    assert.equal(last.terminal, change === 'cancel' ? 'cancelled' : 'provider_error');
+    if (change === 'model') assert.equal(last.error.code, 'companion/auxiliary-selection-changed');
+    assert.equal(last.dispatched, true); assert.equal(last.dispatchAtMs, 1795280000123);
+    assert.equal(last.usage.start_usage.input_tokens, 51); assert.equal(last.usage.output_tokens, 7);
+    assert.equal(g.state.invocations, 1);
+    const saved = await g.http({ path: `${PATH}/requests/request?instanceId=${g.info.body.instanceId}` });
+    assert.deepEqual(saved.body.finish, last);
+  }
 });
 
 test('auth preflight failure is unsent; HTTP error and transport loss after invocation retain a sent unknown-usage receipt', async t => {
@@ -208,6 +238,24 @@ test('tool output is never executed and length termination remains distinguishab
   f.state.tool = false; f.state.stopReason = 'max_tokens'; f.state.finishKind = 'max-tokens';
   const length = await f.post({ requestId: 'length' });
   assert.equal(length.body.at(-1).complete, true); assert.equal(length.body.at(-1).terminal, 'max_tokens');
+
+  f.state.stopReason = 'end_turn'; f.state.finishKind = 'aborted';
+  const aborted = await f.post({ requestId: 'aborted-finish' });
+  assert.equal(aborted.body.at(-1).complete, false); assert.equal(aborted.body.at(-1).terminal, 'cancelled');
+  assert.equal(aborted.body.at(-1).usage.output_tokens, 7);
+
+  // Preserve complete empty/refusal outcomes while the bridge still accepts
+  // the attempt; these content failures are not a successful model answer.
+  for (const code of ['EMPTY_RESPONSE', 'REFUSAL']) {
+    f.state.output = ''; f.state.stopReason = code === 'REFUSAL' ? 'refusal' : 'end_turn';
+    f.state.finishKind = 'stop';
+    f.state.completeError = Object.assign(new Error('Synthetic completed content'), { code });
+    const content = await f.post({ requestId: `completed-${code}` });
+    const last = content.body.at(-1);
+    assert.equal(last.complete, true); assert.equal(last.usage.complete, true);
+    assert.equal(last.error.code, code); assert.equal(last.terminal, 'provider_error');
+    assert.equal(last.dispatched, true); assert.equal(last.usage.output_tokens, 7);
+  }
 });
 
 // The adapter above is explicit: this proves route behavior and exact payload,

@@ -90,13 +90,35 @@ class CompanionMark {
 
 @immutable
 class CompanionReply {
-  const CompanionReply(this.words, this.marks);
+  const CompanionReply(this.words, this.marks, [this._rawOffsets = const []]);
 
   /// What to show: the text without marks.
   final String words;
 
   /// Marks in the order they appear; unknown names are dropped.
   final List<CompanionMark> marks;
+
+  // Each displayed UTF-16 unit still belongs to its original whole-turn text.
+  // Removed marks, held partial marks and trimmed whitespace have no entry.
+  final List<int> _rawOffsets;
+
+  /// The non-blank word ranges contributed by one saved raw source range.
+  /// Parse the whole turn first: a mark can cross a model-round boundary.
+  List<({int start, int end})> wordRangesFrom(int rawStart, int rawEnd) {
+    final ranges = <({int start, int end})>[];
+    int? start;
+    for (var i = 0; i <= words.length; i++) {
+      final belongs =
+          i < _rawOffsets.length && _rawOffsets[i] >= rawStart && _rawOffsets[i] < rawEnd && words[i].trim().isNotEmpty;
+      if (belongs) {
+        start ??= i;
+      } else if (start != null) {
+        ranges.add((start: start, end: i));
+        start = null;
+      }
+    }
+    return ranges;
+  }
 }
 
 final _mark = RegExp(r'[\[【]\s*(表情|动作|emotion|action)\s*[:：]\s*([^\]】\n]{1,40}?)\s*[\]】]', caseSensitive: false);
@@ -135,7 +157,13 @@ CompanionReply parseCompanionReply(
   Map<String, String> actions = const {},
 }) {
   final marks = <CompanionMark>[];
-  var words = text.replaceAllMapped(_mark, (m) {
+  final kept = StringBuffer();
+  final rawOffsets = <int>[];
+  var cursor = 0;
+  for (final m in _mark.allMatches(text)) {
+    kept.write(text.substring(cursor, m.start));
+    rawOffsets.addAll([for (var i = cursor; i < m.start; i++) i]);
+    cursor = m.end;
     final kind = m[1]!.toLowerCase();
     final name = m[2]!;
     if (kind == '表情' || kind == 'emotion') {
@@ -149,10 +177,35 @@ CompanionReply parseCompanionReply(
       if (hers != null) marks.add(CompanionMark(CompanionMarkKind.action, hers));
       if (own != null) marks.add(CompanionMark(CompanionMarkKind.action, own, native: true));
     }
-    return '';
-  });
-  if (streaming) words = words.replaceFirst(_partialMark, '');
-  return CompanionReply(words.replaceAll(RegExp(r'[ \t]{2,}'), ' ').trim(), marks);
+  }
+  kept.write(text.substring(cursor));
+  rawOffsets.addAll([for (var i = cursor; i < text.length; i++) i]);
+  var words = kept.toString();
+  if (streaming) {
+    final partial = _partialMark.firstMatch(words);
+    if (partial != null) {
+      words = words.substring(0, partial.start);
+      rawOffsets.removeRange(partial.start, rawOffsets.length);
+    }
+  }
+  final normalized = StringBuffer();
+  final offsets = <int>[];
+  cursor = 0;
+  for (final spaces in RegExp(r'[ \t]{2,}').allMatches(words)) {
+    normalized
+      ..write(words.substring(cursor, spaces.start))
+      ..write(' ');
+    offsets
+      ..addAll(rawOffsets.getRange(cursor, spaces.start))
+      ..add(rawOffsets[spaces.start]);
+    cursor = spaces.end;
+  }
+  normalized.write(words.substring(cursor));
+  offsets.addAll(rawOffsets.getRange(cursor, rawOffsets.length));
+  final untrimmed = normalized.toString();
+  final start = untrimmed.length - untrimmed.trimLeft().length;
+  final visible = untrimmed.trim();
+  return CompanionReply(visible, marks, List<int>.unmodifiable(offsets.sublist(start, start + visible.length)));
 }
 
 /// What goes in front of a message the person sends: the small facts the model

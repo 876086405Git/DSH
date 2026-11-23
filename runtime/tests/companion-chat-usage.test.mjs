@@ -9,7 +9,7 @@ import { createCompanionRoutes } from '../bridge/dsh-go-bridge/lib/companion/rou
 function ledger(limits) {
   const owner = {}, usage = createCompanionUsage({ instanceId: 'boot', now: () => 100, limits });
   const prepare = (requestId = 'request', agent = owner) => usage.prepare(agent,
-    { sessionId: 'session', requestId, archiveId: 'archive', controlRevision: 3, historyAfterSeq: 4 });
+    { sessionId: 'session', requestId, archiveId: 'archive', controlRevision: 3, historyAfterSeq: 4, preparedAt: 100 });
   const claim = (requestId = 'request', turn = 1) => usage.claim(owner, 'session', requestId, turn);
   const open = (ids = ['request'], turn = 1, observed = true) => usage.open(owner, 'session', ids, turn,
     { provider: 'provider', model: 'model' }, observed);
@@ -91,7 +91,7 @@ test('retirement retains late evidence for its original binding and does not era
   g.usage.retire(g.owner); assert.deepEqual(g.snapshot(), before, 'retiring a completed turn creates no accounting gap');
 });
 
-test('root or receipt capacity never evicts unfinished work and explicitly marks missing coverage', () => {
+test('root or receipt capacity never evicts unfinished work and explicitly marks missing coverage', async t => {
   const f = ledger({ roots: 1, receipts: 1 }); f.prepare(); f.claim(); const call = f.open(), physical = call.beginPhysical(100);
   assert.equal(f.prepare('second'), false); assert.equal(f.snapshot('second').state, 'unknown');
   const secondPhysical = call.beginPhysical(101); secondPhysical.close();
@@ -99,6 +99,53 @@ test('root or receipt capacity never evicts unfinished work and explicitly marks
   physical.close(); call.close(); f.usage.end(f.owner, 1);
   assert.equal(f.prepare('second'), true, 'closed records may now be evicted');
   assert.equal(f.snapshot().state, 'unknown'); assert.deepEqual(f.snapshot().gaps, ['not-retained']);
+
+  let now = 100;
+  const c = await httpFixture(t, { now: () => now, usageLimits: { roots: 4 } });
+  const snapshot = (requestId, sessionId = 'session') => c.context.usageSnapshot({ instanceId: 'boot', sessionId, requestId });
+  const human = rpcId => ({ role: 'user', source: { kind: 'user', rpcId }, content: [{ type: 'text', text: 'hello' }] });
+  const request = line => c.context.forRequest(c.agent,
+    { sessionId: 'session', provider: 'provider', model: 'model', messages: [line] });
+  c.prepare('abandoned'); c.prepare('active');
+  c.context.claim(c.agent, human('active'), 1);
+  const activeCall = c.context.observeUsageRequest(c.agent, request(human('active')), true);
+  const late = activeCall.beginPhysical(now);
+  late.observe({ type: 'usage', event: 'message_start', raw: { input_tokens: 11 } });
+  activeCall.close(); c.context.end(c.agent.session);
+  const activeBefore = snapshot('active');
+  const other = { ...c.agent, id: 'other', session: { ...c.agent.session, id: 'other' } };
+  c.prepare('other', other);
+
+  now += 30 * 60000 - 1;
+  c.prepare('abandoned'); // The same POST must not renew its first timestamp.
+  c.prepare('retryable'); c.context.discard(c.agent, human('retryable'));
+  now++;
+  c.context.render(c.agent);
+  assert.equal(snapshot('abandoned').state, 'pending', 'the existing strict TTL boundary is unchanged');
+  now++;
+  c.prepare('fresh');
+  assert.equal(snapshot('fresh').state, 'pending', 'expired unclaimed accounting makes room in the same live Session');
+  assert.deepEqual(snapshot('abandoned').gaps, ['not-retained']);
+  assert.deepEqual(snapshot('active'), activeBefore, 'expiry cannot retire a claimed physical call that is still draining');
+  assert.equal(snapshot('other', 'other').state, 'pending', 'pruning one actual Session does not retire another owner');
+  assert.equal(snapshot('retryable').state, 'pending');
+  c.prepare('retryable');
+  assert.equal(snapshot('retryable').state, 'pending', 'a parked lease still inside its original TTL remains retryable');
+  c.context.claim(c.agent, human('abandoned'), 2);
+  assert.equal(c.context.observeUsageRequest(c.agent, request(human('abandoned')), true), undefined,
+    'a late claim cannot revive expired accounting ownership');
+
+  late.observe({ type: 'usage', event: 'message_delta', raw: { output_tokens: 31 } });
+  late.observe({ type: 'complete' }); late.close({ kind: 'stop' });
+  const settled = snapshot('active');
+  assert.equal(settled.complete, true); assert.equal(settled.receipts[0].usage.output_tokens, 31);
+  c.context.render(c.agent);
+  assert.deepEqual(snapshot('active'), settled, 'claimed evidence is not expired after its physical close either');
+  c.context.claim(c.agent, human('fresh'), 3);
+  const next = c.context.observeUsageRequest(c.agent, request(human('fresh')), true), physicalNext = next.beginPhysical(now);
+  physicalNext.observe({ type: 'complete' }); physicalNext.close({ kind: 'stop' }); next.close(); c.context.end(c.agent.session);
+  const result = await c.request({ query: 'instanceId=boot&sessionId=session&requestId=fresh' });
+  assert.equal(result.status, 200); assert.equal(result.body.complete, true); assert.equal(result.body.physicalRequests, 1);
 });
 
 test('an owner collision cannot relabel old receipts and disposal is an explicit unknown response', () => {
@@ -109,12 +156,12 @@ test('an owner collision cannot relabel old receipts and disposal is an explicit
   assert.equal(result.physicalRequests, null); assert.deepEqual(result.gaps, ['instance-disposed']);
 });
 
-async function httpFixture(t) {
+async function httpFixture(t, { now = () => 100, usageLimits } = {}) {
   const runtime = { dshGoPhoneMemory: true, dshGoCompanionChatUsage: true };
   const agent = { id: 'session', ctx: { get: name => name === 'llm' ? runtime : undefined },
     session: { id: 'session', seq: 0, header: { isSeeded: false }, inheritedEventCount: 0,
       eventAt() { throw new Error('empty synthetic Session must not read history'); } } };
-  const context = createCompanionPromptContext({ now: () => 100, instanceId: 'boot' });
+  const context = createCompanionPromptContext({ now, instanceId: 'boot', usageLimits });
   const route = createCompanionRoutes({ promptContext: context, ctx: { get(name) {
     assert.equal(name, 'connection', 'usage reads must not resolve or start an Agent');
     return { admit(req) { return req.headers.authorization === 'owner' ? { peer: { principal: { kind: 'owner' } } } :
@@ -128,7 +175,8 @@ async function httpFixture(t) {
       { method, headers: { authorization: auth } });
     return { status: response.status, body: await response.json() };
   };
-  const prepare = () => context.prepare(agent, { v: 1, instanceId: 'boot', sessionId: 'session', requestId: 'request', events: [],
+  const prepare = (requestId = 'request', target = agent) => context.prepare(target,
+    { v: 1, instanceId: 'boot', sessionId: target.id, requestId, events: [],
     phoneMemory: { archiveId: 'archive', controlRevision: 0, historyAfterSeq: 0,
       block: '{"type":"companion_memory","version":2,"scope":"real","items":[]}' } });
   return { agent, runtime, context, request, prepare };

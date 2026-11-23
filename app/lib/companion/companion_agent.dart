@@ -416,7 +416,7 @@ class CompanionAgent extends ChangeNotifier {
     final id = 'reply:${run.source['id']}:${request.id}';
     _save(run, id, request.text);
     request.saved = true;
-    run.unpresentedReplies[id] = run.text.length;
+    run.unpresentedReplies[id] = (start: run.text.length - request.text.length, end: run.text.length);
   }
 
   void _save(_CompanionAgentRun run, String id, String words) {
@@ -443,7 +443,7 @@ class CompanionAgent extends ChangeNotifier {
     if (!_disposed && identical(_run, run) && !run.discard) {
       if (run.text.isNotEmpty) run.text += '\n';
       run.text += words;
-      run.unpresentedReplies[id] = run.text.length;
+      run.unpresentedReplies[id] = (start: run.text.length - words.length, end: run.text.length);
       notifyListeners();
     }
   }
@@ -526,7 +526,8 @@ class _CompanionAgentRun {
   final exchanges = <CompanionAgentExchange>[];
   // Only real Page frame acknowledgements turn these saved assistant sources
   // into presentation facts. A saved reply alone is not a shown question.
-  final unpresentedReplies = <String, int>{};
+  // UTF-16 ranges in this same run.text, before the Page removes stage marks.
+  final unpresentedReplies = <String, ({int start, int end})>{};
   int controlRevision;
   bool running = true;
   bool cancelled = false;

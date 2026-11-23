@@ -4,11 +4,33 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('parseCompanionReply', () {
     test('takes marks out of the words, in order', () {
-      final reply = parseCompanionReply('[表情:开心]今天不错。[动作:点头]你呢？');
+      const raw = '[表情:开心]今天不错。[动作:点头]你呢？';
+      final reply = parseCompanionReply(raw);
       expect(reply.words, '今天不错。你呢？');
       expect(reply.marks, const [
         CompanionMark(CompanionMarkKind.emotion, 'happy'),
         CompanionMark(CompanionMarkKind.action, 'nod'),
+      ]);
+      final boundary = raw.indexOf('[动作');
+      expect(reply.wordRangesFrom(0, boundary), [(start: 0, end: 5)]);
+      expect(reply.wordRangesFrom(boundary, raw.length), [(start: 5, end: 8)]);
+      expect(reply.wordRangesFrom(0, raw.indexOf('今天')), isEmpty);
+
+      // The complete bubble parser, not an independent parse of each source,
+      // decides whether a mark crossing a source boundary contributes words.
+      const first = '[表情:';
+      const second = '开心]  嗯🙂\t ';
+      const third = '[动作:点头]\n好了。';
+      const combined = '$first\n$second\n$third';
+      final joined = parseCompanionReply(combined);
+      expect(joined.words, '嗯🙂 \n\n好了。');
+      expect(joined.marks, reply.marks);
+      expect(joined.wordRangesFrom(0, first.length), isEmpty);
+      final secondStart = first.length + 1;
+      expect(joined.wordRangesFrom(secondStart, secondStart + second.length), [(start: 0, end: '嗯🙂'.length)]);
+      final thirdStart = secondStart + second.length + 1;
+      expect(joined.wordRangesFrom(thirdStart, combined.length), [
+        (start: joined.words.indexOf('好了。'), end: joined.words.length),
       ]);
     });
 
@@ -20,9 +42,15 @@ void main() {
     });
 
     test('an unknown name still disappears from the words', () {
-      final reply = parseCompanionReply('[表情:翻白眼]算了。');
+      const raw = '[表情:翻白眼]算了。';
+      final reply = parseCompanionReply(raw);
       expect(reply.words, '算了。');
       expect(reply.marks, isEmpty);
+      expect(reply.wordRangesFrom(0, raw.indexOf('算了')), isEmpty);
+      expect(reply.wordRangesFrom(raw.indexOf('算了'), raw.length), [(start: 0, end: 3)]);
+      const blank = '[表情:开心]\n \t ';
+      expect(parseCompanionReply(blank).wordRangesFrom(0, blank.length), isEmpty);
+      expect(parseCompanionReply('').wordRangesFrom(0, 0), isEmpty);
     });
 
     test('leaves brackets that are not marks alone', () {
@@ -32,7 +60,10 @@ void main() {
 
     test('holds back a mark still arriving, only while streaming', () {
       for (final partial in ['你好[', '你好[表', '你好[表情', '你好[表情:', '你好[表情:开', '你好【动作：点', '你好[emot']) {
-        expect(parseCompanionReply(partial, streaming: true).words, '你好', reason: partial);
+        final reply = parseCompanionReply(partial, streaming: true);
+        expect(reply.words, '你好', reason: partial);
+        expect(reply.wordRangesFrom(0, 2), [(start: 0, end: 2)], reason: partial);
+        expect(reply.wordRangesFrom(2, partial.length), isEmpty, reason: partial);
       }
       expect(parseCompanionReply('你好[表情:开', streaming: false).words, '你好[表情:开');
       // Not the start of a mark: shown straight away.

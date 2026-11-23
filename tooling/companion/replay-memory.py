@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 
 
 STATUSES = ('FAIL', 'NOT_RUN', 'NEEDS_REVIEW', 'PASS', 'NOT_APPLICABLE')
+UNREAD = object()
 
 
 def aggregate(values):
@@ -22,17 +23,19 @@ def aggregate(values):
 class Report:
     """Read the whole JSON stream: an error may arrive after testDone."""
 
-    def __init__(self, path):
+    def __init__(self, path, raw=UNREAD):
         self.path = path
         self.tests = {}
         self.complete = False
         self.success = None
         self.issue = None
-        if not path.is_file():
+        if raw is UNREAD:
+            raw = path.read_bytes() if path.is_file() else None
+        if raw is None:
             self.issue = 'report missing'
             return
         try:
-            for line in path.read_text(encoding='utf-8').splitlines():
+            for line in raw.decode('utf-8').splitlines():
                 event = json.loads(line)
                 kind = event['type']
                 if kind == 'testStart':
@@ -73,15 +76,17 @@ class Report:
 class EngineReport:
     """Node's real pinned-engine tests, with skipped cases kept as NOT_RUN."""
 
-    def __init__(self, path):
+    def __init__(self, path, raw=UNREAD):
         self.path = path
         self.cases = []
         self.success = None
         self.issue = 'engine report missing'
-        if not path.is_file():
+        if raw is UNREAD:
+            raw = path.read_bytes() if path.is_file() else None
+        if raw is None:
             return
         try:
-            self.cases = list(ET.parse(path).getroot().iter('testcase'))
+            self.cases = list(ET.fromstring(raw).iter('testcase'))
             self.success = bool(self.cases) and all(case.find('failure') is None and
                 case.find('error') is None for case in self.cases)
             self.issue = None
@@ -135,6 +140,43 @@ def read_fixtures(path, root, required_sources):
         if actual != source['sha256']:
             raise ValueError(f'fixture source changed: {source["path"]}')
     return {'sha256': sha256(raw).hexdigest(), 'sources': sources}
+
+
+def checkout_identity(root):
+    """Bind tracked changes and untracked product sources, without copying them."""
+    def git(*args):
+        try:
+            return subprocess.check_output(['git', *args], cwd=root, stderr=subprocess.PIPE)
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise ValueError('cannot read checkout source identity') from error
+
+    head = git('rev-parse', 'HEAD').decode('ascii').strip()
+    changes = git('-c', 'core.filemode=true', 'diff', '--binary', '--full-index',
+                  '--no-ext-diff', '--no-textconv', '--no-renames', 'HEAD', '--')
+    roots = ['app', 'packages', 'runtime']
+    paths = sorted(name for name in git('ls-files', '--others', '--exclude-standard', '-z',
+                                        '--', *roots).decode('utf-8').split('\0') if name)
+    untracked = sha256()
+    for name in paths:
+        untracked.update(name.encode('utf-8') + b'\0')
+        untracked.update(sha256((root / name).read_bytes()).digest())
+    return {'head': head, 'tracked_diff_sha256': sha256(changes).hexdigest(),
+            'untracked_roots': roots, 'untracked_count': len(paths),
+            'untracked_sha256': untracked.hexdigest()}
+
+
+def report_name(key):
+    return 'engine.xml' if key == 'engine' else f'{key}.jsonl'
+
+
+def report_bytes(folder, suites):
+    return {key: (folder / report_name(key)).read_bytes()
+            if (folder / report_name(key)).is_file() else None for key in suites}
+
+
+def report_hashes(raw_reports):
+    return {report_name(key): sha256(raw).hexdigest() if raw is not None else None
+            for key, raw in raw_reports.items()}
 
 
 def collect(data, reports, run_id, fixture_issue=None, fixture_sha256=None):
@@ -237,17 +279,16 @@ def main():
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    # Even a rejected input is a new attempt, never the old green summary.
-    for name in ('summary.json', 'results.jsonl'):
-        (output / name).unlink(missing_ok=True)
     now = datetime.now(timezone.utc).isoformat()
     try:
         data = read_cases(args.cases)
         manifest_sha256 = sha256(args.cases.read_bytes()).hexdigest()
     except (OSError, ValueError, KeyError, TypeError) as error:
         issue = f'case manifest not verified: {error}'
+        for name in ('summary.json', 'results.jsonl', 'run-inputs.json'):
+            (output / name).unlink(missing_ok=True)
         if not args.reports:
-            for name in ('run-inputs.json', 'sdk.jsonl', 'app.jsonl', 'engine.xml'):
+            for name in ('sdk.jsonl', 'app.jsonl', 'engine.xml'):
                 target = output / name
                 if not args.engine_report or target != args.engine_report.resolve():
                     target.unlink(missing_ok=True)
@@ -269,12 +310,16 @@ def main():
     fixture_issue = None
     fixtures = None
     inputs = None
+    checkout = None
+    raw_reports = {}
+    exits = None
     try:
         fixtures = read_fixtures(args.model_fixtures, root, data['fixture_sources'])
+        checkout = checkout_identity(root)
         if args.reports:
             inputs = json.loads((report_dir / 'run-inputs.json').read_text(encoding='utf-8'))
-            if inputs['manifest_sha256'] != manifest_sha256 or inputs['fixture_catalog_sha256'] != fixtures['sha256']:
-                raise ValueError('imported reports belong to different replay inputs')
+            # Capture before invalidating the destination, including in-place collection.
+            raw_reports = report_bytes(report_dir, data['suites'])
             if not isinstance(inputs.get('run_id'), str):
                 raise ValueError('imported reports have no original run identifier')
             exits = inputs.get('suite_exits')
@@ -282,40 +327,54 @@ def main():
                 raise ValueError('imported reports have no completed original execution record')
             if any(code is not None and type(code) is not int for code in exits.values()):
                 raise ValueError('imported reports have invalid original exit codes')
+            if inputs['manifest_sha256'] != manifest_sha256 or inputs['fixture_catalog_sha256'] != fixtures['sha256']:
+                raise ValueError('imported reports belong to different replay inputs')
+            if inputs.get('checkout_identity') != checkout:
+                raise ValueError('imported reports belong to different or unrecorded production content')
+            if inputs.get('report_sha256') != report_hashes(raw_reports):
+                raise ValueError('imported raw report bytes do not match the original execution record')
         else:
             inputs = {'run_id': now, 'mode': 'offline', 'manifest_sha256': manifest_sha256,
                       'fixture_catalog_sha256': fixtures['sha256'],
+                      'checkout_identity': checkout,
                       'execution_complete': False,
                       'engine_report': str(args.engine_report) if args.engine_report else 'launched by replay'}
-        (output / 'run-inputs.json').write_text(json.dumps(inputs, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     except (OSError, ValueError, KeyError, TypeError) as error:
-        fixture_issue = f'compiled fixture catalog not verified: {error}'
+        fixture_issue = f'replay inputs not verified: {error}'
+    # No old completion may describe partially replaced reports. The original
+    # input record and report bytes above are already retained for --reports=output.
+    for name in ('summary.json', 'results.jsonl', 'run-inputs.json'):
+        (output / name).unlink(missing_ok=True)
+    if fixture_issue:
         if not args.reports:
-            (output / 'run-inputs.json').unlink(missing_ok=True)
             for key in data['suites']:
-                target = output / ('engine.xml' if key == 'engine' else f'{key}.jsonl')
+                target = output / report_name(key)
                 if args.engine_report and target == args.engine_report.resolve():
                     continue  # This is an explicitly supplied input, not a prior output.
                 target.unlink(missing_ok=True)
-    exits = None
-    if not fixture_issue:
-        if args.reports:
-            exits = inputs['suite_exits']
-        else:
+    else:
+        pending = {**inputs, 'execution_complete': False}
+        (output / 'run-inputs.json').write_text(json.dumps(pending, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        if not args.reports:
             exits = run_suites(root, data, output, args.engine_report.resolve() if args.engine_report else None)
-            inputs.update(execution_complete=True, suite_exits=exits)
-            (output / 'run-inputs.json').write_text(json.dumps(inputs, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    reports = {key: EngineReport(report_dir / 'engine.xml') if key == 'engine'
-               else Report(report_dir / f'{key}.jsonl') for key in data['suites']}
+            try:
+                raw_reports = report_bytes(output, data['suites'])
+                if checkout_identity(root) != checkout:
+                    raise ValueError('production content changed during execution')
+            except (OSError, ValueError) as error:
+                fixture_issue = f'replay inputs not verified: {error}'
+    reports = {key: EngineReport(report_dir / report_name(key), raw_reports.get(key)) if key == 'engine'
+               else Report(report_dir / report_name(key), raw_reports.get(key)) for key in data['suites']}
     run_id = inputs['run_id'] if inputs and not fixture_issue else now
     rows = collect(data, reports, run_id, fixture_issue, fixtures['sha256'] if fixtures else None)
-    if args.reports and not fixture_issue:
-        for key, report in reports.items():
-            target = output / report.path.name
-            if report.path != target:
+    if not fixture_issue:
+        for key, raw in raw_reports.items():
+            target = output / report_name(key)
+            if raw is None:
                 target.unlink(missing_ok=True)
-                if report.path.is_file():
-                    target.write_bytes(report.path.read_bytes())
+            else:
+                # Publish exactly the bytes parsed above, never reread a moving source.
+                target.write_bytes(raw)
     (output / 'results.jsonl').write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows),
                                         encoding='utf-8')
     counts = dict(Counter(row['status'] for row in rows))
@@ -335,6 +394,9 @@ def main():
                'required_gap_counts': dict(Counter(check['status'] for row in rows for check in row['checks']
                                                   if 'test_name' not in check)),
                'manifest_sha256': manifest_sha256,
+               'checkout_identity': checkout,
+               'tested_checkout_identity': inputs.get('checkout_identity') if inputs else None,
+               'report_sha256': report_hashes(raw_reports),
                'model_fixtures': fixtures, 'fixture_issue': fixture_issue,
                'collection_only': bool(args.reports), 'collected_at': now,
                'suite_exits': exits, 'report_success': {key: report.success for key, report in reports.items()},
@@ -343,6 +405,12 @@ def main():
                'separate_modes': data.get('separate_modes', []),
                'limits': data['limits']}
     (output / 'summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    if not fixture_issue:
+        inputs.update(execution_complete=True, suite_exits=exits,
+                      report_sha256=report_hashes(raw_reports))
+        temporary = output / '.run-inputs.json.tmp'
+        temporary.write_text(json.dumps(inputs, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        temporary.replace(output / 'run-inputs.json')
     print(json.dumps(summary, ensure_ascii=False))
     if execution_status == 'FAIL':
         return 1

@@ -1256,19 +1256,34 @@ void main() {
           final reached = Completer<void>();
           final release = Completer<void>();
           final posts = <Map<String, Object?>>[];
-          var words = '等你回来，我们接着聊刚才的小事。';
+          const markOnly = '[表情:开心]';
+          const earlyWords = '第一轮：先理清线索。';
+          final lastWords = [for (var i = 1; i <= 16; i++) '后续第$i行：这段文字来自最后一轮模型回复。', '好了。'].join('\n');
+          var words = '$earlyWords\n$lastWords';
+          var chatRounds = 0;
           CompanionStageEvents? stageEvents;
           final client = MockClient.streaming((request, bytes) async {
             final body = jsonDecode(await bytes.bytesToString()) as Map<String, Object?>;
             posts.add(body);
             if (_isChat2(body)) {
+              final round = chatRounds++;
               if (!reached.isCompleted) reached.complete();
               await release.future;
+              final response = !sameWordsFromWake && round < 2
+                  ? _reply2(
+                      words: round == 0 ? markOnly : earlyWords,
+                      calls: [
+                        ('visible-$round', 'recall', {'query': '线索'}),
+                      ],
+                    )
+                  : _reply2(words: sameWordsFromWake ? words : lastWords);
+              return http.StreamedResponse(
+                Stream.value(response.bodyBytes),
+                response.statusCode,
+                headers: response.headers,
+              );
             }
-            return http.StreamedResponse(
-              Stream.value(utf8.encode(_messageEvents(_wordsTurn(_isChat2(body) ? words : '')))),
-              200,
-            );
+            return http.StreamedResponse(Stream.value(utf8.encode(_messageEvents(_wordsTurn('')))), 200);
           });
           addTearDown(() async {
             if (!release.isCompleted) release.complete();
@@ -1338,13 +1353,24 @@ void main() {
           await _drained(tester, memory);
           await _settle(tester);
           expect(agent.running, isFalse);
-          expect(agent.text, words);
-          final assistant = memory.store.messages().singleWhere((row) => row['role'] == 'assistant');
-          expect(assistant['text'], words);
+          expect(agent.text, sameWordsFromWake ? words : '$markOnly\n$words');
+          final assistants = memory.store.messages().where((row) => row['role'] == 'assistant').toList();
+          expect(assistants, hasLength(sameWordsFromWake ? 1 : 3));
+          final assistant = assistants.singleWhere((row) => row['text'] == (sameWordsFromWake ? words : lastWords));
+          if (!sameWordsFromWake) {
+            expect(assistants.where((row) => row['text'] == markOnly), hasLength(1));
+            expect(assistants.where((row) => row['text'] == earlyWords), hasLength(1));
+            for (final body in posts.where(_isChat2).skip(1)) {
+              final results = _toolResults2(body);
+              expect(results, hasLength(1));
+              expect(results.single['is_error'], isNot(true));
+              expect(_toolResult2(body)['applied'], isTrue);
+            }
+          }
           // The Agent saves assistant sources with its real wall clock. Keep
           // the existing fake presentation clock at or after that real source,
           // and complete any changed-day settlement under the hidden route.
-          clock.wall = (assistant['said_at_utc']! as int) + 1;
+          clock.wall = assistants.map((row) => row['said_at_utc']! as int).reduce((a, b) => a > b ? a : b) + 1;
           memory.changed();
           await _drained(tester, memory);
           await _settle(tester);
@@ -1357,7 +1383,7 @@ void main() {
             stageEvents!.onWake();
             await _settle(tester);
           }
-          expect(posts.where(_isChat2), hasLength(1));
+          expect(posts.where(_isChat2), hasLength(sameWordsFromWake ? 1 : 3));
           expect(db.select('SELECT * FROM memory_affinity_presentations'), isEmpty);
           expect(find.text(words), findsNothing);
           final changesBeforeReturn = agentChanges;
@@ -1374,13 +1400,39 @@ void main() {
           expect(find.text(words), findsOneWidget);
           expect(agentChanges, changesBeforeReturn, reason: 'returning must not rely on another Agent notification');
           expect(memoryChanges, memoryChangesBeforeReturn);
-          final shown = db.select('SELECT * FROM memory_affinity_presentations');
+          var shown = db.select('SELECT * FROM memory_affinity_presentations');
           expect(shown, hasLength(sameWordsFromWake ? 0 : 1));
           if (!sameWordsFromWake) {
             expect(shown.single['id'], 'assistant:${assistant['id']}');
             expect(shown.single['assistant_source_id'], assistant['id']);
             expect(shown.single['kind'], 'assistant');
             expect(shown.single['presented_at_ms'], clock.wall);
+
+            final scroll = tester
+                .state<ScrollableState>(
+                  find.descendant(of: find.byType(CompanionSpeech), matching: find.byType(Scrollable)),
+                )
+                .position;
+            expect(scroll.pixels, 0, reason: 'the unchanged reverse bubble starts at its newest lines');
+            expect(scroll.maxScrollExtent, greaterThan(0));
+            final early = assistants.singleWhere((row) => row['text'] == earlyWords);
+            final mark = assistants.singleWhere((row) => row['text'] == markOnly);
+            expect(shown.any((row) => row['assistant_source_id'] == early['id']), isFalse);
+            expect(shown.any((row) => row['assistant_source_id'] == mark['id']), isFalse);
+
+            // Scroll the actual existing bubble to its oldest lines. No new
+            // Agent/Owner notification or model round makes this source seen.
+            scroll.jumpTo(scroll.maxScrollExtent);
+            await tester.pump();
+            await tester.pump();
+            shown = db.select('SELECT * FROM memory_affinity_presentations');
+            expect(shown.map((row) => row['assistant_source_id']), unorderedEquals([assistant['id'], early['id']]));
+            expect(shown.any((row) => row['assistant_source_id'] == mark['id']), isFalse);
+            expect(agentChanges, changesBeforeReturn);
+            expect(memoryChanges, memoryChangesBeforeReturn);
+            scroll.jumpTo(0);
+            await tester.pump();
+            expect(db.select('SELECT * FROM memory_affinity_presentations'), shown);
           }
 
           // Another actual frame and a pause/resume keep the same durable fact;

@@ -1,9 +1,11 @@
 // Manual Android entry point. Not a test and never registered in CI.
-// Only a one-use token goes to the private bootstrap; the key stays in memory.
+// Only a public claim commitment goes to bootstrap; secret and key stay in memory.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:dsh_app/companion/companion_agent.dart';
 import 'package:dsh_app/companion/companion_agent_task_tools.dart';
 import 'package:dsh_app/companion/companion_agent_task_ui.dart';
@@ -52,8 +54,11 @@ class _ReplayPageState extends State<_ReplayPage> {
   Future<void> start() async {
     if (!mounted || cancelled) return;
     try {
+      final random = math.Random.secure();
+      final claimSecret = base64UrlEncode(List<int>.generate(32, (_) => random.nextInt(256)));
       final file = File('${Directory.systemTemp.path}/dsh-a3-config.json');
-      debugPrint('A3_CONFIG_READY:${jsonEncode({'path': file.path})}');
+      final ready = {'path': file.path, 'claimHash': crypto.sha256.convert(utf8.encode(claimSecret)).toString()};
+      debugPrint('A3_CONFIG_READY:${jsonEncode(ready)}');
       late final Map<String, Object?> config;
       try {
         final waiting = Stopwatch()..start();
@@ -70,7 +75,7 @@ class _ReplayPageState extends State<_ReplayPage> {
         if (await file.exists()) await file.delete();
       }
       if (!mounted || cancelled) return;
-      config['key'] = await takeKey(config);
+      config['key'] = await takeKey(config, claimSecret);
       if (!mounted || cancelled) return;
       replay = _Replay(config, (value) {
         if (mounted) setState(() => status = value);
@@ -84,11 +89,13 @@ class _ReplayPageState extends State<_ReplayPage> {
     }
   }
 
-  Future<String> takeKey(Map<String, Object?> config) async {
+  Future<String> takeKey(Map<String, Object?> config, String claimSecret) async {
     final handoff = Map<String, Object?>.from(config.remove('keyHandoff')! as Map);
     final port = handoff['port'];
-    final token = handoff['token'];
-    if (port is! int || port < 1 || port > 65535 || token is! String || token.isEmpty) {
+    if (port is! int ||
+        port < 1 ||
+        port > 65535 ||
+        handoff['claimHash'] != crypto.sha256.convert(utf8.encode(claimSecret)).toString()) {
       throw StateError('Invalid local key handoff');
     }
     final client = HttpClient()
@@ -101,7 +108,7 @@ class _ReplayPageState extends State<_ReplayPage> {
         final request = await client.postUrl(Uri(scheme: 'http', host: '127.0.0.1', port: port, path: '/a3-key'));
         request.followRedirects = false;
         request.contentLength = 0;
-        request.headers.set('X-DSH-A3-Token', token);
+        request.headers.set('X-DSH-A3-Token', claimSecret);
         if (!mounted || cancelled) throw StateError('Manual configuration stopped');
         final response = await request.close();
         if (response.statusCode != HttpStatus.ok) throw StateError('Local key handoff failed');

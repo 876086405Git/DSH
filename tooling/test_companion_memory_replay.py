@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 path = Path(__file__).parent / 'companion' / 'replay-memory.py'
@@ -162,6 +163,13 @@ class ReporterTests(unittest.TestCase):
         catalog = root / 'catalog.json'
         catalog.write_text(json.dumps({'fixture_version': 1, 'kind': 'compiled-product-fixtures',
             'sources': [{'path': child.name, 'sha256': sha256(child.read_bytes()).hexdigest()}]}), encoding='utf-8')
+        production = root / 'app/lib/companion_memory_rules.dart'
+        production.parent.mkdir(parents=True)
+        production.write_text('const selected = 1;\n', encoding='utf-8')
+        for command in (['git', 'init', '--quiet'], ['git', 'add', '.'],
+                        ['git', '-c', 'user.name=Reporter fixture', '-c', 'user.email=reporter@example.invalid',
+                         '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'reporter fixture']):
+            subprocess.run(command, cwd=root, capture_output=True, check=True)
         return [sys.executable, str(runner), '--cases', str(cases), '--model-fixtures', str(catalog)]
 
     def test_recollection_preserves_original_nonzero_child_exit(self):
@@ -181,6 +189,77 @@ class ReporterTests(unittest.TestCase):
             self.assertEqual(summary['acceptance_status'], 'FAIL')
             self.assertEqual(summary['run_id'], first_summary['run_id'])
             self.assertTrue(summary['collection_only'])
+            inputs = json.loads((original / 'run-inputs.json').read_text())
+            raw = (original / 'engine.xml').read_bytes()
+            self.assertTrue(inputs['execution_complete'])
+            self.assertEqual(inputs['report_sha256'], {'engine.xml': sha256(raw).hexdigest()})
+            self.assertEqual((imported / 'engine.xml').read_bytes(), raw)
+
+            # A source file changing after parsing must not change the published
+            # evidence. This also exercises collecting directly over its input.
+            checked = False
+            check = replay.EngineReport.check
+
+            def change_after_parse(report, name):
+                nonlocal checked
+                if not checked:
+                    (original / 'engine.xml').write_bytes(b'<testsuites/>')
+                    checked = True
+                return check(report, name)
+
+            with patch.object(replay, '__file__', command[1]), \
+                    patch.object(sys, 'argv', [*command[1:], '--reports', str(original), '--output', str(original)]), \
+                    patch.object(replay.EngineReport, 'check', change_after_parse), patch('builtins.print'):
+                self.assertEqual(replay.main(), 1)
+            self.assertTrue(checked)
+            self.assertEqual((original / 'engine.xml').read_bytes(), raw)
+            self.assertEqual(json.loads((original / 'run-inputs.json').read_text()), inputs)
+            rows = [json.loads(line) for line in (original / 'results.jsonl').read_text().splitlines()]
+            self.assertTrue(all(row['status'] == 'PASS' for row in rows))
+            self.assertEqual(json.loads((original / 'summary.json').read_text())['suite_exits'], {'engine': 7})
+
+            # Neither HEAD nor the fixture catalog changes when a tracked
+            # production file, or an untracked production import, changes.
+            production = Path(folder) / 'app/lib/companion_memory_rules.dart'
+            before = production.read_bytes()
+            extra = production.with_name('new_source.dart')
+            for target, content in ((production, b'const selected = 2;\n'),
+                                    (extra, b'const added = true;\n')):
+                try:
+                    target.write_bytes(content)
+                    self.assertEqual(subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=folder)
+                                     .decode().strip(), inputs['checkout_identity']['head'])
+                    self.assertEqual(sha256((Path(folder) / 'catalog.json').read_bytes()).hexdigest(),
+                                     inputs['fixture_catalog_sha256'])
+                    rejected = subprocess.run([*command, '--reports', str(original), '--output', str(imported)],
+                                              capture_output=True, text=True, check=False)
+                    self.assertEqual(rejected.returncode, 1, rejected.stderr)
+                    rejected_summary = json.loads((imported / 'summary.json').read_text())
+                    self.assertFalse(rejected_summary['reports_considered'])
+                    self.assertIn('production content', rejected_summary['fixture_issue'])
+                    self.assertEqual(rejected_summary['case_counts'], {'NOT_RUN': 15})
+                    self.assertEqual(rejected_summary['suite_exits'], {'engine': 7})
+                    self.assertFalse((imported / 'run-inputs.json').exists())
+                finally:
+                    production.write_bytes(before)
+                    extra.unlink(missing_ok=True)
+
+            for replacement in (None, b'<testsuites><testcase name="different run"/></testsuites>'):
+                try:
+                    if replacement is None:
+                        (original / 'engine.xml').unlink()
+                    else:
+                        (original / 'engine.xml').write_bytes(replacement)
+                    rejected = subprocess.run([*command, '--reports', str(original), '--output', str(imported)],
+                                              capture_output=True, text=True, check=False)
+                    self.assertEqual(rejected.returncode, 1, rejected.stderr)
+                    rejected_summary = json.loads((imported / 'summary.json').read_text())
+                    self.assertFalse(rejected_summary['reports_considered'])
+                    self.assertIn('raw report bytes', rejected_summary['fixture_issue'])
+                    self.assertEqual(rejected_summary['suite_exits'], {'engine': 7})
+                    self.assertFalse((imported / 'run-inputs.json').exists())
+                finally:
+                    (original / 'engine.xml').write_bytes(raw)
 
     def test_invalid_cases_replace_old_green_summary_with_current_not_run(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -190,6 +269,36 @@ class ReporterTests(unittest.TestCase):
             self.assertEqual(first.returncode, 0, first.stderr)
             original = json.loads((output / 'summary.json').read_text())
             self.assertEqual(original['execution_status'], 'PASS')
+            write_bytes = Path.write_bytes
+
+            def interrupted_copy(target, raw):
+                if target == output / 'engine.xml':
+                    pending = json.loads((output / 'run-inputs.json').read_text())
+                    self.assertFalse(pending['execution_complete'])
+                    self.assertFalse((output / 'summary.json').exists())
+                    write_bytes(target, b'<partial-new-report')
+                    raise OSError('interrupted report copy')
+                return write_bytes(target, raw)
+
+            with patch.object(replay, '__file__', command[1]), \
+                    patch.object(sys, 'argv', [*command[1:], '--reports', str(output), '--output', str(output)]), \
+                    patch.object(Path, 'write_bytes', interrupted_copy):
+                with self.assertRaisesRegex(OSError, 'interrupted report copy'):
+                    replay.main()
+            self.assertFalse(json.loads((output / 'run-inputs.json').read_text())['execution_complete'])
+            self.assertFalse((output / 'summary.json').exists())
+            self.assertFalse((output / 'results.jsonl').exists())
+            rejected = subprocess.run([*command, '--reports', str(output), '--output', str(output)],
+                                      capture_output=True, text=True, check=False)
+            self.assertEqual(rejected.returncode, 2, rejected.stderr)
+            self.assertFalse(json.loads((output / 'summary.json').read_text())['reports_considered'])
+            # Only a new real child execution can create a new complete record.
+            rerun = subprocess.run([*command, '--output', str(output)], capture_output=True, text=True, check=False)
+            self.assertEqual(rerun.returncode, 0, rerun.stderr)
+            repaired = json.loads((output / 'run-inputs.json').read_text())
+            self.assertTrue(repaired['execution_complete'])
+            self.assertEqual(repaired['report_sha256']['engine.xml'],
+                             sha256((output / 'engine.xml').read_bytes()).hexdigest())
             cases = Path(folder) / 'cases.json'
             data = json.loads(cases.read_text())
             data['fixture_version'] = 2

@@ -10,6 +10,7 @@ import 'dart:math';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -178,6 +179,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   // What's on screen.
   String? _bubble;
   String? _bubbleReplyId;
+  var _bubbleTextKey = GlobalKey();
   List<({String taskId, String placeName})> _lookupResults = const [];
   List<String> _notesResults = const [];
   List<String> _mapResults = const [];
@@ -1399,6 +1401,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _bubbleTimer?.cancel();
     _memoryFollowupTicket = null;
     setState(() {
+      // AnimatedSwitcher can still retain the outgoing words while a new
+      // bubble arrives. Never give those two Text elements the same GlobalKey.
+      if (_bubble == null) _bubbleTextKey = GlobalKey();
       _bubble = text;
       _bubbleReplyId = replyId;
       _bubbleIsError = error;
@@ -1757,9 +1762,74 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
           attachment.error == null &&
           !_bubbleIsError &&
           _bubble == reply.words) {
-        attachment.presentedReply(user, text);
+        final sources = _visibleReplySources(attachment, reply);
+        if (sources.isNotEmpty) attachment.presentedReply(user, text, sourceIds: sources);
       }
     });
+    // Scroll metrics may arrive after a frame, without an Agent notification.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  Set<String> _visibleReplySources(CompanionAgentAttachment attachment, CompanionReply reply) {
+    final pending = attachment.pendingReplyRanges;
+    if (pending.isEmpty) return const {};
+    final textObject = _bubbleTextKey.currentContext?.findRenderObject();
+    if (textObject == null || !textObject.attached) return const {};
+    RenderParagraph? findParagraph(RenderObject object) {
+      if (object is RenderParagraph) return object;
+      RenderParagraph? found;
+      object.visitChildren((child) {
+        found ??= findParagraph(child);
+      });
+      return found;
+    }
+
+    // Text may have a selection/semantics wrapper. Search only that Text's
+    // render subtree, never another bubble or another page's paragraph.
+    final paragraph = findParagraph(textObject);
+    if (paragraph == null ||
+        !paragraph.attached ||
+        !paragraph.hasSize ||
+        paragraph.size.isEmpty ||
+        paragraph.text.toPlainText() != reply.words) {
+      return const {};
+    }
+    final RenderBox viewport;
+    switch (RenderAbstractViewport.maybeOf(paragraph)) {
+      case final RenderBox box when box.attached && box.hasSize && !box.size.isEmpty:
+        viewport = box;
+      default:
+        return const {};
+    }
+    var visible = MatrixUtils.transformRect(
+      viewport.getTransformTo(null),
+      Offset.zero & viewport.size,
+    ).intersect(Offset.zero & MediaQuery.sizeOf(context));
+    RenderObject child = paragraph;
+    for (var parent = child.parent; parent != null; parent = child.parent) {
+      // A nonzero transform does not prove that an offstage/zero-opacity child
+      // was painted. Respect the actual render parents before reading boxes.
+      if (!parent.paintsChild(child)) return const {};
+      if (parent is RenderAnimatedOpacity && Color.getAlphaFromOpacity(parent.opacity.value) == 0) return const {};
+      final clip = parent.describeApproximatePaintClip(child);
+      if (clip != null) {
+        visible = visible.intersect(MatrixUtils.transformRect(parent.getTransformTo(null), clip));
+      }
+      child = parent;
+    }
+    if (!visible.isFinite || visible.isEmpty) return const {};
+    final transform = paragraph.getTransformTo(null);
+    final sources = <String>{};
+    for (final entry in pending.entries) {
+      for (final range in reply.wordRangesFrom(entry.value.start, entry.value.end)) {
+        final boxes = paragraph.getBoxesForSelection(TextSelection(baseOffset: range.start, extentOffset: range.end));
+        if (boxes.any((box) => !MatrixUtils.transformRect(transform, box.toRect()).intersect(visible).isEmpty)) {
+          sources.add(entry.key);
+          break;
+        }
+      }
+    }
+    return sources;
   }
 
   Future<void> _send() async {
@@ -2924,6 +2994,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                   CompanionMyLine(text: _myLine),
                   CompanionSpeech(
                     text: _bubble,
+                    textKey: _bubbleTextKey,
+                    onFrame: _queueReplyPresentation,
                     error: _bubbleIsError,
                     thinking: _sending || (_running && _bubble == null),
                     onPullBack: _openLog,
