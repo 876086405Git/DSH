@@ -263,18 +263,17 @@ TextSpan _highlightChunk(
   AppAccent accent,
   ThemeSyntaxColors? syntax,
 ) {
+  if (code.length > _kHighlightMaxChars) return TextSpan(text: code, style: base);
   final key = (code, language, brightness, base, accent, syntax);
   final cached = _chunkSpans.remove(key);
   if (cached != null) return _chunkSpans[key] = cached;
   var span = TextSpan(text: code, style: base);
-  if (code.length <= _kHighlightMaxChars) {
-    try {
-      final result = _hl.highlight(code: code, language: language);
-      final renderer = TextSpanRenderer(base, dshHighlightTheme(brightness, accent, syntax));
-      result.render(renderer);
-      span = renderer.span ?? span;
-    } catch (_) {}
-  }
+  try {
+    final result = _hl.highlight(code: code, language: language);
+    final renderer = TextSpanRenderer(base, dshHighlightTheme(brightness, accent, syntax));
+    result.render(renderer);
+    span = renderer.span ?? span;
+  } catch (_) {}
   _chunkSpans[key] = span;
   if (_chunkSpans.length > 64) _chunkSpans.remove(_chunkSpans.keys.first);
   return span;
