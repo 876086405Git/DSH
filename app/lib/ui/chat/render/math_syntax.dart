@@ -86,6 +86,8 @@ class _MathScanner {
 
   String run(int lastOpener) {
     var i = 0;
+    // Keep unchanged spans in the source until a delimiter really changes.
+    var copiedTo = 0;
     var lineStart = 0;
     var atLineStart = true;
     _Fence? fence;
@@ -99,7 +101,6 @@ class _MathScanner {
         final open = fence;
         if (open != null) {
           if (open.closedBy(line)) fence = null;
-          _copyLine(i, lineEnd);
           i = lineEnd < _n ? lineEnd + 1 : _n;
           atLineStart = true;
           continue;
@@ -107,7 +108,6 @@ class _MathScanner {
         final opens = _Fence.open(line);
         if (opens != null) {
           fence = opens;
-          _copyLine(i, lineEnd);
           i = lineEnd < _n ? lineEnd + 1 : _n;
           atLineStart = true;
           continue;
@@ -115,7 +115,6 @@ class _MathScanner {
       }
       final c = text.codeUnitAt(i);
       if (c == _newline) {
-        _out.writeCharCode(c);
         i += 1;
         atLineStart = true;
         continue;
@@ -123,17 +122,16 @@ class _MathScanner {
       if (c == _backtick) {
         if (i > paragraphEnd) paragraphEnd = _paragraphEnd(i);
         final end = _codeSpanEnd(i, paragraphEnd);
-        _out.write(text.substring(i, end));
         i = end;
         continue;
       }
       if (c == _backslash && i + 1 < _n) {
         final next = text.codeUnitAt(i + 1);
         if (next == _openBracket && streaming && !text.contains(r'\]', i + 2)) {
+          _out.write(text.substring(copiedTo, i));
           _pending(i, 2, lineStart);
           return _out.toString();
         }
-        _out.write(text.substring(i, i + 2));
         i += 2;
         if (next == _newline) atLineStart = true;
         continue;
@@ -143,45 +141,44 @@ class _MathScanner {
           final end = _displayCloser(i + 2);
           if (end != -1) {
             _out
+              ..write(text.substring(copiedTo, i))
               ..write(r'\[')
               ..write(text.substring(i + 2, end))
               ..write(r'\]');
             i = end + 2;
+            copiedTo = i;
             continue;
           }
           if (streaming && _hasDisplayBody(i + 2)) {
+            _out.write(text.substring(copiedTo, i));
             _pending(i, 2, lineStart);
             return _out.toString();
           }
-          _out.write(r'$$');
           i += 2;
           continue;
         }
         final end = inlineDollarCloser(text, i);
         if (end != -1) {
           _out
+            ..write(text.substring(copiedTo, i))
             ..write(r'\(')
             ..write(text.substring(i + 1, end))
             ..write(r'\)');
           i = end + 1;
+          copiedTo = i;
           continue;
         }
       }
-      _out.writeCharCode(c);
       i += 1;
     }
-    if (i < _n) _out.write(text.substring(i));
+    if (copiedTo == 0) return text;
+    _out.write(text.substring(copiedTo));
     return _out.toString();
   }
 
   int _lineEnd(int from) {
     final end = text.indexOf('\n', from);
     return end == -1 ? _n : end;
-  }
-
-  void _copyLine(int from, int lineEnd) {
-    _out.write(text.substring(from, lineEnd));
-    if (lineEnd < _n) _out.write('\n');
   }
 
   /// The closing `$$` of a display formula whose body starts at [from], or

@@ -43,6 +43,11 @@ void main() {
       expect(normalizeMath(r'$5 and $10, but $x^2$ is maths'), r'$5 and $10, but \(x^2\) is maths');
     });
 
+    test('a scan with no delimiter changes reuses its input', () {
+      final source = '${'正文 ' * 100}${r'cost $5 and $10; run `echo $HOME $PATH`'}';
+      expect(normalizeMath(source, streaming: true), same(source));
+    });
+
     test('escaped dollars are literal', () {
       expect(normalizeMath(r'cost \$5 and \$10'), r'cost \$5 and \$10');
       expect(normalizeMath(r'$\$5 + x$'), r'\(\$5 + x\)');
