@@ -275,7 +275,11 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
       }
       if (id != null) {
         final guarded = await IslandPlatform.instance.attach(id, dark: false, textZoom: 100);
-        if (stale()) return;
+        if (stale()) {
+          // Left while attaching: never shown, so it goes now (a cover's id was released already).
+          if (!cover) unawaited(IslandPlatform.instance.destroy(id));
+          return;
+        }
         if (!guarded) {
           _fail('guard');
           return;
@@ -430,7 +434,7 @@ class _CompanionStageState extends State<CompanionStage> with WidgetsBindingObse
     widget.controller
       .._web = null
       .._ready = false;
-    if (_cover) _destroyWebView();
+    _destroyWebView();
     // The hook stays until the server has closed: a pack change that races
     // leaving the room waits for the last handler too.
     final unhook = _unhook;
