@@ -65,6 +65,7 @@ const _pages = {
   'page:phoneAlwaysAllow',
   'page:phoneAndroidShell',
   'page:phoneDnd',
+  'page:phoneSkills',
   'page:phoneUnlocks',
 };
 const _rows = {

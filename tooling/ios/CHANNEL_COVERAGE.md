@@ -10,6 +10,7 @@ Flutter 的 `MethodChannel` 能编译通过，即使 iOS 没有注册同名通�
 | `dsh/companion_reminders` | 伙伴小屋本机提醒只接了 Android 精确闹钟；iOS 上调用失败时提醒如实显示「还没设上」 | iOS 本机提醒需用 UNUserNotificationCenter 单独实现 |
 | `dsh/companion_embeddings` | 伙伴小屋的本地语义检索只接了 Android（ONNX 小模型按需下载）；iOS 上调用失败时退回关键词检索 | iOS 本地向量需用 Core ML 单独实现 |
 | `dsh/companion/always_on` | 伙伴常驻（前台服务保活）只接了 Android；iOS 上调用报缺少通道时按未开启处理 | iOS 没有对应的常驻机制，暂不移植 |
+| `dsh/companion` | 伙伴「她会留意你的通知」只接了 Android（NotificationListenerService）；iOS 上入口不显示，调用缺少通道时按未开启处理 | iOS 不允许读取别的 App 的通知，不移植 |
 | `dsh/companion_screen/state` | 伙伴看屏的屏幕状态事件只接了 Android（沿用手机操控）；iOS 上常驻不会开启，观察器从不订阅这条事件流 | iOS 不提供同类能力，暂不移植 |
 | `dsh/attachment-files` | OHOS 专用附件接口 | 无需移植；iOS 走自己的文件入口 |
 | `dsh/authorized-workspaces` | OHOS 手机文件夹授权（系统目录选择与持久授权）；Dart 侧尚未接入界面 | 无需移植；iOS 的工作目录授权走自己的路径 |

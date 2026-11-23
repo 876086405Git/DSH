@@ -12,10 +12,13 @@ class PhoneSkillsController extends AsyncNotifier<PhoneSkillListing> {
   PhoneChannel get _channel => ref.read(phoneChannelProvider);
 
   @override
-  Future<PhoneSkillListing> build() {
+  Future<PhoneSkillListing> build() async {
+    // Without the native side (other platforms, widget tests) the listing fails here and
+    // nothing subscribes to the event channel, which has no handler there either.
+    final listing = await _channel.listSkills();
     final sub = _channel.skillEvents.listen((_) => unawaited(reload()));
     ref.onDispose(sub.cancel);
-    return _channel.listSkills();
+    return listing;
   }
 
   Future<void> reload() async {

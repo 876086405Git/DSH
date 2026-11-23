@@ -28,11 +28,9 @@ class PhoneSkillBanner extends ConsumerStatefulWidget {
 class _PhoneSkillBannerState extends ConsumerState<PhoneSkillBanner> {
   StreamSubscription<PhoneSkillEvent>? _outcomes;
 
-  @override
-  void initState() {
-    super.initState();
-    if (!PhoneSkillBanner.supported) return;
-    _outcomes = ref.read(phoneChannelProvider).skillEvents.listen((event) {
+  /// Once the native side has answered (its event channel exists), outcomes for this chat.
+  void _listen() {
+    _outcomes ??= ref.read(phoneChannelProvider).skillEvents.listen((event) {
       if (event is PhoneSkillOutcomeEvent && event.from.sessionId == widget.sessionId) _note(event);
     });
   }
@@ -64,7 +62,9 @@ class _PhoneSkillBannerState extends ConsumerState<PhoneSkillBanner> {
   Widget build(BuildContext context) {
     if (!PhoneSkillBanner.supported) return const SizedBox.shrink();
     final hidden = ref.watch(hiddenSkillDraftsProvider);
-    final drafts = ref.watch(phoneSkillsProvider).value?.drafts ?? const <PhoneSkillDraft>[];
+    final listing = ref.watch(phoneSkillsProvider).value;
+    if (listing != null) _listen();
+    final drafts = listing?.drafts ?? const <PhoneSkillDraft>[];
     final mine = drafts.where((d) => d.from.sessionId == widget.sessionId && !hidden.contains(d.id)).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     if (mine.isEmpty) return const SizedBox.shrink();
