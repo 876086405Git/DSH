@@ -152,7 +152,7 @@
     },
     {
       "path": "packages/dsh_client/test/companion_memory_store_test.dart",
-      "sha256": "11888ac9220b4ec360e4ee2fee8450701d3cc16d3c78a92d7ce95925148e3fa9"
+      "sha256": "012bf37a12b2b110f377d4b81dd75ec7f1feb8d44473aaba0ae79801a2b52fa0"
     },
     {
       "path": "packages/dsh_client/test/companion_migration_recovery_test.dart",
