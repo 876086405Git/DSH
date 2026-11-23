@@ -391,15 +391,14 @@ Frame capFrame(CapRig r) {
 /// How wide the front's texture fades out toward the outline, in design units.
 const frontFade = 5.0;
 
-/// Per frame: matcap lookup × baked AO into the texels (`px` RGBA, unpremultiplied,
-/// and `argb` for the vertex mesh); `lift` (fabric) multiplies in when given.
-void shadeTexels(BotAvatarForm form, Float32List mc, Uint8List px, Int32List argb, Float32List aoMul, Lift? lift) {
+/// Shade unpremultiplied ARGB texels for both the vertex mesh and the side rays.
+/// `lift` (fabric) multiplies in when given.
+void shadeTexels(BotAvatarForm form, Float32List mc, Int32List argb, Float32List aoMul, Lift? lift) {
   final n = form.n, i00 = form.i00, wx = form.wx, wy = form.wy, ao = form.ao, sd = form.sd;
   const r3 = _m * 3;
-  for (var i = 0, k = 0; i < n * n; i++, k += 4) {
+  for (var i = 0; i < n * n; i++) {
     final a = ao[i];
     if (a == 0) {
-      px[k + 3] = 0;
       argb[i] = 0;
       continue;
     }
@@ -417,10 +416,6 @@ void shadeTexels(BotAvatarForm form, Float32List mc, Uint8List px, Int32List arg
     final bb = (mc[b + 2] * w00 + mc[b + 5] * w10 + mc[b + r3 + 2] * w01 + mc[b + r3 + 5] * w11).round().clamp(0, 255);
     final t = sd[i] / frontFade;
     final al = t >= 1 ? 255 : (t <= 0 ? 0 : (255 * t * t * (3 - 2 * t)).round());
-    px[k] = rr;
-    px[k + 1] = gg;
-    px[k + 2] = bb;
-    px[k + 3] = al;
     argb[i] = (al << 24) | (rr << 16) | (gg << 8) | bb;
   }
 }
@@ -433,7 +428,7 @@ class Rays {
   final List<Uint8List> c;
 }
 
-Rays raysOf(Uint8List img, BotAvatarForm form, double c0x, double c0y) {
+Rays raysOf(Int32List argb, BotAvatarForm form, double c0x, double c0y) {
   final n = form.n, sd = form.sd;
   double toG(double v) => ((v + pad) / span) * n - 0.5;
   final dOut = <Float32List>[], cOut = <Uint8List>[];
@@ -446,9 +441,9 @@ Rays raysOf(Uint8List img, BotAvatarForm form, double c0x, double c0y) {
       if (d < 0) break;
       final gx = toG(x).round(), gy = toG(y).round();
       if (gx < 0 || gy < 0 || gx >= n || gy >= n) break;
-      final k = (gy * n + gx) * 4;
+      final color = argb[gy * n + gx];
       ds.add(d);
-      cs.addAll([img[k], img[k + 1], img[k + 2]]);
+      cs.addAll([(color >>> 16) & 255, (color >>> 8) & 255, color & 255]);
     }
     dOut.add(Float32List.fromList(ds));
     cOut.add(Uint8List.fromList(cs));
@@ -463,8 +458,11 @@ List<Color> sliceColors(Rays rays, double Function(int) inset, double Function(i
     final d = rays.d[s], c = rays.c[s];
     final ins = inset(s), k = 1 - dark(s);
     var j = 0;
-    for (var i = 0; i < d.length; i++) {
-      if (d[i] >= ins) j = i;
+    for (var i = d.length - 1; i >= 0; i--) {
+      if (d[i] >= ins) {
+        j = i;
+        break;
+      }
     }
     if (c.isEmpty) return const Color(0xFF000000);
     return Color.fromARGB(255, (c[j * 3] * k).floor(), (c[j * 3 + 1] * k).floor(), (c[j * 3 + 2] * k).floor());

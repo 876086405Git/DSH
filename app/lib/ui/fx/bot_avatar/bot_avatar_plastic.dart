@@ -104,7 +104,6 @@ class PlasticState {
   BotAvatarForm? _imgForm;
   double _aoK = -1;
   final _aoMul = Float32List(256);
-  Uint8List _img = Uint8List(0);
   Int32List _argb = Int32List(0);
   ui.Vertices? _verts;
   String _sliceKey = '';
@@ -193,6 +192,7 @@ bool drawPlasticCap(
   Material mat,
   PlasticState st,
   FurStyle? furStyle,
+  void Function(Float32List, Frame) fillPlastic,
 ) {
   final bakery = BotAvatarBakery.instance;
   final n = formTier(rig.dev);
@@ -234,7 +234,7 @@ bool drawPlasticCap(
     if (fabric) {
       buildFabricMatcap(st._mc, linearColor(base), f, mat);
     } else {
-      buildMatcap(st._mc, linearColor(base), f, mat);
+      fillPlastic(st._mc, f);
     }
     /* a still frame shows the new light at once: no frames follow to fade */
     if (st._version == 0 || rig.still) {
@@ -261,8 +261,13 @@ bool drawPlasticCap(
     st._blendT = math.min(1, st._blendT + 1 / st._blendFrames);
     final e = st._blendT >= 1 ? 1.0 : st._blendT * st._blendT * (3 - 2 * st._blendT);
     final a = st._mcPrev, b = st._mc, o = st._mcMix;
-    for (var i = 0; i < o.length; i++) {
-      o[i] = a[i] + (b[i] - a[i]) * e;
+    if (!fabric && e == 1) {
+      // Plastic targets are zero or >= 2, so the Float32 endpoint is b.
+      o.setAll(0, b);
+    } else {
+      for (var i = 0; i < o.length; i++) {
+        o[i] = a[i] + (b[i] - a[i]) * e;
+      }
     }
     st._mixVersion++;
   }
@@ -276,13 +281,12 @@ bool drawPlasticCap(
     st._aoK = aoK;
   }
   if (st._n != n) {
-    st._img = Uint8List(n * n * 4);
     st._argb = Int32List(n * n);
     st._n = n;
     st._imgVersion = -1;
   }
   if (st._imgVersion != st._mixVersion || st._imgAoK != aoK || !identical(st._imgForm, form)) {
-    shadeTexels(form, st._mcMix, st._img, st._argb, st._aoMul, fur != null ? edgeLift(form) : null);
+    shadeTexels(form, st._mcMix, st._argb, st._aoMul, fur != null ? edgeLift(form) : null);
     final mesh = _meshOf(form);
     st._verts?.dispose();
     st._verts = ui.Vertices.raw(ui.VertexMode.triangles, mesh.positions, colors: st._argb, indices: mesh.indices);
@@ -320,7 +324,7 @@ bool drawPlasticCap(
   final c0x = rel.cx[0], c0y = rel.cy[0];
   final sliceKey = '${st._version}|$kk|${rel.q}|${fur != null}';
   Rays? rays;
-  Rays raysNow() => rays ??= raysOf(st._img, form, c0x, c0y);
+  Rays raysNow() => rays ??= raysOf(st._argb, form, c0x, c0y);
   Shader sweep(List<Color> colors) => ui.Gradient.sweep(
     Offset(c0x, c0y),
     colors,

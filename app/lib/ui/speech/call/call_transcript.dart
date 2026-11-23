@@ -27,6 +27,7 @@ class CallTranscript extends StatefulWidget {
 
 class _CallTranscriptState extends State<CallTranscript> {
   final _scroll = ScrollController();
+  final _spoken = Expando<String>();
 
   /// The reader is at the bottom, following the words: only their own
   /// scrolling changes it, not the words growing under an animation.
@@ -97,7 +98,11 @@ class _CallTranscriptState extends State<CallTranscript> {
                     controller: _scroll,
                     padding: const EdgeInsets.fromLTRB(kSheetGutter, 4, kSheetGutter, 28),
                     itemCount: turns.length,
-                    itemBuilder: (context, i) => _Turn(turns[i]),
+                    itemBuilder: (context, i) {
+                      final turn = turns[i];
+                      final her = _spoken[turn] ??= speakable(turn.her).trim();
+                      return _Turn(turn, her);
+                    },
                   ),
                 ),
         ),
@@ -107,15 +112,15 @@ class _CallTranscriptState extends State<CallTranscript> {
 }
 
 class _Turn extends StatelessWidget {
-  const _Turn(this.turn);
+  const _Turn(this.turn, this.her);
 
   final CallTurn turn;
+  final String her;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final surfaces = DshSurfaces.of(context);
-    final her = speakable(turn.her).trim();
     return Padding(
       padding: const EdgeInsets.only(bottom: 22),
       child: Column(

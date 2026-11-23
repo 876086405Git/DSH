@@ -375,6 +375,18 @@ void paintBotAvatar(
     backSoft: look.backSoftness,
   );
 
+  // Parts share this paint's plastic target, while each keeps its own fade.
+  Float32List? plasticTarget;
+  void fillPlastic(Float32List out, Frame frame) {
+    final source = plasticTarget;
+    if (source != null) {
+      out.setAll(0, source);
+      return;
+    }
+    buildMatcap(out, linearColor(look.color), frame, mat);
+    plasticTarget = out;
+  }
+
   /* plastic's hairline lays itself over the avatar's own pixels only */
   final layered = mode == BotAvatarShading.plastic && box * math.min(2, dpr) >= 256;
   if (layered) canvas.saveLayer(Rect.fromLTWH(0, 0, full, full), Paint());
@@ -426,6 +438,7 @@ void paintBotAvatar(
         mat,
         rs._for(solid.key),
         plush && mode == BotAvatarShading.fabric ? look.fur : null,
+        fillPlastic,
       );
     }
     if (done) return true;

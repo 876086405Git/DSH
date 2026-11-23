@@ -489,7 +489,8 @@ class _RevealTextState extends State<RevealText> with SingleTickerProviderStateM
     final target = _target;
     // Catch up faster the further behind: never more than a second late.
     final rate = math.max(26.0, (target - _shown) * 2.2);
-    setState(() => _shown = math.min(target, _shown + rate * dt));
+    _shown = math.min(target, _shown + rate * dt);
+    if (!AppMotion.reduced(context)) setState(() {});
     if (_shown >= target) _ticker.stop();
   }
 
