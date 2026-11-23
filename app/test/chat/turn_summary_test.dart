@@ -197,6 +197,22 @@ void main() {
   });
 
   group('edge cases', () {
+    test('整文件新增保留 CRLF、末尾空行和重复读取的行文本', () {
+      final write = tool(
+        'whole-write-eol',
+        'write',
+        {'file_path': 'f', 'content': 'a\r\n\nb\n\n'},
+        meta: {'operation': 'create'},
+      );
+      final file = fileChangesOf([write]).single;
+      expect((file.added, file.removed), (4, 0));
+      expect(file.lines.map((line) => line.text), ['+a\r', '+', '+b', '+']);
+      expect(file.lines.first.text, same(file.lines.first.text));
+      const patch = '--- /dev/null\n+++ b/f\n@@ -0,0 +1,4 @@\n+a\r\n+\n+b\n+\n';
+      expect(file.patch, patch);
+      expect(file.patch, patch);
+    });
+
     test('failed, denied and streaming edits are not changes', () {
       final tools = [
         tool('a', 'edit', {
