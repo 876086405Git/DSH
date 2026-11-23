@@ -176,11 +176,21 @@ Disclaimer:
 - Turn it on only when you need it, and off when you're done.
 - We advise against turning it on for a device that holds payment or banking details.
 
+## Learning from completed tasks (Android)
+
+When a phone task ends normally and the phone has accepted at least three actions, DSH can ask the same model and provider to draft a reusable procedure. Learning is on by default. If you take over, decline a confirmation, stop the task, or complete it by following an existing skill, DSH skips the new draft.
+
+The drafting model receives your original goal, the final DSH answer, a summary of phone actions, and short descriptions of existing skills. The action summary omits screen text, images and coordinates, and replaces typed input with a placeholder. The model is asked to turn names, numbers, amounts, addresses and message text into parameters. Before saving the draft, DSH checks for secret fields and masks quoted values, groups of digits and amounts.
+
+Up to 20 drafts survive a restart and expire after 30 days. When your client presents a draft for review, you can edit its five sections before accepting. An update shows the added and removed lines. If the saved skill has changed since the proposal, review the newer version. Accepting a skill starts its trial. To choose an enabled skill explicitly in chat, enter its name, such as `/phone-find-item`.
+
+A trial skill becomes active after its procedure is used successfully in one of its apps. Two misses in the latest three scored uses suspend it. The five most recent results can also include unscored uses, such as network, model or quota failures. These do not contribute to suspension. Re-enabling a suspended skill starts a fresh scoring window. Switching off learning stops automatic drafts from phone tasks.
+
 ## Action log and more settings
 
 Expand **More settings**. **Recent actions** logs every step, without screen contents. Tap **All actions** to see them. The log lasts until the app closes.
 
-**Non-disruptive mode** is directly available on the main page. **More settings** holds the floating bar, accessibility restoration, background running, Check phone control, text recognition, phone skills, Android Shell and recent actions.
+**Non-disruptive mode** is directly available on the main page. **More settings** holds the floating bar, accessibility restoration, background running, Check phone control, text recognition, Android Shell and recent actions.
 
 **Check phone control** opens a separate page showing only status and start or cancel/cleanup controls. B, C1 and C2 profiles, coverage, individual results, refresh and report export are under **Technical details**. This is a partial check: untested items never count as passed. Opening the page does not start a check.
 
