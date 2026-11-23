@@ -3066,10 +3066,11 @@ class CompanionMemoryStore {
   /// Currentness protects an existing display as well as a pending ticket.
   /// Asked may remain visible for its original eight seconds; only pending
   /// can reserve, so this is never permission to show the question twice.
-  bool isFollowupCurrent(MemoryRow captured, {required int nowMs}) => _db
+  bool isFollowupCurrent(MemoryRow captured, {required int nowMs}) {
+    final rows = _db
       .select(
         '''
-    SELECT 1 FROM memory_followups f JOIN memory_cards c ON c.id=f.card_id
+    SELECT f.* FROM memory_followups f JOIN memory_cards c ON c.id=f.card_id
     JOIN memory_topics t ON t.id=c.topic_id JOIN memory_messages m ON m.id=f.message_id
     JOIN memory_archive a ON a.singleton=1 LEFT JOIN memory_messages support ON support.id=f.support_message_id
     WHERE f.id=? AND f.row_rev=? AND f.card_id=? AND f.card_rev=? AND f.control_revision=?
@@ -3098,11 +3099,20 @@ class CompanionMemoryStore {
           nowMs,
           nowMs,
         ],
-      )
-      .isNotEmpty;
+      );
+    if (rows.isEmpty) return false;
+    final current = rows.single;
+    if (current['agent_origin'] == 1 || current['state'] == 'asked' || current['wait_subject'] == null) return true;
+    // An unshown legacy completion still needs one unambiguous card.
+    // Read the current candidates without altering the presentation debit.
+    final candidateCards = _legacyFollowupCandidates(nowMs).choices
+        .where((row) => row['wait_subject'] == current['wait_subject'])
+        .map((row) => row['card_id'])
+        .toSet();
+    return candidateCards.length == 1 && candidateCards.contains(current['card_id']);
+  }
 
-  void _refreshFollowups(int at) {
-    _refreshAgentFollowups(at);
+  ({Map<String, MemoryRow> sources, List<MemoryRow> choices}) _legacyFollowupCandidates(int at) {
     final meta = archive;
     final sources = <String, MemoryRow>{
       for (final row in _db.select(
@@ -3145,10 +3155,20 @@ class CompanionMemoryStore {
         });
       }
     }
-    final choices = [
-      for (final group in candidates.values)
-        if (group.length == 1) group.single,
-    ];
+    return (
+      sources: sources,
+      choices: [
+        for (final group in candidates.values)
+          if (group.length == 1) group.single,
+      ],
+    );
+  }
+
+  void _refreshFollowups(int at) {
+    _refreshAgentFollowups(at);
+    final candidates = _legacyFollowupCandidates(at);
+    final sources = candidates.sources;
+    final choices = candidates.choices;
     final chosenIds = choices.map((row) => row['id']).toSet();
     final existing = {
       for (final row in _db.select('SELECT * FROM memory_followups WHERE agent_origin=0')) row['id'] as String: row,
