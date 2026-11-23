@@ -135,6 +135,7 @@ class LayerPackaging(unittest.TestCase):
             prefix = f'gaxios/build/{kind}'
             test_file = prefix + '/test/test.getch.js'
             dropped.add(test_file)
+            kept |= {prefix + '/src/index.js', 'gaxios/LICENSE'}
             for relative in (test_file, prefix + '/src/index.js', 'gaxios/LICENSE'):
                 path = self.root / 'dsh/node_modules' / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -146,7 +147,7 @@ class LayerPackaging(unittest.TestCase):
         original = members(before / 'engine-arm64-v8a.tar.gz')
         candidate = members(after / 'engine-arm64-v8a.tar.gz')
         removed = {'opt/dsh/node_modules/' + relative for relative in dropped}
-        self.assertTrue(removed <= original.keys())
+        self.assertTrue({'opt/dsh/node_modules/' + relative for relative in dropped | kept} <= original.keys())
         self.assertEqual(candidate, {path: value for path, value in original.items() if path not in removed})
         self.assertEqual((before / 'base-arm64-v8a.tar.gz').read_bytes(),
                          (after / 'base-arm64-v8a.tar.gz').read_bytes())
