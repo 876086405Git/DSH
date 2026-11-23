@@ -2771,6 +2771,7 @@
   "targetSets": {
     "android": [
       "cordis-effect-dispose-completion.diff",
+      "cordis-effect-setup-retention.diff",
       "cordis-inspect-catalog-on-query.diff",
       "credentials-decimal-refs.diff",
       "fs-create-exclusive.diff",
@@ -2977,6 +2978,7 @@
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
+      "cordis-effect-setup-retention.diff",
       "cordis-inspect-catalog-on-query.diff",
       "credentials-decimal-refs.diff",
       "fs-create-exclusive.diff",
