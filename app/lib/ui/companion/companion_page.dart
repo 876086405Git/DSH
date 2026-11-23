@@ -775,9 +775,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   /// A conversation of the person's (not hers) ended its turn, failed, or waits
   /// on them: when it is on the host in front, a pill offers the way there.
-  /// Nothing more from here. Whether she mentions it is the signal gate's
-  /// call (_onTaskSignal), and no note of it goes to the model: sharing one
-  /// would take the person's yes for that item (C902), not built yet.
+  /// Nothing more from here. Separately admitted task metadata reaches her
+  /// Agent through _onTaskSignal; sharing task details still needs the person's
+  /// consent for that item through the original signal gate.
   void _onAgentEvent(PetEvent event) {
     if (!mounted || _leaving || !_stageReady || event.sessionId == _sessionId) return;
     // Stopped is the person's own doing.
@@ -863,6 +863,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
           .listen((delivery) => _onTaskSignal(delivery, ingress));
     }
     _lateUseIngress = _signals.openIngress(_roomSignals);
+    // Retire a held preparation after a consent/source change through the
+    // existing post-frame observer, never by presenting synchronously here.
+    _queueObserve();
   }
 
   /// One of the active host's metadata signals (a turn ended, a request
@@ -917,15 +920,25 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   void _speakSignal(CompanionSignalV1 signal) {
     final slot = _signals.slots.where((s) => identical(s.signal, signal)).firstOrNull;
     if (slot == null || !mounted) return;
-    final speech = _signals.speechCandidate(
-      slot,
-      language: Localizations.localeOf(context).languageCode == 'zh' ? 'zh' : 'en',
-    );
+    final language = Localizations.localeOf(context).languageCode == 'zh' ? 'zh' : 'en';
+    final speech = _signals.speechCandidate(slot, language: language);
     final line = speech == null ? null : _signalLine(signal);
     if (speech == null || line == null) return;
+    final contextKey = _initiativeContext;
+    if (signal.kind == 'task.terminal') {
+      _attachment.offerTaskSignal(
+        speech,
+        language: language,
+        isCurrent: () =>
+            mounted && !_leaving && contextKey == _initiativeContext && _signals.speechCurrent(speech),
+        present: (display, text) =>
+            _presentSignal(display, speech, (line: text, emotion: line.emotion, action: line.action)),
+      );
+      return;
+    }
     final candidate = CompanionInitiativeSignal(
       id: speech.id,
-      contextKey: _initiativeContext,
+      contextKey: contextKey,
       expiresAtMonoMs: speech.expiresAtMonoMs,
       nightKey: speech.nightKey,
     );
@@ -942,7 +955,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     );
   }
 
-  /// Her words for a signal, in the app's language. Metadata only: no titles.
+  /// Night care keeps its local line. Task phases supply the original visual
+  /// style only; their words above come from the Agent, with no template fallback.
   ({String line, String emotion, String action})? _signalLine(CompanionSignalV1 signal) {
     final l10n = context.l10n;
     return switch (signal.kind) {
@@ -1470,7 +1484,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     stageReady: _stageReady && _phase == _Phase.stage,
     resumed: WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
     inputBusy: _focus.hasFocus || _input.text.trim().isNotEmpty,
-    generating: _sending || _running,
+    generating: _sending || _running || (_agent.running && _attachment.preparingSignalId == null),
     // Her mouth still settling counts: the words may still be on their way out.
     audioBusy:
         _voice.active || (_settleTimer?.isActive ?? false) || (_ttsPending.isNotEmpty && _memoryFollowupTicket == null),
@@ -1521,16 +1535,21 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   }
 
   @override
-  bool canPresent(CompanionInitiativeTicket ticket) =>
-      mounted &&
-      !_leaving &&
-      // She greets in her own words when the person arrives; only invitations
-      // and signal lines come here.
-      ticket.kind != CompanionPromptKind.greeting &&
-      // No invitation while the pill to another conversation is up.
-      (ticket.kind != CompanionPromptKind.invite || _agentPill == null) &&
-      ticket.contextKey == _initiativeContext &&
-      _presentable(_initiativeView());
+  bool canPresent(CompanionInitiativeTicket ticket) {
+    final preparing = _attachment.preparingSignalId;
+    final ownPreparation =
+        preparing != null && ticket.kind == CompanionPromptKind.signal && ticket.signalId == preparing;
+    return mounted &&
+        !_leaving &&
+        // She greets in her own words when the person arrives; only invitations
+        // and signal lines come here.
+        ticket.kind != CompanionPromptKind.greeting &&
+        // No invitation while the pill to another conversation is up.
+        (ticket.kind != CompanionPromptKind.invite || _agentPill == null) &&
+        ticket.contextKey == _initiativeContext &&
+        (!_agent.running || ownPreparation) &&
+        _presentable(_initiativeView());
+  }
 
   @override
   void show(CompanionInitiativeDisplay display) {
