@@ -7651,11 +7651,11 @@ class L10nEn extends L10n {
 
   @override
   String get companionScreenVisionHint =>
-      'Send a screen image up to 512 pixels on its longest side to the model you choose; the image is not saved';
+      'Images are checked for privacy with on-device text recognition (OCR) first, so it needs to be on. Up to 512 px on the longest side, never saved';
 
   @override
   String get companionScreenVisionTextOnly =>
-      'The current screen capture can provide text only. Images need accessibility capture with verified window sources';
+      'This capture method only reads text; images need accessibility capture with on-device text recognition on';
 
   @override
   String get companionScreenVisionModel => 'Model for screen images';
@@ -7665,14 +7665,14 @@ class L10nEn extends L10n {
 
   @override
   String get companionScreenVisionAvailable =>
-      'The selected model can receive qualified screen images up to 512 pixels; images are not saved';
+      'The selected model can see images; they\'re sent only while on-device text recognition is on, and never saved';
 
   @override
-  String get companionScreenVisionChecking => 'Checking the selected model; screen images are not active yet';
+  String get companionScreenVisionChecking => 'Checking the selected model; text only for now';
 
   @override
   String get companionScreenVisionUnavailable =>
-      'Images are unavailable for this connection or model; screen observation uses text';
+      'This connection or model can\'t take images, so screen watching uses text';
 
   @override
   String get companionScreenFrequency => 'How often she speaks';
