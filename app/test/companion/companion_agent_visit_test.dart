@@ -15,10 +15,12 @@ import 'package:dsh_app/companion/companion_maps.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_memory_worker.dart';
 import 'package:dsh_app/companion/companion_moves.dart';
+import 'package:dsh_app/companion/companion_notice_channel.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_public_lookup.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/companion/companion_widget.dart';
+import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_client/dsh_client.dart';
@@ -29,6 +31,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/sqlite3.dart';
+
+import 'companion_notice_triage_test.dart' show FakeCompanionNotices;
 
 final _now = DateTime.utc(2026, 11, 22, 10).millisecondsSinceEpoch;
 const _raw = '明天九点提醒我带伞。';
@@ -320,6 +324,7 @@ class _Visit {
     http.Response? Function(http.Request request)? auxiliary,
     Future<void> Function(Map<String, Object?> body)? beforeReply,
     _RoomUi? roomUi,
+    CompanionNotices? notices,
     CompanionInitiativeClock Function()? clock,
     CompanionMemoryTransport Function()? memoryTransport,
   }) async {
@@ -376,6 +381,10 @@ class _Visit {
     });
     visit._container = ProviderContainer(
       overrides: [
+        if (notices != null) ...[
+          operatingSystemProvider.overrideWithValue('android'),
+          companionNoticesProvider.overrideWithValue(notices),
+        ],
         activeHostProvider.overrideWith(_Host.new),
         activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null)),
         companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory),
@@ -427,11 +436,197 @@ class _Visit {
   }
 }
 
+// Only the Android inbox is faked. Source timestamps, person and package
+// follow the channel contract while classification and delivery use the visit.
+class _NoticeInbox extends FakeCompanionNotices {
+  final firstJudged = Completer<void>();
+  final firstSaid = Completer<void>();
+  @override
+  Future<CompanionNoticeBatch?> takeBatch(String pkg, List<String> keys, int expected) async {
+    final batch = await super.takeBatch(pkg, keys, expected);
+    if (batch == null) return null;
+    return CompanionNoticeBatch(
+      pkg: pkg,
+      appName: '聊天',
+      level: batch.level,
+      epoch: batch.epoch,
+      consentEpoch: batch.consentEpoch,
+      items: [
+        for (final item in batch.items)
+          (
+            key: item.key,
+            segments: [
+              for (final segment in item.segments) (text: segment.text, atMs: segment.atMs, personId: 'a' * 64),
+            ],
+          ),
+      ],
+    );
+  }
+
+  @override
+  Future<bool> record(int epoch, {int judged = 0, int said = 0}) async {
+    final recorded = await super.record(epoch, judged: judged, said: said);
+    if (recorded && judged > 0 && !firstJudged.isCompleted) firstJudged.complete();
+    if (recorded && said > 0 && !firstSaid.isCompleted) firstSaid.complete();
+    return recorded;
+  }
+}
+
+const _offer = '聊天里小石问起周末安排，要我帮你想个回复吗？';
+http.Response _noticeOutput({bool remember = false}) => _message(
+  words: jsonEncode([
+    {
+      'id': 0,
+      'segment': 0,
+      'action': remember ? 'remember' : 'say',
+      'person': '小石',
+      'text': remember ? '周五有包裹要领。' : _offer,
+      if (remember) ...{'topic': 'delivery', 'sensitive': false} else 'offerReply': true,
+    },
+  ]),
+);
+
+Future<_Visit> _shownOffer(List<http.Response> replies) async {
+  SharedPreferences.setMockInitialValues({'companion_mode': 'light', 'companion_initiative_enabled': true});
+  final inbox = _NoticeInbox();
+  addTearDown(inbox.events.close);
+  final room = _FollowupUi();
+  var advance = 0;
+  inbox.post('a', 'b' * 64, DateTime.fromMillisecondsSinceEpoch(_now - 30000), '小石 · 周末你回家吗');
+  final visit = await _Visit.open(
+    [_noticeOutput(), ...replies],
+    notices: inbox,
+    roomUi: room,
+    clock: () => CompanionInitiativeClock(wallMs: _now + advance, monoMs: advance, offsetMinutes: 480),
+  );
+  await inbox.firstJudged.future.timeout(const Duration(seconds: 5));
+  await Future<void>.delayed(Duration.zero);
+  room.visible = true;
+  visit.attachment.observe(room.initiativeView);
+  advance += 46000;
+  visit.attachment.observe(room.initiativeView);
+  await inbox.firstSaid.future.timeout(const Duration(seconds: 5));
+  expect(room.lines, [_offer]);
+  return visit;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(
     () => SharedPreferences.setMockInitialValues({'companion_mode': 'light', 'companion_initiative_enabled': false}),
   );
+
+  test('notice visit keeps an unrelated user task ordinary after an actually shown offer', () async {
+    final visit = await _shownOffer([_message(words: '可以。')]);
+    visit.attachment.acted();
+    await visit.attachment.submit('明天提醒我买水果。');
+    expect(visit.attachment.error, isNull);
+    expect(_context(visit.requests.last), isNot(contains('noticeReply')));
+    expect((visit.requests.last['tools'] as List).cast<Map>().map((tool) => tool['name']), contains('reminder'));
+    expect(visit.memory.store.messages().where((row) => row['role'] == 'assistant').single['text'], '可以。');
+  });
+
+  test('notice visit retries draft without tools and requires its full frame before phone approval', () async {
+    const phone = MethodChannel('dsh/phone');
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final approvals = <MethodCall>[];
+    messenger.setMockMethodCallHandler(phone, (call) async {
+      if (call.method == 'companionPhoneTools')
+        return [
+          {
+            'name': 'status',
+            'description': 'status',
+            'inputSchema': {'type': 'object'},
+          },
+        ];
+      if (call.method == 'companionPhoneBegin') {
+        approvals.add(call);
+        return {'decision': 'denied'};
+      }
+      if (call.method == 'companionPhoneEnd') return null;
+      throw StateError('Unexpected phone action');
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(phone, null));
+    const draft = '我还在确认时间，晚些告诉你。';
+    final visit = await _shownOffer([
+      http.Response('temporary failure', 503),
+      _message(words: draft),
+      _message(calls: [('phone-first', 'phone_status', {})]),
+      _message(words: '尚未操作手机。'),
+    ]);
+    final room = visit.attachment;
+    room.acted();
+    await room.submit('帮我回复');
+    expect(room.error, isNotNull);
+    expect(room.pendingReplyRanges, isEmpty);
+    room.acted();
+    await room.submit('帮我回复');
+    expect(room.error, isNull);
+    for (final request in visit.requests.skip(1).take(2)) {
+      expect((_context(request)['noticeReply'] as Map)['phase'], 'draft');
+      expect(request['tools'] ?? const [], isEmpty);
+    }
+    expect(approvals, isEmpty);
+    expect(room.text, draft);
+    final ranges = room.pendingReplyRanges;
+    expect(ranges.keys.single, 'notice-draft:${room.replyId}');
+    expect(ranges.values.single, (start: 0, end: draft.length));
+    room.presentedReply(room.replyId!, draft.substring(0, 2), sourceIds: ranges.keys.toSet());
+    expect(room.pendingReplyRanges, ranges);
+    room.presentedReply(room.replyId!, draft, sourceIds: ranges.keys.toSet());
+    expect(room.pendingReplyRanges, isEmpty);
+    room.acted();
+    await room.submit('确认发送');
+    expect(room.error, isNull);
+    final request = visit.requests[3];
+    expect((_context(request)['noticeReply'] as Map)['shown_draft'], draft);
+    expect((_context(request)['noticeReply'] as Map)['phase'], 'confirmed');
+    expect((request['tools'] as List).cast<Map>().map((tool) => tool['name']), ['phone_status']);
+    expect((approvals.single.arguments as Map)['sourceText'], '确认发送');
+    final messages = visit.memory.store.messages();
+    expect(messages.where((row) => row['role'] == 'assistant'), isEmpty);
+    expect(messages.where((row) => row['role'] == 'user').map((row) => row['text']), containsAll(['帮我回复', '确认发送']));
+  });
+
+  test('notice visit remembers a 48-hour event and discards a model result after lock', () async {
+    final inbox = _NoticeInbox();
+    addTearDown(inbox.events.close);
+    final held = Completer<void>();
+    final release = Completer<void>();
+    final returned = Completer<void>();
+    var requests = 0;
+    final sourceTime = _now - const Duration(days: 2).inMilliseconds;
+    inbox.post('a', 'b' * 64, DateTime.fromMillisecondsSinceEpoch(sourceTime), '小石 · 请留意周五送到门房的包裹');
+    final visit = await _Visit.open(
+      [_noticeOutput(remember: true), _noticeOutput()],
+      notices: inbox,
+      beforeReply: (_) async {
+        if (++requests == 2) {
+          held.complete();
+          await release.future;
+          returned.complete();
+        }
+      },
+    );
+    await inbox.firstJudged.future.timeout(const Duration(seconds: 5));
+    await Future<void>.delayed(Duration.zero);
+    final row = visit.memory.store.noticeMemories().single;
+    expect(row['text'], '周五有包裹要领。');
+    inbox.post('a', 'c' * 64, DateTime.fromMillisecondsSinceEpoch(_now - 30000), '小石 · 周末安排定了吗');
+    await held.future.timeout(const Duration(seconds: 5));
+    inbox.lock();
+    release.complete();
+    await returned.future;
+    await Future<void>.delayed(Duration.zero);
+    inbox.unlocked = true;
+    inbox.events.add(++inbox.epoch);
+    await Future<void>.delayed(Duration.zero);
+    expect(inbox.judged, 1);
+    expect(inbox.said, 0);
+    expect(inbox.inbox, isEmpty);
+    expect(requests, 2);
+    expect(visit.memory.store.noticeMemories(), hasLength(1));
+  });
 
   test('public attachment retries a no-tool failure with the same source clock and open turn', () async {
     const savedCustom = '我是已保存的星桥旅伴。';

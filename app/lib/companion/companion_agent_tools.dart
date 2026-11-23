@@ -19,6 +19,14 @@ typedef CompanionAgentMaintenanceCommit = void Function({
   required int revision,
 });
 
+/// These rows were assembled by the store for this model response. User text,
+/// model fields and unrelated cards in the same archive confer no provenance.
+bool _noticeCards(List rows) =>
+    rows.any((row) => row is Map && row['source'] is Map && row['source']['kind'] == 'notice');
+
+bool companionSelectionHasNotice(MemorySelection selection) =>
+    selection.ids.isNotEmpty && _noticeCards((jsonDecode(selection.block) as Map)['items'] as List);
+
 /// The original SQLite source owns this turn and its durable three-card budget.
 /// A model HTTP continuation does not create another turn or another allowance.
 class CompanionAgentMemoryTools {
@@ -235,17 +243,22 @@ class CompanionAgentMemoryTools {
       'currentCardRevisions': receipt.currentCardRevisions,
       'targetId': receipt.targetId,
     };
+    var externalNoticeContent = false;
     if (call.name == 'recall') {
       final selection = receipt.recallSelection;
       if (selection == null) return _failure('recall_not_current');
-      result['selection'] = jsonDecode(selection.block);
+      final block = jsonDecode(selection.block) as Map;
+      result['selection'] = block;
+      externalNoticeContent = _noticeCards(block['items'] as List);
     }
     if (call.name == 'related') {
       if (receipt.relatedCards == null) return _failure('related_not_current');
       result['cards'] = receipt.relatedCards;
+      externalNoticeContent = _noticeCards(receipt.relatedCards!);
     }
     return CompanionAgentToolResult(
       content: jsonEncode(result),
+      externalNoticeContent: externalNoticeContent,
       notice: receipt.code == 'forgotten' && !receipt.replayed ? forgottenNotice : null,
     );
   }
@@ -299,6 +312,60 @@ class CompanionAgentMemoryTools {
       'additionalProperties': false,
     },
   };
+  static final _memoryNames = definitions.map((tool) => tool.name).toSet();
+
+  static bool allowedAfterNotice(String name) =>
+      !_memoryNames.contains(name) || const {'recall', 'related', 'forget'}.contains(name);
+
+  static bool pureDeletion(Map<String, Object?> input) {
+    if (input.containsKey('card') && input['card'] is! String) return false;
+    if (input.keys.any((key) => key != 'card' && key != 'changes')) return false;
+    if (!input.containsKey('changes')) return input['card'] is String;
+    final changes = input['changes'];
+    return changes is List &&
+        changes.isNotEmpty &&
+        changes.every(
+          (change) => change is Map && change.length == 2 && change['card'] is String && change['forget'] == true,
+        );
+  }
+
+  static const noticeForget = CompanionAgentTool(
+    name: 'forget',
+    description:
+        'Delete a supplied card or an explicit group of deletions. Any replacement wording needs a separate user turn.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'card': _card,
+        'changes': {
+          'type': 'array',
+          'minItems': 1,
+          'items': {
+            'type': 'object',
+            'properties': {
+              'card': _card,
+              'forget': {
+                'type': 'boolean',
+                'enum': [true],
+              },
+            },
+            'required': ['card', 'forget'],
+            'additionalProperties': false,
+          },
+        },
+      },
+      'anyOf': [
+        {
+          'required': ['card'],
+        },
+        {
+          'required': ['changes'],
+        },
+      ],
+      'additionalProperties': false,
+    },
+  );
+
   static const _change = {
     'type': 'object',
     'properties': {

@@ -120,6 +120,9 @@ class _SignalRequest {
     this.prepare,
     this.deliver,
     this.retainDelivery,
+    this.noticeEventId,
+    this.noticePersonId,
+    this.settled,
   );
   final CompanionInitiativeRoom room;
   final CompanionInitiativeSignal candidate;
@@ -130,6 +133,8 @@ class _SignalRequest {
   final Future<bool> Function()? prepare;
   final Future<bool> Function(CompanionInitiativeDisplay)? deliver;
   final void Function(Future<void>)? retainDelivery;
+  final String? noticeEventId, noticePersonId;
+  final void Function(String outcome)? settled;
   bool preparing = false;
   bool prepared = false;
 }
@@ -332,6 +337,9 @@ class CompanionInitiative {
     Future<bool> Function()? prepare,
     Future<bool> Function(CompanionInitiativeDisplay)? deliver,
     void Function(Future<void>)? retainDelivery,
+    String? noticeEventId,
+    String? noticePersonId,
+    void Function(String outcome)? settled,
   }) {
     if (_disposed ||
         _controller == null ||
@@ -355,6 +363,9 @@ class CompanionInitiative {
       prepare,
       deliver,
       retainDelivery,
+      noticeEventId,
+      noticePersonId,
+      settled,
     );
     _signal = request;
     if (previous != null) _enqueue(CompanionInitiativeEvent.cancelSignal(previous.candidate.id), room);
@@ -504,6 +515,8 @@ class CompanionInitiative {
           maxPerDay: controller.pace.maxPerDay,
           gapMs: controller.pace.gapMs,
           followupId: request?.followupId,
+          noticeEventId: request?.noticeEventId,
+          noticePersonId: request?.noticePersonId,
         );
         allowed = reservation != null;
       }
@@ -563,6 +576,13 @@ class CompanionInitiative {
               : 'released',
         );
       }
+      request?.settled?.call(
+        shown
+            ? 'shown'
+            : unknown
+            ? 'unknown'
+            : 'released',
+      );
       if (!shown && !unknown) {
         _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);
         return;
@@ -622,6 +642,13 @@ class CompanionInitiative {
               : 'released',
         );
       }
+      request.settled?.call(
+        shown
+            ? 'shown'
+            : unknown
+            ? 'unknown'
+            : 'released',
+      );
       if (!shown && !unknown) {
         _apply(controller, controller.handle(CompanionInitiativeEvent.dropOffer(ticket.id), _now()), op);
         return;

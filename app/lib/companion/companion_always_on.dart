@@ -236,7 +236,17 @@ class CompanionAlwaysOnOwner {
     while (_spokenReplies.length > 64) {
       _spokenReplies.remove(_spokenReplies.first);
     }
-    unawaited(_presentLine(id: reply, text: visible, emotion: 'neutral', speak: speak));
+    final resident = _resident;
+    if (resident != null) {
+      unawaited(
+        resident.deliverReply(
+          reply,
+          visible,
+          (noticeEpoch) =>
+              _presentLine(id: reply, text: visible, emotion: 'neutral', speak: speak, noticeEpoch: noticeEpoch),
+        ),
+      );
+    }
     _postReply(reply, visible);
   }
 
@@ -261,7 +271,19 @@ class CompanionAlwaysOnOwner {
       await Future<void>.delayed(const Duration(milliseconds: 300));
       if (identical(_replyUpdate, update)) _replyUpdate = null;
       if (!active || update.generation != _outputGeneration || update.epoch != _status.epoch) return;
-      await channel.update(epoch: update.epoch, name: _name, text: update.text, id: update.id);
+      final resident = _resident;
+      if (resident == null) return;
+      await resident.deliverReply(
+        update.id,
+        update.text,
+        (noticeEpoch) => channel.update(
+          epoch: update.epoch,
+          name: _name,
+          text: update.text,
+          id: update.id,
+          noticeEpoch: noticeEpoch,
+        ),
+      );
     });
   }
 
@@ -334,10 +356,19 @@ class CompanionAlwaysOnOwner {
     required String text,
     required String emotion,
     required bool speak,
+    int? noticeEpoch,
   }) async {
     final generation = _voiceGeneration;
-    final shown = await overlay.presentCompanion(id: id, text: text, emotion: emotion, speaking: false);
-    if (!shown || !speak || !active || generation != _voiceGeneration) return shown;
+    final shown = await overlay.presentCompanion(
+      id: id,
+      text: text,
+      emotion: emotion,
+      speaking: false,
+      noticeEpoch: noticeEpoch,
+    );
+    // Notice-derived words stay on the already-authorized text surface. A
+    // voice model warm-up cannot retain authority across a later lock.
+    if (!shown || noticeEpoch != null || !speak || !active || generation != _voiceGeneration) return shown;
     final settings = ref.read(companionEffectiveVoiceProvider);
     if (settings?.on != true) return shown;
     final ready = await _speaker.ready(settings!);
@@ -381,7 +412,12 @@ class CompanionAlwaysOnOwner {
 /// Background is not a visible/resumed room. It cannot manufacture a picker,
 /// a real frame acknowledgement, or a fresh foreground task capability.
 class _ResidentUi
-    implements CompanionAgentRoomUi, CompanionInitiativeRoom, CompanionAgentAmbientUi, CompanionAgentNotificationUi {
+    implements
+        CompanionAgentRoomUi,
+        CompanionInitiativeRoom,
+        CompanionAgentAmbientUi,
+        CompanionAgentNotificationUi,
+        CompanionAgentNoticeUi {
   _ResidentUi(this.owner);
   final CompanionAlwaysOnOwner owner;
   @override
@@ -394,6 +430,9 @@ class _ResidentUi
   @override
   Future<bool> deliverFollowup({required String id, required String text}) =>
       owner.channel.deliver(epoch: owner._status.epoch, name: owner._name, text: text, id: id);
+  @override
+  Future<bool> deliverNotice({required String id, required String text, required int noticeEpoch}) => owner.channel
+      .deliver(epoch: owner._status.epoch, name: owner._name, text: text, id: id, noticeEpoch: noticeEpoch);
   @override
   bool get mounted => !owner._closed && owner._status.enabled && owner._status.running;
   @override
