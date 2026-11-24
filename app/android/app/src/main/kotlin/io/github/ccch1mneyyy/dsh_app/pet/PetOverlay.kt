@@ -609,6 +609,12 @@ internal object PetOverlay {
                             slideAnim?.cancel()
                             dockedRest(v)
                         }
+                        // Tucked, the crop's shift alone could carry her wholly past the edge (a new
+                        // width needs a new half): placed again, slide or not, half on screen.
+                        box != null && tucking.tucked -> {
+                            slideAnim?.cancel()
+                            dockedRest(v)
+                        }
                         else -> wanted
                     }
                     val dx = pos.x - previous.x
