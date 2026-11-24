@@ -1515,6 +1515,18 @@ void main() {
           );
           await flush(tester);
           expect(room.commands.where((command) => command.$1 == 'say').length, before);
+          if (sample.moreSpeech.isNotEmpty) {
+            final currentCall = later.singleWhere((c) => c.method == 'speak');
+            final currentId = (currentCall.arguments as Map)['id'];
+            expect(currentId, isNot(oldId));
+            await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+              voice.name,
+              const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': 'start', 'id': currentId})),
+              (_) {},
+            );
+            await flush(tester);
+            expect(room.commands.where((command) => command.$1 == 'say').length, before + 1);
+          }
         }
       } finally {
         for (final stream in bridge.calls.values) {
