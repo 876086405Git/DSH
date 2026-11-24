@@ -5108,6 +5108,9 @@ class L10nZh extends L10n {
   String get companionAgentRetryClosed => '刚才那件事我可能已经动手了，怕做两遍。你先在「交代的事」里看一眼，再告诉我要不要接着来？';
 
   @override
+  String get companionPhoneRunStopped => '手机上的事做到一半断了，我怕重复操作就先停在这儿。你看一眼手机现在的样子，要接着来就再跟我说一声。';
+
+  @override
   String get companionLogTitle => '聊天记录';
 
   @override

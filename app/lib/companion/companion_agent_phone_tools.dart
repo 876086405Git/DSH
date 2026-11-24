@@ -15,6 +15,9 @@ import 'companion_memory_id.dart';
 String? companionPhoneWindow(String? sessionId) =>
     sessionId != null && sessionId.startsWith('companion:') ? sessionId.split(':')[1] : null;
 
+/// Her phone tools are the native catalog under this prefix.
+const companionPhoneToolPrefix = 'phone_';
+
 /// Only a real, current user turn constructs this adapter. Screen observations
 /// never create it. The person asking her is the go-ahead; writes still pass
 /// the native SafetyGate.
@@ -49,7 +52,6 @@ class CompanionAgentPhoneTools {
   late final String _sessionId;
   final _definitions = <CompanionAgentTool>[];
   final _nativeNames = <String, String>{};
-  final _calls = <String>{};
   bool _retired = false;
   bool _beginStarted = false;
   bool _returnToApp;
@@ -75,7 +77,7 @@ class CompanionAgentPhoneTools {
         continue;
       }
       final nativeName = item['name'] as String;
-      final name = 'phone_$nativeName';
+      final name = '$companionPhoneToolPrefix$nativeName';
       _nativeNames[name] = nativeName;
       _definitions.add(
         CompanionAgentTool(
@@ -97,9 +99,6 @@ class CompanionAgentPhoneTools {
     final nativeName = _nativeNames[call.name];
     if (!_current) return _failure('turn_not_current', '本轮已结束，没有继续操作手机。');
     if (nativeName == null) return _failure('unknown_phone_tool', '当前没有这个手机工具。');
-    if (!_calls.add(call.id)) {
-      return _failure('duplicate_phone_call', '此调用已经提交过；结果未知时不能自动重放。');
-    }
     try {
       _started ??= _begin(nativeName);
       // Native only declines a run that cannot start; none of these is a missing permission.
@@ -121,7 +120,9 @@ class CompanionAgentPhoneTools {
       final raw = await channel.invokeMethod<String>('companionPhoneCall', {
         'sessionId': _sessionId,
         'runId': _runId,
-        'callId': call.id,
+        // The loop runs each call once, but some models reuse ids across
+        // rounds: native identity is this execution, never the model's id.
+        'callId': companionMemoryId(),
         'name': nativeName,
         'arguments': call.input,
       });
