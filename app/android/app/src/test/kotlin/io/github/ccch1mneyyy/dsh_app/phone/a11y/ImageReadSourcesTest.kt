@@ -141,6 +141,15 @@ class ImageReadSourcesTest {
         assertEquals(formatted.text, withoutSplitImage.text)
         assertEquals(setOf("example.a"), withoutSplitImage.readPackages)
 
+        val noisy = recognized(listOf("7 3 1", "4111 1111", "1111 1111", "8 9 3"))
+        assertTrue(noisy is LocalOcrResult.Recognized)
+        assertNull(exported(noisy).image)
+        // These two dates concatenate to a Luhn-valid 16-digit string.
+        val dates = listOf("2026-11-27", "2026-12-04")
+        assertTrue(ScreenMask.luhnOk("2026112720261204"))
+        assertSame(pixels, exported(recognized(dates)).image)
+        assertNull(exported(recognized(listOf("reference " + dates.first(), dates.last()))).image)
+        assertNull(exported(recognized(dates + listOf("4111 1111", "1111 1111"))).image)
         val fourLineCard = recognized(listOf("4111", "1111", "1111", "1111"))
         assertTrue(fourLineCard is LocalOcrResult.Recognized)
         assertNull(exported(fourLineCard).image)

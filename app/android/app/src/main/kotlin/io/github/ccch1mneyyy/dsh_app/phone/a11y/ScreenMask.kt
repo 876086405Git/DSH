@@ -1,5 +1,8 @@
 package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
+
 // Bank-card and resident-ID numbers in screen text are masked before
 // anything leaves the phone, e.g. `«银行卡 ****1234»`. Tasks that need the full
 // number are exactly the ones we refuse. Plain Kotlin: JVM-tested.
@@ -29,6 +32,41 @@ object ScreenMask {
                 "«银行卡 ****${digits.takeLast(4)}»"
             else m.value
         }
+    }
+
+    private val ocrNumberRun = Regex("""[0-9][0-9\s\p{Zs}-]*""")
+    private val calendarDay = Regex("""[0-9]{4}-[0-9]{2}-[0-9]{2}""")
+
+    private fun isCalendarDay(text: String): Boolean {
+        if (!calendarDay.matches(text)) return false
+        return try {
+            LocalDate.parse(text)
+            true
+        } catch (_: DateTimeParseException) {
+            false
+        }
+    }
+
+    /** A noise digit before or after a wrapped card must not change its checksum. */
+    internal fun hasOcrCard(lines: List<String>): Boolean {
+        val joined = lines.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+        for (match in ocrNumberRun.findAll(joined)) {
+            val run = match.value.trimEnd()
+            val digits = run.filter { it in '0'..'9' }
+            if (digits.length < 15) continue
+            // Exempt only a whole run made of distinct, valid ISO calendar lines.
+            val startIndex = match.range.first
+            val endIndex = startIndex + run.length
+            if ((startIndex == 0 || joined[startIndex - 1] == '\n') &&
+                (endIndex == joined.length || joined[endIndex] == '\n') &&
+                run.lineSequence().all { isCalendarDay(it.trim()) }) continue
+            for (start in 0..digits.length - 15) {
+                for (length in 15..minOf(19, digits.length - start)) {
+                    if (luhnOk(digits.substring(start, start + length))) return true
+                }
+            }
+        }
+        return false
     }
 
     fun luhnOk(digits: String): Boolean {

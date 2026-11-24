@@ -166,9 +166,6 @@ internal fun companionScreenImage(bytes: ByteArray?, packageName: String, localT
     if (lines.none { it.isNotBlank() } ||
         lines.any { SafetyRules.isSecret(it) || ScreenMask.mask(it) != it } ||
         ProtectedPages.isProtected(packageName, lines.take(8))) return null
-    // Keep line checks above: joining can introduce an order-number context.
-    val joined = lines.map { line -> line.trim { it.isWhitespace() || it == '-' } }
-        .filter { it.isNotEmpty() }.joinToString(" ")
-    if (ScreenMask.mask(joined) != joined) return null
+    if (ScreenMask.hasOcrCard(lines)) return null
     return bytes
 }
