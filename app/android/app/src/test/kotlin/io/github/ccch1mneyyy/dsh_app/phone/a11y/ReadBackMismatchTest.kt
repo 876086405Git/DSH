@@ -36,6 +36,7 @@ class ReadBackMismatchTest {
             "已输入，但回读不一致：框里现在是「小明 123456」。没有重试，也没有提交；请看新屏幕决定下一步。",
             MainScreenDriver.readBackMismatch("小明 123456", nickname),
         )
+        assertTrue(MainScreenDriver.readBackMismatch("", nickname).contains("框里现在是空"))
         assertTrue(MainScreenDriver.readBackMismatch("4111 1111 1111 1111", nickname).contains("«银行卡 ****1111»"))
     }
 
@@ -49,17 +50,35 @@ class ReadBackMismatchTest {
         assertTrue(message, message.contains("无法确认") || message.contains("未能确认"))
     }
 
+    @Test fun aKnownEmptyReadBackStillReportsEmptyContent() {
+        val message = MainScreenDriver.readBackMismatch("", field(hint = "昵称"))
+        assertTrue(message, message.contains("已输入"))
+        assertTrue(message, message.contains("框里现在是空"))
+        assertTrue(message, message.contains("没有重试，也没有提交"))
+    }
+
     /** vivo's calculator display reads "" while it shows what was typed: empty is "cannot see". */
     @Test fun anEmptyReadBackIsUnconfirmedNotAMismatch() {
-        for (target in listOf(field(hint = "昵称"), field(hint = "验证码"))) {
-            val message = MainScreenDriver.readBackMismatch("", target)
-            assertTrue(message, message.contains("已输入"))
-            assertFalse(message, message.contains("回读不一致"))
-            assertFalse(message, message.contains("框里现在是"))
-            assertTrue(message, message.contains("无法确认"))
-            assertTrue(message, message.contains("没有重试，也没有提交"))
-            assertTrue(message, message.contains("不要重复输入"))
-        }
+        val note = typedNote("formula", ReadBackMatch.EMPTY)
+        assertTrue(note, note.contains("已在「formula」输入"))
+        assertTrue(note, note.contains("无法确认"))
+        assertTrue(note, note.contains("不要重复输入"))
+        assertFalse(note, note.contains("回读一致"))
+        assertFalse(note, note.contains("不一致"))
+        // The note comes before any submit, so it never claims one either way.
+        assertFalse(note, note.contains("提交"))
+        assertEquals("已在「formula」输入，回读一致。", typedNote("formula", ReadBackMatch.SAME))
+    }
+
+    @Test fun textThatWillBeSubmittedMustKeepItsSpacing() {
+        assertEquals(ReadBackMatch.DIFFERENT, readBackMatch("newyork", "new york", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.DIFFERENT, readBackMatch("new  york", "new york", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("newyork", "new york", ignoreSpaces = true))
+        // Display formatting and invisible marks still match when submitting.
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("１２×３", "12*3", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("\u200Enew york", "new york", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("new\u00A0york", "new york", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.EMPTY, readBackMatch("", "new york", ignoreSpaces = false))
     }
 
     @Test fun readBackMatchToleratesFormattingOnly() {

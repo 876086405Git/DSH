@@ -166,8 +166,9 @@ class ScreenFormatTest {
         val search = format(UiNode(className = "android.widget.EditText", text = "搜索", showingHint = true,
             bounds = Box(0, 100, 300, 150), editable = true))
         assertTrue(search.text, search.text.lines().single { it.contains("搜索") }.contains("空"))
+        // Hint metadata alone is not a hint on screen.
         val hinted = format(UiNode(className = "android.widget.EditText", hint = "昵称",
             bounds = Box(0, 100, 300, 150), editable = true))
-        assertTrue(hinted.text, hinted.text.lines().single { it.contains("昵称") }.contains("空"))
+        assertFalse(hinted.text, hinted.text.lines().single { it.contains("昵称") }.contains("空"))
     }
 }
