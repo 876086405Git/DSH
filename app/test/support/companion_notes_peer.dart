@@ -345,11 +345,13 @@ class _HostModelRelay {
       return;
     }
     _httpStatus = response.statusCode;
-    if (_cancelled || response.statusCode != 200) {
-      if (!_cancelled) {
-        _terminal = 'http_error';
-        _error = 'provider-http-error';
-      }
+    if (_cancelled) {
+      await response.stream.listen((_) {}).cancel();
+      return;
+    }
+    if (response.statusCode != 200) {
+      _terminal = 'http_error';
+      _error = 'provider-http-error';
       unawaited(response.stream.drain<void>().catchError((Object _) {}));
       return;
     }
@@ -358,6 +360,12 @@ class _HostModelRelay {
       if (!reading.isCompleted) reading.complete();
       unawaited(_subscription?.cancel());
       _subscription = null;
+    }
+
+    void invalid() {
+      _terminal = 'provider_error';
+      _error = 'provider-invalid-stream';
+      stop();
     }
 
     _subscription = response.stream
@@ -370,18 +378,20 @@ class _HostModelRelay {
             if (data.isEmpty || data == '[DONE]') return;
             try {
               final event = jsonDecode(data);
-              if (event is! Map) return;
+              if (event is! Map) throw const FormatException('Expected a model event');
               if (event['type'] == 'error' || (event['type'] == null && event['error'] != null)) {
                 _terminal = 'provider_error';
                 _error = 'provider-error';
                 stop();
+              } else if (event['type'] is! String) {
+                throw const FormatException('Expected an event type');
               } else if (_add(event, emit)) {
                 stop();
               }
             } on FormatException {
-              _terminal = 'provider_error';
-              _error = 'provider-invalid-stream';
-              stop();
+              invalid();
+            } on TypeError {
+              invalid();
             }
           },
           onError: (Object _) {
@@ -424,7 +434,11 @@ class _HostModelRelay {
           block['text'] = '${block['text']}${delta['text']}';
           emit({'type': 'text', 'text': delta['text']});
         } else if (delta['type'] == 'input_json_delta') {
-          _arguments[index as int]!.write(delta['partial_json']);
+          final partial = delta['partial_json'];
+          if (partial is! String || !_arguments.containsKey(index)) {
+            throw const FormatException('Expected JSON for an open tool block');
+          }
+          _arguments[index]!.write(partial);
         }
       case 'content_block_stop':
         final arguments = _arguments.remove(index)?.toString();
@@ -436,6 +450,7 @@ class _HostModelRelay {
         final delta = event['delta'];
         if (delta is Map && delta['stop_reason'] is String) _stopReason = delta['stop_reason'] as String;
       case 'message_stop':
+        if (_arguments.isNotEmpty) throw const FormatException('Unclosed tool block');
         _complete = true;
         final content = [for (final key in _blocks.keys.toList()..sort()) _blocks[key]!];
         final calls = content.any((block) => block['type'] == 'tool_use');

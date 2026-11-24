@@ -389,7 +389,11 @@ void main() {
         ),
       ],
     ).whenComplete(() => settled = true);
-    await Future.wait([held.future, heard.future]);
+    await Future.wait([held.future, heard.future]).timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => throw TimeoutException('Host stream handshake timed out: '
+          'flushed=${held.isCompleted}, firstText=${heard.isCompleted}, error=${hostAgent.error}'),
+    );
     expect(hostAgent.text, '我先看看。');
     expect(hostAgent.running, isTrue);
     expect(settled, isFalse);
