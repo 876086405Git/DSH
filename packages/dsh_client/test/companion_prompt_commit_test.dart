@@ -146,7 +146,7 @@ void main() {
       text: raw,
       sessionId: 's',
       requestId: 'chosen-id',
-      profile: const CompanionContextProfile(name: '小鲸'),
+      profile: const CompanionContextProfile(persona: '记得看天气。', name: '小鲸', callMe: '阿周'),
       supported: true,
       instanceId: 'boot',
       now: now,
@@ -157,7 +157,10 @@ void main() {
     final payload = f.host.rpcCalls.last['payload'] as Map;
     final request = (payload['args'] as Map)['request'] as Map;
     expect(request['requestId'], plan.requestId);
-    expect((request['content'] as List).first, {'type': 'text', 'text': raw});
+    expect(request['content'], [
+      {'type': 'text', 'text': raw},
+    ]);
+    expect(plan.update!['profile'], {'persona': '记得看天气。', 'name': '小鲸', 'callMe': '阿周', 'moves': ''});
     expect(f.received, isEmpty, reason: 'A prompt ACK is only inbox acceptance');
     final pending = [touch, feed];
     final queue = await f.event(type: 'inbox/splice');

@@ -372,17 +372,12 @@ void main() {
       expect(own, contains(companionPersonaRules));
       expect(companionPersona(custom: '你是一只猫娘。', tools: true), isNot(contains('用不上工具')));
       expect(companionPersona(custom: '你是一只猫娘。', tools: true), endsWith('说做完了什么。'));
-      expect(companionPersonaUpdate(), isNull);
-      expect(companionPersonaUpdate(callMe: '阿周'), contains('称呼对方为「阿周」'));
-      expect(companionPersonaUpdate(custom: '你是一只猫娘。'), isNot(contains('[表情:')));
     });
 
     test('her persona under the name she was given', () {
-      expect(companionPersonaNamed(null), companionPersonaCore);
-      expect(companionPersonaNamed('  '), companionPersonaCore);
-      expect(companionPersonaNamed('小蓝'), startsWith('你是小蓝，一只'));
-      expect(companionNameNote('小蓝'), contains('「小蓝」'));
-      expect(companionNameNote(null), isNull);
+      expect(companionPersona(name: null), companionPersonaCore);
+      expect(companionPersona(name: '  '), companionPersonaCore);
+      expect(companionPersona(name: '小蓝'), startsWith('你是小蓝，一只'));
     });
   });
 

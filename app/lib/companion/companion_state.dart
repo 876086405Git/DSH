@@ -420,9 +420,6 @@ class CompanionNameSetting extends Notifier<String?> {
 
 final companionNameProvider = NotifierProvider<CompanionNameSetting, String?>(CompanionNameSetting.new);
 
-/// Her persona under the name the person gave her (or as written, without one).
-String companionPersonaNamed(String? name) => companionPersona(name: name);
-
 /// The person's part of her persona: their own text, or the default under the
 /// name she goes by; then how she calls them. [whale]: she is the app's own
 /// whale girl; anyone else gets the same default without the whale's looks.
@@ -467,14 +464,6 @@ String companionPersona({
   return [part, '', companionPersonaRules, tools ? _toolsLine : _noToolsLine].join('\n');
 }
 
-/// For full mode, whose persona is the host's: the person's own part, told
-/// once per conversation and change. Null while it is the default.
-String? companionPersonaUpdate({String? custom, String? callMe}) {
-  if ((custom?.trim() ?? '').isEmpty && (callMe?.trim() ?? '').isEmpty) return null;
-  final part = companionPersonaPart(custom: custom, callMe: callMe);
-  return '（对方给你改了设定。从现在起按下面这份来，和之前的设定冲突时以这份为准，不用复述：\n$part）';
-}
-
 /// What the person set about her besides her name (她的设定).
 @immutable
 class CompanionPersonaSettings {
@@ -494,12 +483,11 @@ class CompanionPersonaSettings {
     return CompanionPersonaSettings(custom: text('custom'), callMe: text('callMe'));
   }
 
-  /// Changes whenever what she is told changes: full mode tells her again.
+  /// Cache key for locally generated lines under these settings.
   String get fingerprint => '${custom.trim().hashCode}:${callMe.trim().hashCode}';
 }
 
 const _personaKey = 'companion_persona_v1';
-const _personaSentKey = 'companion_persona_sent';
 
 class CompanionPersonaController extends Notifier<CompanionPersonaSettings> {
   late Future<void> _ready;
@@ -533,32 +521,6 @@ final companionPersonaProvider = NotifierProvider<CompanionPersonaController, Co
   CompanionPersonaController.new,
 );
 
-/// Whether full mode's conversation [sessionId] has been told [fingerprint].
-Future<bool> companionPersonaTold(String sessionId, String fingerprint) async {
-  final prefs = await SharedPreferences.getInstance();
-  final raw = prefs.getString(_personaSentKey);
-  final map = raw == null ? const {} : jsonDecode(raw);
-  return map is Map && map[sessionId] == fingerprint;
-}
-
-/// What was last told in [sessionId] (its fingerprint), if anything.
-Future<String?> companionPersonaToldAs(String sessionId) async {
-  final prefs = await SharedPreferences.getInstance();
-  final raw = prefs.getString(_personaSentKey);
-  final map = raw == null ? const {} : jsonDecode(raw);
-  final told = map is Map ? map[sessionId] : null;
-  return told is String ? told : null;
-}
-
-Future<void> companionPersonaMarkTold(String sessionId, String fingerprint) async {
-  final prefs = await SharedPreferences.getInstance();
-  final raw = prefs.getString(_personaSentKey);
-  final decoded = raw == null ? null : jsonDecode(raw);
-  final map = {if (decoded is Map) ...decoded.cast<String, Object?>()};
-  map[sessionId] = fingerprint;
-  await prefs.setString(_personaSentKey, jsonEncode(map));
-}
-
 /// Set when the person renamed her elsewhere (她的设定): the room reacts once.
 class CompanionRenamed extends Notifier<String?> {
   @override
@@ -568,14 +530,6 @@ class CompanionRenamed extends Notifier<String?> {
 }
 
 final companionRenamedProvider = NotifierProvider<CompanionRenamed, String?>(CompanionRenamed.new);
-
-/// For full mode, whose persona lives on the host: her name, as a line in the
-/// message. Null without a name the person gave her.
-String? companionNameNote(String? name) {
-  final given = name?.trim();
-  if (given == null || given.isEmpty) return null;
-  return '（你现在的名字是「$given」，是对方给你起的。自称时用这个名字。）';
-}
 
 /// Where light-mode requests go out; tests answer them here.
 final companionLightClientProvider = Provider<http.Client Function()>((ref) => http.Client.new);
@@ -590,12 +544,6 @@ Future<void> companionMarkSeen(DateTime now) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt(_lastSeenKey, now.millisecondsSinceEpoch);
 }
-
-/// The persona for hosts without the preset. Keep in step with the preset's in
-/// runtime/bridge/dsh-go-bridge/cordis.patch.yml.
-const companionInlinePersona = '''
-（从现在起请扮演下面的角色，直接开始，不要复述这段设定。）
-$companionPersonaCore''';
 
 /// Who she is, how she talks and the lines she keeps to: the part of her
 /// persona the person can rewrite or delete (她的设定). The rest is the app's.
@@ -628,7 +576,7 @@ const _toolsLine = '对方让你看手机、看相册或帮忙办事，就直接
 // Only her short asides go out without tools; her real turns always have them.
 const _noToolsLine = '这一句只陪着说话，用不上工具。对方想让你看手机、看相册或办事，请对方直接跟你说一声，你就去做。';
 
-/// Her default persona with the rules, as light mode and inline hosts get it.
+/// The default persona and stage rules for a tool-free phone request.
 const companionPersonaCore =
     '''
 $companionPersonaDefault
