@@ -168,8 +168,8 @@ class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
             }
             .build()
-        focus = request
-        am.requestAudioFocus(request)
+        // Refused: she speaks anyway, and her next line asks again.
+        if (am.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) focus = request
     }
 
     private fun abandonFocus() {
