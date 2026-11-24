@@ -26,6 +26,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/companion_session_peer.dart';
 import 'phone_keeper_fake.dart';
 import 'companion_test_settle.dart';
 
@@ -87,6 +88,16 @@ class _Bridge extends DshConnection {
   }) async => _json({
     'error': {'code': 'companion/not-found'},
   }, 404);
+
+  @override
+  Future<DshHttpStreamResponse> postJsonStream(
+    String path, Object? body, {
+    required DshHttpAbort abort,
+    Duration? headerTimeout,
+    Duration? idleTimeout = const Duration(seconds: 20),
+  }) => path.endsWith('/session-tools/open')
+      ? Future.value(DshHttpStreamResponse(404, 'text/plain', const Stream.empty(), () async {}))
+      : super.postJsonStream(path, body, abort: abort, headerTimeout: headerTimeout, idleTimeout: idleTimeout);
 
   @override
   Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
@@ -241,10 +252,10 @@ class _Phone extends FakePhoneKeeper {
 }
 
 class _Room {
-  _Room(this.root) {
+  _Room(this.root, {this.sessionPeer = false}) {
     final bridge = _Bridge('store-a');
     a = bridge;
-    final client = DshClient(bridge);
+    final client = sessionPeer ? CompanionSessionPeer(bridge) : DshClient(bridge);
     clients.add(client);
     connections[HostRef.local] = HostConnection(client: client, isLocal: true);
     Directory('${root.path}/pack/runtime').createSync(recursive: true);
@@ -253,6 +264,7 @@ class _Room {
     File('${root.path}/pack/character/index.json').writeAsStringSync('[]');
   }
   final Directory root;
+  final bool sessionPeer;
   final phone = _Phone();
   Directory? phoneDirectory;
   late final _Bridge a;
@@ -291,7 +303,7 @@ class _Room {
 
   _Bridge connect(HostRef host) {
     final bridge = _Bridge('store-${host.id}');
-    final client = DshClient(bridge);
+    final client = sessionPeer ? CompanionSessionPeer(bridge) : DshClient(bridge);
     clients.add(client);
     connections[host] = HostConnection(client: client, isLocal: host.isLocal, kind: host.kind, hostId: host.id);
     return bridge;
@@ -302,7 +314,7 @@ class _Room {
       activeHostProvider.overrideWith(() => host),
       activeConnectionProvider.overrideWith((ref) => AsyncData(connections[ref.watch(activeHostProvider)])),
       companionSessionsProvider.overrideWith(() => sessions),
-      chatProvider.overrideWith2((id) => chats.putIfAbsent(id, () => _Chat(id))),
+      if (!sessionPeer) chatProvider.overrideWith2((id) => chats.putIfAbsent(id, () => _Chat(id))),
       settingsProvider.overrideWith(_Settings.new),
       companionLightClientProvider.overrideWithValue(() => light),
       companionPhoneKeeperProvider.overrideWithValue((directory) {
@@ -362,7 +374,11 @@ class _Room {
     phone.releaseGates();
     await tester.pump(const Duration(seconds: 15));
     for (final client in clients) {
-      await client.close();
+      if (client is CompanionSessionPeer) {
+        await client.closeAll();
+      } else {
+        await client.close();
+      }
     }
   }
 }
@@ -461,39 +477,48 @@ void main() {
     await room.close(tester);
   });
 
-  // Full mode chats through the phone loop too: the pending send is A's model
-  // request, already out with no words back, when the host becomes B.
   testWidgets('switching host retires a pending send without restoring its draft into B', (tester) async {
-    final room = _Room(temporary);
+    SharedPreferences.setMockInitialValues({'companion_mode': 'full'});
+    final room = _Room(temporary, sessionPeer: true);
     const nextHost = HostRef.ssh('b');
     room.connect(nextHost);
+    final hostA = room.connections[HostRef.local]!.client as CompanionSessionPeer;
+    final hostB = room.connections[nextHost]!.client as CompanionSessionPeer;
+    final response = Completer<void>();
+    hostA.holdBeforeResponse = response.future;
     await room.open(tester);
+    addTearDown(() {
+      if (!response.isCompleted) response.complete();
+    });
     await tester.enterText(find.byType(TextField), '属于 A 的句子');
     tester.widget<CompanionComposer>(find.byType(CompanionComposer)).onSend();
-    // The source must be durable before the host race starts.
-    for (var i = 0; i < 100 && room.lightAsked.isEmpty; i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
-      await tester.pump();
-    }
-    expect(room.lightAsked, hasLength(1));
+    await settleMixed(tester, hostA.firstPrompt.future);
+    final sent = hostA.prompts.single;
+    expect(sent.session, room.sessions.of(HostRef.local)!.sessionId);
+    expect(sent.text, '属于 A 的句子');
+    expect(sent.requestId, isNotEmpty);
+    expect(room.lightAsked, isEmpty);
     final memory = room.container.read(companionMemoryOwnerProvider(room.root.absolute.path)).value!;
-    expect(memory.store.messages().where((row) => row['text'] == '属于 A 的句子'), hasLength(1));
-    await flush(tester);
+    expect(memory.store.messages().where((row) => row['text'] == sent.text), hasLength(1));
     room.host.change(nextHost);
     await flush(tester);
     final composer = tester.widget<CompanionComposer>(find.byType(CompanionComposer));
-    final busyAfterSwitch = composer.busy || composer.running;
-    // A's late reply has nowhere to land.
-    room.lightSays('A 的回答');
-    room.lightDone();
-    for (var i = 0; i < 4; i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    expect((busyAfterSwitch, tester.widget<TextField>(find.byType(TextField)).controller!.text), (false, ''));
-    expect(find.textContaining('A 的回答'), findsNothing);
+    expect(composer.busy, isFalse, reason: 'B must not inherit A\'s pending preparation');
+    expect(composer.running, isFalse, reason: 'B must not inherit A\'s active turn');
+
+    // A commits a real follow-frame reply after B owns the room.
+    response.complete();
+    await settleMixed(tester, hostA.firstTurnEnded.future);
+    await flush(tester);
+    final messages = hostA.records[sent.session]!.where((row) => row['type'] == 'assistant/message');
+    expect(messages, hasLength(1));
+    expect(jsonEncode(messages.single), contains('会话回复'));
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
+    expect(find.textContaining('会话回复'), findsNothing);
     expect(memory.store.messages().where((row) => row['role'] == 'assistant'), isEmpty);
-    expect(room.chats.values.expand((chat) => chat.sent), isEmpty);
+    expect(hostA.prompts, hasLength(1));
+    expect(hostB.prompts, isEmpty);
+    expect(room.lightAsked, isEmpty);
     await room.close(tester);
   });
 
