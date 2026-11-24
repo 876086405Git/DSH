@@ -464,6 +464,14 @@
         }
       }
     },
+    "jsonl-identical-cold-read.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "8714888700f1508ffa212c5cdcd5650bf8c1ccb07014703120dc3fb0a825c7f2",
+          "before": "4ce5ef22bc25c37ead321f86427231ca8b4491e46ffa6033c6760d0783fc38eb"
+        }
+      }
+    },
     "jsonl-materialize-rename.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
@@ -1781,8 +1789,8 @@
     "zzzzzzz-ohos-session-publication.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "53a8eb489be48479da039d63696d831149c37c8b9d645b9ae94560fcc86941dc",
-          "before": "4ce5ef22bc25c37ead321f86427231ca8b4491e46ffa6033c6760d0783fc38eb"
+          "after": "ac3511a72c5225555c32995187f924246f8b51fd63f7681acaadc14a00d67ab9",
+          "before": "8714888700f1508ffa212c5cdcd5650bf8c1ccb07014703120dc3fb0a825c7f2"
         }
       }
     },
@@ -2025,8 +2033,8 @@
           "before": "80933656125dec9d255a4b6a71514736bfc4f80b6cca67d2bfd09d062db3690b"
         },
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "4ea142d366555ee3cf64992e56745a9299dff44404fa8ccd7abaecbdd88b019b",
-          "before": "53a8eb489be48479da039d63696d831149c37c8b9d645b9ae94560fcc86941dc"
+          "after": "076c80e36815d10434e1aacd05511d6cd5efc81c6b2cc14418151ea52ecd7087",
+          "before": "ac3511a72c5225555c32995187f924246f8b51fd63f7681acaadc14a00d67ab9"
         }
       }
     },
@@ -2401,8 +2409,8 @@
     "zzzzzzzzzzzz-ohos-runtime-capabilities.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
-          "after": "7718483b03c2b036c14318a6123fd43e5e07a521dbd2bdf0a7b9a078bb50353a",
-          "before": "4ea142d366555ee3cf64992e56745a9299dff44404fa8ccd7abaecbdd88b019b"
+          "after": "e41aefd237a3dea1a2a0a3c530d6ebdb192d8612e0ab85169b99b514bcd766ea",
+          "before": "076c80e36815d10434e1aacd05511d6cd5efc81c6b2cc14418151ea52ecd7087"
         }
       }
     },
@@ -3120,6 +3128,7 @@
       "rrule-mixed-byday.diff",
       "input-trigger-source-recovery.diff",
       "jsonl-frozen-live-event.diff",
+      "jsonl-identical-cold-read.diff",
       "web-preset-save-freshness.diff",
       "web-search-key-write-result.diff",
       "deepseek-attachment-error.diff",
@@ -3348,6 +3357,7 @@
       "rrule-mixed-byday.diff",
       "input-trigger-source-recovery.diff",
       "jsonl-frozen-live-event.diff",
+      "jsonl-identical-cold-read.diff",
       "web-preset-save-freshness.diff",
       "web-search-key-write-result.diff",
       "deepseek-attachment-error.diff",
