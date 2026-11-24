@@ -1924,17 +1924,24 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   /// once her page or panel is open, not before: reading holds the pack store.
   List<CompanionRosterEntry> _roster = const [];
   bool _rosterWanted = false;
+  int _rosterLoads = 0;
 
   Future<void> _loadRoster() async {
     final store = _store;
     if (store == null) return;
     try {
       final roster = await store.roster();
-      // Whoever just moved in has her cover at the same path as the last one.
-      for (final CompanionRosterEntry(:active, :cover) in roster) {
-        if (active && cover != null) unawaited(companionRosterCover(cover).evict());
+      // A cover's path stays the same when another moves in or she's updated,
+      // so each roster decodes its covers afresh, in rows made anew.
+      for (final CompanionRosterEntry(:cover) in roster) {
+        if (cover != null) unawaited(companionRosterCover(cover).evict());
       }
-      if (mounted) setState(() => _roster = roster);
+      if (mounted) {
+        setState(() {
+          _roster = roster;
+          _rosterLoads++;
+        });
+      }
     } on Object {
       // Shown again on the next change.
     }
@@ -3172,7 +3179,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         children: [
           for (final entry in _roster)
             CompanionRosterRow(
-              key: ValueKey('roster-${entry.key}'),
+              key: ValueKey('roster-${entry.key}-$_rosterLoads'),
               name: entry.active ? _name(l10n) : entry.character.name ?? l10n.companionDefaultName,
               active: entry.active,
               cover: entry.cover,
