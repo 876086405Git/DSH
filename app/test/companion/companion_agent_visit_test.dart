@@ -1480,9 +1480,13 @@ void main() {
       _message(words: '已经处理好了。'),
     ];
     var rawClock = _now;
+    void Function(Map<String, Object?> body)? retryStep;
     final visit = await _Visit.open(
       replies,
       clock: () => CompanionInitiativeClock(wallMs: rawClock, monoMs: rawClock - _now, offsetMinutes: 480),
+      beforeReply: (body) async {
+        retryStep?.call(body);
+      },
     );
     var ownerChanges = 0;
     void ownerChanged() => ownerChanges++;
@@ -2467,6 +2471,82 @@ void main() {
         expect(row['raw_usage'], containsPair('http_status', 200));
         expect(row['raw_usage'], containsPair('complete', true));
       }
+      // Keep all 45 preceding HTTP/usage observations. This new explicit request
+      // obtains its opaque target from the actual tool response on the wire.
+      const retryText = '我收藏了红色陶杯。';
+      final resident = rawResident;
+      replies.addAll([
+        _message(calls: [('new-cup-card', 'remember', {'text': retryText, 'keywords': ['陶杯']})]),
+        _message(words: '记住了。'),
+      ]);
+      await resident.submit(retryText, fromFloat: true);
+      final original = store.messages().singleWhere((row) => row['id'] == visit.agent.sourceId);
+      final cup = store.cards().singleWhere((card) => card['text'] == retryText);
+      replies.addAll([
+        _message(calls: [('original-cup-forget', 'forget', {'card': cup['id'], 'deleteChat': true})]),
+        _message(words: '记忆已忘，原话等你确认。'),
+      ]);
+      await resident.submit('忘掉红色陶杯，提请删掉当时原话。', fromFloat: true);
+      final first = resident.pendingRawErase!;
+      expect(resident.markRawEraseOffered(first.id).state, 'awaiting');
+      expect(resident.declineRawErase(first.id).state, 'declined');
+      final beforeControl = store.archive['control_revision'];
+      final beforeCutoff = store.archive['history_after_seq'];
+      final beforeRetry = visit.requests.length;
+      String? offeredDuringNotify;
+      void observeOffer() {
+        final current = resident.pendingRawErase;
+        if (current != null) offeredDuringNotify = current.id;
+      }
+      const readCall = 'locate-original-cup', askCall = 'fresh-cup-confirmation';
+      retryStep = (body) {
+        final last = (body['messages'] as List).last as Map;
+        final content = last['content'];
+        if (content is! List) return;
+        final receipts = content.whereType<Map>().where((row) => row['type'] == 'tool_result');
+        for (final row in receipts) {
+          if (row['tool_use_id'] == readCall) {
+            final read = jsonDecode(row['content'] as String) as Map;
+            expect(read['applied'], isTrue);
+            expect(read['cards'], isEmpty);
+            expect(read['targetId'], isA<String>());
+            expect(read.containsKey('pendingRawEraseId'), isFalse);
+            expect(resident.pendingRawErase, isNull);
+            replies.add(_message(calls: [
+              (askCall, 'forget', {'rawEraseRetry': read['targetId'], 'deleteChat': true}),
+            ]));
+          } else if (row['tool_use_id'] == askCall) {
+            final result = jsonDecode(row['content'] as String) as Map;
+            expect(result['changedCardIds'], isEmpty);
+            expect(result['pendingRawEraseId'], offeredDuringNotify);
+            expect(result['rawEraseState'], 'pending');
+            replies.add(_message(words: '请你重新确认。'));
+          }
+        }
+      };
+      visit.memory.addListener(observeOffer);
+      try {
+        replies.add(_message(calls: [(readCall, 'related', {'rawEraseRetry': true})]));
+        await resident.submit('请重新发起，删掉上次陶杯那句原话。', fromFloat: true);
+      } finally {
+        retryStep = null;
+        visit.memory.removeListener(observeOffer);
+      }
+      expect(visit.agent.error, isNull);
+      expect(visit.requests.length, beforeRetry + 3);
+      final fresh = resident.pendingRawErase!;
+      expect(offeredDuringNotify, fresh.id);
+      expect(fresh.id, isNot(first.id));
+      expect(fresh.expiresAtUtcMs, isNull);
+      expect(resident.confirmRawErase(first.id).state, 'not_found');
+      expect(store.archive['control_revision'], beforeControl);
+      expect(store.archive['history_after_seq'], beforeCutoff);
+      expect(store.messages().any((row) => row['id'] == original['id']), isTrue);
+      expect(resident.markRawEraseOffered(fresh.id).state, 'awaiting');
+      expect(resident.pendingRawErase!.expiresAtUtcMs, rawClock + 5 * 60000);
+      expect(resident.confirmRawErase(fresh.id).state, 'confirmed');
+      expect(store.messages().any((row) => row['id'] == original['id']), isFalse);
+      expect(store.archive['history_after_seq'], beforeCutoff);
     } finally {
       rawRoom?.detach();
       rawResident?.close();

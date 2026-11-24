@@ -223,7 +223,8 @@ class CompanionMemoryOwner extends ChangeNotifier {
     // this phone Owner survives. The next real room reads the same deferred
     // id. Actual room departure and an already offered record both revoke it.
     final pending = actualRoomLeave ? null : store.pendingRawErase(characterId: characterId);
-    final invalidated = (actualRoomLeave || pending?.expiresAtUtcMs != null) && store.invalidateRawErase();
+    final invalidated = (actualRoomLeave || pending == null || pending.expiresAtUtcMs != null) &&
+        store.invalidateRawErase();
     _cancelRawEraseExpiry();
     _roomReady = false;
     _worker?.cancel();
