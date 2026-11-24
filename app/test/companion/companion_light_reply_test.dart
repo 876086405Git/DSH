@@ -12,6 +12,7 @@ import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
+import 'package:dsh_app/ui/common/typing_indicator.dart';
 import 'package:dsh_app/ui/companion/companion_chrome.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
@@ -173,6 +174,44 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       }
     }
+  });
+
+  testWidgets('a hidden room stops the thinking orb and can show its outgoing fade', (tester) async {
+    var roomVisible = true;
+    String? words;
+    late StateSetter update;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildDarkTheme(),
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            update = setState;
+            return IndexedStack(
+              index: roomVisible ? 0 : 1,
+              children: [
+                CompanionSpeech(text: words, thinking: words == null),
+                const SizedBox.shrink(),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+    final orb = find.byType(TypingIndicator, skipOffstage: false);
+    expect(orb, findsOneWidget);
+    update(() => roomVisible = false);
+    await tester.pump();
+    expect(orb, findsNothing);
+
+    update(() => words = '你好');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 32));
+    update(() => roomVisible = true);
+    await tester.pump();
+    expect(orb, findsOneWidget);
+    expect(find.text('你好'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(orb, findsNothing);
   });
 
   testWidgets('light deltas complete a hidden marker once and keep the current words', (tester) async {
