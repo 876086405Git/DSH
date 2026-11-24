@@ -83,6 +83,11 @@ class _WebHomeState extends ConsumerState<WebHome> {
       _webSession = target.sessionId;
       unawaited(_link.open(target));
     }
+    // Another host's page has not opened anything yet: a conversation chosen
+    // there opens even when its id is the one this page last showed.
+    ref.listenManual(activeHostProvider, (previous, next) {
+      if (previous != next) _webSession = null;
+    });
     // Something chose a conversation (a notification, a recent shortcut, the
     // banner): the page goes there, once it has been rebuilt for the host.
     ref.listenManual(currentSessionProvider, (_, next) {

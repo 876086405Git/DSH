@@ -597,6 +597,8 @@ class CompanionPhoneLines {
     while (same < read && words.codeUnitAt(same) == _words.codeUnitAt(same)) {
       same++;
     }
+    // Never between an emoji's two halves: "😀" rewritten as "😁" shares the first.
+    if (same > 0 && words.codeUnitAt(same - 1) & 0xFC00 == 0xD800) same--;
     _words = words;
     final (say, said) = companionSpeakable(words, min(_said, same), final_: !running || stepped);
     _said = said;

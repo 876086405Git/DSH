@@ -334,7 +334,8 @@ class _CompanionAgentVisit {
 
   /// 清空对话 in progress: nothing new is taken until it is done, or its run
   /// would be dropped along with the old conversation's.
-  bool clearing = false;
+  Future<void>? clearingNow;
+  bool get clearing => clearingNow != null;
   bool entered = false;
   CompanionInitiativeRoom? enteredRoom;
   int epoch = 0;
@@ -1024,15 +1025,18 @@ class _CompanionAgentVisit {
     changed();
   }
 
+  /// A second 清空 while one is running waits for that one, so the guard is
+  /// let go only when the conversation is really clear.
   Future<void> restart() async {
     if (!active) return;
-    clearing = true;
-    try {
-      await _clear();
-    } finally {
-      clearing = false;
-      changed();
-    }
+    await (clearingNow ??= () async {
+      try {
+        await _clear();
+      } finally {
+        clearingNow = null;
+        changed();
+      }
+    }());
   }
 
   Future<void> _clear() async {
