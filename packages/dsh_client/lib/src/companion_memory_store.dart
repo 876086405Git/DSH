@@ -1059,6 +1059,7 @@ class CompanionMemoryStore {
     final sequence = _sequence();
     _removeFactRelations(
       {id},
+      retainTopics: {for (final topic in topicControls()) topic['topic_id'] as String},
       domainSnapshot: _memoryDomainCards(rows.single['character_id'] as String?)
           .where((card) => card['character_id'] == rows.single['character_id'])
           .toList(),

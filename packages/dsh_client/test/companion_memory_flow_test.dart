@@ -1696,6 +1696,73 @@ void main() {
       store.deleteCard(id: sugar['id'] as String, expectedRowRev: sugar['row_rev'] as int);
       expect(store.cards(), [morning]);
       expect(store.cards().single['topic_mode'], 'less');
+
+      // Removing the last fact does not release its separate expression control.
+      final topic = morning['topic_id'] as String;
+      final lessControls = store.topicControls();
+      final lessMessages = store.messages();
+      expect(lessControls.single['anchors'], ['咖啡']);
+      store.deleteCard(id: morning['id'] as String, expectedRowRev: morning['row_rev'] as int);
+      expect(store.cards(), isEmpty);
+      expect(store.topicControls(), lessControls);
+      expect(store.messages(), lessMessages);
+      reopen();
+      expect(store.topicControls(), lessControls);
+      final freshLess = remember('fresh-less', '我周末喝咖啡。', keywords: ['咖啡']);
+      expect(freshLess['topic_id'], topic);
+      expect(freshLess['topic_mode'], 'less');
+      expect(select('咖啡').ids, [freshLess['id']]);
+
+      store.applyControl(topicIds: [topic], kind: 'never');
+      final neverControls = store.topicControls();
+      final neverMessages = store.messages();
+      expect(neverControls.single['anchors'], ['咖啡']);
+      store.deleteCard(id: freshLess['id'] as String, expectedRowRev: freshLess['row_rev'] as int);
+      expect(store.cards(), isEmpty);
+      expect(store.topicControls(), neverControls);
+      expect(store.messages(), neverMessages);
+      reopen();
+      expect(store.topicControls(), neverControls);
+      final freshNever = remember('fresh-never', '我下午喝咖啡。', keywords: ['咖啡']);
+      expect(freshNever['topic_id'], topic);
+      expect(freshNever['topic_mode'], 'never');
+      expect(select('咖啡').ids, isEmpty);
+
+      final boundary = store.archive['history_after_seq'];
+      store.applyControl(topicIds: [topic], kind: 'normal');
+      final normal = store.cards().single;
+      expect(normal['topic_mode'], 'normal');
+      expect(store.topicControls(), isEmpty);
+      expect(store.archive['history_after_seq'], boundary);
+      expect(select('咖啡').ids, [freshNever['id']]);
+
+      // Both topics exist before either control; the composite is a literal
+      // dependency in another topic, not another fact in the root's topic.
+      final home = remember('home', '我住杭州。', keywords: ['杭州']);
+      final composite = remember('home-and-cat', '我住杭州，也养猫。', keywords: ['养猫']);
+      expect(composite['topic_id'], isNot(home['topic_id']));
+      store.applyControl(topicIds: [home['topic_id'] as String], kind: 'less');
+      store.applyControl(topicIds: [composite['topic_id'] as String], kind: 'never');
+      final closureControls = store.topicControls();
+      final closureMessages = store.messages();
+      expect(
+        closureControls.map((control) => control['topic_id']),
+        unorderedEquals([home['topic_id'], composite['topic_id']]),
+      );
+      store.deleteCard(id: home['id'] as String, expectedRowRev: home['row_rev'] as int);
+      expect(store.cards(), [normal]);
+      expect(store.topicControls(), closureControls);
+      expect(store.messages(), closureMessages);
+      reopen();
+      expect(store.topicControls(), closureControls);
+      final freshHome = remember('fresh-home', '我周末常去杭州。', keywords: ['杭州']);
+      final freshCat = remember('fresh-cat', '我会继续养猫。', keywords: ['养猫']);
+      expect(freshHome['topic_id'], home['topic_id']);
+      expect(freshHome['topic_mode'], 'less');
+      expect(freshCat['topic_id'], composite['topic_id']);
+      expect(freshCat['topic_mode'], 'never');
+      expect(select('杭州').ids, [freshHome['id']]);
+      expect(select('养猫').ids, isEmpty);
     });
 
     for (final action in ['delete', 'forget', 'correct']) {
