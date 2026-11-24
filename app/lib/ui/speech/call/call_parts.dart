@@ -544,7 +544,9 @@ class _RevealTextState extends State<RevealText> with SingleTickerProviderStateM
     final text = widget.text;
     final shown = AppMotion.reduced(context) ? text.length + _tail.toDouble() : _shown;
     final end = _whole(text, shown.ceil().clamp(0, text.length));
-    final start = _whole(text, math.max(0, end - widget.window));
+    // Past an emoji's first half, not back before it: the window stays [window] long.
+    final cut = math.max(0, end - widget.window);
+    final start = _whole(text, cut) == cut ? cut : cut + 1;
     final base = widget.style ?? DefaultTextStyle.of(context).style;
     final color = base.color ?? Colors.white;
     final spans = <InlineSpan>[];
