@@ -2317,7 +2317,9 @@ void main() {
         'changes': [for (final card in otherCards) {'card': card['id'], 'forget': true}],
       });
       expect(tooMany.code, 'card_limit');
-      for (final card in otherCards) expect(actualCard(card['id'] as String), card);
+      for (final card in otherCards) {
+        expect(actualCard(card['id'] as String), card);
+      }
       expect(store.markRawEraseOffered(freshId, characterId: null).state, 'awaiting');
       expect(store.confirmRawErase(freshId, characterId: null).changedCardIds, unorderedEquals([survivor]));
       expect(actualCard(survivor)['manual'], isTrue);

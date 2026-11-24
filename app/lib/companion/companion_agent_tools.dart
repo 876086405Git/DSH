@@ -452,7 +452,7 @@ class CompanionAgentMemoryTools {
       name: 'forget',
       description: 'First use related to inspect same-source candidates: sharing a source does not mean the same fact. Forget the intended entries atomically; changes must explicitly include all true literal/reference dependencies and preserve independent facts by nonempty rewrites. To request erasing original chat too, set deleteChat=true and supply top-level card as the single original-source target, also forgotten in changes if present. This only prepares a separate owner confirmation: original chat remains until the person confirms through the app. Other changes are not additional original-source targets. All affected entries must be granted and fit the shared budget. Report the actual card changes and pending confirmation; never claim raw erasure from the model request alone. Only if the person explicitly asks again after expiry or refusal, first call related(rawEraseRetry: true) and then send exactly its targetId as rawEraseRetry with deleteChat: true to request fresh confirmation.',
       inputSchema: {
-        ..._ordinaryForget,
+        'type': 'object',
         'properties': {..._forgetProperties, 'rawEraseRetry': _text},
         'anyOf': [
           {'anyOf': _forgetTargets, 'not': {'required': ['rawEraseRetry']}},
@@ -461,6 +461,7 @@ class CompanionAgentMemoryTools {
             'properties': {'deleteChat': {'enum': [true]}},
           },
         ],
+        'additionalProperties': false,
       },
     ),
     CompanionAgentTool(
@@ -487,8 +488,9 @@ class CompanionAgentMemoryTools {
       name: 'related',
       description: 'Read and grant actual same-source candidates and required literal/reference effects for a supplied card. Decide meaning from their text; do not equate a shared proof with the same fact. With no card, return only stale cleanup IDs without obsolete text. For an explicit new request to erase the same original chat after a refusal or timeout, use only rawEraseRetry: true. An empty cards list is valid and targetId identifies the same original set.',
       inputSchema: {
-        ..._ordinaryRelated,
+        'type': 'object',
         'properties': {'card': _card, 'rawEraseRetry': {'type': 'boolean', 'enum': [true]}},
+        'additionalProperties': false,
         'maxProperties': 1,
       },
     ),

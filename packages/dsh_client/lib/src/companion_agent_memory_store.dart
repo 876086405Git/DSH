@@ -336,7 +336,9 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     if (anchor == null || anchor.characterId != characterId || pending.characterId != characterId) return false;
     final meta = archive;
     if (meta['id'] != anchor.archiveId || meta['control_revision'] != anchor.controlRevision ||
-        meta['id'] != pending.archiveId || meta['control_revision'] != pending.controlRevision) return false;
+        meta['id'] != pending.archiveId || meta['control_revision'] != pending.controlRevision) {
+      return false;
+    }
     bool matches(String message, int revision, String fingerprint) {
       final rows = _db.select('SELECT * FROM memory_messages WHERE id=?', [message]);
       return rows.isNotEmpty && rows.single['source_rev'] == revision &&
@@ -411,7 +413,9 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       '''SELECT 1 FROM memory_agent_calls WHERE turn_id=? AND tool_name='related' AND state='applied'
          AND target_id=? AND after_control_revision=? AND input_sha256=? LIMIT 1''',
       [turn['id'], id, archive['control_revision'], digest],
-    ).isEmpty) throw const _AgentMemoryRejected('raw_retry_needs_read');
+    ).isEmpty) {
+      throw const _AgentMemoryRejected('raw_retry_needs_read');
+    }
     _agentBudget(turn, anchor.plan.changed);
     for (final id in _rawRetryParents(anchor.plan)) {
       _agentCard(turn, id);

@@ -163,10 +163,10 @@ class _Bridge extends DshConnection {
 // tool selection/execution, SQLite, ChatController, speech and widget writes.
 class _CorrectionBridge extends _Bridge {
   final contexts = <Map<String, Object?>>[];
-  final calls = <String, StreamController<List<int>>>{};
+  final calls = <String, StreamController<Uint8List>>{};
   final revised = Completer<Map<String, Object?>>();
 
-  DshHttpResponse capability(String id) => json({
+  DshHttpResponse capability(String id) => this.json({
     'v': 1, 'supported': true, 'instanceId': 'correction-peer', 'sessionId': id,
     'profileRevision': 0, 'profileAccepted': true, 'phoneMemory': true,
     'phoneMemoryVersion': 3, 'memoryMode': 'phone',
@@ -191,7 +191,7 @@ class _CorrectionBridge extends _Bridge {
     }
     if (path.endsWith('/session-tools/result')) {
       revised.complete(Map<String, Object?>.from(body! as Map));
-      return json({});
+      return this.json({});
     }
     return super.postJson(path, body, timeout: timeout);
   }
@@ -207,7 +207,7 @@ class _CorrectionBridge extends _Bridge {
     final open = body! as Map;
     final id = open['requestId']! as String;
     expect((open['tools'] as List).cast<Map>().map((tool) => tool['name']), contains('revise'));
-    final stream = calls[id] = StreamController<List<int>>();
+    final stream = calls[id] = StreamController<Uint8List>();
     stream.add(utf8.encode('${jsonEncode({'type': 'ready', 'token': id})}\n'));
     return DshHttpStreamResponse(200, 'application/x-ndjson', stream.stream, () async {
       if (!stream.isClosed) await stream.close();
