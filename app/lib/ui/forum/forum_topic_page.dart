@@ -199,6 +199,7 @@ class _ForumTopicPageState extends ConsumerState<ForumTopicPage> {
     final l10n = context.l10n;
     final async = ref.watch(forumTopicProvider(widget.topicId));
     final detail = async.value;
+    final hasMore = detail?.hasMore ?? false;
     final site = ref.watch(forumSiteProvider).value;
     final signedIn = ref.watch(forumAuthProvider.select((s) => s.signedIn));
     ref.listen(forumTopicProvider(widget.topicId), (_, next) {
@@ -282,9 +283,9 @@ class _ForumTopicPageState extends ConsumerState<ForumTopicPage> {
           },
         ),
         SliverToBoxAdapter(
-          child: detail.hasMore || _loadingMore || _moreError != null
+          child: hasMore || _loadingMore || _moreError != null
               ? ForumListFooter(
-                  loading: _loadingMore || detail.hasMore && _moreError == null,
+                  loading: _loadingMore || hasMore && _moreError == null,
                   error: _moreError,
                   onRetry: _loadMore,
                 )
@@ -296,7 +297,7 @@ class _ForumTopicPageState extends ConsumerState<ForumTopicPage> {
 
     final page = NotificationListener<ScrollUpdateNotification>(
       onNotification: (n) {
-        if (detail != null && n.metrics.extentAfter < 900 && _moreError == null && !_loadingMore && detail.hasMore) {
+        if (hasMore && n.metrics.extentAfter < 900 && _moreError == null && !_loadingMore) {
           unawaited(_loadMore());
         }
         return false;
