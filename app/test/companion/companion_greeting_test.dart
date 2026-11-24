@@ -445,25 +445,29 @@ void main() {
   testWidgets('a retired selection during discovery reserves no phone attempt', (tester) async {
     final room = _Room(temporary);
     await room.open(tester, bindRole: true);
-    await settleMixed(tester, room.bridge.firstAuxiliary.future);
-    final agent = room.container.read(companionAgentProvider);
-    final before = room.bridge.auxiliarySessions.length;
-    final requests = room.memory.store.requests().map((row) => row['id']).toSet();
-    final phonePosts = room.asked.length;
-    room.bridge.selectionChanged = true;
-    final source = room.memory.store.submitMessage(
-      id: 'auxiliary-discovery-changed', sessionId: 'existing-role-session', text: '这轮已经换了模型。',
-      saidAtUtc: _now, offsetMinutes: 0,
-    );
-    await settleMixed(tester, agent.say(memory: room.memory, source: source, system: 'test',
-      tools: const [], isCurrent: () => true));
-    expect(room.bridge.auxiliarySessions.skip(before), contains('existing-role-session'));
-    expect(agent.error, isA<CompanionHostError>().having(
-      (error) => error.hostFailure, 'reason', CompanionHostFailure.selectionChanged,
-    ));
-    expect(room.asked.length, phonePosts);
-    expect(room.memory.store.requests().where((row) => row['category'] == 'chat' && !requests.contains(row['id'])),
-        isEmpty);
+    try {
+      await settleMixed(tester, room.bridge.firstAuxiliary.future);
+      final agent = room.container.read(companionAgentProvider);
+      final before = room.bridge.auxiliarySessions.length;
+      final requests = room.memory.store.requests().map((row) => row['id']).toSet();
+      final phonePosts = room.asked.length;
+      room.bridge.selectionChanged = true;
+      final source = room.memory.store.submitMessage(
+        id: 'auxiliary-discovery-changed', sessionId: 'existing-role-session', text: '这轮已经换了模型。',
+        saidAtUtc: _now, offsetMinutes: 0,
+      );
+      await settleMixed(tester, agent.say(memory: room.memory, source: source, system: 'test',
+        tools: const [], isCurrent: () => true));
+      expect(room.bridge.auxiliarySessions.skip(before), contains('existing-role-session'));
+      expect(agent.error, isA<CompanionHostError>().having(
+        (error) => error.hostFailure, 'reason', CompanionHostFailure.selectionChanged,
+      ));
+      expect(room.asked.length, phonePosts);
+      expect(room.memory.store.requests().where((row) => row['category'] == 'chat' && !requests.contains(row['id'])),
+          isEmpty);
+    } finally {
+      await room.close(tester);
+    }
   });
 
   testWidgets('a touch supersedes a pending greeting without dropping visit state', (tester) async {
