@@ -124,11 +124,17 @@ class CompanionReply {
 
 final _mark = RegExp(r'[\[【]\s*(表情|动作|emotion|action)\s*[:：]\s*([^\]】\n]{1,40}?)\s*[\]】]', caseSensitive: false);
 
-/// Whether [text] carries any of her marks.
-bool companionHasMarks(String text) => _mark.hasMatch(text);
+/// Whether [text] carries any of her marks (or, while [streaming], the
+/// start of one at its end).
+bool companionHasMarks(String text, {bool streaming = false}) =>
+    _mark.hasMatch(text) || (streaming && _partialMark.hasMatch(text));
 
-/// [text] without her marks (and the spaces right after them).
-String companionWithoutMarks(String text) => text.replaceAll(_markAndSpace, '').trim();
+/// [text] without her marks (and the spaces right after them). While
+/// [streaming], a mark still arriving at the end is held back too.
+String companionWithoutMarks(String text, {bool streaming = false}) {
+  final done = text.replaceAll(_markAndSpace, '');
+  return (streaming ? done.replaceFirst(_partialMark, '') : done).trim();
+}
 
 final _markAndSpace = RegExp('${_mark.pattern}[ \\t]*', caseSensitive: false);
 

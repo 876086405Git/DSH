@@ -892,9 +892,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _ => null,
     });
     if (_running || _sending) return; // Her words first.
-    final choices = lines.where((l) => l != _lastLine).toList();
-    final line = choices[_random.nextInt(choices.length)];
-    _lastLine = line;
+    final line = _pick(lines);
     _say(line);
   }
 
@@ -941,9 +939,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       'play' => _linesFor('play', [l10n.companionPlay1, l10n.companionPlay2, l10n.companionPlay3]),
       _ => _linesFor('rest', [l10n.companionRest1, l10n.companionRest2]),
     };
-    final choices = lines.where((l) => l != _lastLine).toList();
-    final line = choices[_random.nextInt(choices.length)];
-    _lastLine = line;
+    final line = _pick(lines);
     // After the snack has reached her, not before.
     _objectTimer?.cancel();
     _objectTimer = Timer(Duration(milliseconds: id == 'snack' ? 1700 : 900), () {
@@ -1518,7 +1514,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   // ── Voice ────────────────────────────────────────────────────────────────
 
-  bool get _voiceOn => _ttsReady && (ref.read(companionEffectiveVoiceProvider)?.on ?? false);
+  /// On a call the call reads her words; the room itself stays quiet.
+  bool get _voiceOn => _call == null && _ttsReady && (ref.read(companionEffectiveVoiceProvider)?.on ?? false);
 
   /// Ready to speak with [settings] (or silent when they are off).
   Future<void> _prepareVoice(CompanionVoiceSettings settings) async {
@@ -1796,8 +1793,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   List<String> _linesFor(String moment, List<String> fallback) {
     final own = _character.lines?[moment];
     if (own != null) return own;
-    if (!_ownWhale) unawaited(_refreshLines());
+    if (_ownWhale) return fallback;
+    unawaited(_refreshLines());
     return _ownLines?[moment] ?? fallback;
+  }
+
+  /// One of [lines], not the one she just said unless it is all she has.
+  String _pick(List<String> lines) {
+    final fresh = lines.where((l) => l != _lastLine).toList();
+    final choices = fresh.isEmpty ? lines : fresh;
+    return _lastLine = choices[_random.nextInt(choices.length)];
   }
 
   /// Her own lines kept for the current character and persona, if written.
@@ -1866,8 +1871,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   void _setCharacter(CompanionCharacter character, String? sourceKey) {
     // Another character moved in: her name and persona come with her, the
     // last one's are kept for when she's back.
-    if (_characterSourceKey case final from? when sourceKey != null && sourceKey != from) {
-      unawaited(companionSwapIdentity(ref, from: from, to: sourceKey).then((_) => _writeLines()));
+    if (sourceKey != null && sourceKey != _characterSourceKey) {
+      unawaited(
+        companionAdoptIdentity(ref, sourceKey).then((swapped) {
+          if (swapped) unawaited(_writeLines());
+        }),
+      );
     }
     if (_characterSourceKey != sourceKey) {
       _affinityCharacter = null;
@@ -1877,6 +1886,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     }
     if (_character.name != character.name) ref.invalidate(companionPackNameProvider);
     final changed = _characterSourceKey != sourceKey;
+    if (changed || _character.name != character.name) {
+      _ownLines = null;
+      _ownLinesFor = null;
+    }
     _character = character;
     _characterSourceKey = sourceKey;
     if (changed && _store != null) scheduleMicrotask(() => unawaited(_loadRoster()));
@@ -1937,7 +1950,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (!ok || !mounted) return;
     try {
       await _store?.removeShelved(entry.key);
-      unawaited(companionForgetIdentity(entry.key));
+      unawaited(companionForgetIdentity(ref, entry.key));
     } on Object {
       if (mounted) _notice(l10n.companionPackStorage);
     }
@@ -2039,6 +2052,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       if (widget.sections) _selectTab(_CompanionTab.room);
     } else {
       await _loadRoster();
+      // The same character updated: her stage was stopped for it.
+      await _afterWorkshop();
     }
   }
 
@@ -2147,8 +2162,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (_call case final call? when user != _callBaseline) call.reply(reply.words, running: running);
 
     final fresh = reply.words.length - _wordsSpoken;
-    // On a call the call reads her words; the room stays quiet.
-    final aloud = _voiceOn && error == null && _call == null;
+    final aloud = _voiceOn && error == null;
     if (fresh > 0) {
       // Read aloud, her mouth follows the voice instead of the text.
       if (!aloud) _stage.command('say', {'chars': fresh});
@@ -2327,6 +2341,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   Future<void> _openCall() async {
     _acted();
     _hush();
+    _objectTimer?.cancel();
     _focus.unfocus();
     if (_voice.active || _voice.cancelling) await _voice.cancel();
     if (!mounted) return;
@@ -3382,10 +3397,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       await _store?.remove();
       if (!mounted || !_attachment.isAttached) return;
       // What the person called her and wrote for her goes with her.
-      if (_characterSourceKey case final key?) unawaited(companionForgetIdentity(key));
-      unawaited(ref.read(companionNameProvider.notifier).set(null));
-      final persona = ref.read(companionPersonaProvider);
-      unawaited(ref.read(companionPersonaProvider.notifier).set(CompanionPersonaSettings(callMe: persona.callMe)));
+      if (_characterSourceKey case final key?) unawaited(companionForgetIdentity(ref, key));
       setState(() => _setCharacter(const CompanionCharacter(), null));
       _attachment.updateCharacter(_character, _moves, sourceKey: _characterSourceKey);
     } on CompanionPackException catch (error) {

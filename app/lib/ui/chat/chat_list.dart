@@ -1276,7 +1276,9 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
 
   Widget _reply(AssistantChatItem item, bool showActions, TurnTrace? footnote) {
     // Her expression and action marks move her in the room; here they are not words.
-    if (_hers && companionHasMarks(item.text)) item = replyWithText(item, companionWithoutMarks(item.text));
+    if (_hers && companionHasMarks(item.text, streaming: item.streaming)) {
+      item = replyWithText(item, companionWithoutMarks(item.text, streaming: item.streaming));
+    }
     // A picture a media card shows is not drawn again in the reply.
     if (item.text.contains('![')) {
       if (withoutShownImages(item.text, ref.read(sessionMediaPathsProvider(widget.sessionId))) case final text?) {

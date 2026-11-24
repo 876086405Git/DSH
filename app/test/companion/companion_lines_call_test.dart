@@ -24,6 +24,9 @@ void main() {
     expect(companionHasMarks(text), isTrue);
     expect(companionWithoutMarks(text), '嗯？好呀。');
     expect(companionHasMarks('普通的话'), isFalse);
+    // While she is still talking, a mark half arrived stays out of sight.
+    expect(companionWithoutMarks('好呀。[表情:开', streaming: true), '好呀。');
+    expect(companionWithoutMarks('好呀。[表情:开'), '好呀。[表情:开');
   });
 
   test('a call hears each reply once and ends the turn when she stops', () async {

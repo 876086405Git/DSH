@@ -5,8 +5,10 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
+import 'package:dsh_app/pets/pet_library.dart';
 import 'package:dsh_app/workshop/workshop_receipt.dart';
-import 'package:dsh_app/workshop/workshop_repository.dart' show workshopLocalError;
+import 'package:dsh_app/workshop/workshop_repository.dart'
+    show LocalWorkshopPackages, WorkshopInstalled, workshopLocalError;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../workshop/support.dart';
@@ -498,5 +500,17 @@ void main() {
     expect((await store.workshopReceipt())!.version, '1.1.0');
     await store.install(zip.path);
     expect(await store.workshopReceipt(), isNull);
+  });
+
+  test('companions waiting on the shelf are installed in the Workshop and can be removed there', () async {
+    final packages = LocalWorkshopPackages(pets: PetLibrary(() async => Directory('${temp.path}/pets')), companion: store);
+    await seed();
+    final zip = workshopZip(temp, workshopCharacter());
+    await packages.install(zip, receipt(), replaceExisting: false);
+    await packages.install(zip, receipt(id: 'dog'), replaceExisting: false);
+    final installed = (await packages.installed()).whereType<WorkshopInstalled>().toList();
+    expect([for (final item in installed) item.receipt.id], unorderedEquals(['dog', 'cat']));
+    await packages.remove(installed.singleWhere((item) => item.receipt.id == 'cat'));
+    expect([for (final entry in await store.roster()) entry.workshop?.id], ['dog', null]);
   });
 }
