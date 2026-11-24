@@ -154,4 +154,43 @@ void main() {
     expect(guestFs.counts.stats, 3);
     expect(guestFs.counts.reads, 2);
   });
+
+  test('past the cache cap a query re-reads only the files that did not fit', () async {
+    final root = await Directory.systemTemp.createTemp('dsh_search_ckpt_');
+    addTearDown(() => root.delete(recursive: true));
+    final checkpointDir = Directory('${root.path}/root/.dsh/storages/session_projcache/sessions');
+    await checkpointDir.create(recursive: true);
+    final sessions = [
+      for (var i = 0; i < 513; i++) searchSession('s$i', null, DateTime(2026, 10, 20).subtract(Duration(minutes: i))),
+    ];
+    for (final s in sessions) {
+      await File('${checkpointDir.path}/${s.sessionId}.json').writeAsString(_checkpointJson('问题 ${s.sessionId}'));
+    }
+    final guestFs = _FixtureGuestFs(root);
+
+    final client = DshClient.withCarrier(FakePluginCarrier()..handlers['session/search'] = (_) => throw searchDisabled);
+    addTearDown(client.close);
+
+    final container = ProviderContainer(
+      retry: (_, _) => null,
+      overrides: [
+        activeHostProvider.overrideWith(_LocalHost.new),
+        activeConnectionProvider.overrideWithValue(
+          AsyncValue<HostConnection?>.data(HostConnection(client: client, isLocal: true)),
+        ),
+        sessionsProvider.overrideWith(() => SearchSessions(sessions)),
+        guestFsProvider.overrideWith((ref) async => guestFs),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(sessionsProvider.future);
+    final backend = container.read(sessionContentSearchProvider)!;
+
+    await backend.search('第一答');
+    expect(guestFs.counts.reads, 513);
+    await backend.search('第一答');
+    final settled = guestFs.counts.reads;
+    await backend.search('第一答');
+    expect(guestFs.counts.reads - settled, 1);
+  });
 }
