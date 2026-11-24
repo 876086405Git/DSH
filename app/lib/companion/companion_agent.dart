@@ -248,7 +248,7 @@ class CompanionAgent extends ChangeNotifier {
       run.running &&
       !run.cancelled &&
       run.isCurrent() &&
-      run.memory.store.archive['control_revision'] == run.controlRevision;
+      run.memory.store.hasControlRevision(run.controlRevision);
 
   /// Resolve before reserving a physical request. The Session supplies only
   /// the selected model; this stateless route never reads its old transcript
