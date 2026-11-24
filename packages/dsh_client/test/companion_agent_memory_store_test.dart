@@ -2641,6 +2641,9 @@ void main() {
     now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
     final firstRole = character('local:keeper-first');
     final secondRole = character('local:keeper-second');
+    final quietCard = seed('很想念那株银杏。', keywords: ['银杏']);
+    final quietId = quietCard['id']! as String;
+    store.applyControl(topicIds: [quietCard['topic_id']! as String], kind: 'never');
     final firstSource = sayAs('day-first', '今天喝了红茶。', firstRole);
     sayAs('day-second', '今天散步了。', secondRole);
     now += 86400000;
@@ -2657,6 +2660,17 @@ void main() {
     expect(claim['scope_characters'], [null, firstRole, secondRole]);
     final shared = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
     final sharedId = shared['id']! as String;
+    expect((shared['cards'] as List<MemoryRow>).map((row) => row['id']), isNot(contains(quietId)));
+    for (final ranked in <List<String>?>[null, [quietId]]) {
+      final recalled = store.applyAgentMemoryTool(
+        turnId: sharedId, callId: ranked == null ? 'lexical-quiet' : 'ranked-quiet', toolName: 'recall',
+        input: {'query': '聊聊银杏'}, rankedRecallIds: ranked,
+      );
+      expect(recalled.applied, isTrue);
+      expect(recalled.recallSelection!.ids, isNot(contains(quietId)));
+    }
+    final reviewed = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+    expect((reviewed['shown_cards'] as Map).containsKey(quietId), isFalse);
     expect(
       estimatedContexts,
       contains(

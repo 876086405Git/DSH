@@ -223,8 +223,7 @@ void main() {
     final encodedBeforeInvitation = encoded.length;
     expect(await embeddings.rank(store: store, characterId: c, query: '聊聊咖啡', isCurrent: () => true), isEmpty);
     expect(encoded.skip(encodedBeforeInvitation), isEmpty);
-    // Different strings are a service-level contract; the real chat Agent
-    // supplies the same user source to query and explicitUserInput.
+    // The model may shorten the query while the invitation remains the person's actual words.
     final invited = await embeddings.rank(
       store: store, characterId: c, query: '咖啡', explicitInput: '聊聊咖啡', isCurrent: () => true,
     );
@@ -252,20 +251,23 @@ void main() {
 
     final recallSource = store.submitMessage(
       id: id(), sessionId: 'light:embedding-test', characterId: c,
-      text: '今天先随便聊几句。', saidAtUtc: now, offsetMinutes: 0,
+      text: '聊聊咖啡', saidAtUtc: now, offsetMinutes: 0,
     );
     final recallTurn = store.beginAgentTurn(
       messageId: recallSource['id']! as String,
       expectedSourceRev: recallSource['source_rev']! as int,
       shownCardRevisions: const {},
     )['id']! as String;
+    final uninvitedIds = await memory.recallIds('聊聊咖啡', characterId: c, isCurrent: () => true);
+    expect(uninvitedIds, isEmpty);
     final actualRankedIds = await memory.recallIds(
-      '聊聊咖啡', characterId: c, isCurrent: () => store.isAgentTurnCurrent(recallTurn),
+      '咖啡', explicitUserInput: recallSource['text']! as String,
+      characterId: c, isCurrent: () => store.isAgentTurnCurrent(recallTurn),
     );
     expect(actualRankedIds, [walk.targetId]);
     final recalled = store.applyAgentMemoryTool(
       turnId: recallTurn, callId: 'ranked-coffee', toolName: 'recall',
-      input: {'query': '聊聊咖啡'}, rankedRecallIds: actualRankedIds,
+      input: {'query': '咖啡'}, rankedRecallIds: actualRankedIds,
     );
     expect(recalled.applied, isTrue);
     expect(recalled.recallSelection!.ids, [walk.targetId]);
@@ -276,7 +278,7 @@ void main() {
     )['shown_cards'], {walk.targetId!: ordinaryCard['row_rev']});
     final replayed = store.applyAgentMemoryTool(
       turnId: recallTurn, callId: 'ranked-coffee', toolName: 'recall',
-      input: {'query': '聊聊咖啡'}, rankedRecallIds: actualRankedIds,
+      input: {'query': '咖啡'}, rankedRecallIds: actualRankedIds,
     );
     expect(replayed.replayed, isTrue);
     expect(replayed.recallSelection!.ids, [walk.targetId]);

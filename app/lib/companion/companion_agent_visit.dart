@@ -826,6 +826,7 @@ class _CompanionAgentVisit {
         forgottenNotice: origin.forgottenNotice,
         semanticRecall: (query) => owner.recallIds(
           query,
+          explicitUserInput: source['text']! as String,
           characterId: source['character_id'] as String?,
           isCurrent: () => current() && memoryTools?.isCurrent == true,
         ),

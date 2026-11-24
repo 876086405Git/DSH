@@ -491,8 +491,8 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         List<MemoryRow>? related;
         if (toolName == 'recall' && call['state'] == 'applied') {
           try {
-            _agentCheckCurrent(turn);
-            selection = _agentRecallSelection(turn, input, rankedRecallIds);
+            final source = _agentCheckCurrent(turn);
+            selection = _agentRecallSelection(turn, input, rankedRecallIds, source?['text'] as String?);
             _grantAgentSelection(turn, selection);
             control = _agentRecallControl(turn, input, replayedCall: call);
           } on _AgentMemoryRejected {
@@ -522,7 +522,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       var forgotten = false;
       _RawErasePlan? rawPlan;
       try {
-        _agentCheckCurrent(turn);
+        final source = _agentCheckCurrent(turn);
         final ({Set<String> changed, String? target}) effect;
         switch (toolName) {
           case 'remember':
@@ -568,7 +568,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           case 'ask_later':
             effect = _agentAskLater(turn, _agentToolSource(turn, input), callId, input);
           case 'recall':
-            recallSelection = _agentRecallSelection(turn, input, rankedRecallIds);
+            recallSelection = _agentRecallSelection(turn, input, rankedRecallIds, source?['text'] as String?);
             recalledControl = _agentRecallControl(turn, input);
             effect = (changed: <String>{}, target: recalledControl?['topic_id'] as String?);
           default:
@@ -633,10 +633,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     return _rawEraseResult(result, fallback: runtimeState);
   }
 
-  MemorySelection _agentRecallSelection(Row turn, MemoryRow input, List<String>? rankedIds) {
+  MemorySelection _agentRecallSelection(Row turn, MemoryRow input, List<String>? rankedIds, String? explicitUserInput) {
     final query = _agentText(input, 'query');
     final candidates = [
-      for (final card in memoryRetrievalCandidates(characterId: turn['character_id'] as String?, input: query))
+      for (final card in memoryRetrievalCandidates(characterId: turn['character_id'] as String?, input: explicitUserInput))
         if (turn['origin_kind'] == 'chat' || card['collection'] != 'recent') card,
     ];
     final explicit = <String>{
@@ -760,13 +760,11 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     'changed_cards': _agentIds(row['changed_cards'] as String),
   };
 
-  Row _agentCurrentSource(Row turn) {
-    _agentCheckCurrent(turn);
-    if (turn['origin_kind'] != 'chat') throw const _AgentMemoryRejected('not_a_chat_turn');
-    return _db.select('SELECT * FROM memory_messages WHERE id=?', [turn['source_message_id']]).single;
-  }
+  Row _agentCurrentSource(Row turn) =>
+      _agentCheckCurrent(turn) ?? (throw const _AgentMemoryRejected('not_a_chat_turn'));
 
-  void _agentCheckCurrent(Row turn) {
+  // Chat owns the source admitted by _taskSource; a maintenance turn has no user invitation.
+  Row? _agentCheckCurrent(Row turn) {
     if (turn['closed'] != 0) throw const _AgentMemoryRejected('turn_closed');
     if (turn['archive_id'] != archive['id']) throw const _AgentMemoryRejected('archive_changed');
     if (turn['control_revision'] != archive['control_revision']) {
@@ -779,12 +777,13 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           sources.single['character_id'] != turn['character_id']) {
         throw const _AgentMemoryRejected('source_changed');
       }
-    } else {
-      final claim = _agentClaim(turn['claim_id'] as String);
-      if (!_agentParentCurrent(claim) || claim['kind'] != turn['origin_kind']) {
-        throw const _AgentMemoryRejected('maintenance_changed');
-      }
+      return sources.single;
     }
+    final claim = _agentClaim(turn['claim_id'] as String);
+    if (!_agentParentCurrent(claim) || claim['kind'] != turn['origin_kind']) {
+      throw const _AgentMemoryRejected('maintenance_changed');
+    }
+    return null;
   }
 
   MemoryRow _agentToolSource(Row turn, MemoryRow input) {

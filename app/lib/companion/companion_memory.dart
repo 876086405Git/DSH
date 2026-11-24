@@ -358,6 +358,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
 
   Future<List<String>?> recallIds(
     String query, {
+    String? explicitUserInput,
     required String? characterId,
     required bool Function() isCurrent,
   }) async {
@@ -367,7 +368,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
       store: store,
       characterId: characterId,
       query: query,
-      explicitInput: query,
+      explicitInput: explicitUserInput,
       isCurrent: current,
     );
     if (!current()) throw const CompanionMemoryRetrievalCancelled();

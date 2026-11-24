@@ -1888,9 +1888,7 @@ void main() {
       ].singleWhere((row) => row['tool_use_id'] == 'wire-explicit-recall');
       final recallPayload = jsonDecode(explicitRecallResult['content']! as String) as Map;
       expect(recallPayload['applied'], isTrue);
-      expect(((recallPayload['selection']! as Map)['items']! as List).cast<Map>().map((row) => row['id']), [
-        invitationStory.targetId,
-      ]);
+      expect((recallPayload['selection']! as Map)['items'], isEmpty, reason: 'the model query is not a new invitation');
       expect(store.cards().singleWhere((row) => row['id'] == invitationImpression.targetId), impressionRow);
       expect(store.cards().singleWhere((row) => row['id'] == invitationStory.targetId), storyRow);
       expect(store.topicControls(), invitationControls);
