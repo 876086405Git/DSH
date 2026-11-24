@@ -16,6 +16,14 @@
         }
       }
     },
+    "brotli-packed-dictionary.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/brotli/dec/dictionary-data.js": {
+          "after": "dc056ee845e0b609d8873fcf70789feaffe3491905f94ce4b519735627e531cf",
+          "before": "e2a9bd8348d01afc08f49730d08b7f33fc5dbbc198cdea54da49afbeae45da4d"
+        }
+      }
+    },
     "client-chunk-empty-path.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-client-modules/lib/index.js": {
@@ -1213,6 +1221,14 @@
         "node_modules/@deepseek-ai/dsh-skill-filesystem/lib/index.js": {
           "after": "54d0833039aa6b5875338a259f8f7baa90d9365cd2458a6ce710364ae6ffd4ef",
           "before": "5000e40f6eb3b6416c741c8a7300d8427fb10a9a995649d3ed3cbe2e7d8bff5d"
+        }
+      }
+    },
+    "sqlite-highlight-byte-count.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-query-sqlite/lib/index.js": {
+          "after": "392c63e10dc6f89762435e3a6b34c91d0738bb9e713faafe6de7ae0ad8815a17",
+          "before": "f226f15108bd2079a6a88f3cc5d9e7e022b6b46bf6628fde38df66f0c1ec83a4"
         }
       }
     },
@@ -3090,6 +3106,7 @@
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff",
       "session-cold-unused-fingerprint.diff",
+      "sqlite-highlight-byte-count.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff",
       "jsonl-materialize-rename.diff",
       "jsonl-migration-link-fallback.diff",
@@ -3180,7 +3197,8 @@
       "ohos-client-hmr-idle.diff",
       "ohos-skill-root-events.diff",
       "ohos-piai-empty-models.diff",
-      "projection-current-state.diff"
+      "projection-current-state.diff",
+      "brotli-packed-dictionary.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -3319,6 +3337,7 @@
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff",
       "session-cold-unused-fingerprint.diff",
+      "sqlite-highlight-byte-count.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff",
       "jsonl-materialize-rename.diff",
       "jsonl-migration-link-fallback.diff",
@@ -3410,6 +3429,7 @@
       "ohos-skill-root-events.diff",
       "ohos-piai-empty-models.diff",
       "projection-current-state.diff",
+      "brotli-packed-dictionary.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",

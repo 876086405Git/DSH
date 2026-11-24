@@ -135,6 +135,7 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-instruction-encoding-reuse.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff
 session-cold-unused-fingerprint.diff
+sqlite-highlight-byte-count.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff
 jsonl-materialize-rename.diff
 jsonl-migration-link-fallback.diff
@@ -228,6 +229,7 @@ ohos-client-hmr-idle.diff
 ohos-skill-root-events.diff
 ohos-piai-empty-models.diff
 projection-current-state.diff
+brotli-packed-dictionary.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
