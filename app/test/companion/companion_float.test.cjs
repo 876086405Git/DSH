@@ -352,17 +352,23 @@ for (const phase of ['metadata', 'resize']) test(`dispose during texture ${phase
   assert.equal(s.counts().lost, 1);
 });
 
-test('a texture within the limit is decoded once', async () => {
-  const calls = [];
-  const s = stage(true, async () => ({ blob: async () => ({}) }), {
-    createImageBitmap(_, options) {
-      calls.push({ ...options });
-      return Promise.resolve({ width: 1024, height: 512, close() {} });
-    },
-  });
-  s.install();
-  await s.api.texture('http://127.0.0.1/synthetic.png');
-  assert.deepEqual(calls, [{ premultiplyAlpha: 'premultiply', colorSpaceConversion: 'none' }]);
+test('a texture within the limit is decoded once; a larger one again, scaled from the source', async () => {
+  const upload = { premultiplyAlpha: 'premultiply', colorSpaceConversion: 'none' };
+  for (const [width, decodes] of [
+    [1024, [upload]],
+    [2048, [upload, { ...upload, resizeWidth: 1024, resizeHeight: 256, resizeQuality: 'high' }]],
+  ]) {
+    const calls = [];
+    const s = stage(true, async () => ({ blob: async () => ({}) }), {
+      createImageBitmap(_, options) {
+        calls.push({ ...options });
+        return Promise.resolve({ width: options.resizeWidth ?? width, height: options.resizeHeight ?? 512, close() {} });
+      },
+    });
+    s.install();
+    await s.api.texture('http://127.0.0.1/synthetic.png');
+    assert.deepEqual(calls, decodes);
+  }
 });
 
 test('real boot cancels a late optional motion and releases its unfinished Core owner once', async () => {
