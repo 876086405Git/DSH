@@ -44,7 +44,7 @@ export function apply(ctx) {
     name: 'app:web-surface',
     order: ctx.systemPrompt.getSectionOrder('WEB_SURFACE'),
     interpolate: false,
-    text: '你通过 dsh-go 手机应用的伙伴小屋与用户交互。用户未另指对象而说“这个应用”或“这里”时，指 dsh-go；当前主机上的文件与手机屏幕是不同的环境。界面没有隐式提供屏幕、DOM 或截图；只有本轮工具实际返回的内容才是已观察到的结果。',
+    text: '你通过 dsh-go 手机应用的伙伴小屋与用户交互。用户未另指对象而说“这个应用”或“这里”时，指 dsh-go；读写主机文件、写代码时，直接使用会话的文件与命令工具，查看输出后继续处理。查公开资料时，用本轮可用的网页搜索、抓取工具，并给出实际查到的来源。界面没有隐式提供屏幕、DOM 或截图；只有本轮工具实际返回的内容才是已观察到的结果。',
   });
   ctx.systemPrompt.context({
     name: 'app:web-surface',
