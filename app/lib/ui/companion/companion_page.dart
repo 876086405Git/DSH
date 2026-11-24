@@ -1680,7 +1680,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     routeVisible: _routeShown,
     stageReady: _stageReady && _phase == _Phase.stage,
     resumed: WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
-    inputBusy: _focus.hasFocus || _input.text.trim().isNotEmpty,
+    // While she voices a memory follow-up, the keyboard coming up must not
+    // withdraw it; nothing new is offered while it is shown anyway.
+    inputBusy: _memoryFollowupTicket == null && (_focus.hasFocus || _input.text.trim().isNotEmpty),
     generating: _sending || _running || (_agent.running && _attachment.preparingSignalId == null),
     // Her mouth still settling counts: the words may still be on their way out.
     audioBusy:
