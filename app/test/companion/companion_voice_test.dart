@@ -73,6 +73,12 @@ void main() {
       // Past the rewrite, her line since the step goes on as before.
       expect(lines.read('西。好', steps: 1, running: true), (line: '好', say: ''));
     });
+
+    test('a rewrite inside an emoji is said and shown again from the whole emoji', () {
+      final lines = CompanionPhoneLines();
+      expect(lines.read('😀。', steps: 1, running: true), (line: '😀。', say: '😀。'));
+      expect(lines.read('😁。', steps: 1, running: true), (line: '😁。', say: '😁。'));
+    });
   });
 
   group('companionPhoneUserStops', () {
