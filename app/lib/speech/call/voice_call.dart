@@ -50,7 +50,7 @@ enum CallEnd { hungUp, permission, microphone, noRecognizer, background, failed 
 class CallReply {
   const CallReply(this.text, {required this.done});
 
-  /// Everything said so far (it only grows while [done] is false).
+  /// Latest visible reply. A durable message can replace a streaming draft.
   final String text;
 
   /// The turn ended.
@@ -186,7 +186,6 @@ class VoiceCallController extends ChangeNotifier {
   StreamSubscription<CallReply>? _replySub;
   SpeechOut? _out;
   StreamSubscription<SpeechOutEvent>? _outSub;
-  int _spoken = 0;
   bool _replyDone = true;
   int _turn = 0;
   int _recognizing = 0;
@@ -410,7 +409,6 @@ class VoiceCallController extends ChangeNotifier {
     _reply = '';
     _said = '';
     _voiced = false;
-    _spoken = 0;
     _turn++;
     // Skipped while this was being made out: it still goes, its reply is not read.
     final hushed = mine == _hushed;
@@ -441,11 +439,20 @@ class VoiceCallController extends ChangeNotifier {
   void _onReply(CallReply reply) {
     if (_phase == CallPhase.ended || _replyDone) return;
     final text = reply.text;
-    if (text.length > _spoken) {
-      if (_spoken == 0) unawaited(const DiagnosticsChannel().recordVoiceStage('reply_received'));
-      final out = _out ??= _newVoice();
-      out.add(text.substring(_spoken));
-      _spoken = text.length;
+    if (text != _reply) {
+      final extendsReply = text.startsWith(_reply);
+      if (!extendsReply) {
+        _stopVoice();
+        _said = '';
+        _voiced = false;
+      }
+      if (text.isNotEmpty) {
+        if (_reply.isEmpty) unawaited(const DiagnosticsChannel().recordVoiceStage('reply_received'));
+        final out = _out ??= _newVoice();
+        out.add(extendsReply ? text.substring(_reply.length) : text);
+      } else if (_phase == CallPhase.speaking) {
+        _set(CallPhase.thinking);
+      }
       _reply = text;
       if (_turns.isNotEmpty) _turns.last = CallTurn(_turns.last.you, her: text);
       notifyListeners();
@@ -509,6 +516,13 @@ class VoiceCallController extends ChangeNotifier {
       if (!identical(_out, out) || _phase == CallPhase.ended) return;
       switch (event) {
         case SpeechOutStarted():
+          if (_over) {
+            if (!out.canDuck) {
+              _cutIn();
+              return;
+            }
+            out.duck(true);
+          }
           _voiced = true;
           _cueTimer?.cancel();
           if (_phase == CallPhase.thinking || _phase == CallPhase.listening) _set(CallPhase.speaking);

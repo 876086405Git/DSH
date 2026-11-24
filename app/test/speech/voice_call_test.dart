@@ -9,9 +9,26 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'speech_fakes.dart';
 
+// The native audio stream can change volume only after playback has opened.
+class _OpeningVoice extends FakeOut {
+  bool opened = false;
+
+  @override
+  void emit(SpeechOutEvent event) {
+    if (event is SpeechOutStarted) opened = true;
+    super.emit(event);
+  }
+
+  @override
+  void duck(bool on) {
+    if (opened) super.duck(on);
+  }
+}
+
 class _Rig {
   _Rig({
     FakeCloud? cloud,
+    FakeOut Function()? makeVoice,
     bool noRecognizer = false,
     bool verbatim = false,
     CallStart start = CallStart.ok,
@@ -28,7 +45,7 @@ class _Rig {
       verbatimInput: () => verbatim,
       recognizer: () async => noRecognizer ? null : (pick != null ? await pick!() : (next ?? this.cloud)),
       voice: () {
-        final out = FakeOut();
+        final out = makeVoice?.call() ?? FakeOut();
         outs.add(out);
         return out;
       },
@@ -139,8 +156,12 @@ void main() {
     expect(rig.conversation.sent.last, '那上海呢');
   });
 
-  Future<_Rig> speaking({Duration confirmAfter = const Duration(milliseconds: 60), bool verbatim = false}) async {
-    final rig = _Rig(confirmAfter: confirmAfter, verbatim: verbatim);
+  Future<_Rig> speaking({
+    Duration confirmAfter = const Duration(milliseconds: 60),
+    bool verbatim = false,
+    FakeOut Function()? makeVoice,
+  }) async {
+    final rig = _Rig(confirmAfter: confirmAfter, verbatim: verbatim, makeVoice: makeVoice);
     await rig.call.start();
     await rig.say();
     rig.conversation.reply('好的，我来详细说一说。');
@@ -148,6 +169,79 @@ void main() {
     rig.outs.single.heard = '好的，';
     return rig;
   }
+
+  test('an authoritative correction replaces queued speech and the call transcript', () async {
+    final rig = await speaking(verbatim: true);
+    addTearDown(rig.call.dispose);
+    final old = rig.outs.single;
+    rig.conversation.reply('改在明天。');
+    expect(old.stopped, isTrue);
+    expect(rig.outs, hasLength(2));
+    final corrected = rig.outs.last;
+    expect(corrected.added, ['改在明天。']);
+    expect(rig.call.turns.single.her, '改在明天。');
+    old.emit(const SpeechOutDone());
+    rig.conversation.reply('改在明天。九点。', done: true);
+    expect(corrected.added, ['改在明天。', '九点。']);
+    expect(corrected.finished, isTrue);
+    expect(rig.call.reply, '改在明天。九点。');
+    expect(rig.conversation.interrupts, 0);
+  });
+
+  test('an empty final correction retires the voice and clears the old turn text', () async {
+    final rig = await speaking(verbatim: true);
+    addTearDown(rig.call.dispose);
+    rig.conversation.reply('', done: true);
+    expect(rig.outs.single.stopped, isTrue);
+    expect(rig.call.phase, CallPhase.listening);
+    expect(rig.call.caption, isEmpty);
+    expect(rig.call.turns.single.her, isEmpty);
+  });
+
+  for (final stillTalking in [true, false]) {
+    test('a replacement voice uses the overlap state when playback opens: $stillTalking', () async {
+      final rig = await speaking(makeVoice: _OpeningVoice.new, confirmAfter: const Duration(seconds: 5));
+      addTearDown(rig.call.dispose);
+      rig.audio.emit(const SpeechStart(over: true));
+      final old = rig.outs.single;
+      expect(old.ducks, [true]);
+      rig.conversation.reply('改在周五。');
+      final replacement = rig.outs.last;
+      expect(old.stopped, isTrue);
+      expect(replacement.ducks, isEmpty);
+      if (!stillTalking) {
+        rig.audio.emit(Utterance(_Rig.second, const Duration(milliseconds: 100)));
+        await pumpEventQueue();
+      }
+      replacement.emit(const SpeechOutStarted());
+      expect(replacement.ducks, stillTalking ? [true] : isEmpty);
+      rig.call.hangUp();
+      old.emit(const SpeechOutStarted());
+      replacement.emit(const SpeechOutStarted());
+      rig.conversation.reply('挂断后迟到的文字。');
+      expect(rig.call.phase, CallPhase.ended);
+      expect(rig.outs, hasLength(2));
+      expect(replacement.ducks, stillTalking ? [true] : isEmpty);
+    });
+  }
+
+  test('a replacement that cannot duck yields to an ongoing interruption', () async {
+    var number = 0;
+    final rig = await speaking(
+      makeVoice: () => _OpeningVoice()..canDuck = number++ == 0,
+      confirmAfter: const Duration(seconds: 5),
+    );
+    addTearDown(rig.call.dispose);
+    rig.audio.emit(const SpeechStart(over: true));
+    rig.conversation.reply('新声音刚开始。');
+    final replacement = rig.outs.last;
+    replacement.emit(const SpeechOutStarted());
+    expect(replacement.stopped, isTrue);
+    expect(rig.call.phase, CallPhase.hearing);
+    expect(rig.conversation.interrupts, 1);
+    rig.conversation.reply('同一轮迟到的话。');
+    expect(rig.outs, hasLength(2));
+  });
 
   Future<void> over(_Rig rig, String said) async {
     rig.cloud.text = said;
