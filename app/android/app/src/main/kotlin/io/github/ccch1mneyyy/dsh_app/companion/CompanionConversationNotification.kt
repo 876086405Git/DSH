@@ -173,7 +173,10 @@ internal object CompanionConversationNotification {
             if (!resident) builder.setContentIntent(task)
         }
         val locked = context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
-        if (Build.VERSION.SDK_INT >= 24 && !locked) {
+        // A MessagingStyle with no messages makes System UI throw NoSuchElementException
+        // while inflating it, so the foreground notification is rejected and the app is
+        // killed (right after turning "always here" on, before anything was said).
+        if (Build.VERSION.SDK_INT >= 24 && !locked && lines.isNotEmpty()) {
             val style = Notification.MessagingStyle("You").setConversationTitle(name)
             for (line in lines) style.addMessage(line.text, line.at, if (line.user) null else name)
             builder.setStyle(style)
