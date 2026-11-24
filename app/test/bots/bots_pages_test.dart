@@ -4,6 +4,7 @@
 // a member's work is stopped.
 
 import 'package:dsh_app/state/models_state.dart';
+import 'package:dsh_app/ui/bots/bot_chat_kit.dart' show BotReplyText;
 import 'package:dsh_app/ui/bots/bot_chat_page.dart';
 import 'package:dsh_app/ui/bots/bot_details_page.dart';
 import 'package:dsh_app/ui/bots/bots_page.dart';
@@ -92,6 +93,33 @@ void main() {
     await frames(tester, 3);
     expect(find.text('发送中'), findsNothing);
     expect(find.text('海报文案今晚给我'), findsOneWidget);
+  });
+
+  testWidgets('streaming updates the Bot reply without rebuilding the chat page', (tester) async {
+    final fake = await open(tester, const BotChatPage(botId: 'm1'));
+    void send(Map<String, Object?> data) =>
+        fake.emit('stream', {'botId': 'm1', 'sessionId': 'm1-c', 'attemptId': 'writing', ...data});
+    send({'phase': 'start'});
+    await frames(tester, 2);
+    var pageBuilds = 0;
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, builtOnce) {
+      previous?.call(element, builtOnce);
+      if (element.widget is BotChatPage) pageBuilds++;
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = previous);
+    var words = '';
+    for (final chunk in ['这', '是', '一段', '回复']) {
+      words += chunk;
+      send({'text': chunk});
+      await frames(tester, 2);
+      final reply = tester.widgetList<BotReplyText>(find.byType(BotReplyText)).singleWhere((row) => row.streaming);
+      expect(reply.text, words);
+    }
+    expect(pageBuilds, 0);
+    send({'phase': 'end'});
+    await frames(tester, 2);
+    expect(tester.widgetList<BotReplyText>(find.byType(BotReplyText)).where((row) => row.streaming), isEmpty);
   });
 
   // #1395: a card in a Bot's reply answers like one in a chat, and the answer reads as a tag.

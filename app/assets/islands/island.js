@@ -1216,7 +1216,8 @@
     document.addEventListener('pointermove', function () {
       if (Date.now() - st.touchedAt <= LAYER_WINDOW) reportHits();
     }, true);
-    setInterval(function () { if (st.cfg && st.cfg.mode === 'overlay') reportHits(); }, 250);
+    // A document keeps its form; only an overlay reports touch areas.
+    if (st.cfg.mode === 'overlay') setInterval(reportHits, 250);
     // A plugin that selects another conversation (the official sessions
     // service writes the stored selection): the app opens it natively.
     st.selection = storedSession();

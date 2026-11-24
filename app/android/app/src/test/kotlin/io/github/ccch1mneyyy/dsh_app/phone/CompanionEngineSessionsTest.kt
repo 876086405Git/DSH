@@ -35,7 +35,10 @@ class CompanionEngineSessionsTest {
         assertFalse(hers.replace(listOf("b", 3)))
         assertFalse(hers.replace(listOf("")))
         assertFalse(hers.replace(listOf("bad\u0000id")))
+        // A bad entry past the kept newest still fails the whole list.
+        assertFalse(hers.replace(listOf(3) + List(64) { "s$it" }))
         assertTrue("a" in hers)
+        assertFalse("s0" in hers)
         assertFalse("b" in hers)
     }
 

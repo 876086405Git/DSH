@@ -18,6 +18,7 @@ class CompanionScreenObserver {
     agent.onScreenCost = _costCallback;
     _routeCallback = _routeChanged;
     agent.onScreenRouteChanged = _routeCallback;
+    state.addListener(_schedule);
   }
   final CompanionAgent agent;
   static const _channel = MethodChannel('dsh/phone');
@@ -63,14 +64,21 @@ class CompanionScreenObserver {
   void setReducedPower(bool value) {
     if (_disposed || _reducedPower == value) return;
     _reducedPower = value;
-    if (_active) _schedule();
+    _timer?.cancel();
+    _timer = null;
+    _schedule();
   }
 
+  /// Ticks only while watching is switched on: with it off (the default) the
+  /// resident owner would otherwise wake every 2 s for nothing. A mute has no
+  /// native event when it ends, so ticks go on through it.
   void _schedule() {
-    _timer?.cancel();
-    _timer = Timer.periodic(Duration(seconds: _reducedPower ? 4 : 2), (_) {
-      unawaited(_tick());
-    });
+    if (_active && state.value['enabled'] == true && state.value['resident_active'] == true) {
+      _timer ??= Timer.periodic(Duration(seconds: _reducedPower ? 4 : 2), (_) => unawaited(_tick()));
+    } else {
+      _timer?.cancel();
+      _timer = null;
+    }
   }
 
   void stop() {

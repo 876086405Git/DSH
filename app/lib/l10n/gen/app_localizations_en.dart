@@ -7681,7 +7681,7 @@ class L10nEn extends L10n {
 
   @override
   String get companionScreenHint =>
-      'She watches the screen with you and speaks up when something catches her eye; nothing she sees is kept';
+      'She watches the screen with you and speaks up when something catches her eye; the screen itself is not kept, only her last few remarks';
 
   @override
   String get companionScreenNeedsAccess =>

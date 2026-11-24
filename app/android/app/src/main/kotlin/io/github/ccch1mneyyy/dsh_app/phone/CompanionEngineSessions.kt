@@ -15,7 +15,7 @@ internal class CompanionEngineSessions {
      */
     fun replace(raw: Any?): Boolean {
         val list = raw as? List<*> ?: return false
-        ids = list.takeLast(MAX).map { PhoneCaller.identifier(it) ?: return false }.toSet()
+        ids = list.map { PhoneCaller.identifier(it) ?: return false }.takeLast(MAX).toSet()
         return true
     }
 

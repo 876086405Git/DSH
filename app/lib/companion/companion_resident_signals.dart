@@ -43,6 +43,12 @@ class CompanionResidentSignals {
   bool _entered = false;
   bool _closed = false;
 
+  /// The visit observes every frame of a reply. Connection and consent
+  /// already have their own listeners; only a recipient handoff needs work.
+  void observeRecipient() {
+    if (!_closed && isCurrent() != _entered) refresh();
+  }
+
   void refresh() {
     if (_closed) return;
     if (!isCurrent()) {

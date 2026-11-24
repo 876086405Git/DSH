@@ -172,12 +172,12 @@ void main() {
     expect(attach.written, 'ls\x7f\r');
 
     // Pinyin while composing shows in a pill and sends nothing.
-    final style = tester.widget<TerminalView>(find.byType(TerminalView)).textStyle;
+    final view = tester.widget<TerminalView>(find.byType(TerminalView));
     edit('  zhong', composing: const TextRange(start: 2, end: 7));
     await settleTerminal(tester);
     expect(find.text('zhong'), findsOneWidget);
-    // The terminal keeps its laid-out characters: same size, same style.
-    expect(tester.widget<TerminalView>(find.byType(TerminalView)).textStyle, same(style));
+    // Only the composing pill changes. The emulator keeps its view and laid-out characters.
+    expect(tester.widget<TerminalView>(find.byType(TerminalView)), same(view));
     expect(attach.written, 'ls\x7f\r');
     edit('  中');
     await settleTerminal(tester);

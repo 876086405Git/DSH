@@ -168,8 +168,10 @@ class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
             }
             .build()
-        // Refused: she speaks anyway, and her next line asks again.
+        // Refused: she speaks anyway, and her next line asks again. The refused request is still
+        // registered with the system, so it is abandoned now rather than left to pile up.
         if (am.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) focus = request
+        else runCatching { am.abandonAudioFocusRequest(request) }
     }
 
     private fun abandonFocus() {

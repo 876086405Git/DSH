@@ -1067,7 +1067,7 @@
   "companionReceiptPriorResult": "The workbook from the earlier agreement was found; the new agreement has not been completed.",
   "companionLegacyConversation": "Earlier conversation (character not recorded)",
   "companionScreen": "Watch the screen with me",
-  "companionScreenHint": "She watches the screen with you and speaks up when something catches her eye; nothing she sees is kept",
+  "companionScreenHint": "She watches the screen with you and speaks up when something catches her eye; the screen itself is not kept, only her last few remarks",
   "companionScreenNeedsAccess": "Turn on phone control's accessibility service first, or let her record the screen",
   "companionScreenAllowProjection": "Allow screen recording",
   "companionScreenVision": "Allow screen images",

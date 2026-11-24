@@ -229,10 +229,17 @@ class StarPromptController extends Notifier<StarPromptRecord> {
   }
 
   void _watch() {
-    final lifecycle = AppLifecycleListener(onStateChange: (s) => _front(_inFront(s)));
-    ref.onDispose(() {
-      lifecycle.dispose();
+    AppLifecycleListener? lifecycle = AppLifecycleListener(onStateChange: (s) => _front(_inFront(s)));
+    void stop() {
+      lifecycle?.dispose();
+      lifecycle = null;
       _tick?.cancel();
+      _since = null;
+    }
+
+    ref.onDispose(stop);
+    listenSelf((_, record) {
+      if (record.over) stop();
     });
     _front(_inFront(WidgetsBinding.instance.lifecycleState));
   }

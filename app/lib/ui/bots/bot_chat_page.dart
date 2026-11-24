@@ -108,7 +108,12 @@ class _BotChatPageState extends ConsumerState<BotChatPage> {
         children: [DsBotUnavailableMessage(status: status, goneIcon: AppIcons.bot, goneTitle: l10n.botsBotGone)],
       );
     }
-    final chat = ref.watch(botChatProvider(widget.botId));
+    final feed = botChatProvider(widget.botId);
+    // The transcript owns the live row. Its words only rebuild that row.
+    ref.watch(
+      feed.select((s) => (s.items, s.pending, s.loading, s.loadingEarlier, s.hasEarlier, s.error, s.streaming != null)),
+    );
+    final chat = ref.read(feed);
     final work = status.live.bots[bot.id];
     final ownTurn = work != null && work.roomId == null;
     final question = team.questionOf(bot);
@@ -160,10 +165,14 @@ class _BotChatPageState extends ConsumerState<BotChatPage> {
                 child: switch (row) {
                   BotTimeRow(:final time) => BotTimeLine(time),
                   BotPendingRow(:final pending) => BotUserMessage(text: pending.text, pending: true),
-                  BotStreamingRow(:final text) =>
-                    text.isEmpty
-                        ? const Align(alignment: Alignment.centerLeft, child: _Thinking())
-                        : BotReplyText(text: text, streaming: true),
+                  BotStreamingRow() => Consumer(
+                    builder: (context, ref, _) {
+                      final text = ref.watch(feed.select((s) => s.streaming));
+                      return text == null || text.isEmpty
+                          ? const Align(alignment: Alignment.centerLeft, child: _Thinking())
+                          : BotReplyText(text: text, streaming: true);
+                    },
+                  ),
                   BotTypingRow() => const SizedBox.shrink(),
                   BotItemRow(:final item) => switch (item.kind) {
                     DsBotItemKind.user => BotUserMessage(text: item.text, images: item.images),

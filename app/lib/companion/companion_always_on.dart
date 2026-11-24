@@ -92,7 +92,7 @@ class CompanionAlwaysOnOwner {
   StreamSubscription<void>? _phoneStops;
   bool _fromFloat = false;
   final _spokenReplies = <String>{};
-  final _voices = <String, ({String bubble, int chars, bool ambient})>{};
+  final _voices = <String, ({String bubble, int chars, int utterance, bool ambient})>{};
   int _voiceGeneration = 0;
   int _voiceSerial = 0;
   int _textAfterControl = 0;
@@ -469,14 +469,18 @@ class CompanionAlwaysOnOwner {
     if (settings?.on != true) return;
     final ready = await _speaker.ready(settings!);
     if (!ready || !active || generation != _voiceGeneration) return;
-    if (keepUp && _voices.length > 1 || ambient && _voices.isNotEmpty && _voices.values.every((l) => l.ambient)) {
+    // A screen line never waits behind her reply; it only replaces another screen line.
+    if (ambient && _voices.values.any((line) => !line.ambient)) return;
+    // Counted in sentences: a long one split into parts is still one.
+    if (keepUp && _voices.values.map((line) => line.utterance).toSet().length > 1 || ambient && _voices.isNotEmpty) {
       _hush();
     }
     // The phone's own synthesizer takes only so much at once, as in her room.
     final parts = settings.source == CompanionVoiceSource.system ? companionSystemSpeechParts(words) : [words];
+    final utterance = _voiceSerial + 1;
     for (final part in parts) {
       final voiceId = 'float:${_status.epoch}:${++_voiceSerial}';
-      _voices[voiceId] = (bubble: bubble, chars: part.length, ambient: ambient);
+      _voices[voiceId] = (bubble: bubble, chars: part.length, utterance: utterance, ambient: ambient);
       _speaker.speak(voiceId, part);
     }
   }

@@ -13431,7 +13431,7 @@ abstract class L10n {
   /// No description provided for @companionScreenHint.
   ///
   /// In zh, this message translates to:
-  /// **'陪你一起看屏幕，看到有意思的就说出来；看到的不会记下来'**
+  /// **'陪你一起看屏幕，看到有意思的就说出来；屏幕内容不会存下来，她只记得自己刚说过的几句'**
   String get companionScreenHint;
 
   /// No description provided for @companionScreenNeedsAccess.
