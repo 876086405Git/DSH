@@ -161,6 +161,119 @@ class _Bridge extends DshConnection {
   }
 }
 
+// The transport boundary for fixture 4. The room still owns prompt context,
+// tool selection/execution, SQLite, ChatController, speech and widget writes.
+class _CorrectionBridge extends _Bridge {
+  final contexts = <Map<String, Object?>>[];
+  final calls = <String, StreamController<List<int>>>{};
+  final revised = Completer<Map<String, Object?>>();
+
+  DshHttpResponse capability(String id) => json({
+    'v': 1, 'supported': true, 'instanceId': 'correction-peer', 'sessionId': id,
+    'profileRevision': 0, 'profileAccepted': true, 'phoneMemory': true,
+    'phoneMemoryVersion': 3, 'memoryMode': 'phone',
+  });
+
+  @override
+  Future<DshHttpResponse> get(String path, {
+    Map<String, String>? query, Map<String, String>? headers, Duration? timeout,
+    bool followRedirects = true, int? maxResponseBytes,
+  }) async {
+    if (path.endsWith('/prompt-context')) return capability(query!['sessionId']!);
+    return super.get(path, query: query, headers: headers, timeout: timeout,
+        followRedirects: followRedirects, maxResponseBytes: maxResponseBytes);
+  }
+
+  @override
+  Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
+    if (path.endsWith('/prompt-context')) {
+      final context = Map<String, Object?>.from(body! as Map);
+      contexts.add(context);
+      return capability(context['sessionId']! as String);
+    }
+    if (path.endsWith('/session-tools/result')) {
+      revised.complete(Map<String, Object?>.from(body! as Map));
+      return json({});
+    }
+    return super.postJson(path, body, timeout: timeout);
+  }
+
+  @override
+  Future<DshHttpStreamResponse> postJsonStream(String path, Object? body, {
+    required DshHttpAbort abort, Duration? headerTimeout,
+    Duration? idleTimeout = const Duration(seconds: 20),
+  }) async {
+    if (!path.endsWith('/session-tools/open')) {
+      return super.postJsonStream(path, body, abort: abort, headerTimeout: headerTimeout, idleTimeout: idleTimeout);
+    }
+    final open = body! as Map;
+    final id = open['requestId']! as String;
+    expect((open['tools'] as List).cast<Map>().map((tool) => tool['name']), contains('revise'));
+    final stream = calls[id] = StreamController<List<int>>();
+    stream.add(utf8.encode('${jsonEncode({'type': 'ready', 'token': id})}\n'));
+    return DshHttpStreamResponse(200, 'application/x-ndjson', stream.stream, () async {
+      if (!stream.isClosed) await stream.close();
+    });
+  }
+
+  void revise(String request, Map<String, Object?> input) {
+    final frame = {
+      'type': 'call', 'name': 'revise', 'callId': 'call-revise',
+      'input': input,
+    };
+    calls[request]!.add(utf8.encode('${jsonEncode(frame)}\n'));
+  }
+}
+
+class _CorrectionClient extends _Client {
+  _CorrectionClient(super.bridge);
+  late _Wire wire;
+  final prompts = <({String id, String session, String text})>[];
+  final first = Completer<void>();
+  final second = Completer<void>();
+
+  @override
+  Stream<DshEvent> watch(String sessionId, {WatchOptions options = const WatchOptions()}) {
+    wire = _Wire(sessionId, events.add);
+    wire.frame({
+      'type': 'snapshot', 'cursor': -1, 'records': [],
+      'assistantStream': {'revision': 0},
+    });
+    return events.stream;
+  }
+
+  // This Host cannot stop the in-flight step. ChatController then steers the
+  // correction into its active turn, the case where the old step can arrive late.
+  @override
+  Future<void> cancel(String sessionId) async {
+    throw const DshRemoteException('session/busy', 'Already committing the old step');
+  }
+
+  @override
+  Future<String> prompt(String sessionId, String text, {
+    List<PromptImage> images = const [], List<String> fileReceiptIds = const [],
+    String? requestId, PromptMode mode = PromptMode.queue, String? timeZone,
+  }) async {
+    expect(sessionId, wire.session);
+    expect(mode, prompts.isEmpty ? PromptMode.queue : PromptMode.steer);
+    final id = requestId!;
+    prompts.add((id: id, session: sessionId, text: text));
+    if (prompts.length == 1) wire.log('turn/start', {'turn': wire.turn});
+    wire.log('user/message', {
+      'id': 'user-${prompts.length}', 'role': 'user',
+      'content': [{'type': 'text', 'text': text}], 'source': {'kind': 'user', 'rpcId': id},
+    });
+    if (prompts.length == 1) {
+      wire.log('step/start', {'turn': wire.turn, 'step': wire.step});
+      wire.start('first-answer');
+      first.complete();
+    } else {
+      second.complete();
+    }
+    return id;
+  }
+}
+
 class _Mux extends DshMux {
   _Mux(super.carrier);
   final connection = StreamController<DshConnectionState>.broadcast();
@@ -1097,7 +1210,9 @@ void main() {
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(voiceChannel, null);
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(widgetChannel, null);
     });
-    final room = _Room(temporary);
+    final bridge = _CorrectionBridge();
+    final client = _CorrectionClient(bridge);
+    final room = _Room(temporary, client: client);
     late String card;
     await room.open(
       tester,
@@ -1139,9 +1254,18 @@ void main() {
     try {
       await settleMixed(tester, voiceReady.future);
       await flush(tester);
-      await room.send('说一句话。');
+      Future<void> send(String text, Future<void> delivered) async {
+        await tester.enterText(find.byType(TextField), text);
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('send')));
+        await settleMixed(tester, delivered);
+        await flush(tester);
+      }
+
+      await send('说一句话。', client.first.future);
       const prefix = '我记得琴课在周四。';
-      room.words(prefix);
+      final wire = client.wire;
+      wire.text(prefix);
       await flush(tester);
       expect(room.running, isTrue);
       expect(room.speech(tester), prefix);
@@ -1154,19 +1278,57 @@ void main() {
       final stops = voiceCalls.where((call) => call.method == 'stop').length;
       final before = room.memory.store.archive['control_revision']! as int;
       controlBefore = before;
-      final late = room.replies.first;
       const correction = '琴课改成我琴课一直在周五。';
-      await room.send(correction);
-      expect(jsonEncode(room.chats.last['messages']), contains(card));
-      room.toolCall(0, 'call-revise', 'revise', {
-        'card': card,
-        'text': '我琴课一直在周五。',
-        'keywords': ['琴课'],
-      });
-      await room.end(stop: 'tool_use');
-      await room.chatRequest(3);
-      room.words('啊，是我记岔了。');
-      await room.end();
+      await send(correction, client.second.future);
+      final second = client.prompts.last;
+      expect(client.prompts.map((p) => p.text), ['说一句话。', correction]);
+      expect(second.session, client.prompts.first.session);
+      expect(second.id, isNot(client.prompts.first.id));
+      final context = bridge.contexts.singleWhere((row) => row['requestId'] == second.id);
+      expect(context['sessionId'], second.session);
+      final selection = jsonDecode((context['phoneMemory']! as Map)['block']! as String) as Map;
+      expect((selection['items'] as List).cast<Map>().map((item) => item['id']), contains(card));
+
+      const lateWords = '旧回复晚到，还是周四。';
+      final voiceBeforeLate = voiceCalls.where((call) => call.method == 'speak').length;
+      final mouthBeforeLate = room.commands.where((command) => command.$1 == 'say').length;
+      final writesBeforeLate = updates.length;
+      wire.text(lateWords);
+      wire.finish('stop');
+      wire.settle('assistant/message', text: prefix + lateWords);
+      wire.log('step/end', {'turn': wire.turn, 'step': wire.step});
+      await room.drain();
+      expect(room.speech(tester) ?? '', isNot(contains(lateWords)));
+      expect(voiceCalls.where((call) => call.method == 'speak').length, voiceBeforeLate);
+      expect(room.commands.where((command) => command.$1 == 'say').length, mouthBeforeLate);
+      expect(updates.skip(writesBeforeLate).where((row) => row['line'] != null), isEmpty);
+      final oldCommit = wire.frames.lastWhere((frame) =>
+          frame['type'] == 'event' && (frame['event'] as Map)['type'] == 'assistant/message');
+      wire.step++;
+      wire.log('step/start', {'turn': wire.turn, 'step': wire.step});
+      wire.start('memory-correction');
+      final input = {'card': card, 'text': '我琴课一直在周五。', 'keywords': ['琴课']};
+      final tool = {'type': 'tool-call', 'id': 'call-revise', 'name': 'revise', 'arguments': jsonEncode(input)};
+      wire.finish('tool-calls');
+      wire.settle('assistant/message', text: '', extraParts: [tool]);
+      bridge.revise(second.id, input);
+      final receipt = await settleMixed(tester, bridge.revised.future);
+      expect(receipt, containsPair('requestId', second.id));
+      expect(receipt, containsPair('sessionId', second.session));
+      expect(receipt, containsPair('callId', 'call-revise'));
+      expect(receipt, containsPair('isError', false));
+      expect(jsonDecode(receipt['content']! as String), containsPair('applied', true));
+
+      wire.log('step/end', {'turn': wire.turn, 'step': wire.step});
+      wire.step++;
+      wire.log('step/start', {'turn': wire.turn, 'step': wire.step});
+      wire.start('corrected-answer');
+      wire.text('啊，是我记岔了。');
+      wire.finish('stop');
+      wire.settle('assistant/message', text: '啊，是我记岔了。');
+      wire.endTurn();
+      await room.drain();
+      expect(room.chats, isEmpty, reason: 'both foreground messages used the DSH session');
       await settleMixed(tester, cleared.future);
       await flush(tester);
       expect(room.memory.store.archive['control_revision'], before + 1);
@@ -1184,24 +1346,14 @@ void main() {
       final speaks = voiceCalls.where((call) => call.method == 'speak').length;
       final mouth = room.commands.where((command) => command.$1 == 'say').length;
       final writes = updates.length;
+      // Redeliver the actual old durable frame after the corrected turn has settled.
+      wire.frame(oldCommit);
       // Even a native callback for the already stopped prefix must stay old.
       await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
         voiceChannel.name,
         const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': 'start', 'id': oldSpeech['id']})),
         (_) {},
       );
-      const lateWords = '旧回复晚到，还是周四。';
-      if (!late.isClosed) {
-        late.add(
-          utf8.encode(
-            'data: ${jsonEncode({
-              'type': 'content_block_delta',
-              'index': 0,
-              'delta': {'type': 'text_delta', 'text': lateWords},
-            })}\n\n',
-          ),
-        );
-      }
       await room.drain();
       expect(room.speech(tester), '啊，是我记岔了。');
       expect(voiceCalls.where((call) => call.method == 'speak').length, speaks);
@@ -1227,6 +1379,9 @@ void main() {
       expect(native.containsKey('line'), isFalse);
       expect(native.containsKey('saidAt'), isFalse);
     } finally {
+      for (final stream in bridge.calls.values) {
+        if (!stream.isClosed) unawaited(stream.close());
+      }
       await room.close(tester);
     }
   });
