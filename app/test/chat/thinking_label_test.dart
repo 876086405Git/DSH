@@ -151,6 +151,30 @@ void main() {
     expect(_maskOver('乙'), findsNothing);
   });
 
+  testWidgets('growing reasoning leaves the header alone and updates the ticker', (tester) async {
+    final thought = ValueNotifier('推');
+    addTearDown(thought.dispose);
+    await tester.pumpWidget(
+      testApp(
+        Scaffold(
+          body: ValueListenableBuilder<String>(
+            valueListenable: thought,
+            builder: (context, text, _) => ThinkingPill(reasoning: text, active: true, streaming: true),
+          ),
+        ),
+      ),
+    );
+    final labels = {tester.widget<ThinkingLabel>(find.byType(ThinkingLabel))};
+    for (var i = 0; i < 20; i++) {
+      thought.value += '理';
+      await tester.pump(const Duration(milliseconds: 32));
+      labels.add(tester.widget<ThinkingLabel>(find.byType(ThinkingLabel)));
+    }
+    expect(tester.widget<ThinkingTicker>(find.byType(ThinkingTicker)).text, '推${'理' * 20}');
+    expect(labels, hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'the whole pill: a thinking orb while active, the quiet glyph after; the label sweeps only while active',
     (tester) async {

@@ -39,6 +39,44 @@ void main() {
 
   TextEditingController input(WidgetTester tester) => tester.widget<TextField>(composerInput).controller!;
 
+  testWidgets('ordinary typing and selection leave the closed palette idle', (tester) async {
+    await mount(tester);
+    await enter(tester, '/');
+    final slot = tester.element(find.byType(SlashPalette)).findAncestorWidgetOfExactType<LayoutId>()!.id;
+    await enter(tester, '字' * 2048);
+    final controller = input(tester);
+    var builds = 0;
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, builtOnce) {
+      previous?.call(element, builtOnce);
+      if (element.findAncestorWidgetOfExactType<LayoutId>()?.id == slot) builds++;
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = previous);
+
+    final counts = <int>[];
+    for (final typing in [true, false]) {
+      builds = 0;
+      for (var i = 0; i < 20; i++) {
+        final text = typing ? '${controller.text}字' : controller.text;
+        final value = TextEditingValue(
+          text: text,
+          selection: TextSelection.collapsed(offset: typing ? text.length : text.length - i - 1),
+        );
+        tester.testTextInput.updateEditingValue(value);
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(controller.value, value);
+      }
+      counts.add(builds);
+    }
+    expect(counts, [0, 0], reason: 'closed palette builds for 20 keystrokes and 20 caret moves');
+
+    // A slash draft still reaches the palette.
+    builds = 0;
+    await enter(tester, '/');
+    expect(builds, greaterThan(0));
+    expect(find.byType(SlashPalette), findsOneWidget);
+  });
+
   testWidgets('picking an input command closes its hint and preserves explicit sending', (tester) async {
     final harness = await mount(tester);
     await enter(tester, '/per');

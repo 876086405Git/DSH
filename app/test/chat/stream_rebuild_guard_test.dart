@@ -23,6 +23,7 @@ import 'package:dsh_app/ui/chat/widgets/thinking_pill.dart';
 import 'package:dsh_app/ui/chat/widgets/tool_row.dart';
 import 'package:dsh_app/ui/chat/widgets/turn_process.dart';
 import 'package:dsh_app/ui/chat/widgets/user_bubble.dart';
+import 'package:dsh_app/ui/pets/pet_perch.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -347,6 +348,42 @@ void main() {
 
   testWidgets('a streaming reply with queued messages derives no rows per delta', (tester) async {
     await streamText(tester, queued: ['排队一', '排队二']);
+  });
+
+  testWidgets('text deltas leave the jump button alone', (tester) async {
+    final g = _Guard();
+    addTearDown(g.dispose);
+    await g.mount(tester);
+    g.snapshot();
+    await g.settle(tester);
+    g.startStream();
+    g.chunk(const TextDeltaChunk(0, '开始'));
+    await g.settle(tester);
+
+    // The Positioned that owns the floating button stays in both trees.
+    final overlay = tester.element(find.ancestor(of: find.byType(PetAvoid), matching: find.byType(Positioned)).first);
+    var builds = 0;
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, builtOnce) {
+      previous?.call(element, builtOnce);
+      element.visitAncestorElements((ancestor) {
+        if (ancestor != overlay) return true;
+        builds++;
+        return false;
+      });
+    };
+    try {
+      for (var i = 0; i < _deltas; i++) {
+        g.chunk(const TextDeltaChunk(0, '字'));
+        await tester.pump(const Duration(milliseconds: 32));
+      }
+    } finally {
+      debugOnRebuildDirtyWidget = previous;
+    }
+    expect(g.state.items.whereType<AssistantChatItem>().last.text, '开始${'字' * _deltas}');
+    debugPrint('[GUARD] jump button builds=$builds for $_deltas text deltas');
+    expect(builds, 0);
+    await g.unmount(tester);
   });
 
   testWidgets('text deltas reuse the unchanged reasoning control', (tester) async {

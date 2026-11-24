@@ -56,7 +56,7 @@ class MediaVideoViewerPage extends StatefulWidget {
 
 class _MediaVideoViewerPageState extends State<MediaVideoViewerPage> with WidgetsBindingObserver {
   MediaVideoHandle? _handle;
-  MediaVideoState? _state;
+  final _playback = ValueNotifier((positionMs: 0, durationMs: 0, playing: false));
   File? _file;
   Object? _error;
   Timer? _poller;
@@ -94,7 +94,6 @@ class _MediaVideoViewerPageState extends State<MediaVideoViewerPage> with Widget
     final previous = _handle;
     setState(() {
       _handle = null;
-      _state = null;
       _error = null;
       _loading = true;
       _progress = null;
@@ -123,7 +122,7 @@ class _MediaVideoViewerPageState extends State<MediaVideoViewerPage> with Widget
       }
       setState(() {
         _handle = handle;
-        _state = MediaVideoState(positionMs: 0, durationMs: handle.durationMs, playing: false);
+        _playback.value = (positionMs: 0, durationMs: handle.durationMs, playing: false);
         _loading = false;
       });
       if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) await widget.video.play(handle.texture);
@@ -159,12 +158,7 @@ class _MediaVideoViewerPageState extends State<MediaVideoViewerPage> with Widget
     try {
       final state = await widget.video.state(handle.texture);
       if (!mounted || !identical(_handle, handle)) return;
-      final previous = _state;
-      if (previous?.positionMs != state.positionMs ||
-          previous?.durationMs != state.durationMs ||
-          previous?.playing != state.playing) {
-        setState(() => _state = state);
-      }
+      _playback.value = (positionMs: state.positionMs, durationMs: state.durationMs, playing: state.playing);
     } catch (error) {
       if (mounted && identical(_handle, handle)) _fail(error);
     } finally {
@@ -193,16 +187,8 @@ class _MediaVideoViewerPageState extends State<MediaVideoViewerPage> with Widget
       final handle = _handle;
       if (handle != null) {
         unawaited(widget.video.pause(handle.texture).catchError((Object _) {}));
-        final previous = _state;
-        if (previous != null) {
-          setState(
-            () => _state = MediaVideoState(
-              positionMs: previous.positionMs,
-              durationMs: previous.durationMs,
-              playing: false,
-            ),
-          );
-        }
+        final previous = _playback.value;
+        _playback.value = (positionMs: previous.positionMs, durationMs: previous.durationMs, playing: false);
       }
     } else if (_handle != null) {
       unawaited(_poll());
@@ -256,12 +242,59 @@ class _MediaVideoViewerPageState extends State<MediaVideoViewerPage> with Widget
     }
   }
 
+  Widget _playbackControls() => ValueListenableBuilder(
+    valueListenable: _playback,
+    builder: (context, state, _) {
+      final l10n = context.l10n;
+      final duration = state.durationMs.clamp(0, 1 << 53).toDouble();
+      final transport = IconButton(
+        tooltip: state.playing ? l10n.mediaVideoPause : l10n.mediaVideoPlay,
+        onPressed: _commanding
+            ? null
+            : () => _command((texture) async {
+                if (state.playing) {
+                  await widget.video.pause(texture);
+                } else {
+                  if (state.positionMs >= state.durationMs) await widget.video.seek(texture, 0);
+                  await widget.video.play(texture);
+                }
+              }),
+        icon: Icon(state.playing ? AppIcons.mediaPause : AppIcons.mediaPlay),
+      );
+      final total = Text(mediaVideoTime(duration.toInt()));
+      return StatefulBuilder(
+        builder: (context, setPosition) {
+          final position = (_seeking ?? state.positionMs.toDouble()).clamp(0.0, duration);
+          return Row(
+            children: [
+              transport,
+              Text(mediaVideoTime(position.toInt())),
+              Expanded(
+                child: Slider(
+                  value: position,
+                  max: duration > 0 ? duration : 1,
+                  onChanged: _commanding ? null : (value) => setPosition(() => _seeking = value),
+                  onChangeEnd: (value) {
+                    setPosition(() => _seeking = null);
+                    unawaited(_command((texture) => widget.video.seek(texture, value.toInt())));
+                  },
+                ),
+              ),
+              total,
+            ],
+          );
+        },
+      );
+    },
+  );
+
   @override
   void dispose() {
     ++_generation;
     _poller?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_close(_handle));
+    _playback.dispose();
     super.dispose();
   }
 
@@ -270,9 +303,6 @@ class _MediaVideoViewerPageState extends State<MediaVideoViewerPage> with Widget
     final l10n = context.l10n;
     final handle = _handle;
     final unsupported = _error is PlatformException && (_error as PlatformException).code == 'unsupported';
-    final state = _state;
-    final duration = (state?.durationMs ?? 0).clamp(0, 1 << 53).toDouble();
-    final position = (_seeking ?? state?.positionMs.toDouble() ?? 0).clamp(0.0, duration);
     return Theme(
       data: Theme.of(context).copyWith(brightness: Brightness.dark, colorScheme: const ColorScheme.dark()),
       child: Scaffold(
@@ -336,41 +366,8 @@ class _MediaVideoViewerPageState extends State<MediaVideoViewerPage> with Widget
                         ),
                 ),
               ),
-              if (handle != null && state != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        tooltip: state.playing ? l10n.mediaVideoPause : l10n.mediaVideoPlay,
-                        onPressed: _commanding
-                            ? null
-                            : () => _command((texture) async {
-                                if (state.playing) {
-                                  await widget.video.pause(texture);
-                                } else {
-                                  if (state.positionMs >= state.durationMs) await widget.video.seek(texture, 0);
-                                  await widget.video.play(texture);
-                                }
-                              }),
-                        icon: Icon(state.playing ? AppIcons.mediaPause : AppIcons.mediaPlay),
-                      ),
-                      Text(mediaVideoTime(position.toInt())),
-                      Expanded(
-                        child: Slider(
-                          value: position,
-                          max: duration > 0 ? duration : 1,
-                          onChanged: _commanding ? null : (value) => setState(() => _seeking = value),
-                          onChangeEnd: (value) {
-                            setState(() => _seeking = null);
-                            unawaited(_command((texture) => widget.video.seek(texture, value.toInt())));
-                          },
-                        ),
-                      ),
-                      Text(mediaVideoTime(duration.toInt())),
-                    ],
-                  ),
-                ),
+              if (handle != null)
+                Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: _playbackControls()),
               TextButton(onPressed: _external || _loading ? null : _openExternal, child: Text(l10n.mediaOpenElsewhere)),
               const SizedBox(height: 12),
             ],
