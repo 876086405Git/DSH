@@ -3164,12 +3164,28 @@ void main() {
     final controlsBeforeFixedReads = store.topicControls();
     final archiveBeforeFixedReads = store.archive;
     final requestsBeforeFixedReads = store.requests();
-    expect(
-      store
-          .memoryFixedLayerCards(characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04')
-          .map((row) => row['id']),
-      isNot(contains(editingImpressionId)),
-    );
+    List<String> fixedIds(String? input, int expectedDomainSelects) {
+      var selects = 0;
+      database.trace = SqliteTraceCallback((event) {
+        if (event is SqliteTraceStatement && (event.sql?.contains('SELECT c.*,t.mode AS topic_mode') ?? false)) {
+          selects++;
+        }
+        return 0;
+      });
+      try {
+        final rows = store.memoryFixedLayerCards(
+          characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04', explicitUserInput: input,
+        );
+        expect(selects, expectedDomainSelects, reason: 'one fixed-layer SELECT, plus one for an invitation');
+        return [for (final row in rows) row['id']! as String];
+      } finally {
+        database.trace = null;
+      }
+    }
+    for (final input in [null, '  ', '今天看见玉兰了。', '如果玉兰怎么样？', '「聊聊玉兰」']) {
+      expect(fixedIds(input, 1), isNot(contains(editingImpressionId)));
+    }
+    expect(fixedIds('请，聊聊玉兰？！', 2), contains(editingImpressionId));
     expect(
       store
           .memoryFixedLayerCards(

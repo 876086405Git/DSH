@@ -622,7 +622,7 @@ MemoryRow _correction(String replacement, String? target, List<MemoryRow> cards)
 
 /// Recognizes a few direct invitations, not arbitrary keyword questions.
 /// The returned permission lasts for one selection; it never changes a topic.
-Set<String> explicitMemoryTopics(String input, List<MemoryRow> cards) {
+Set<String> explicitMemoryTopics(String input, Iterable<MemoryRow> cards) {
   final text = normalizeMemoryText(_controlInput(input));
   if (_nonLiteralControl(text)) return {};
   final match =
