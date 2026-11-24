@@ -297,43 +297,49 @@ void main() {
     );
   }
 
-  testWidgets('D a set reminder with notifications off asks for them and reads again on return', (tester) async {
-    final created = (await submit(await source('create', _raw))).task;
-    registered(created);
-    // The native runner sets the alarm anyway and keeps why it cannot ring yet.
-    db.execute("UPDATE companion_task_revisions SET wait_reason='notifications_disabled' WHERE task_id=?", [
-      created['task_id'],
-    ]);
-    owner = CompanionMemoryOwner(store, CompanionLocal.at(root));
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null))],
-        child: MaterialApp(
-          theme: buildDarkTheme(),
-          localizationsDelegates: L10n.localizationsDelegates,
-          supportedLocales: L10n.supportedLocales,
-          locale: const Locale('zh'),
-          home: CompanionTasksPage(memory: owner, taskId: created['task_id']! as String),
+  // done: the native runner set the alarm anyway and keeps why it cannot ring
+  // yet. waiting: an older build stopped before setting it; nothing claims it is.
+  for (final (state, line) in [('done', '设好了，可通知还关着，到点我叫不到你。去系统设置里打开通知就好。'), ('waiting', '好，提醒记下了，还没确认设好。')]) {
+    testWidgets('D a $state reminder with notifications off asks for them and reads again on return', (tester) async {
+      final created = (await submit(await source('create', _raw))).task;
+      if (state == 'done') registered(created);
+      db.execute("UPDATE companion_task_revisions SET state=?,wait_reason='notifications_disabled' WHERE task_id=?", [
+        state,
+        created['task_id'],
+      ]);
+      owner = CompanionMemoryOwner(store, CompanionLocal.at(root));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [activeConnectionProvider.overrideWithValue(const AsyncData<HostConnection?>(null))],
+          child: MaterialApp(
+            theme: buildDarkTheme(),
+            localizationsDelegates: L10n.localizationsDelegates,
+            supportedLocales: L10n.supportedLocales,
+            locale: const Locale('zh'),
+            home: CompanionTasksPage(memory: owner, taskId: created['task_id']! as String),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('设好了，可通知还关着，到点我叫不到你。去系统设置里打开通知就好。'), findsOneWidget);
-    calls.clear();
-    await tester.tap(find.widgetWithText(FilledButton, '去系统设置'));
-    await tester.pumpAndSettle();
-    expect(calls.single.method, 'openSettings');
-    expect(calls.single.arguments, {'kind': 'notifications'});
-    // Back from the system settings, the same reminder is read again.
-    calls.clear();
-    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pumpAndSettle();
-    expect(calls.where((call) => call.method == 'wake').map((call) => call.arguments), [
-      {'taskId': created['task_id']},
-    ]);
-    await tester.pumpWidget(const SizedBox());
-  });
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(line), findsOneWidget);
+      if (state == 'waiting') expect(find.textContaining('设好了'), findsNothing);
+      calls.clear();
+      await tester.tap(find.widgetWithText(FilledButton, '去系统设置'));
+      await tester.pumpAndSettle();
+      expect(calls.single.method, 'openSettings');
+      expect(calls.single.arguments, {'kind': 'notifications'});
+      // Back from the system settings, the same reminder is read again, which
+      // is also what sets the older waiting one.
+      calls.clear();
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(calls.where((call) => call.method == 'wake').map((call) => call.arguments), [
+        {'taskId': created['task_id']},
+      ]);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   testWidgets('D a real integer cancellation row shows its unknown stop and offers no amendment', (tester) async {
     final created = (await submit(await source('create', _raw))).task;

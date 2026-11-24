@@ -159,6 +159,7 @@ String companionReminderLine(L10n l10n, MemoryRow task, {required String? execut
   if (task['state'] == 'unknown') {
     return l10n.companionReminderUnknown;
   }
+  final set = task['state'] == 'done';
   return switch (task['wait_reason']) {
     'text_missing' => l10n.companionReminderTextMissing,
     'date_missing' => l10n.companionReminderDateMissing,
@@ -167,16 +168,17 @@ String companionReminderLine(L10n l10n, MemoryRow task, {required String? execut
     'time_gap' => l10n.companionReminderGap,
     'time_overlap' => l10n.companionReminderOverlap,
     // These ride on a reminder that is already set (see CompanionReminderRunner).
-    'notifications_disabled' => l10n.companionReminderNotificationsMissing,
-    'notification_channel_disabled' => l10n.companionReminderChannelMissing,
-    'notification_group_disabled' => l10n.companionReminderGroupMissing,
+    'notifications_disabled' when set => l10n.companionReminderNotificationsMissing,
+    'notification_channel_disabled' when set => l10n.companionReminderChannelMissing,
+    'notification_group_disabled' when set => l10n.companionReminderGroupMissing,
     'time_passed' => l10n.companionReminderTimePassed,
     'invalid_time' => l10n.companionReminderInvalidTime,
     'cancellation_unconfirmed' => l10n.companionReminderCancelUnknown,
     _ => switch (task['state']) {
       'done' => l10n.companionReminderDone,
       'cancelled' => l10n.companionReminderCancelled,
-      'queued' || 'running' => l10n.companionReminderQueued,
+      // An older build left a permission stop here unset; its next run sets it.
+      'queued' || 'running' || 'waiting' => l10n.companionReminderQueued,
       _ => l10n.companionReminderFailed,
     },
   };
