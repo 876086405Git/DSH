@@ -139,6 +139,12 @@ class CompanionSessionPeer extends DshClient {
     return id;
   }
 
+  void hostEvent(String sessionId, Map<String, Object?> frame) {
+    for (final watch in _bySession[sessionId] ?? <StreamController<DshEvent>>[]) {
+      watch.add(HostEvent.fromFrame(frame));
+    }
+  }
+
   Future<void> closeAll() async {
     for (final watch in _watches) {
       await watch.close();

@@ -11,7 +11,9 @@ import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/links/launcher_entries.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
+import 'package:dsh_app/ui/chat/widgets/approval_card.dart';
 import 'package:dsh_app/ui/companion/companion_ask.dart';
 import 'package:dsh_app/ui/companion/companion_chrome.dart';
 import 'package:dsh_app/ui/companion/companion_log.dart';
@@ -45,6 +47,7 @@ class _Bridge extends DshConnection {
   bool chatUsage = false;
   bool phoneMemory = true;
   final prepared = <Map<String, Object?>>[];
+  final boundSessions = <String>{};
   final revokes = <Map<String, Object?>>[];
   final binds = <Map<String, Object?>>[];
 
@@ -159,6 +162,23 @@ class _Bridge extends DshConnection {
       if (update.containsKey('phoneMemory')) phoneSessions.add(update['sessionId']! as String);
       return json(capability(update['sessionId']! as String));
     }
+    if (path == '/api/agentPresets/list' || path == '/api/agentPresets/select' || path == '/api/session/projections') {
+      final envelope = body! as Map;
+      final args = (envelope['payload'] as Map)['args'] as Map;
+      final Object? result;
+      if (path == '/api/agentPresets/list') {
+        result = {'presets': [{'id': companionPresetId}]};
+      } else if (path == '/api/agentPresets/select') {
+        final id = args['agentId']! as String;
+        expect(args['agentPreset'], companionPresetId);
+        boundSessions.add(id);
+        result = companionPresetId;
+      } else {
+        final id = (args['request'] as Map)['sessionId'];
+        result = boundSessions.contains(id) ? {'asOfSeq': -1, 'values': {'agentPreset': companionPresetId}} : null;
+      }
+      return json({'type': 'server-response', 'rpcId': envelope['rpcId'], 'result': {'ok': true, 'value': result}});
+    }
     return get(path);
   }
 
@@ -251,52 +271,18 @@ class _Host extends ActiveHostController {
   HostRef build() => HostRef.local;
 }
 
-class _Sessions extends CompanionSessions {
+// Room ownership and persisted role keys stay with the real CompanionSessions.
+class _Sessions extends SessionsController {
   int created = 0;
-  int forgotten = 0;
-  String get key => 'local:${HostRef.local.id}';
-  @override
-  Map<String, CompanionBinding> build() => const {};
-  @override
-  Future<CompanionBinding> ensure({String? memoryArchiveId, int? memoryControlRevision}) async {
-    final known = of(HostRef.local);
-    if (known != null &&
-        known.memoryArchiveId == memoryArchiveId &&
-        known.memoryControlRevision == memoryControlRevision) {
-      return known;
-    }
-    final binding = CompanionBinding(
-      'fresh-${++created}',
-      memoryArchiveId: memoryArchiveId,
-      memoryControlRevision: memoryControlRevision,
-    );
-    state = {...state, key: binding};
-    return binding;
-  }
 
   @override
-  Future<CompanionBinding> ensureForCharacter(String? sourceKey, {
-    String? memoryArchiveId, int? memoryControlRevision, String? replaceSessionId, String? requireSessionId,
-  }) async {
-    if (replaceSessionId != null) state = {};
-    if (requireSessionId != null && of(HostRef.local)?.sessionId != requireSessionId) {
-      throw const DshRemoteException('companion/agent-retry-closed', 'Missing original session');
-    }
-    return ensure(memoryArchiveId: memoryArchiveId, memoryControlRevision: memoryControlRevision);
-  }
+  Future<List<SessionSummary>> build() async => const [];
 
   @override
-  Future<void> forgetCharacter(String? sourceKey) => forget();
-
-  @override
-  Future<void> forget() async {
-    forgotten++;
-    state = {};
-  }
-
-  @override
-  Future<void> forgetAll() async {
-    state = {};
+  Future<String> createForConnection(HostConnection conn, {required bool Function() isCurrent, bool autoApprove = true}) async {
+    expect(isCurrent(), isTrue);
+    expect(autoApprove, isFalse);
+    return 'fresh-${++created}';
   }
 }
 
@@ -350,7 +336,7 @@ class _Room {
         overrides: [
           activeHostProvider.overrideWith(_Host.new),
           activeConnectionProvider.overrideWithValue(AsyncData(HostConnection(client: client, isLocal: true))),
-          companionSessionsProvider.overrideWith(() => sessions),
+          sessionsProvider.overrideWith(() => sessions),
           settingsProvider.overrideWith(_Settings.new),
           companionLightClientProvider.overrideWithValue(model),
         ],
@@ -421,10 +407,12 @@ void main() {
     final room = _Room(root);
     await room.open(tester);
     try {
+      expect(room.sessions.created, 0, reason: 'opening the room does not create a Host session');
       const raw = '  读一下说明，再改脚本。\n';
       await room.say(tester, raw);
       final sent = room.client.prompts.single;
       final prepared = room.bridge.prepared.single;
+      expect(room.sessions.created, 1);
       expect(sent.session, 'fresh-1');
       expect(sent.text, raw);
       expect(prepared['requestId'], sent.requestId);
@@ -442,12 +430,23 @@ void main() {
   testWidgets('DSH draft, durable message and second step share one bubble and run one stage action', (tester) async {
     final room = _Room(root)..bridge.chatUsage = true;
     await room.open(tester);
+    final commit = room.client.releaseCommit = Completer<void>();
     try {
-      final commit = room.client.releaseCommit = Completer<void>();
       await room.say(tester, '看看文件');
       expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, '找到文件了。');
       expect(room.actions.where((action) => action == 'nod'), hasLength(1));
-      expect(find.byType(CompanionAsk), findsOneWidget);
+      final session = room.client.prompts.single.session;
+      final ask = find.byType(CompanionAsk);
+      expect(tester.widget<CompanionAsk>(ask).sessionId, session);
+      const approvalId = 'room-read-preview';
+      room.client.hostEvent(session, {
+        'type': 'waterfall', 'event': 'approval/request', 'eventId': approvalId,
+        'agentId': session, 'request': {'toolName': 'read_file', 'reason': 'Read the fixture preview'},
+      });
+      await room.settle(tester);
+      final card = tester.widget<ApprovalCard>(find.descendant(of: ask, matching: find.byType(ApprovalCard)));
+      expect((card.request.sessionId, card.request.eventId), (session, approvalId));
+      room.client.hostEvent(session, {'type': 'cancel', 'eventId': approvalId});
       expect(room.memory.store.messages().where((r) => r['role'] == 'assistant'), isEmpty);
       commit.complete();
       await room.settle(tester);
@@ -462,6 +461,7 @@ void main() {
       final log = tester.widget<CompanionLog>(find.byType(CompanionLog));
       expect(log.entries.map((e) => e.text), ['看看文件', '找到文件了。', '里面有三行。']);
     } finally {
+      if (!commit.isCompleted) commit.complete();
       await room.close(tester);
     }
   });
