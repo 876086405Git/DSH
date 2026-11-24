@@ -5,6 +5,7 @@ import { createRecallCoordinator } from "./recall.js";
 import { recallError } from "./recall-schema.js";
 import { createCompanionAuxiliaryRoutes } from './auxiliary.js';
 import { createCompanionLookupRoutes } from './lookup.js';
+import { createSessionToolRoutes } from './session-tools.js';
 
 const ROOT = "/dsh-go/v1/companion";
 
@@ -75,7 +76,7 @@ function readJson(req, maxBytes = MAX_BODY_BYTES, strictKeys = false) {
 // Store construction does no I/O, including on hosts that never open this page.
 export function createCompanionRoutes({ send, store = createCompanionStore(), signals, ctx, promptContext,
   recall = createRecallCoordinator({ store, promptContext }) }) {
-  let tasks;
+  let tasks, sessionTools;
   const auxiliary = createCompanionAuxiliaryRoutes({ ctx, send, readJson });
   const lookup = createCompanionLookupRoutes({ ctx, send, readJson, resolve: auxiliary.resolve });
   function usageRoute(req) {
@@ -175,6 +176,10 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
           return true;
         }
       }
+      if (path.startsWith(ROOT + '/session-tools/')) {
+        sessionTools ??= createSessionToolRoutes({ ctx, readJson, send });
+        if (await sessionTools.handle(req, res, path)) return true;
+      }
       if (await auxiliary.handle(req, res, path)) return true;
       if (await lookup.handle(req, res, path)) return true;
       if (signals && await signals.handle(req, res, path, send)) return true;
@@ -228,6 +233,6 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
       }
       return true;
     },
-    dispose() { lookup.dispose(); auxiliary.dispose(); },
+    dispose() { lookup.dispose(); auxiliary.dispose(); return sessionTools?.dispose(); },
   };
 }
