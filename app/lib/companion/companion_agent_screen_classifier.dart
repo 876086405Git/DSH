@@ -126,8 +126,17 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
         for (final row in history) {'role': row['role'], 'text': row['text']},
       ],
     });
-    final key = _apiKey().trim();
-    if (key.isEmpty) return null;
+    // The same model route as her screen asides: the Host in Full mode, the
+    // phone's model in Light. No usable route is the only reason to skip.
+    final CompanionMemoryTransport? transport;
+    try {
+      transport = await _modelTransport(isCurrent: current);
+    } on Object {
+      return null;
+    }
+    if (transport is! CompanionAgentModelTransport || !transport.agentConfigured) return null;
+    final route = transport;
+    bool live() => current() && route.current;
     final messages = <Map<String, Object?>>[
       {'role': 'user', 'content': input},
     ];
@@ -135,48 +144,49 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
     final body = companionAgentRequestBody(system: system, messages: messages, maxTokens: outputTokens);
     final id = owner.store.reserveRequest(
       category: 'chat',
-      provider: 'deepseek',
-      model: companionLightModel,
+      provider: route.provider,
+      model: route.model,
       inputTokens: estimateTokens(jsonEncode(body)).ceil(),
       outputTokens: outputTokens,
     );
-    if (id == null || !current()) {
+    if (id == null || !live()) {
       if (id != null) owner.store.finishRequest(id, terminal: 'not_sent');
       return null;
     }
     final request = _asideRequest = CompanionAgentModelRequest(id);
     owner.retainReceipt(request.settled.future);
     try {
-      final message = await request.read(
-        client: _client(),
-        apiKey: key,
+      final message = await route.readAgent(
+        request: request,
         system: system,
         messages: messages,
         tools: const [],
         maxTokens: outputTokens,
-        isCurrent: current,
-        onText: (text) => request.text += text,
+        isCurrent: live,
+        onText: (_) {},
+        onDispatchUncertain: () {
+          owner.store.markRequestUncertain(id);
+          request.uncertain = true;
+          recordScreenObservationCost(owner.store, id);
+        },
         onSent: () {
-          if (!current()) throw const DshClosedException('Screen observation changed');
           owner.store.markRequestSent(id);
           request.sent = true;
           recordScreenObservationCost(owner.store, id);
         },
         onUsage: (usage) {
-          owner.store.recordUsage(id, usage.toJson());
-          owner.store.finishRequest(id, terminal: usage.terminal);
+          owner.store.recordUsage(id, usage);
+          owner.store.finishRequest(id, terminal: usage['terminal']! as String);
           request.finalized = true;
           owner.changed();
-          if (!_disposed) _onUsage?.call(usage);
+          if (!_disposed) _onUsage?.call(CompanionUsage.fromReceipt(usage));
         },
         onUsageSettled: (usage, {required partial}) {
           if (!_disposed) _onUsageSettled?.call(usage, partial: partial);
         },
       );
-      if (!current() || message == null || message.calls.isNotEmpty) return null;
-      final decoded = jsonDecode(request.text.trim());
-      if (decoded is! Map || decoded.keys.any((key) => key is! String)) return null;
-      return Map<String, Object?>.from(decoded);
+      if (!live() || message == null || message.calls.isNotEmpty) return null;
+      return _screenJson(message.text);
     } on Object {
       return null;
     } finally {
@@ -185,7 +195,11 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
         await request.drain();
       } finally {
         try {
-          if (!request.finalized) owner.store.finishRequest(id, terminal: request.sent ? 'cancelled' : 'not_sent');
+          if (request.notSentProven && !request.sent) {
+            owner.store.finishRequest(id, terminal: 'not_sent');
+          } else if (!request.finalized) {
+            owner.store.finishRequest(id, terminal: request.sent || request.uncertain ? 'cancelled' : 'not_sent');
+          }
           recordScreenObservationCost(owner.store, id);
         } finally {
           request.settled.complete();
@@ -214,14 +228,7 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
       current: current,
       stillShown: isCurrentObservation,
     );
-    if (text == null) return null;
-    try {
-      final decoded = jsonDecode(text.trim());
-      if (decoded is! Map || decoded.keys.any((key) => key is! String)) return null;
-      return Map<String, Object?>.from(decoded);
-    } on FormatException {
-      return null;
-    }
+    return text == null ? null : _screenJson(text);
   }
 
   /// The person asked her to look at one of their photos: it goes to the same
@@ -369,6 +376,18 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
         if (identical(_asideAbort, abort)) _asideAbort = null;
       }
     }
+  }
+}
+
+/// The one JSON line, also when a model wraps it in a code fence.
+Map<String, Object?>? _screenJson(String text) {
+  final start = text.indexOf('{'), end = text.lastIndexOf('}');
+  if (start < 0 || end < start) return null;
+  try {
+    final decoded = jsonDecode(text.substring(start, end + 1));
+    return decoded is Map && decoded.keys.every((key) => key is String) ? Map<String, Object?>.from(decoded) : null;
+  } on FormatException {
+    return null;
   }
 }
 
