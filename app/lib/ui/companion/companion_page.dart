@@ -3825,10 +3825,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                     // Reaching for the keyboard is not talking over her: she finishes
                     // her sentence; sending (or the microphone) is what stops her.
                     // While she voices a memory follow-up, acting would withdraw it
-                    // and cut her off, so typing counts only once it is sent.
-                    onUserInput: () {
-                      if (_memoryFollowupTicket == null) _acted();
-                    },
+                    // and cut her off, so typing only marks that the person is here.
+                    onUserInput: () => _memoryFollowupTicket == null
+                        ? _acted()
+                        : _observeLateUse(interaction: true),
                     input: _input,
                     focus: _focus,
                     hint: l10n.companionInputHint(name),
