@@ -371,7 +371,7 @@ void main() {
       expect(own, endsWith('你就去做。'));
       expect(own, contains(companionPersonaRules));
       expect(companionPersona(custom: '你是一只猫娘。', tools: true), isNot(contains('用不上工具')));
-      expect(companionPersona(custom: '你是一只猫娘。', tools: true), endsWith('说做完了什么。'));
+      expect(companionPersona(custom: '你是一只猫娘。', tools: true), endsWith('不念步骤、编号或工具名。'));
     });
 
     test('her persona under the name she was given', () {
