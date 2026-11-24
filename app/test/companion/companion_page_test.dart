@@ -72,6 +72,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'phone_keeper_fake.dart';
 import 'companion_test_settle.dart';
 import '../support/companion_notes_peer.dart';
+import '../support/companion_session_peer.dart';
 import '../support/companion_compare_peer.dart';
 import '../support/companion_receipts_peer.dart';
 import '../support/companion_map_platform_peer.dart';
@@ -2066,7 +2067,9 @@ void main() {
           var inputCount = 0;
           // Her model asks for the sheet as said: four receipts, by eight
           // tonight, carrying on after she leaves. A cancel only reads tasks.
-          final model = _AgentModel.script(
+          final phone = _AgentModel.script((_) => const []);
+          final host = PageTaskSessionPeer(
+            peer,
             (said) => said == receiptSpokenExample
                 ? [_receiptsCall]
                 : said == '取消整理票据'
@@ -2090,6 +2093,7 @@ void main() {
               memory.dispose();
             }
             await tester.pump();
+            await tester.runAsync(host.closeAll);
             await tester.runAsync(peer.close);
             tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
           });
@@ -2167,13 +2171,13 @@ void main() {
               }, status: 404);
             }
           };
-          // The full room asks its Host for each model round.
-          peer.hostModel.model = () => model.client;
+          // Install the Session callback on the same loopback peer as the task API.
+          host.install();
           await openLight(
             tester,
             apiKey: 'sk-test',
-            client: model.client,
-            connection: HostConnection(client: peer.client, isLocal: false),
+            client: phone.client,
+            connection: HostConnection(client: host, isLocal: false),
             extra: [..._hostRoom, companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
           );
           expect(await memoryOf(tester), same(memory));
@@ -2196,12 +2200,16 @@ void main() {
             expect(memory.store.messages(), isEmpty);
             expect(memory.store.tasks(), isEmpty);
             expect(_taskCalls(peer), isEmpty);
-            expect(model.requests, isEmpty);
+            expect(phone.requests, isEmpty);
+            expect(host.prompts, isEmpty);
+            expect(host.offered, isEmpty);
             await tester.pumpWidget(const SizedBox());
             // The full room's real HttpClient keeps a 15-second idle timer.
             await tester.pump(const Duration(seconds: 16));
             return;
           }
+          await settleMixed(tester, host.firstPrompt.future);
+          expect(host.prompts.single.text, receiptSpokenExample);
           for (var index = 0; index < 4; index++) {
             // Wait for this input's own sheet: the previous one may still be closing.
             await _notesVisible(tester, find.text('第 ${index + 1} 份票据在哪个文件夹？'));
@@ -2341,15 +2349,12 @@ void main() {
             ),
             isEmpty,
           );
-          expect(model.offered.first, contains('receipts_to_sheet'));
-          expect(
-            model.chats,
-            hasLength(switch (scenario) {
-              'accepted' => 2,
-              'cancel-during-fourth-input' => 3,
-              _ => 1,
-            }),
-          );
+          expect(host.offered.first, contains('receipts_to_sheet'));
+          expect(phone.chats, isEmpty, reason: 'An online room task must use its DSH Session');
+          expect(host.errors, isEmpty);
+          expect(host.prompts, hasLength(scenario == 'cancel-during-fourth-input' ? 2 : 1));
+          expect(host.results, hasLength(scenario == 'accepted' || scenario == 'cancel-during-fourth-input' ? 1 : 0));
+          expect(host.prompts.every((p) => host.contexts[p.requestId] == p.session), isTrue);
           await tester.pumpWidget(const SizedBox());
           // The real HttpClient keeps its idle connection on a 15-second fake-clock timer.
           await tester.pump(const Duration(seconds: 16));
@@ -2687,7 +2692,9 @@ void main() {
           var inputReads = 0;
           // Her model asks for the comparison as said: A then B, by eight
           // tonight, carrying on after she leaves. A cancel only reads tasks.
-          final model = _AgentModel.script(
+          final phone = _AgentModel.script((_) => const []);
+          final host = PageTaskSessionPeer(
+            peer,
             (said) => said == compareSpokenExample
                 ? [_compareCall]
                 : said == '取消对稿'
@@ -2711,6 +2718,7 @@ void main() {
               memory.dispose();
             }
             await tester.pump();
+            await tester.runAsync(host.closeAll);
             await tester.runAsync(peer.close);
             tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
           });
@@ -2781,13 +2789,13 @@ void main() {
               }, status: 404);
             }
           };
-          // The full room asks its Host for each model round.
-          peer.hostModel.model = () => model.client;
+          // Install the Session callback on the same loopback peer as the task API.
+          host.install();
           await openLight(
             tester,
             apiKey: 'sk-test',
-            client: model.client,
-            connection: HostConnection(client: peer.client, isLocal: false),
+            client: phone.client,
+            connection: HostConnection(client: host, isLocal: false),
             extra: [..._hostRoom, companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
           );
           expect(await memoryOf(tester), same(memory));
@@ -2810,12 +2818,16 @@ void main() {
             expect(memory.store.messages(), isEmpty);
             expect(memory.store.tasks(), isEmpty);
             expect(_taskCalls(peer), isEmpty);
-            expect(model.requests, isEmpty);
+            expect(phone.requests, isEmpty);
+            expect(host.prompts, isEmpty);
+            expect(host.offered, isEmpty);
             await tester.pumpWidget(const SizedBox());
             // The full room's real HttpClient keeps a 15-second idle timer.
             await tester.pump(const Duration(seconds: 16));
             return;
           }
+          await settleMixed(tester, host.firstPrompt.future);
+          expect(host.prompts.single.text, compareSpokenExample);
           for (var side = 0; side < 2; side++) {
             // Wait for this side's own sheet: the previous one may still be closing.
             await _notesVisible(tester, find.text(side == 0 ? '选择 A · 旧稿 所在的文件夹' : '选择 B · 新稿 所在的文件夹'));
@@ -2929,15 +2941,12 @@ void main() {
             peer.calls.where((call) => call.uri.path.contains('/session/') || call.uri.path.contains('/agent/')),
             isEmpty,
           );
-          expect(model.offered.first, contains('compare_drafts'));
-          expect(
-            model.chats,
-            hasLength(switch (scenario) {
-              'accepted' => 2,
-              'cancel-during-second-input' => 3,
-              _ => 1,
-            }),
-          );
+          expect(host.offered.first, contains('compare_drafts'));
+          expect(phone.chats, isEmpty, reason: 'An online room task must use its DSH Session');
+          expect(host.errors, isEmpty);
+          expect(host.prompts, hasLength(scenario == 'cancel-during-second-input' ? 2 : 1));
+          expect(host.results, hasLength(scenario == 'accepted' || scenario == 'cancel-during-second-input' ? 1 : 0));
+          expect(host.prompts.every((p) => host.contexts[p.requestId] == p.session), isTrue);
           await tester.pumpWidget(const SizedBox());
           // The real HttpClient keeps its idle connection on a 15-second fake-clock timer.
           await tester.pump(const Duration(seconds: 16));
@@ -3282,7 +3291,9 @@ void main() {
             'localDate': '2026-11-21',
             'outputName': name,
           };
-          final model = _AgentModel.script(
+          final phone = _AgentModel.script((_) => const []);
+          final host = PageTaskSessionPeer(
+            peer,
             (said) => !said.startsWith('请电脑把今天的笔记')
                 ? const []
                 : [
@@ -3425,13 +3436,13 @@ void main() {
             }
           };
           try {
-            // The full room asks its Host for each model round.
-            peer.hostModel.model = () => model.client;
+            // Install the Session callback on the same loopback peer as the task API.
+            host.install();
             await openLight(
               tester,
               apiKey: 'sk-test',
-              client: model.client,
-              connection: HostConnection(client: peer.client, isLocal: false),
+              client: phone.client,
+              connection: HostConnection(client: host, isLocal: false),
               extra: [..._hostRoom, companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
             );
             expect(await memoryOf(tester), same(memory));
@@ -3477,6 +3488,8 @@ void main() {
             await tester.pump();
             final turn = memory.receipts.length;
             await tester.tap(find.byIcon(AppIcons.send).last);
+            await settleMixed(tester, host.firstPrompt.future);
+            expect(host.prompts.single.text, raw);
             if (scenario == 'route-return-before-capability') {
               await settleMixed(tester, capabilitySeen.future);
               expect(find.byType(DirectoryLocationsSheet), findsNothing);
@@ -3571,15 +3584,12 @@ void main() {
             expect(source['text'], raw);
             expect(source['session_id'], originalSession);
             expect(taskCountsAtBind, lostDuringSelection ? isEmpty : (two || followingFind ? [0, 1] : [0]));
-            expect(model.offered.first, contains('notes_to_todo'));
-            expect(
-              model.chats,
-              hasLength(switch (scenario) {
-                _ when two || followingFind || followingCancel => 3,
-                'host-return-before-acceptance' => 1,
-                _ => 2,
-              }),
-            );
+            expect(host.offered.first, contains('notes_to_todo'));
+            expect(phone.chats, isEmpty, reason: 'An online room task must use its DSH Session');
+            expect(host.errors, isEmpty);
+            expect(host.prompts, hasLength(1));
+            expect(host.results, hasLength(two || followingFind || followingCancel ? 2 : scenario == 'host-return-before-acceptance' ? 0 : 1));
+            expect(host.prompts.every((p) => host.contexts[p.requestId] == p.session), isTrue);
             if (followingCancel) {
               // 甲 was created as its call was accepted; the following call
               // cancels that revision before any foreground start.
@@ -3600,7 +3610,7 @@ void main() {
             if (lostDuringSelection) {
               // A lost window ends the selection before acceptance: the model
               // hears it was not accepted, and nothing is sent or started.
-              expect(model.results.first['accepted'], isFalse);
+              expect(jsonDecode(host.results.first['content'] as String), containsPair('accepted', false));
               expect(creations, isEmpty);
               expect(foregroundPosts, isEmpty);
               expect(memory.store.tasks(), isEmpty);
@@ -3727,6 +3737,7 @@ void main() {
             }
             memory.removeListener(changed);
             memory.dispose();
+            await tester.runAsync(host.closeAll);
             await tester.runAsync(peer.close);
             // The inherited real HttpClient owns a 15-second idle timer.
             await tester.pump(const Duration(seconds: 16));
@@ -3811,7 +3822,9 @@ void main() {
                     'localDate': '2026-11-21',
                   },
                 );
-          final model = _AgentModel.script(
+          final phone = _AgentModel.script((_) => const []);
+          final host = PageTaskSessionPeer(
+            peer,
             (said) => switch (said) {
               '别找了' || '取消这次笔记整理' when scenario == 'cancel-after-acceptance' => [
                 ('task_status', <String, Object?>{}),
@@ -3853,6 +3866,7 @@ void main() {
               memory.dispose();
             }
             await tester.pump();
+            await tester.runAsync(host.closeAll);
             await tester.runAsync(peer.close);
             // The inherited real HttpClient owns a 15-second idle timer.
             await tester.pump(const Duration(seconds: 16));
@@ -3964,13 +3978,13 @@ void main() {
               }, status: 404);
             }
           };
-          // The full room asks its Host for each model round.
-          peer.hostModel.model = () => model.client;
+          // Install the Session callback on the same loopback peer as the task API.
+          host.install();
           await openLight(
             tester,
             apiKey: 'sk-test',
-            client: model.client,
-            connection: HostConnection(client: peer.client, isLocal: false),
+            client: phone.client,
+            connection: HostConnection(client: host, isLocal: false),
             extra: [..._hostRoom, companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
           );
           expect(await memoryOf(tester), same(memory));
@@ -4006,11 +4020,15 @@ void main() {
               isEmpty,
             );
             expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, raw);
-            expect(model.requests, isEmpty);
+            expect(phone.requests, isEmpty);
+            expect(host.prompts, isEmpty);
+            expect(host.offered, isEmpty);
             expect(resolves, isEmpty);
             await cleanUp();
             return;
           }
+          await settleMixed(tester, host.firstPrompt.future);
+          expect(host.prompts.single.text, raw);
           if (findDraft && scenario == 'accepted') {
             await _notesVisible(tester, find.text('你说的七点是上午还是晚上？'));
             expect(memory.store.messages().single['text'], findSpokenExample);
@@ -4075,13 +4093,13 @@ void main() {
             // This does not claim to exercise the restart-menu gesture.
             memory.store.startLightConversation();
             expect(memory.store.lightSessionId, isNot(sourceRoom));
-            // The full room asks its Host for each model round.
-            peer.hostModel.model = () => model.client;
+            // Install the Session callback on the same loopback peer as the task API.
+            host.install();
             await openLight(
               tester,
               apiKey: 'sk-test',
-              client: model.client,
-              connection: HostConnection(client: peer.client, isLocal: false),
+              client: phone.client,
+              connection: HostConnection(client: host, isLocal: false),
               extra: [..._hostRoom, companionMemoryOwnerProvider(root.absolute.path).overrideWith((ref) => memory)],
             );
             expect(await memoryOf(tester), same(memory));
@@ -4173,20 +4191,16 @@ void main() {
             expect(reopened.messages().singleWhere((item) => item['id'] == sources.single['id'])['said_at_utc'], now);
             reopened.close();
           }
-          expect(model.offered.first, contains(hostCall.$1));
-          expect(
-            model.chats,
-            hasLength(switch (scenario) {
-              'accepted' => 2,
-              'cancel-during-bind' => 3,
-              'cancel-after-acceptance' => 5,
-              _ => 1,
-            }),
-          );
+          expect(host.offered.first, contains(hostCall.$1));
+          expect(phone.chats, isEmpty, reason: 'An online room task must use its DSH Session');
+          expect(host.errors, isEmpty);
+          expect(host.prompts, hasLength(scenario.startsWith('cancel-') ? 2 : 1));
+          expect(host.results, hasLength(scenario == 'cancel-after-acceptance' ? 3 : scenario == 'accepted' || scenario == 'cancel-during-bind' ? 1 : 0));
+          expect(host.prompts.every((p) => host.contexts[p.requestId] == p.session), isTrue);
           expect(
             peer.calls.any(
               (call) =>
-                  call.method == 'POST' && (call.uri.path.contains('/prompt') || call.uri.path.contains('/auxiliary')),
+                  call.method == 'POST' && call.uri.path.contains('/auxiliary'),
             ),
             isFalse,
           );
