@@ -133,6 +133,19 @@
     <string name="pet_wheel_hosts">Hosts</string>
     <string name="pet_wheel_snooze">Hide today</string>
     <string name="pet_wheel_settings">Settings</string>
+    <!-- Her menu while she stays out of the app (她一直在) -->
+    <string name="pet_companion_talk">Talk with her</string>
+    <string name="pet_companion_room">Open her room</string>
+    <string name="pet_companion_unwatch">Stop watching the screen</string>
+    <string name="pet_companion_tuck">Tuck her to the edge</string>
+    <string name="pet_companion_hide">Hide her for an hour</string>
+    <string name="pet_wheel_talk">Talk</string>
+    <string name="pet_wheel_room">Her room</string>
+    <string name="pet_wheel_unwatch">Look away</string>
+    <string name="pet_wheel_tuck">Tuck</string>
+    <string name="pet_wheel_hide">Hide 1 h</string>
+    <string name="pet_companion_unwatched">She stopped watching the screen. Turn it back on in her room’s settings.</string>
+    <string name="pet_companion_hidden">She’ll be back in an hour</string>
     <string name="pet_screenshot_unsupported">Screenshots need Android 11 or later.</string>
     <string name="pet_screenshot_accessibility">Enable DSH-Go accessibility in the App’s phone control settings first.</string>
     <string name="pet_screenshot_secure">This screen blocks screenshots. DSH-Go won’t bypass its protection.</string>

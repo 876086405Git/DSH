@@ -493,7 +493,10 @@ internal class PetMenuView(
         ring.color = blend(palette.stroke, palette.accent, picked)
         ring.alpha = a
         canvas.drawCircle(x, y, r - hairline / 2, ring)
-        rows[i].item?.let { icons.draw(canvas, it, x, y, 23f * d * scale, blend(palette.accent, palette.onAccent, picked), a) }
+        rows[i].item?.let {
+            icons.draw(canvas, it, x, y, 23f * d * scale, blend(palette.accent, palette.onAccent, picked), a,
+                mirror = it == PetMenuItem.TUCK && g.direction > 0)
+        }
         if (isCommitted && ct > 0f) {
             // Running it: one ring rolls outward as the button lets go.
             ring.strokeWidth = 2f * d
@@ -548,7 +551,8 @@ private class PetWheelIcons {
     private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val paths = HashMap<PetMenuItem, Path>()
 
-    fun draw(canvas: Canvas, item: PetMenuItem, x: Float, y: Float, size: Float, color: Int, alpha: Int) {
+    /** [mirror]: drawn the other way round (tuck points at the side she docks on). */
+    fun draw(canvas: Canvas, item: PetMenuItem, x: Float, y: Float, size: Float, color: Int, alpha: Int, mirror: Boolean = false) {
         stroke.color = color
         stroke.alpha = alpha
         dot.color = color
@@ -556,6 +560,7 @@ private class PetWheelIcons {
         val save = canvas.save()
         canvas.translate(x - size / 2, y - size / 2)
         canvas.scale(size / 24f, size / 24f)
+        if (mirror) canvas.scale(-1f, 1f, 12f, 12f)
         canvas.drawPath(paths.getOrPut(item) { outline(item) }, stroke)
         when (item) {
             PetMenuItem.ASK -> for (dx in floatArrayOf(8.6f, 12f, 15.4f)) canvas.drawCircle(dx, 10.5f, 1.05f, dot)
@@ -601,6 +606,29 @@ private class PetWheelIcons {
                 moveTo(4f, 16f); lineTo(5.4f, 16f); moveTo(10.6f, 16f); lineTo(20f, 16f)
                 addCircle(14f, 8f, 2.6f, Path.Direction.CW)
                 addCircle(8f, 16f, 2.6f, Path.Direction.CW)
+            }
+            PetMenuItem.ROOM -> {
+                // A small house: roof, walls, a door.
+                moveTo(4f, 11f); lineTo(12f, 4.5f); lineTo(20f, 11f)
+                moveTo(6.5f, 9.2f); lineTo(6.5f, 19.5f); lineTo(17.5f, 19.5f); lineTo(17.5f, 9.2f)
+                moveTo(10.2f, 19.5f); lineTo(10.2f, 15f); lineTo(13.8f, 15f); lineTo(13.8f, 19.5f)
+            }
+            PetMenuItem.UNWATCH -> {
+                // An eye, struck through.
+                moveTo(3f, 12f); quadTo(12f, 3.5f, 21f, 12f); quadTo(12f, 20.5f, 3f, 12f)
+                addCircle(12f, 12f, 2.6f, Path.Direction.CW)
+                moveTo(5f, 19f); lineTo(19f, 5f)
+            }
+            PetMenuItem.TUCK -> {
+                // Towards the edge: an arrow up to a line.
+                moveTo(19.5f, 5f); lineTo(19.5f, 19f)
+                moveTo(4.5f, 12f); lineTo(15f, 12f)
+                moveTo(11f, 8f); lineTo(15f, 12f); lineTo(11f, 16f)
+            }
+            PetMenuItem.HIDE_HOUR -> {
+                // A clock face.
+                addCircle(12f, 12f, 8f, Path.Direction.CW)
+                moveTo(12f, 7.5f); lineTo(12f, 12f); lineTo(15.2f, 14f)
             }
         }
     }
