@@ -445,7 +445,7 @@ class OverlayMachine {
 
         val wakeAt = listOfNotNull(
             bubble?.untilMs,
-            if (!alwaysShow && !push.active && lastActiveAt > 0) lastActiveAt + IDLE_COLLAPSE_MS else null,
+            if (!alwaysShow && !push.active && recent) lastActiveAt + IDLE_COLLAPSE_MS else null,
         ).minOrNull()
         if (phoneTask) return hidden("phone task", keepAlive = true, wakeAt = wakeAt)
         if (!interactive) return Decision(Visibility.PAUSED, false, !dshService, bubble, wakeAt, "screen off")
