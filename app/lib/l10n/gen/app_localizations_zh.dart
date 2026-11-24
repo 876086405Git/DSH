@@ -7201,10 +7201,10 @@ class L10nZh extends L10n {
   String get companionScreenVision => '允许发送屏幕图片';
 
   @override
-  String get companionScreenVisionHint => '把最长边不超过 512 像素的屏幕图片发给你选的模型；图片不会保存';
+  String get companionScreenVisionHint => '发图前要先用本机文字识别（OCR）查一遍隐私，所以得开着它。图片最长边 512 像素，不会保存';
 
   @override
-  String get companionScreenVisionTextOnly => '当前截图方式只能提供文字；图片需要能核实窗口来源的无障碍截图';
+  String get companionScreenVisionTextOnly => '现在的截图方式只能读到文字；要发图片，得用无障碍截图并开着本机文字识别';
 
   @override
   String get companionScreenVisionModel => '看图使用的模型';
@@ -7213,13 +7213,13 @@ class L10nZh extends L10n {
   String get companionScreenVisionChoose => '选择支持图片的模型';
 
   @override
-  String get companionScreenVisionAvailable => '所选模型可接收通过检查、最长边不超过 512 像素的屏幕图片；图片不会保存';
+  String get companionScreenVisionAvailable => '所选模型能看图；开着本机文字识别时才会发图，图片不会保存';
 
   @override
-  String get companionScreenVisionChecking => '正在检查所选模型，屏幕图片尚未启用';
+  String get companionScreenVisionChecking => '正在检查所选模型，先只用文字';
 
   @override
-  String get companionScreenVisionUnavailable => '当前连接或模型不能接收图片，看屏时继续使用文字';
+  String get companionScreenVisionUnavailable => '当前连接或模型不能看图，看屏时只用文字';
 
   @override
   String get companionScreenFrequency => '多久开口';

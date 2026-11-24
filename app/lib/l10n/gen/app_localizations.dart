@@ -13383,13 +13383,13 @@ abstract class L10n {
   /// No description provided for @companionScreenVisionHint.
   ///
   /// In zh, this message translates to:
-  /// **'把最长边不超过 512 像素的屏幕图片发给你选的模型；图片不会保存'**
+  /// **'发图前要先用本机文字识别（OCR）查一遍隐私，所以得开着它。图片最长边 512 像素，不会保存'**
   String get companionScreenVisionHint;
 
   /// No description provided for @companionScreenVisionTextOnly.
   ///
   /// In zh, this message translates to:
-  /// **'当前截图方式只能提供文字；图片需要能核实窗口来源的无障碍截图'**
+  /// **'现在的截图方式只能读到文字；要发图片，得用无障碍截图并开着本机文字识别'**
   String get companionScreenVisionTextOnly;
 
   /// No description provided for @companionScreenVisionModel.
@@ -13407,19 +13407,19 @@ abstract class L10n {
   /// No description provided for @companionScreenVisionAvailable.
   ///
   /// In zh, this message translates to:
-  /// **'所选模型可接收通过检查、最长边不超过 512 像素的屏幕图片；图片不会保存'**
+  /// **'所选模型能看图；开着本机文字识别时才会发图，图片不会保存'**
   String get companionScreenVisionAvailable;
 
   /// No description provided for @companionScreenVisionChecking.
   ///
   /// In zh, this message translates to:
-  /// **'正在检查所选模型，屏幕图片尚未启用'**
+  /// **'正在检查所选模型，先只用文字'**
   String get companionScreenVisionChecking;
 
   /// No description provided for @companionScreenVisionUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'当前连接或模型不能接收图片，看屏时继续使用文字'**
+  /// **'当前连接或模型不能看图，看屏时只用文字'**
   String get companionScreenVisionUnavailable;
 
   /// No description provided for @companionScreenFrequency.

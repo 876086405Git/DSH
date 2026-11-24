@@ -1776,6 +1776,144 @@ void main() {
         expect(row['raw_usage'], containsPair('http_status', 200));
         expect(row['raw_usage'], containsPair('complete', true));
       }
+
+
+      // Keep all 36 original paid requests above. A later new remember does
+      // not retire text, but its real control commit invalidates raw consent.
+      expect(rawResident.active, isTrue);
+      expect(visit.attachment.isAttached, isFalse);
+      const sameRawText = '我住紫藤路。';
+      const sameNewText = '我用竹木书签。';
+      replies.addAll([
+        _message(calls: [('stale-same-setup', 'remember', {'text': sameRawText, 'keywords': ['紫藤路']})]),
+        _message(words: '这条住址已记下。'),
+      ]);
+      await rawResident.submit(sameRawText, fromFloat: true);
+      expect(visit.agent.error, isNull);
+      expect(visit.requests, hasLength(38));
+      final sameRawSource = store.messages().singleWhere((row) => row['id'] == visit.agent.sourceId);
+      final sameRawCard = store.cards().singleWhere((card) => card['text'] == sameRawText);
+      replies.addAll([
+        _message(calls: [
+          ('stale-same-forget', 'forget', {'card': sameRawCard['id'], 'deleteChat': true}),
+          ('stale-same-remember', 'remember', {'text': sameNewText, 'keywords': ['竹木书签']}),
+        ]),
+        _message(words: '卡片已忘记，也记下了新的书签信息；原话还在。'),
+      ]);
+      await rawResident.submit('忘掉紫藤路住址，连原话也删。另记：$sameNewText', fromFloat: true);
+      expect(visit.agent.error, isNull);
+      expect(visit.requests, hasLength(40));
+      expect(jsonEncode(visit.requests[38]), contains(sameRawCard['id']! as String));
+      final sameResults = <Map>[
+        for (final message in (visit.requests[39]['messages']! as List).cast<Map>())
+          if (message['role'] == 'user' && message['content'] is List)
+            for (final block in (message['content']! as List).cast<Map>())
+              if (block['type'] == 'tool_result') block,
+      ];
+      expect(sameResults.map((row) => row['tool_use_id']), ['stale-same-forget', 'stale-same-remember']);
+      expect(jsonDecode(sameResults.first['content']! as String), {
+        'retiredAfterMemoryChange': true,
+        'applied': true,
+        'replayed': false,
+        'changedCardIds': [sameRawCard['id']],
+        'currentCardRevisions': <String, int>{},
+        'targetId': sameRawCard['id'],
+      });
+      final sameRemember = jsonDecode(sameResults.last['content']! as String) as Map;
+      final sameNewCard = store.cards().singleWhere((card) => card['text'] == sameNewText);
+      expect(sameRemember['applied'], isTrue);
+      expect(sameRemember['replayed'], isFalse);
+      expect(sameRemember['targetId'], sameNewCard['id']);
+      expect(sameRemember['changedCardIds'], [sameNewCard['id']]);
+      expect(sameRemember.containsKey('retiredAfterMemoryChange'), isFalse);
+      expect((sameNewCard['evidence'] as List).single, containsPair('message_id', visit.agent.sourceId));
+      expect(rawResident.pendingRawErase, isNull);
+      expect(store.cards().any((card) => card['id'] == sameRawCard['id']), isFalse);
+      expect(store.messages().singleWhere((row) => row['id'] == sameRawSource['id'])['text'], sameRawText);
+      expect(store.messages().singleWhere((row) => row['id'] == sameRawSource['id'])['source_rev'], sameRawSource['source_rev']);
+
+      // A fresh forget is visible on the next real HTTP continuation. Only the
+      // later remember removes its three transient fields from the old exchange.
+      const laterRawText = '我住紫檀路。';
+      const laterNewText = '我用皮革书签。';
+      replies.addAll([
+        _message(calls: [('stale-later-setup', 'remember', {'text': laterRawText, 'keywords': ['紫檀路']})]),
+        _message(words: '这条住址已记下。'),
+      ]);
+      await rawResident.submit(laterRawText, fromFloat: true);
+      expect(visit.agent.error, isNull);
+      expect(visit.requests, hasLength(42));
+      final laterRawSource = store.messages().singleWhere((row) => row['id'] == visit.agent.sourceId);
+      final laterRawCard = store.cards().singleWhere((card) => card['text'] == laterRawText);
+      replies.addAll([
+        _message(calls: [('stale-later-forget', 'forget', {'card': laterRawCard['id'], 'deleteChat': true})]),
+        _message(calls: [('stale-later-remember', 'remember', {'text': laterNewText, 'keywords': ['皮革书签']})]),
+        _message(words: '卡片已忘记，原话仍留着；新的书签信息已记下。'),
+      ]);
+      await rawResident.submit('忘掉紫檀路住址，连原话也删。另记：$laterNewText', fromFloat: true);
+      expect(visit.agent.error, isNull);
+      expect(visit.requests, hasLength(45));
+      expect(jsonEncode(visit.requests[42]), contains(laterRawCard['id']! as String));
+      final freshForget = <Map>[
+        for (final message in (visit.requests[43]['messages']! as List).cast<Map>())
+          if (message['role'] == 'user' && message['content'] is List)
+            for (final block in (message['content']! as List).cast<Map>())
+              if (block['type'] == 'tool_result') block,
+      ].single;
+      expect(freshForget['tool_use_id'], 'stale-later-forget');
+      final freshPayload = jsonDecode(freshForget['content']! as String) as Map;
+      expect(freshPayload['applied'], isTrue);
+      expect(freshPayload['replayed'], isFalse);
+      expect(freshPayload['rawEraseState'], 'pending');
+      expect(freshPayload['pendingRawEraseId'], isA<String>());
+      expect(freshPayload['rawEraseMessage'], contains('separate confirmation'));
+      final laterResults = <Map>[
+        for (final message in (visit.requests[44]['messages']! as List).cast<Map>())
+          if (message['role'] == 'user' && message['content'] is List)
+            for (final block in (message['content']! as List).cast<Map>())
+              if (block['type'] == 'tool_result') block,
+      ];
+      expect(laterResults.map((row) => row['tool_use_id']), ['stale-later-forget', 'stale-later-remember']);
+      final withoutPending = Map<String, Object?>.from(freshPayload)
+        ..remove('pendingRawEraseId')
+        ..remove('rawEraseState')
+        ..remove('rawEraseMessage');
+      expect(
+        {...laterResults.first, 'content': jsonDecode(laterResults.first['content']! as String)},
+        {...freshForget, 'content': withoutPending},
+      );
+      final laterRemember = jsonDecode(laterResults.last['content']! as String) as Map;
+      final laterNewCard = store.cards().singleWhere((card) => card['text'] == laterNewText);
+      expect(laterRemember['applied'], isTrue);
+      expect(laterRemember['replayed'], isFalse);
+      expect(laterRemember['targetId'], laterNewCard['id']);
+      expect(laterRemember['changedCardIds'], [laterNewCard['id']]);
+      expect(laterRemember.containsKey('retiredAfterMemoryChange'), isFalse);
+      expect((laterNewCard['evidence'] as List).single, containsPair('message_id', visit.agent.sourceId));
+      expect(rawResident.pendingRawErase, isNull);
+      expect(store.cards().any((card) => card['id'] == laterRawCard['id']), isFalse);
+      expect(store.messages().singleWhere((row) => row['id'] == laterRawSource['id'])['text'], laterRawText);
+      expect(store.messages().singleWhere((row) => row['id'] == laterRawSource['id'])['source_rev'], laterRawSource['source_rev']);
+      final afterStaleResults = {for (final row in store.requests()) row['id']! as String: row};
+      expect(afterStaleResults, hasLength(45));
+      for (final entry in allPaid.entries) {
+        expect(afterStaleResults[entry.key], entry.value);
+      }
+      final staleRequests = afterStaleResults.entries.where((entry) => !allPaid.containsKey(entry.key)).map((entry) => entry.value).toList();
+      expect(staleRequests, hasLength(9));
+      for (final row in staleRequests) {
+        expect(row['origin'], 'local');
+        expect(row['category'], 'chat');
+        expect(row['sent_at_ms'], isNotNull);
+        expect(row['state'], 'finished');
+        expect(row['terminal'], 'complete');
+        expect(row['input_uncached'], 12);
+        expect(row['input_cache_read'], 0);
+        expect(row['input_cache_write'], 0);
+        expect(row['output_tokens'], 8);
+        expect(row['raw_usage'], containsPair('http_status', 200));
+        expect(row['raw_usage'], containsPair('complete', true));
+      }
     } finally {
       rawRoom?.detach();
       rawResident?.close();

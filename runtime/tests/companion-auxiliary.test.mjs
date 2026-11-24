@@ -62,7 +62,11 @@ async function fixture(t, configure = {}) {
     llm,
     connection: { admit: req => req.headers.authorization === 'owner' ? { peer: { principal: { kind: 'owner' } } } :
       req.headers.authorization === 'reader' ? { peer: { principal: { kind: 'reader' } } } : { rejection: 401 } },
-    sessionController: { async resolveAgent(id) { state.resolves++; return id === 'session' ? { agent } : undefined; } },
+    sessionController: { async resolveAgent(id) {
+      state.resolves++;
+      if (state.resolveGate) await state.resolveGate.promise;
+      return id === 'session' ? { agent } : undefined;
+    } },
     agentPresets: { presetForSession: () => state.wrongPreset ? 'other' : FULL_PRESET },
     agents: { get: id => id === 'session' && !state.retired ? agent : undefined },
   }[name]; }, on(name, fn) { listeners.set(name, fn); return () => listeners.delete(name); } };
@@ -239,6 +243,73 @@ test('a pending request reports unknown, busy rejects another, and model changes
     const saved = await g.http({ path: `${PATH}/requests/request?instanceId=${g.info.body.instanceId}` });
     assert.deepEqual(saved.body.finish, last);
   }
+
+  // Hold the actual resolver after acceptance, before record.agent can bind.
+  // A -> B -> A events must latch cancellation even though final values match.
+  const h = await fixture(t);
+  const resolveGate = defer(); h.state.resolveGate = resolveGate;
+  const originalSelection = { ...h.state.selected };
+  const beforeResolve = { resolves: h.state.resolves, prepares: h.state.prepares, invocations: h.state.invocations };
+  const receiptPath = `${PATH}/requests/resolve-aba?instanceId=${h.info.body.instanceId}`;
+  const resolving = h.post({ requestId: 'resolve-aba' });
+  let resolved;
+  try {
+    await until(() => h.state.resolves === beforeResolve.resolves + 1);
+    const accepted = await h.http({ path: receiptPath });
+    assert.equal(accepted.status, 200); assert.equal(accepted.body.phase, 'accepted');
+    assert.equal(accepted.body.dispatched, null); assert.equal(Object.hasOwn(accepted.body, 'finish'), false);
+    assert.equal(h.state.prepares, beforeResolve.prepares); assert.equal(h.state.invocations, beforeResolve.invocations);
+    h.state.selected = { ...originalSelection, model: 'changed-during-resolve' };
+    h.listeners.get('session/event')(h.agent.session, { type: 'model/selection' });
+    h.state.selected = originalSelection;
+    h.listeners.get('session/event')(h.agent.session, { type: 'model/selection' });
+    // abort does not settle the unresolved controller or prove not-sent yet.
+    assert.deepEqual((await h.http({ path: receiptPath })).body, accepted.body);
+    assert.equal(h.state.prepares, beforeResolve.prepares); assert.equal(h.state.invocations, beforeResolve.invocations);
+  } finally {
+    resolveGate.resolve();
+    resolved = await resolving;
+  }
+  h.state.resolveGate = undefined;
+  const cancelled = resolved.body.at(-1);
+  assert.equal(resolved.status, 200); assert.equal(cancelled.terminal, 'cancelled');
+  assert.equal(cancelled.complete, false); assert.equal(cancelled.usage.complete, false);
+  assert.equal(cancelled.dispatched, false); assert.equal(cancelled.dispatchAtMs, null);
+  assert.equal(h.state.prepares, beforeResolve.prepares); assert.equal(h.state.invocations, beforeResolve.invocations);
+  const cancelledReceipt = await h.http({ path: receiptPath });
+  assert.equal(cancelledReceipt.body.phase, 'finished'); assert.deepEqual(cancelledReceipt.body.finish, cancelled);
+  const used = await h.post({ requestId: 'resolve-aba' });
+  assert.equal(used.status, 409); assert.equal(used.body.error.code, 'companion/auxiliary-request-used');
+  assert.equal(used.body.dispatched, null); assert.deepEqual(used.body.receipt.finish, cancelled);
+  assert.equal(h.state.resolves, beforeResolve.resolves + 1);
+  const fresh = await h.post({ requestId: 'resolve-after-aba' });
+  assert.equal(fresh.body.at(-1).terminal, 'complete'); assert.equal(fresh.body.at(-1).dispatched, true);
+  assert.equal(h.state.invocations, beforeResolve.invocations + 1);
+
+  // A different Session's event must not cancel this accepted resolver.
+  const j = await fixture(t);
+  const otherGate = defer(); j.state.resolveGate = otherGate;
+  const otherBaseline = { resolves: j.state.resolves, prepares: j.state.prepares, invocations: j.state.invocations };
+  const otherReceiptPath = `${PATH}/requests/resolve-other-event?instanceId=${j.info.body.instanceId}`;
+  const otherPending = j.post({ requestId: 'resolve-other-event' });
+  let otherResponse;
+  try {
+    await until(() => j.state.resolves === otherBaseline.resolves + 1);
+    const accepted = await j.http({ path: otherReceiptPath });
+    assert.equal(accepted.body.phase, 'accepted'); assert.equal(accepted.body.dispatched, null);
+    j.listeners.get('session/event')({ id: 'another-session' }, { type: 'model/selection' });
+    assert.deepEqual((await j.http({ path: otherReceiptPath })).body, accepted.body);
+    assert.equal(j.state.prepares, otherBaseline.prepares); assert.equal(j.state.invocations, otherBaseline.invocations);
+  } finally {
+    otherGate.resolve();
+    otherResponse = await otherPending;
+  }
+  const unaffected = otherResponse.body.at(-1);
+  assert.equal(unaffected.terminal, 'complete'); assert.equal(unaffected.complete, true);
+  assert.equal(unaffected.dispatched, true); assert.equal(j.state.prepares, otherBaseline.prepares + 1);
+  assert.equal(j.state.invocations, otherBaseline.invocations + 1);
+  assert.deepEqual((await j.http({ path: otherReceiptPath })).body.finish, unaffected);
+
 });
 
 test('auth preflight failure is unsent; HTTP error and transport loss after invocation retain a sent unknown-usage receipt', async t => {
@@ -378,6 +449,83 @@ test('tool output is never executed and length termination remains distinguishab
   assert.equal(finished.usage.runtime_normalized_usage[0].outputTokens, 4);
   // The real route returned calls without a Host executor or Session history
   // access. Actual phone execution/continuation is exercised in the Dart case.
+
+  // Form feeds are data in Agent content and descriptions, including complete
+  // text/reasoning output. They do not loosen the separate strict system rule.
+  const ffContent = [
+    { type: 'reasoning', text: 'Private before\fafter.' },
+    { type: 'text', text: 'Visible before\fafter.' },
+  ];
+  llm.prepareCompanionAuxiliaryCall = async (config, signal, observer) => {
+    g.state.prepares++; g.state.config = config; g.state.signal = signal;
+    observer.guard();
+    let message;
+    return { config, get agentMessage() { return message; }, stream: async function* (payload) {
+      g.state.payload = payload;
+      observer.guard(); signal.throwIfAborted();
+      g.state.invocations++;
+      observer.observe({ type: 'handoff', atMs: 1795280000123, boundary: 'adapter-invoked' });
+      yield { type: 'reasoning-delta', index: 0, text: ffContent[0].text };
+      yield { type: 'text-delta', index: 1, text: ffContent[1].text };
+      yield { type: 'usage', usage: { inputTokens: 8, outputTokens: 3 } };
+      yield { type: 'finish', reason: { kind: 'stop' } };
+      message = { id: 'form-feed-message', role: 'assistant', source, content: ffContent };
+    } };
+  };
+  const ffMessages = [
+    { role: 'user', content: 'History before\fafter.' },
+    { role: 'assistant', source, content: [
+      { type: 'thinking', thinking: 'Earlier private before\fafter.' },
+      { type: 'text', text: 'Earlier answer before\fafter.' },
+      { type: 'tool_use', id: 'ff-string-call', name: 'sample', input: { n: 2 } },
+      { type: 'tool_use', id: 'ff-list-call', name: 'sample', input: { n: 3 } },
+    ] },
+    { role: 'user', content: [
+      { type: 'tool_result', tool_use_id: 'ff-string-call', content: 'String result before\fafter.' },
+      { type: 'tool_result', tool_use_id: 'ff-list-call', content: [{ type: 'text', text: 'List result before\fafter.' }] },
+      { type: 'text', text: 'Current before\fafter.' },
+    ] },
+  ];
+  const ffTools = [{ ...tools[0], description: 'Phone tool before\fafter.' }];
+  const ffBefore = { prepares: g.state.prepares, invocations: g.state.invocations };
+  const formFeed = await g.http({ method: 'POST', body: { ...body, requestId: 'agent-form-feed', messages: ffMessages, tools: ffTools } });
+  assert.equal(formFeed.status, 200); assert.equal(g.state.prepares, ffBefore.prepares + 1);
+  assert.equal(g.state.invocations, ffBefore.invocations + 1);
+  assert.deepEqual(g.state.payload.tools, [{ name: 'sample', description: ffTools[0].description, parameters: tools[0].input_schema }]);
+  assert.deepEqual(g.state.payload.messages.map(({ id, ...message }) => message), [
+    { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'History before\fafter.' }] },
+    { role: 'assistant', source, content: [
+      { type: 'reasoning', text: 'Earlier private before\fafter.' },
+      { type: 'text', text: 'Earlier answer before\fafter.' },
+      { type: 'tool-call', id: 'ff-string-call', name: 'sample', arguments: '{"n":2}' },
+      { type: 'tool-call', id: 'ff-list-call', name: 'sample', arguments: '{"n":3}' },
+    ] },
+    { role: 'tool', source: { kind: 'tool', callId: 'ff-string-call' }, toolCallId: 'ff-string-call',
+      content: [{ type: 'text', text: 'String result before\fafter.' }] },
+    { role: 'tool', source: { kind: 'tool', callId: 'ff-list-call' }, toolCallId: 'ff-list-call',
+      content: [{ type: 'text', text: 'List result before\fafter.' }] },
+    { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'Current before\fafter.' }] },
+  ]);
+  assert.equal(formFeed.body.find(event => event.type === 'text').text, ffContent[1].text);
+  assert.deepEqual(formFeed.body.find(event => event.type === 'message').message, {
+    content: [{ type: 'thinking', thinking: ffContent[0].text }, { type: 'text', text: ffContent[1].text }],
+    stopReason: 'end_turn', source,
+  });
+  const ffFinished = formFeed.body.at(-1);
+  assert.equal(ffFinished.terminal, 'complete'); assert.equal(ffFinished.complete, true);
+  assert.equal(ffFinished.dispatched, null); assert.equal(ffFinished.usage.usage_semantics, 'unknown');
+  assert.equal(ffFinished.usage.runtime_normalized_usage[0].outputTokens, 3);
+
+  const invalidSystem = await g.http({ method: 'POST', body: { ...body, requestId: 'agent-system-form-feed',
+    system: 'Strict instructions\fwith a page break.', messages: ffMessages, tools: ffTools } });
+  assert.equal(invalidSystem.status, 400); assert.equal(invalidSystem.body.dispatched, false);
+  assert.equal(invalidSystem.body.error.code, 'companion/auxiliary-invalid-request');
+  const invalidControl = await g.http({ method: 'POST', body: { ...body, requestId: 'agent-forbidden-control',
+    messages: [{ role: 'user', content: 'Still forbidden\u000bcontrol.' }], tools: ffTools } });
+  assert.equal(invalidControl.status, 400); assert.equal(invalidControl.body.dispatched, false);
+  assert.equal(invalidControl.body.error.code, 'companion/auxiliary-invalid-request');
+  assert.equal(g.state.prepares, ffBefore.prepares + 1); assert.equal(g.state.invocations, ffBefore.invocations + 1);
+
 });
 
 // The adapter above is explicit: this proves route behavior and exact payload,
