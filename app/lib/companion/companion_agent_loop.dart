@@ -224,29 +224,32 @@ class CompanionAgentModelRequest {
   }) async {
     if (!isCurrent()) return null;
     final abort = _hostAbort = DshHttpAbort();
-    final future = client.callCompanionAgent(
-      capability,
-      requestId: id,
-      input:
-          hostInput ??
-          CompanionAgentInput(system: system, messages: messages, tools: [for (final tool in tools) tool.toJson()]),
-      maxTokens: maxTokens,
-      abort: abort,
-      onDispatchUncertain: onDispatchUncertain,
-      onSent: onSent,
-      onText: (delta) {
-        if (!isCurrent()) {
-          abort.abort();
-          return;
-        }
-        onText(delta);
-      },
-      onUsage: (usage) {
-        // Late receipts still belong to this captured physical request.
-        onUsage(usage);
-        final view = CompanionUsage.fromReceipt(usage);
-        onUsageSettled?.call(view.telemetry, partial: !view.complete);
-      },
+    // An input that fails to encode settles as notSent, as the call's own failures do.
+    final future = Future.sync(
+      () => client.callCompanionAgent(
+        capability,
+        requestId: id,
+        input:
+            hostInput ??
+            CompanionAgentInput(system: system, messages: messages, tools: [for (final tool in tools) tool.toJson()]),
+        maxTokens: maxTokens,
+        abort: abort,
+        onDispatchUncertain: onDispatchUncertain,
+        onSent: onSent,
+        onText: (delta) {
+          if (!isCurrent()) {
+            abort.abort();
+            return;
+          }
+          onText(delta);
+        },
+        onUsage: (usage) {
+          // Late receipts still belong to this captured physical request.
+          onUsage(usage);
+          final view = CompanionUsage.fromReceipt(usage);
+          onUsageSettled?.call(view.telemetry, partial: !view.complete);
+        },
+      ),
     );
     _hostDrain = future.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     try {
