@@ -36,8 +36,13 @@ class _ConflictBody extends DshConnection {
   }
 }
 
+// Any testWidgets in the same isolate (this file's own, or a bundled file's)
+// installs TestWidgetsFlutterBinding's global HttpOverrides, which answers every
+// request with 400; these two talk to a real loopback server.
+class _RealHttp extends HttpOverrides {}
+
 void main() {
-  test('a paired HTTP stream dispatches only its offered call and reports its real result', () async {
+  test('a paired HTTP stream dispatches only its offered call and reports its real result', () => HttpOverrides.runWithHttpOverrides(() async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final replies = StreamController<Map<String, Object?>>();
     final resultFrames = StreamIterator(replies.stream);
@@ -109,9 +114,9 @@ void main() {
     await replies.close();
     phone!.close();
     await stream.close();
-  });
+  }, _RealHttp()));
 
-  test('a device conflict keeps its host reason, while a repeated request can reconcile the original turn', () async {
+  test('a device conflict keeps its host reason, while a repeated request can reconcile the original turn', () => HttpOverrides.runWithHttpOverrides(() async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final client = DshClient(DshConnection(Uri.parse('http://127.0.0.1:${server.port}')));
     var attempts = 0;
@@ -138,7 +143,7 @@ void main() {
         .having((e) => e.detail, 'reason', reason)));
     expect(await open(), isNull);
     expect(attempts, 2);
-  });
+  }, _RealHttp()));
 
   testWidgets('a partial conflict reply releases the phone handshake on its original deadline', (tester) async {
     final connection = _ConflictBody();
