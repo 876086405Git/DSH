@@ -92,6 +92,10 @@ String _firstLine(String text) {
 class _ThinkingPillState extends State<ThinkingPill> {
   bool _expanded = false;
 
+  /// Reasoning can grow while all four inputs to the header stay the same.
+  (bool, bool, String, Widget?)? _headerInputs;
+  late Widget _header;
+
   /// 收起动画期间还要画的那块内容:收起时它已经不该在树上了,但高度收回
   /// 去的过程里得先留着,不能啪地消失留下一块空白。
   Widget? _body;
@@ -124,17 +128,13 @@ class _ThinkingPillState extends State<ThinkingPill> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildHeader(BuildContext context, String preview) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
     // 深色底上品牌蓝提一档亮度,图形才不发闷。
     final brand = dark ? Color.lerp(_brandBlue, Colors.white, 0.3)! : _brandBlue;
     final active = widget.active;
-    // 思考中或展开了全文:内容在下面,行内不再重复一行预览。
-    final open = active || _expanded;
-    final preview = open ? '' : thinkingPreview(widget.reasoning);
     final detail = StreamRow.detail(context);
 
     final header = Row(
@@ -178,6 +178,24 @@ class _ThinkingPillState extends State<ThinkingPill> {
       ],
     );
 
+    return Semantics(
+      button: true,
+      expanded: _expanded,
+      child: StreamRowFrame(onTap: () => setState(() => _expanded = !_expanded), child: header),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = widget.active;
+    final open = active || _expanded;
+    final preview = open ? '' : thinkingPreview(widget.reasoning);
+    final heading = (active, _expanded, preview, widget.meta);
+    if (heading != _headerInputs) {
+      _headerInputs = heading;
+      _header = Builder(builder: (context) => _buildHeader(context, preview));
+    }
+
     Widget reasoningBody() {
       if (!_expanded) return ThinkingTicker(text: widget.reasoning);
       // 展开后,点正文本身和点头部一样收起。只在展开态挂这层手势:实时窗口
@@ -214,11 +232,7 @@ class _ThinkingPillState extends State<ThinkingPill> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Semantics(
-          button: true,
-          expanded: _expanded,
-          child: StreamRowFrame(onTap: () => setState(() => _expanded = !_expanded), child: header),
-        ),
+        _header,
         // 一个槽:思考中是实时窗口,点开换成全文,一轮结束收起。
         ExpandReveal(open: open && !_windowHeld, child: _body ?? const SizedBox.shrink()),
       ],
