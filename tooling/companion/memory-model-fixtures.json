@@ -136,7 +136,7 @@
     },
     {
       "path": "packages/dsh_client/test/companion_memory_flow_test.dart",
-      "sha256": "c00854ee81f1d204c620170351088dae0cbfce91744b8dbc99c3e039f706e654"
+      "sha256": "feec91dfc7ec7b14e6954045091f23840a29436eb9456b35963946e9944fae2d"
     },
     {
       "path": "packages/dsh_client/test/companion_memory_merge_rules_test.dart",
