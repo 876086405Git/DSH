@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dsh_client/dsh_client.dart' show ImageAttachment;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show ImageConfiguration, MemoryImage, ResizeImage, ResizeImagePolicy, imageCache;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -374,6 +375,23 @@ AttachmentPicker createAttachmentPicker({String? operatingSystem}) =>
 
 final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => createAttachmentPicker());
 
+// Widths each sent image's thumbnail was decoded at. A refetch returns a new
+// array and [MemoryImage] matches bytes by identity, so once these bytes are
+// dropped their cache entries can never be hit again: evict them.
+final _thumbnailWidths = Expando<Set<int>>();
+
+MemoryImage sessionThumbnail(Uint8List bytes, int width) {
+  (_thumbnailWidths[bytes] ??= {}).add(width);
+  return MemoryImage(bytes);
+}
+
+void _evictSessionThumbnails(Uint8List bytes) {
+  for (final width in _thumbnailWidths[bytes] ?? const <int>{}) {
+    final image = ResizeImage(MemoryImage(bytes), width: width, policy: ResizeImagePolicy.fit);
+    unawaited(image.obtainKey(ImageConfiguration.empty).then((key) => imageCache.evict(key, includeLive: false)));
+  }
+}
+
 /// Bytes of an image a session's log refers to (`session/attachment`), for
 /// thumbnails of sent messages. Dropped once no bubble shows it.
 final sessionImageProvider = FutureProvider.autoDispose.family<Uint8List, (String, ImageAttachment)>((ref, key) async {
@@ -386,5 +404,7 @@ final sessionImageProvider = FutureProvider.autoDispose.family<Uint8List, (Strin
   ref.onCancel(() => release = Timer(const Duration(seconds: 30), link.close));
   ref.onResume(() => release?.cancel());
   ref.onDispose(() => release?.cancel());
-  return (await client.attachment(sessionId, attachment)).bytes;
+  final bytes = (await client.attachment(sessionId, attachment)).bytes;
+  if (ref.mounted) ref.onDispose(() => _evictSessionThumbnails(bytes));
+  return bytes;
 });
