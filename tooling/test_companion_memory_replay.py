@@ -1,5 +1,6 @@
 """Reporter semantics only; these do not execute the Dart product."""
 import importlib.util
+import io
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -33,6 +34,45 @@ class ReporterTests(unittest.TestCase):
         path = Path(folder.name) / 'sdk.jsonl'
         path.write_text(''.join(json.dumps(e) + '\n' for e in events), encoding='utf-8')
         return replay.Report(path)
+
+    def test_non_boolean_done_cannot_certify_a_pass(self):
+        for value in (1, 'true', False, None):
+            with self.subTest(value=value):
+                report = self.report([start(1, 'observed'), end(1),
+                                      {'type': 'done', 'success': value}])
+                if value is False:
+                    self.assertIs(report.success, False)
+                    self.assertTrue(report.complete)
+                else:
+                    self.assertIsNone(report.success)
+                    self.assertEqual(report.check('observed')[0], 'NOT_RUN')
+
+    def test_malformed_completion_cannot_hide_a_late_failure_or_leave_a_green_summary(self):
+        started = [start(1, 'observed'), end(1)]
+        valid = {'type': 'done', 'success': True}
+        invalid = {'type': 'done', 'success': 'true'}
+        failure = {'type': 'error', 'testID': 1, 'error': 'late callback', 'isFailure': True}
+        for tail in ([valid, invalid], [invalid, valid]):
+            report = self.report(started + tail)
+            self.assertFalse(report.complete)
+            self.assertIsNone(report.success)
+            self.assertEqual(report.check('observed')[0], 'NOT_RUN')
+        report = self.report(started + [invalid, failure, {'type': 'done', 'success': False}])
+        self.assertIs(report.success, False)
+        self.assertEqual(report.check('observed')[0], 'FAIL')
+
+    def test_cleanup_error_preserves_the_child_exit(self):
+        suite = {'command': ['dart', 'test'], 'cwd': '.', 'guards': ['guard']}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = io.StringIO()
+            with patch.object(replay.shutil, 'which', return_value='/tools/dart'), \
+                    patch.object(replay.subprocess, 'run', return_value=subprocess.CompletedProcess([], 17)), \
+                    patch.object(replay.shutil, 'rmtree', side_effect=PermissionError('locked by scanner')), \
+                    patch.object(replay.tempfile, 'mkdtemp', return_value=str(root)):
+                self.assertEqual(replay.run_windows_suite(root, 'sdk', suite, [], root, log), 17)
+            self.assertIn('locked by scanner', log.getvalue())
+            self.assertEqual(json.loads((root / 'sdk.jsonl').read_text().splitlines()[1])['exit_code'], 17)
 
     def test_late_error_overrides_completed_success(self):
         report = self.report([start(1, 'product'), end(1),
@@ -87,6 +127,15 @@ class ReporterTests(unittest.TestCase):
         self.assertEqual(replay.unique_test_counts([{'checks': [
             {'suite': 'sdk', 'test_name': name, 'status': complete.check(name)[0]}
             for name in ('bad', 'good', guard, guard)]}]), {'PASS': 3})
+
+        # Both assigned cases passed, but the first child also ran a case
+        # owned by the second. The mixed archive cannot certify either case.
+        mixed_events = [start(1, guard), end(1), start(2, 'bad'), end(2),
+                        start(3, 'good'), end(3), {'type': 'done', 'success': True}]
+        mixed = {**first, 'report_base64': replay.base64.b64encode(encoded(mixed_events)).decode('ascii')}
+        unexpected = read([plan, mixed, second, footer])
+        self.assertFalse(unexpected.complete)
+        self.assertEqual(unexpected.check('good')[0], 'NOT_RUN')
 
         failure = result(1, 'bad', failed=True)
         for events, tail in (([plan, failure, second], b''),
