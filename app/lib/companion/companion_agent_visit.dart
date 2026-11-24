@@ -1049,9 +1049,12 @@ class _CompanionAgentVisit {
       }
       if (!still()) return;
     }
+    final clearsLight = light || old == null;
     if (!fresh) await sessions.forgetCharacter(key);
     if (!still()) return;
-    owner.store.startLightConversation();
+    // The phone's conversation pointer is shared by every role: clearing her
+    // DSH session leaves the light history (hers and the others') as it was.
+    if (clearsLight) owner.store.startLightConversation();
     retrySource = null;
     phoneAttempt = null;
     lastSpokenAt = null;
