@@ -12,7 +12,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import '../l10n/l10n.dart';
 import '../notify/chat_alerts.dart' show companionHostKey;
+import '../state/chat_state.dart';
 import '../state/connection_state.dart';
 import '../state/android_features.dart';
 import '../state/hosts_state.dart';
@@ -28,6 +30,7 @@ import 'companion_agent_task_tools.dart';
 import 'companion_agent_task_ui.dart';
 import 'companion_agent_tools.dart';
 import 'companion_context.dart';
+import 'companion_session_tools.dart';
 import 'companion_host_memory_transport.dart';
 import 'companion_light.dart';
 import 'companion_memory.dart';
@@ -49,6 +52,7 @@ import 'companion_state.dart';
 import 'companion_widget.dart';
 
 part 'companion_agent_visit.dart';
+part 'companion_agent_full_session.dart';
 part 'companion_agent_resident.dart';
 part 'companion_agent_notices.dart';
 part 'companion_agent_screen_classifier.dart';
@@ -141,6 +145,12 @@ class CompanionAgent extends ChangeNotifier {
   bool get running => (_run?.running ?? false) || _asideRequest != null;
   String get text => _run?.text ?? '';
   CompanionLightError? get error => _run?.error;
+  bool get hasSessionReply => _run?.hasSessionReply ?? false;
+  String? get sessionActivity => _run?.running == true ? _run?.sessionActivity : null;
+
+  /// Phone steps in this reply so far. Each new one is notified as it starts,
+  /// so a presenter can say her line before the step while it happens.
+  int get phoneSteps => _run?.phoneSteps ?? 0;
 
   /// The original SQLite user source, not the tools' separate journal turn ID.
   String? get sourceId => _run?.source['id'] as String?;
@@ -198,6 +208,7 @@ class CompanionAgent extends ChangeNotifier {
     required bool Function() isCurrent,
     void Function(MemorySelection)? onSelected,
     void Function()? onStop,
+    bool useSession = false,
   }) async {
     if (_disposed) throw const DshClosedException('Companion agent closed');
     stop();
@@ -220,10 +231,39 @@ class CompanionAgent extends ChangeNotifier {
     memory.retainReceipt(run.settled.future);
     notifyListeners();
     try {
-      await _loop(run);
+      if (useSession) {
+        final visit = _visit!;
+        final id = run.source['id']! as String;
+        final scope = visit.ref.read(modelSelectionScopeProvider);
+        try {
+          await visit.sendInSession(run, scope);
+        } on Object catch (error) {
+          final retry = visit.hostAttempt;
+          final phone = CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
+          final failure = _turnFailure(error);
+          final eligible = failure is CompanionHostError && {
+            CompanionHostFailure.disconnected, CompanionHostFailure.unavailable, CompanionHostFailure.modelUnavailable,
+          }.contains(failure.hostFailure);
+          if (run.phoneRoute || !_current(run) || retry?.sourceId == id || !eligible || !phone.agentConfigured) rethrow;
+          run.phoneRoute = true;
+          visit.phoneAttempt = (sourceId: id, page: run.assistantPage);
+          if (visit.runOrigin case final CompanionFallbackUi ui) ui.continuedOnPhone(id);
+          await _loop(run);
+        } finally {
+          // The source can still own this room after its Host connection or model retired.
+          if (!run.phoneRoute && _turnCurrent(run) && run.modelCurrent?.call() == false) {
+            final sameConnection = identical(visit.ref.read(modelSelectionScopeProvider), scope);
+            run.error = CompanionHostError(sameConnection
+                ? CompanionHostFailure.selectionChanged
+                : CompanionHostFailure.disconnected);
+          }
+        }
+      } else {
+        await _loop(run);
+      }
     } on Object catch (error) {
       if (_current(run)) {
-        run.error = error is CompanionLightError ? error : CompanionLightError(CompanionLightFailure.server, '$error');
+        run.error = _turnFailure(error);
       }
     } finally {
       run.running = false;
@@ -231,6 +271,17 @@ class CompanionAgent extends ChangeNotifier {
       run.settled.complete();
     }
   }
+
+  CompanionLightError _turnFailure(Object error) => switch (error) {
+    CompanionLightError() => error,
+    DshRemoteException(code: 'companion/agent-retry-closed') => const CompanionHostError(CompanionHostFailure.retryClosed),
+    DshRemoteException(code: 'companion/selection-changed') => const CompanionHostError(CompanionHostFailure.selectionChanged),
+    DshRemoteException(code: 'companion/model-unavailable' || 'session/model-unavailable' || 'companion/model-restore-unavailable') =>
+        const CompanionHostError(CompanionHostFailure.modelUnavailable),
+    DshTransportException() || DshClosedException() || DshCarrierLostException() =>
+        const CompanionHostError(CompanionHostFailure.disconnected),
+    _ => CompanionLightError(CompanionLightFailure.server, '$error'),
+  };
 
   // A reply keeps the permission generation in which it first received
   // notice content, including when that content came from a memory tool.
@@ -294,15 +345,17 @@ class CompanionAgent extends ChangeNotifier {
         identical(ref.read(modelSelectionScopeProvider), scope);
     CompanionMemoryTransport phoneOrFail(CompanionHostError error) {
       if (!current()) throw const DshClosedException('Companion Host route changed');
-      if (phone.configured) return phone;
+      if (phone.configured && error.hostFailure != CompanionHostFailure.selectionChanged) return phone;
       throw error;
     }
 
     try {
-      // Resolve the current full Session each round. A phone tool may retire
-      // its previous binding without cancelling this same logical turn.
-      final selected = await ref.read(companionSessionsProvider.notifier).ensure();
+      // A stateless round may borrow an existing selection. Only an explicit
+      // Session operation may create, archive or renegotiate a binding.
+      final bindings = ref.read(companionSessionsProvider.notifier);
+      final selected = await bindings.existingForCharacter(host, _visit?.characterSourceKey);
       if (!current()) throw const DshClosedException('Companion Host route changed');
+      if (selected == null) return forMemory ? _memoryTransport?.call() ?? phone : phone;
       final capability = await client.readCompanionAuxiliaryCapability(selected.sessionId);
       if (capability == null || !capability.supported) {
         return phoneOrFail(const CompanionHostError(CompanionHostFailure.unavailable));
@@ -322,6 +375,7 @@ class CompanionAgent extends ChangeNotifier {
 
   // Only the explicitly allowed additive/read paths remain after web data.
   // These names are the current memory adapter's mutators, not task commands.
+  static const _sessionOnlyTools = {'recent_notices', 'notify_user'};
   static const _afterWebMemoryChanges = {
     'forget',
     'revise',
@@ -341,7 +395,8 @@ class CompanionAgent extends ChangeNotifier {
 
   List<CompanionAgentTool> _definitions(_CompanionAgentRun run) => [
     for (final tool in run.tools)
-      if ((!run.externalNoticeContent || CompanionAgentMemoryTools.allowedAfterNotice(tool.definition.name)) &&
+      if ((!run.phoneRoute || !_sessionOnlyTools.contains(tool.definition.name)) &&
+          (!run.externalNoticeContent || CompanionAgentMemoryTools.allowedAfterNotice(tool.definition.name)) &&
           (!run.externalWebContent || !_afterWebMemoryChanges.contains(tool.definition.name)))
         if (run.externalNoticeContent && tool.definition.name == 'forget')
           CompanionAgentMemoryTools.noticeForget
@@ -361,43 +416,49 @@ class CompanionAgent extends ChangeNotifier {
           tool.definition,
   ];
 
+  List<CompanionAgentToolBinding> _bindings(_CompanionAgentRun run) => [
+    for (final binding in run.tools)
+      if (!run.phoneRoute || !_sessionOnlyTools.contains(binding.definition.name))
+      (
+        definition: binding.definition,
+        execute: (call) async {
+          // The execution gate is checked for every call, including a
+          // later call in the same already-decoded model response.
+          if (run.externalNoticeContent &&
+              (!CompanionAgentMemoryTools.allowedAfterNotice(call.name) ||
+                  (call.name == 'forget' && !CompanionAgentMemoryTools.pureDeletion(call.input)) ||
+                  (call.name == 'remember' && call.input['card'] != null))) {
+            return const CompanionAgentToolResult(
+              content: '{"applied":false,"code":"memory_change_after_notice","message":"This turn includes a recent event from an external notification. New memories are fine; existing ones cannot be rewritten until the next message."}',
+              isError: true,
+            );
+          }
+          if (!_toolAvailable(run, call)) {
+            return const CompanionAgentToolResult(
+              content: '{"applied":false,"code":"memory_change_after_web","message":"This memory change is unavailable for the rest of this turn after public web content. It was not applied."}',
+              isError: true,
+            );
+          }
+          if (call.name == 'public_lookup') run.externalWebContent = true;
+          if (call.name.startsWith(companionPhoneToolPrefix)) {
+            run.phoneSteps++;
+            // She acts now: what she said before this step is a whole
+            // line, and her presenters read it out as the step happens.
+            if (!_disposed) notifyListeners();
+          } else {
+            run.otherToolUsed = true;
+          }
+          final result = await binding.execute(call);
+          if (result.externalWebContent) run.externalWebContent = true;
+          if (result.externalNoticeContent) _markNoticeContent(run);
+          return result;
+        },
+      ),
+  ];
+
   Future<void> _loop(_CompanionAgentRun run) async {
     await runCompanionAgentLoop(
-      tools: [
-        for (final binding in run.tools)
-          (
-            definition: binding.definition,
-            execute: (call) async {
-              // The execution gate is checked for every call, including a
-              // later call in the same already-decoded model response.
-              if (run.externalNoticeContent &&
-                  (!CompanionAgentMemoryTools.allowedAfterNotice(call.name) ||
-                      (call.name == 'forget' && !CompanionAgentMemoryTools.pureDeletion(call.input)) ||
-                      (call.name == 'remember' && call.input['card'] != null))) {
-                return const CompanionAgentToolResult(
-                  content: '{"applied":false,"code":"memory_change_after_notice","message":"This turn includes a recent event from an external notification. New memories are fine; existing ones cannot be rewritten until the next message."}',
-                  isError: true,
-                );
-              }
-              if (!_toolAvailable(run, call)) {
-                return const CompanionAgentToolResult(
-                  content: '{"applied":false,"code":"memory_change_after_web","message":"This memory change is unavailable for the rest of this turn after public web content. It was not applied."}',
-                  isError: true,
-                );
-              }
-              if (call.name == 'public_lookup') run.externalWebContent = true;
-              if (call.name.startsWith(companionPhoneToolPrefix)) {
-                run.phoneUsed = true;
-              } else {
-                run.otherToolUsed = true;
-              }
-              final result = await binding.execute(call);
-              if (result.externalWebContent) run.externalWebContent = true;
-              if (result.externalNoticeContent) _markNoticeContent(run);
-              return result;
-            },
-          ),
-      ],
+      tools: _bindings(run),
       retainToolOutcomes: true,
       exchanges: run.exchanges,
       // A model route answers only for its own request (see _round): a Host
@@ -500,7 +561,9 @@ class CompanionAgent extends ChangeNotifier {
     List<Map<String, Object?>> Function(int skip) messagesFrom,
     int historyCount,
   ) async {
-    final selected = await _modelTransport(isCurrent: () => _turnCurrent(run));
+    final selected = run.phoneRoute
+        ? CompanionLightMemoryTransport(apiKey: _apiKey, client: _client)
+        : await _modelTransport(isCurrent: () => _turnCurrent(run));
     if (!_current(run)) return null;
     if (selected is! CompanionAgentModelTransport) {
       throw const CompanionHostError(CompanionHostFailure.unavailable);
@@ -510,7 +573,7 @@ class CompanionAgent extends ChangeNotifier {
       throw const CompanionHostError(CompanionHostFailure.unavailable);
     }
     // A phone fallback still belongs to this captured Host selection and turn.
-    run.modelCurrent = () => selected.current;
+    if (!run.phoneRoute) run.modelCurrent = () => selected.current;
     if (!_current(run)) return null;
     final system = '${run.system}${run.memory.relationshipContext(run.source['character_id'] as String?)}';
     final definitions = _definitions(run);
@@ -591,9 +654,10 @@ class CompanionAgent extends ChangeNotifier {
         }
         answered = message != null;
         return message == null ? null : (message: message, requestId: requestId);
-      } on CompanionHostError {
+      } on CompanionHostError catch (error) {
         final phone = CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
         if (route is! CompanionHostMemoryTransport ||
+            error.hostFailure == CompanionHostFailure.selectionChanged ||
             !request.notSentProven ||
             request.sent ||
             !_current(run) ||
@@ -705,11 +769,12 @@ class CompanionAgent extends ChangeNotifier {
     _visit?.connectionChanged();
   }
 
-  void stop({bool discard = false}) {
+  void stop({bool discard = false, bool cancelSession = true}) {
     cancelScreenObservation();
     if (_visit?.residentUi case final CompanionAgentAmbientUi background) background.stopSpeech();
     final run = _run;
     if (run == null || !run.running) return;
+    run.stopSession?.call(cancelSession);
     run.onStop?.call();
     run.cancelled = true;
     run.running = false;
@@ -761,6 +826,7 @@ class _CompanionAgentRun {
 
   final String replyId;
   final void Function()? onStop;
+  void Function(bool cancelHost)? stopSession;
   final CompanionMemoryOwner memory;
   final MemoryRow source;
   final String system;
@@ -784,12 +850,15 @@ class _CompanionAgentRun {
   bool cancelled = false;
   bool discard = false;
   bool toolDispatchStarted = false;
-  // She acted on the phone: a failed model round is hers to retry.
-  bool phoneUsed = false;
+  // Her own phone model answers this turn (the Host route was unavailable).
+  bool phoneRoute = false;
+  // Phone steps she started; once she acted, a failed model round is hers to retry.
+  int phoneSteps = 0;
+  bool get phoneUsed => phoneSteps > 0;
   // A reminder, task or memory tool ran too: resending could commit it twice.
   bool otherToolUsed = false;
   // Only phone steps ran. They never become tasks, and saying it again is a new go-ahead.
-  bool get phoneOnly => phoneUsed && !otherToolUsed;
+  bool get onlyPhoneSteps => phoneUsed && !otherToolUsed;
   // This capability narrowing belongs only to this original user run.
   bool externalWebContent = false;
   // Monotonic for this logical user turn, including later HTTP continuations.
@@ -799,6 +868,9 @@ class _CompanionAgentRun {
   // Tool-side model requests (a photo look) that Stop must abort with the turn.
   final aborts = <DshHttpAbort>{};
   String text = '';
+  bool hasSessionReply = false;
+  String? sessionActivity;
+  bool waitingForOwner = false;
   CompanionLightError? error;
   _CompanionAgentRequest? request;
 }

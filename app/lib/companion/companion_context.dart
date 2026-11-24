@@ -296,6 +296,7 @@ CompanionFullContextPlan companionFullContextPlan({
   bool recall = true,
   String memoryMode = 'query',
   Map<String, Object?>? phoneMemory,
+  Map<String, Object?>? deviceContext,
 }) {
   if (!_identifier(sessionId) || !_identifier(requestId)) {
     throw const FormatException('Invalid companion request identity');
@@ -322,7 +323,7 @@ CompanionFullContextPlan companionFullContextPlan({
     instanceId: instanceId,
     contextAvailable: true,
     eventIds: List.unmodifiable(selected.map((event) => event.id)),
-    update: !changed && selected.isEmpty && !query && phoneMemory == null
+    update: !changed && selected.isEmpty && !query && phoneMemory == null && deviceContext == null
         ? null
         : Map.unmodifiable({
             'v': 1,
@@ -333,6 +334,7 @@ CompanionFullContextPlan companionFullContextPlan({
             if (changed) 'expectedProfileRevision': profileRevision,
             'events': List.unmodifiable([for (final event in selected) Map.unmodifiable(event.toJson())]),
             if (query) 'query': String.fromCharCodes(text.replaceAll(_controls, ' ').runes.take(256)),
+            if (deviceContext != null) 'deviceContext': Map<String, Object?>.unmodifiable(deviceContext),
             if (phoneMemory != null) 'phoneMemory': Map<String, Object?>.unmodifiable(phoneMemory),
           }),
   );

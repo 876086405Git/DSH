@@ -11,6 +11,7 @@ import 'package:dsh_app/companion/companion_host_tasks.dart';
 import 'package:dsh_app/companion/companion_initiative.dart';
 import 'package:dsh_app/companion/companion_initiative_owner.dart';
 import 'package:dsh_app/companion/companion_local.dart';
+import 'package:dsh_app/companion/companion_light.dart';
 import 'package:dsh_app/companion/companion_maps.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_memory_worker.dart';
@@ -21,6 +22,7 @@ import 'package:dsh_app/companion/companion_public_lookup.dart';
 import 'package:dsh_app/companion/companion_signal_consent.dart';
 import 'package:dsh_app/companion/companion_signals.dart';
 import 'package:dsh_app/companion/companion_state.dart';
+import 'package:dsh_app/companion/companion_voice.dart' show CompanionPhoneLines;
 import 'package:dsh_app/companion/companion_widget.dart';
 import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/notify/chat_alerts.dart';
@@ -167,6 +169,17 @@ Map _context(Map<String, Object?> request) {
   ];
   final text = texts.singleWhere((text) => text.startsWith('<companion_context>'));
   return jsonDecode(text.substring('<companion_context>'.length, text.length - '</companion_context>'.length)) as Map;
+}
+
+class _UnrestoredModel extends CompanionSessions {
+  _UnrestoredModel(this.code);
+  final String code;
+  @override
+  Map<String, CompanionBinding> build() => const {};
+  @override
+  Future<CompanionBinding> ensureForCharacter(String? sourceKey, {
+    String? memoryArchiveId, int? memoryControlRevision, String? replaceSessionId, String? requireSessionId,
+  }) async => throw DshRemoteException(code, 'Original model could not be restored');
 }
 
 class _Host extends ActiveHostController {
@@ -332,7 +345,10 @@ class _TaskUi implements CompanionAgentTaskUi {
       throw StateError('Unexpected foreground task');
 }
 
-class _RoomUi implements CompanionAgentRoomUi, CompanionInitiativeRoom {
+class _RoomUi implements CompanionAgentRoomUi, CompanionInitiativeRoom, CompanionFallbackUi {
+  final fallbacks = <String>[];
+  @override
+  void continuedOnPhone(String sourceId) => fallbacks.add(sourceId);
   final failures = <({Object error, String? retry})>[];
   final commits = <String>[];
   final acceptedTasks = <MemoryRow>[];
@@ -505,6 +521,8 @@ class _Visit {
     CompanionInitiativeClock Function()? clock,
     CompanionMemoryTransport Function()? memoryTransport,
     HostConnection? connection,
+    String apiKey = 'controlled-test-key',
+    CompanionSessions? sessions,
     ModelCatalog? catalog,
   }) async {
     int now() => clock?.call().wallMs ?? _now;
@@ -546,7 +564,7 @@ class _Visit {
         ref: ref,
         memoryTransport: memoryTransport ?? (() => background),
         host: () => null,
-        apiKey: () => 'controlled-test-key',
+        apiKey: () => apiKey,
         client: () => MockClient((request) async {
           if (auxiliary?.call(request) case final response?) return response;
           visit.requests.add(Map<String, Object?>.from(jsonDecode(request.body) as Map));
@@ -564,6 +582,7 @@ class _Visit {
           operatingSystemProvider.overrideWithValue('android'),
           companionNoticesProvider.overrideWithValue(notices),
         ],
+        if (sessions != null) companionSessionsProvider.overrideWith(() => sessions),
         activeHostProvider.overrideWith(_Host.new),
         activeConnectionProvider.overrideWithValue(AsyncData<HostConnection?>(connection)),
         if (catalog != null) currentModelCatalogProvider.overrideWithValue(catalog),
@@ -738,6 +757,70 @@ void main() {
   setUp(
     () => SharedPreferences.setMockInitialValues({'companion_mode': 'light', 'companion_initiative_enabled': false}),
   );
+
+  test('explicit full mode with no connection uses the same source and real phone receipts, once', () async {
+    final visit = await _Visit.open([http.Response('temporary failure', 503), _message(words: '收到了。')]);
+    await visit.container.read(companionModeProvider.notifier).choose(CompanionMode.full);
+    await visit.attachment.submit(_raw);
+    final source = visit.userSource;
+    final turn = visit.turn;
+    expect(visit.ui.fallbacks, [source['id']]);
+    expect(visit.requests, hasLength(1));
+    expect(visit.ui.failures.single.retry, _raw);
+    await visit.attachment.submit(_raw);
+    expect(visit.attachment.error, isNull);
+    expect(visit.attachment.text, '收到了。');
+    expect(visit.userSource['id'], source['id']);
+    expect(visit.turn['id'], turn['id']);
+    expect(visit.calls('clock'), 1);
+    expect(visit.ui.fallbacks, [source['id']]);
+    expect(visit.requests, hasLength(2));
+    expect(visit.memory.store.messages().where((row) => row['role'] == 'assistant'), hasLength(1));
+  });
+
+  for (final (code, key, expectedPhoneCalls) in [
+    ('companion/model-unavailable', 'fixture-key', 1),
+    ('companion/model-restore-unavailable', 'fixture-key', 1),
+    ('companion/model-restore-unavailable', '', 0),
+    ('companion/selection-changed', 'fixture-key', 0),
+    ('companion/forbidden', 'fixture-key', 0),
+  ]) {
+    test('original model resolution $code with phone key ${key.isNotEmpty}', () async {
+      final peer = await _TerminalSignals.open();
+      final visit = await _Visit.open([_message(words: '这次在手机上回答。')],
+          apiKey: key, connection: peer.connection, sessions: _UnrestoredModel(code));
+      await visit.container.read(companionModeProvider.notifier).choose(CompanionMode.full);
+      await visit.attachment.submit(_raw);
+      final source = visit.userSource;
+      final receipts = visit.database.select("SELECT * FROM memory_requests WHERE category = 'chat'");
+      expect(visit.requests, hasLength(expectedPhoneCalls));
+      expect(receipts, hasLength(expectedPhoneCalls));
+      if (expectedPhoneCalls == 1) {
+        expect(visit.ui.fallbacks, [source['id']]);
+        expect(receipts.single['provider'], 'deepseek');
+        expect(receipts.single['sent_at_ms'], isNotNull);
+        expect(visit.attachment.text, '这次在手机上回答。');
+      } else {
+        expect(visit.ui.fallbacks, isEmpty);
+        expect(visit.ui.failures, hasLength(1));
+        if (key.isEmpty) {
+          expect(visit.ui.failures.single.error, isA<CompanionHostError>()
+              .having((error) => error.hostFailure, 'host failure', CompanionHostFailure.modelUnavailable));
+        }
+      }
+    });
+  }
+
+  test('offline full mode without a phone key reports the host failure before any phone model request', () async {
+    final visit = await _Visit.open([], apiKey: '');
+    await visit.container.read(companionModeProvider.notifier).choose(CompanionMode.full);
+    await visit.attachment.submit(_raw);
+    expect(visit.ui.failures.single.error, isA<CompanionHostError>()
+        .having((error) => error.hostFailure, 'host failure', CompanionHostFailure.disconnected));
+    expect(visit.ui.fallbacks, isEmpty);
+    expect(visit.requests, isEmpty);
+    expect(visit.userSource['text'], _raw);
+  });
 
   test('notice visit keeps an unrelated user task ordinary after an actually shown offer', () async {
     final visit = await _shownOffer([_message(words: '可以。')]);
@@ -1128,6 +1211,44 @@ void main() {
     expect(visit.attachment.text, endsWith('屏幕上是 7。'));
   });
 
+  test('her line before a phone step is heard as that step starts, not after it', () async {
+    final phone = _FakePhone();
+    final visit = await _Visit.open([
+      _message(
+        words: '我先打开计算器哦',
+        calls: [
+          ('call_0', 'phone_open', {'app': '计算器'}),
+        ],
+      ),
+      _message(
+        words: '好，点 7',
+        calls: [
+          ('call_1', 'phone_tap', {'id': 7}),
+        ],
+      ),
+      _message(words: '屏幕上是 7。'),
+    ]);
+    // What a presenter reads aloud from the agent's own notifications, and
+    // how many native steps had run by then.
+    final lines = CompanionPhoneLines();
+    final heard = <(String, int)>[];
+    void hear() {
+      final read = lines.read(
+        visit.attachment.text,
+        steps: visit.attachment.phoneSteps,
+        running: visit.attachment.running,
+      );
+      if (read.say.isNotEmpty) heard.add((read.say, phone.steps.length));
+    }
+
+    visit.agent.addListener(hear);
+    addTearDown(() => visit.agent.removeListener(hear));
+    await visit.attachment.submit('打开计算器按一下 7，告诉我屏幕上是什么');
+    expect(phone.steps, ['open', 'tap']);
+    expect(visit.attachment.phoneSteps, 2);
+    expect(heard, [('我先打开计算器哦', 0), ('好，点 7', 1), ('屏幕上是 7。', 2)]);
+  });
+
   test('after a phone step she retries a failed round; a lasting failure points at the phone', () async {
     final phone = _FakePhone();
     final visit = await _Visit.open([
@@ -1329,6 +1450,44 @@ void main() {
     }
   });
 
+  test('a later memory write retains the terminal no-originals receipt', () async {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const newText = '我喜欢竹木书签。';
+    final visit = await _Visit.open([
+      _message(calls: [('find', 'recall', {'query': '手账'})]),
+      _message(calls: [
+        ('drop', 'forget', {'card': id, 'deleteChat': true}),
+        ('write', 'remember', {'text': newText, 'keywords': ['竹木书签']}),
+      ]),
+      _message(words: '处理好了。'),
+    ]);
+    final store = visit.memory.store;
+    store.saveManual(
+      const CompanionMemory(id: id, text: '封面选用青色的布料。', keywords: ['手账']),
+      expectedRowRev: null,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    visit.memory.changed();
+    await visit.attachment.submit('把手账那张卡连原话也忘掉。另记：$newText');
+    expect(visit.attachment.error, isNull);
+    expect(visit.requests, hasLength(3));
+    final blocks = [
+      for (final message in (visit.requests.last['messages']! as List).cast<Map>())
+        if (message['role'] == 'user' && message['content'] is List)
+          for (final block in (message['content'] as List).cast<Map>())
+            if (block['type'] == 'tool_result') block,
+    ];
+    final receipt = jsonDecode(blocks.singleWhere((block) => block['tool_use_id'] == 'drop')['content'] as String) as Map;
+    expect(receipt['applied'], true);
+    expect(receipt['changedCardIds'], [id]);
+    expect(receipt['rawEraseState'], 'no_originals');
+    expect(receipt['rawEraseMessage'], contains('no original chat'));
+    expect(receipt.containsKey('pendingRawEraseId'), isFalse);
+    expect(visit.attachment.pendingRawErase, isNull);
+    expect(store.cards().single['text'], newText);
+  });
+
   test('public attachment keeps outcome IDs but retires recalled text and old revise arguments after forget', () async {
     const id = '11111111-1111-4111-8111-111111111111';
     const oldText = '凭证的旧私密正文：BLUE-ORIGINAL。';
@@ -1360,9 +1519,13 @@ void main() {
       _message(words: '已经处理好了。'),
     ];
     var rawClock = _now;
+    void Function(Map<String, Object?> body)? retryStep;
     final visit = await _Visit.open(
       replies,
       clock: () => CompanionInitiativeClock(wallMs: rawClock, monoMs: rawClock - _now, offsetMinutes: 480),
+      beforeReply: (body) async {
+        retryStep?.call(body);
+      },
     );
     var ownerChanges = 0;
     void ownerChanged() => ownerChanges++;
@@ -1768,9 +1931,7 @@ void main() {
       ].singleWhere((row) => row['tool_use_id'] == 'wire-explicit-recall');
       final recallPayload = jsonDecode(explicitRecallResult['content']! as String) as Map;
       expect(recallPayload['applied'], isTrue);
-      expect(((recallPayload['selection']! as Map)['items']! as List).cast<Map>().map((row) => row['id']), [
-        invitationStory.targetId,
-      ]);
+      expect((recallPayload['selection']! as Map)['items'], isEmpty, reason: 'the model query is not a new invitation');
       expect(store.cards().singleWhere((row) => row['id'] == invitationImpression.targetId), impressionRow);
       expect(store.cards().singleWhere((row) => row['id'] == invitationStory.targetId), storyRow);
       expect(store.topicControls(), invitationControls);
@@ -2349,6 +2510,82 @@ void main() {
         expect(row['raw_usage'], containsPair('http_status', 200));
         expect(row['raw_usage'], containsPair('complete', true));
       }
+      // Keep all 45 preceding HTTP/usage observations. This new explicit request
+      // obtains its opaque target from the actual tool response on the wire.
+      const retryText = '我收藏了红色陶杯。';
+      final resident = rawResident;
+      replies.addAll([
+        _message(calls: [('new-cup-card', 'remember', {'text': retryText, 'keywords': ['陶杯']})]),
+        _message(words: '记住了。'),
+      ]);
+      await resident.submit(retryText, fromFloat: true);
+      final original = store.messages().singleWhere((row) => row['id'] == visit.agent.sourceId);
+      final cup = store.cards().singleWhere((card) => card['text'] == retryText);
+      replies.addAll([
+        _message(calls: [('original-cup-forget', 'forget', {'card': cup['id'], 'deleteChat': true})]),
+        _message(words: '记忆已忘，原话等你确认。'),
+      ]);
+      await resident.submit('忘掉红色陶杯，提请删掉当时原话。', fromFloat: true);
+      final first = resident.pendingRawErase!;
+      expect(resident.markRawEraseOffered(first.id).state, 'awaiting');
+      expect(resident.declineRawErase(first.id).state, 'declined');
+      final beforeControl = store.archive['control_revision'];
+      final beforeCutoff = store.archive['history_after_seq'];
+      final beforeRetry = visit.requests.length;
+      String? offeredDuringNotify;
+      void observeOffer() {
+        final current = resident.pendingRawErase;
+        if (current != null) offeredDuringNotify = current.id;
+      }
+      const readCall = 'locate-original-cup', askCall = 'fresh-cup-confirmation';
+      retryStep = (body) {
+        final last = (body['messages'] as List).last as Map;
+        final content = last['content'];
+        if (content is! List) return;
+        final receipts = content.whereType<Map>().where((row) => row['type'] == 'tool_result');
+        for (final row in receipts) {
+          if (row['tool_use_id'] == readCall) {
+            final read = jsonDecode(row['content'] as String) as Map;
+            expect(read['applied'], isTrue);
+            expect(read['cards'], isEmpty);
+            expect(read['targetId'], isA<String>());
+            expect(read.containsKey('pendingRawEraseId'), isFalse);
+            expect(resident.pendingRawErase, isNull);
+            replies.add(_message(calls: [
+              (askCall, 'forget', {'rawEraseRetry': read['targetId'], 'deleteChat': true}),
+            ]));
+          } else if (row['tool_use_id'] == askCall) {
+            final result = jsonDecode(row['content'] as String) as Map;
+            expect(result['changedCardIds'], isEmpty);
+            expect(result['pendingRawEraseId'], offeredDuringNotify);
+            expect(result['rawEraseState'], 'pending');
+            replies.add(_message(words: '请你重新确认。'));
+          }
+        }
+      };
+      visit.memory.addListener(observeOffer);
+      try {
+        replies.add(_message(calls: [(readCall, 'related', {'rawEraseRetry': true})]));
+        await resident.submit('请重新发起，删掉上次陶杯那句原话。', fromFloat: true);
+      } finally {
+        retryStep = null;
+        visit.memory.removeListener(observeOffer);
+      }
+      expect(visit.agent.error, isNull);
+      expect(visit.requests.length, beforeRetry + 3);
+      final fresh = resident.pendingRawErase!;
+      expect(offeredDuringNotify, fresh.id);
+      expect(fresh.id, isNot(first.id));
+      expect(fresh.expiresAtUtcMs, isNull);
+      expect(resident.confirmRawErase(first.id).state, 'not_found');
+      expect(store.archive['control_revision'], beforeControl);
+      expect(store.archive['history_after_seq'], beforeCutoff);
+      expect(store.messages().any((row) => row['id'] == original['id']), isTrue);
+      expect(resident.markRawEraseOffered(fresh.id).state, 'awaiting');
+      expect(resident.pendingRawErase!.expiresAtUtcMs, rawClock + 5 * 60000);
+      expect(resident.confirmRawErase(fresh.id).state, 'confirmed');
+      expect(store.messages().any((row) => row['id'] == original['id']), isFalse);
+      expect(store.archive['history_after_seq'], beforeCutoff);
     } finally {
       rawRoom?.detach();
       rawResident?.close();

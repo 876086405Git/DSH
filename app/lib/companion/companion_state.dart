@@ -1,11 +1,6 @@
-// Which conversation is the companion's on each host (full mode). It is an
-// ordinary session on that host, opened with the `dsh-go-companion-full` Agent
-// preset: her persona with the host's standard tools, and the phone's when phone
-// control is on. This file remembers its id, keeps it out of the chat drawer and
-// out of chat alerts. Hosts whose engine lacks the preset (an older runtime, a
-// remote DSH without an updated bridge) still get a conversation: the persona
-// then travels in the first message, on the engine's default preset.
-
+// A full-mode conversation belongs to one host and one character source.
+// The legacy host-only key belongs to the bundled character. A missing preset
+// is remembered so an upgraded host can negotiate the same session again.
 import 'dart:async';
 import 'dart:convert';
 
@@ -17,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../state/connection_state.dart';
 import '../state/hosts_state.dart';
+import '../state/phone_state.dart' show phoneChannelProvider;
 import '../state/sessions_state.dart';
 import 'companion_pack.dart' show companionBundledCharacterKey;
 
@@ -32,6 +28,7 @@ class CompanionBinding {
     this.sessionId, {
     this.inlinePersona = false,
     this.full = true,
+    this.model,
     this.memoryArchiveId,
     this.memoryControlRevision,
   });
@@ -40,19 +37,21 @@ class CompanionBinding {
     json['id']! as String,
     inlinePersona: json['inline'] == true,
     full: json['full'] == true,
+    model: ModelSelection.fromJson(json['model']),
     memoryArchiveId: json['memoryArchiveId'] as String?,
     memoryControlRevision: json['memoryControlRevision'] as int?,
   );
 
   final String sessionId;
 
-  /// The host has no preset: the persona goes in this session's first message.
+  /// This session has not yet been confirmed to use the full companion preset.
   final bool inlinePersona;
 
   /// Opened for full mode (tools, normal approvals). An older binding is the
   /// persona-only, read-only conversation: it is left on the host as it is and
   /// a new one is opened, never widened in the background.
   final bool full;
+  final ModelSelection? model;
   final String? memoryArchiveId;
   final int? memoryControlRevision;
 
@@ -60,6 +59,7 @@ class CompanionBinding {
     'id': sessionId,
     if (inlinePersona) 'inline': true,
     if (full) 'full': true,
+    if (model != null) 'model': model!.toJson(),
     if (memoryArchiveId != null) 'memoryArchiveId': memoryArchiveId,
     if (memoryControlRevision != null) 'memoryControlRevision': memoryControlRevision,
   };
@@ -67,10 +67,19 @@ class CompanionBinding {
 
 String _hostKey(HostRef host) => '${host.kind.name}:${host.id}';
 
+String _characterPrefix(HostRef host) => 'character:${jsonEncode(_hostKey(host))}:';
+
+String _bindingKey(HostRef host, String? sourceKey) =>
+    sourceKey == companionBundledCharacterKey
+        ? _hostKey(host)
+        : '${_characterPrefix(host)}${jsonEncode(sourceKey)}';
+
 class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
-  final _loaded = Completer<void>();
+  Future<void>? _loaded;
   int _ownershipEpoch = 0;
   int _bindingsEpoch = 0;
+  // Serialize only competing operations on this role and connection lifetime.
+  final _pending = <(String, int), Future<void>>{};
 
   @override
   Map<String, CompanionBinding> build() {
@@ -80,7 +89,7 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     ref.listen(activeConnectionProvider.select((value) => value.value?.client), (previous, next) {
       if (!identical(previous, next)) _ownershipEpoch++;
     });
-    unawaited(_load());
+    _loaded = _load();
     return const {};
   }
 
@@ -99,7 +108,6 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     } on Object {
       // Unreadable: she starts a new conversation.
     }
-    if (!_loaded.isCompleted) _loaded.complete();
   }
 
   Future<void> _save([bool Function()? current]) async {
@@ -109,87 +117,195 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     await prefs.setString(_sessionsKey, jsonEncode({for (final e in state.entries) e.key: e.value.toJson()}));
   }
 
+  /// Completes once the saved bindings have been read.
+  Future<void> get ready => _loaded ?? Future<void>.value();
+
   CompanionBinding? of(HostRef host) => state[_hostKey(host)];
 
-  /// The conversation on the active host, created on first use. Throws when
-  /// the host isn't connected.
-  Future<CompanionBinding> ensure({String? memoryArchiveId, int? memoryControlRevision}) async {
+  CompanionBinding? ofCharacter(HostRef host, String? sourceKey) =>
+      sourceKey == companionBundledCharacterKey
+          ? of(host)
+          : state[_bindingKey(host, sourceKey)];
+
+  /// Read the saved selection after local preferences load, without contacting the Host.
+  Future<CompanionBinding?> existingForCharacter(HostRef host, String? sourceKey) async {
+    final owner = ref;
+    await _loaded;
+    return owner.mounted ? ofCharacter(host, sourceKey) : null;
+  }
+
+  Future<CompanionBinding> ensure({String? memoryArchiveId, int? memoryControlRevision}) =>
+      _ensure(companionBundledCharacterKey, memoryArchiveId, memoryControlRevision);
+
+  Future<CompanionBinding> ensureForCharacter(
+    String? sourceKey, {
+    String? memoryArchiveId,
+    int? memoryControlRevision,
+    String? replaceSessionId,
+    String? requireSessionId,
+  }) {
+    if (sourceKey == companionBundledCharacterKey && replaceSessionId == null && requireSessionId == null) {
+      return ensure(memoryArchiveId: memoryArchiveId, memoryControlRevision: memoryControlRevision);
+    }
+    return _ensure(sourceKey, memoryArchiveId, memoryControlRevision,
+        replaceSessionId: replaceSessionId, requireSessionId: requireSessionId);
+  }
+
+  /// Start a clean full-mode conversation for this host and character now.
+  /// The queued operation archives the binding it actually replaces. Existing
+  /// messages remain in the host archive and the new binding uses the current
+  /// phone memory generation so the next message can reuse it.
+  Future<CompanionBinding> startNewForCharacter(
+    String? sourceKey, {
+    required String memoryArchiveId,
+    required int memoryControlRevision,
+  }) => _ensure(sourceKey, memoryArchiveId, memoryControlRevision, startNew: true);
+
+  Future<CompanionBinding> _ensure(
+    String? sourceKey,
+    String? memoryArchiveId,
+    int? memoryControlRevision, {
+    bool startNew = false,
+    String? replaceSessionId,
+    String? requireSessionId,
+  }) async {
     final owner = ref;
     final epoch = _ownershipEpoch;
     final host = owner.read(activeHostProvider);
     final conn = owner.read(activeConnectionProvider).value;
     if (conn == null) throw const DshClosedException('not connected');
+    final key = _bindingKey(host, sourceKey);
+    final slot = (key, epoch);
+    final previous = _pending[slot] ?? _loaded;
+    final release = Completer<void>();
+    _pending[slot] = release.future;
     bool current() =>
         owner.mounted &&
         epoch == _ownershipEpoch &&
         owner.read(activeHostProvider) == host &&
         identical(owner.read(activeConnectionProvider).value?.client, conn.client);
     void checkCurrent() {
-      if (!current()) throw const DshClosedException('host changed');
+      if (!current()) throw const DshClosedException('companion selection changed');
     }
 
-    await _loaded.future;
-    checkCurrent();
-    final existing = of(host);
-    var gone = false;
-    if (existing != null &&
-        existing.full &&
-        (memoryArchiveId == null ||
-            (existing.memoryArchiveId == memoryArchiveId && existing.memoryControlRevision == memoryControlRevision))) {
-      gone = await _gone(conn.client, existing.sessionId);
+    try {
+      await previous;
       checkCurrent();
-      if (!gone) return existing;
-    }
-
-    if (existing != null && !gone) {
-      try {
-        await conn.client.archiveSession(existing.sessionId, stopActivity: false);
-      } on DshRemoteException catch (error) {
-        if (error.code != 'session/not-found') rethrow;
+      final existing = state[key];
+      const retired = DshRemoteException('companion/agent-retry-closed', 'This original session is unavailable');
+      if (requireSessionId != null && existing?.sessionId != requireSessionId) throw retired;
+      var gone = false;
+      SessionProjections? projections;
+      Future<CompanionBinding> save(CompanionBinding binding) async {
+        checkCurrent();
+        state = {...state, key: binding};
+        await _save(current);
+        checkCurrent();
+        return binding;
       }
-      checkCurrent();
-    }
+      Future<void> restoreModel(String id, ModelSelection? model) async {
+        if (model == null) return;
+        await conn.client.restoreCompanionSessionModel(id, model);
+        checkCurrent();
+      }
+      if (existing != null) {
+        try {
+          projections = await conn.client.projections(existing.sessionId);
+          gone = projections == null;
+        } on DshRemoteException catch (error) {
+          if (error.code != 'session/not-found') rethrow;
+          gone = true;
+        }
+        checkCurrent();
+        final sameArchive = memoryArchiveId == null ||
+            (existing.memoryArchiveId == memoryArchiveId && existing.memoryControlRevision == memoryControlRevision);
+        if (!startNew && !gone && existing.full && sameArchive && replaceSessionId != existing.sessionId) {
+          // Full bindings normally need only this one existence read. A preset
+          // changed on the host must be negotiated again before sending.
+          if (!existing.inlinePersona && (projections?.agentPreset == null || projections?.agentPreset == companionPresetId)) {
+            return existing;
+          }
+          final selected = projections?.agentPreset == companionPresetId ||
+              await _selectPreset(conn.client, existing.sessionId, checkCurrent);
+          checkCurrent();
+          if (selected == !existing.inlinePersona) return existing;
+          if (selected) await restoreModel(existing.sessionId, existing.model);
+          final binding = CompanionBinding(
+            existing.sessionId,
+            inlinePersona: !selected,
+            model: existing.model,
+            memoryArchiveId: existing.memoryArchiveId,
+            memoryControlRevision: existing.memoryControlRevision,
+          );
+          return await save(binding);
+        }
+        if (requireSessionId != null) throw retired;
+        if (!gone) {
+          try {
+            await conn.client.archiveSession(existing.sessionId, stopActivity: false);
+          } on DshRemoteException catch (error) {
+            if (error.code != 'session/not-found') rethrow;
+          }
+          checkCurrent();
+        }
+      }
 
-    final sessions = owner.read(sessionsProvider.notifier);
-    // The host's default permissions: what needs approval asks for a real tap.
-    // Never auto-approved, whatever the app does for ordinary chats.
-    final id = await sessions.createForConnection(conn, autoApprove: false, isCurrent: current);
-    checkCurrent();
-    // Before the first message, so it never shows in the drawer.
-    final selected = await _selectPreset(conn.client, id, current);
-    checkCurrent();
-    final binding = CompanionBinding(
-      id,
-      inlinePersona: !selected,
-      memoryArchiveId: memoryArchiveId,
-      memoryControlRevision: memoryControlRevision,
-    );
-    state = {...state, _hostKey(host): binding};
-    await _save(current);
-    checkCurrent();
-    return binding;
+      final sessions = owner.read(sessionsProvider.notifier);
+      final id = await sessions.createForConnection(conn, autoApprove: false, isCurrent: current);
+      checkCurrent();
+      final model = projections?.nextModel ?? existing?.model;
+      CompanionBinding binding(bool selected) => CompanionBinding(
+        id,
+        inlinePersona: !selected,
+        model: model,
+        memoryArchiveId: memoryArchiveId,
+        memoryControlRevision: memoryControlRevision,
+      );
+      try {
+        final selected = await _selectPreset(conn.client, id, checkCurrent);
+        checkCurrent();
+        if (selected) await restoreModel(id, model);
+        return await save(binding(selected));
+      } on DshException {
+        // Creation succeeded. A transient selection failure may already have
+        // applied; next visit negotiates this id, including its original model.
+        if (current()) await save(binding(false));
+        rethrow;
+      }
+    } finally {
+      if (identical(_pending[slot], release.future)) _pending.remove(slot);
+      release.complete();
+    }
   }
 
-  Future<bool> _selectPreset(DshClient client, String id, bool Function() current) async {
+  Future<bool> _selectPreset(DshClient client, String id, void Function() checkCurrent) async {
     try {
       final presets = await client.listAgentPresets();
-      if (!current()) return false;
+      checkCurrent();
       if (!presets.any((p) => p.id == companionPresetId && p.broken == null)) return false;
-      await client.selectAgentPreset(id, companionPresetId);
-      return true;
-    } on Object {
-      return false;
+      return await client.selectAgentPreset(id, companionPresetId) == companionPresetId;
+    } on DshRemoteException catch (error) {
+      if (error.code == 'gateway/method-not-found' || error.code == 'gateway/not-found') return false;
+      rethrow;
     }
   }
 
-  /// Only when the host says so: a list that's short or a network that's down
-  /// must not cost her the conversation.
-  Future<bool> _gone(DshClient client, String sessionId) async {
+  /// Keep the last host-observed selection for a session later deleted on
+  /// that host. A reconnect or a stale listener cannot change another slot.
+  Future<void> rememberModel(HostRef host, String? role, String id, ModelSelection model) async {
+    final key = _bindingKey(host, role);
+    final old = state[key];
+    if (old == null || old.sessionId != id || old.inlinePersona ||
+        old.model?.provider == model.provider && old.model?.model == model.model &&
+            old.model?.reasoningEffort == model.reasoningEffort) {
+      return;
+    }
+    state = {...state, key: CompanionBinding(id, model: model,
+      memoryArchiveId: old.memoryArchiveId, memoryControlRevision: old.memoryControlRevision)};
     try {
-      await client.projections(sessionId);
-      return false;
-    } on DshRemoteException catch (error) {
-      return error.code == 'session/not-found';
+      await _save();
+    } on DshClosedException {
+      // The live session listener was disposed while preferences were opening.
     }
   }
 
@@ -199,10 +315,17 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
   }
 
   /// Starts over on the active host: the next message opens a new conversation.
-  Future<void> forget() async {
+  Future<void> forget() => _forget(companionBundledCharacterKey);
+
+  Future<void> forgetCharacter(String? sourceKey) =>
+      sourceKey == companionBundledCharacterKey ? forget() : _forget(sourceKey);
+
+  Future<void> _forget(String? sourceKey) async {
+    final key = _bindingKey(ref.read(activeHostProvider), sourceKey);
     _ownershipEpoch++;
-    _bindingsEpoch++;
-    state = {...state}..remove(_hostKey(ref.read(activeHostProvider)));
+    await _loaded;
+    if (!ref.mounted) return;
+    state = {...state}..remove(key);
     await _save();
   }
 
@@ -225,11 +348,43 @@ final companionChatIdProvider = Provider<String?>(
   (ref) => ref.watch(companionSessionsProvider)[_hostKey(ref.watch(activeHostProvider))]?.sessionId,
 );
 
+final companionCharacterChatIdProvider = Provider.family<String?, String?>(
+  (ref, sourceKey) => ref.watch(companionSessionsProvider)[_bindingKey(ref.watch(activeHostProvider), sourceKey)]?.sessionId,
+);
+
 /// Whether a conversation is the companion's: it lives in her room, not the
 /// chat drawer, and her replies aren't "task finished" alerts.
 final companionSessionFilterProvider = Provider<bool Function(HostRef host, String sessionId)>((ref) {
   final bindings = ref.watch(companionSessionsProvider);
-  return (host, sessionId) => bindings[_hostKey(host)]?.sessionId == sessionId;
+  return (host, sessionId) => bindings.entries.any(
+    (entry) => entry.value.sessionId == sessionId &&
+        (entry.key == _hostKey(host) || entry.key.startsWith(_characterPrefix(host))),
+  );
+});
+
+/// Her full-mode sessions on this phone's own engine, while it is the active
+/// host. Native lets exactly these operate the phone with the switch off: the
+/// person asking her is the go-ahead. A computer's sessions never get it.
+final companionLocalSessionIdsProvider = Provider<Set<String>>((ref) {
+  if (ref.watch(activeHostProvider) != HostRef.local ||
+      ref.watch(companionModeProvider) == CompanionMode.light) {
+    return const {};
+  }
+  final prefix = _characterPrefix(HostRef.local);
+  return {
+    for (final MapEntry(:key, :value) in ref.watch(companionSessionsProvider).entries)
+      if ((key == _hostKey(HostRef.local) || key.startsWith(prefix)) && value.full && !value.inlinePersona)
+        value.sessionId,
+  };
+});
+
+/// Watched by the app: keeps native's copy of [companionLocalSessionIdsProvider].
+final companionPhoneSessionsBridgeProvider = Provider<void>((ref) {
+  ref.listen(companionLocalSessionIdsProvider, (previous, next) {
+    if (previous == null || !setEquals(previous, next)) {
+      unawaited(ref.read(phoneChannelProvider).setCompanionSessions(next));
+    }
+  }, fireImmediately: true);
 });
 
 /// How she talks (docs/design/companion.md §7).
@@ -305,9 +460,6 @@ class CompanionNameSetting extends Notifier<String?> {
 
 final companionNameProvider = NotifierProvider<CompanionNameSetting, String?>(CompanionNameSetting.new);
 
-/// Her persona under the name the person gave her (or as written, without one).
-String companionPersonaNamed(String? name) => companionPersona(name: name);
-
 /// The person's part of her persona: their own text, or the default under the
 /// name she goes by; then how she calls them. [whale]: she is the app's own
 /// whale girl; anyone else gets the same default without the whale's looks.
@@ -329,7 +481,7 @@ const _whaleIntro = '你是鲸鱼娘，一只住在这台手机小屋里的鲸�
 /// pack inside the app, her pack imported by hand ([packName] is hers), or no
 /// pack yet.
 bool companionIsWhale(String? sourceKey, String? packName) =>
-    sourceKey == null || sourceKey == companionBundledCharacterKey || packName == '鲸鱼娘';
+    sourceKey == companionBundledCharacterKey || packName == '鲸鱼娘';
 
 /// Her whole persona: the person's part, then the app's rules they can't
 /// remove, then whether this request carries her tools.
@@ -352,14 +504,6 @@ String companionPersona({
   return [part, '', companionPersonaRules, tools ? _toolsLine : _noToolsLine].join('\n');
 }
 
-/// For full mode, whose persona is the host's: the person's own part, told
-/// once per conversation and change. Null while it is the default.
-String? companionPersonaUpdate({String? custom, String? callMe}) {
-  if ((custom?.trim() ?? '').isEmpty && (callMe?.trim() ?? '').isEmpty) return null;
-  final part = companionPersonaPart(custom: custom, callMe: callMe);
-  return '（对方给你改了设定。从现在起按下面这份来，和之前的设定冲突时以这份为准，不用复述：\n$part）';
-}
-
 /// What the person set about her besides her name (她的设定).
 @immutable
 class CompanionPersonaSettings {
@@ -379,12 +523,11 @@ class CompanionPersonaSettings {
     return CompanionPersonaSettings(custom: text('custom'), callMe: text('callMe'));
   }
 
-  /// Changes whenever what she is told changes: full mode tells her again.
+  /// Cache key for locally generated lines under these settings.
   String get fingerprint => '${custom.trim().hashCode}:${callMe.trim().hashCode}';
 }
 
 const _personaKey = 'companion_persona_v1';
-const _personaSentKey = 'companion_persona_sent';
 
 class CompanionPersonaController extends Notifier<CompanionPersonaSettings> {
   late Future<void> _ready;
@@ -418,32 +561,6 @@ final companionPersonaProvider = NotifierProvider<CompanionPersonaController, Co
   CompanionPersonaController.new,
 );
 
-/// Whether full mode's conversation [sessionId] has been told [fingerprint].
-Future<bool> companionPersonaTold(String sessionId, String fingerprint) async {
-  final prefs = await SharedPreferences.getInstance();
-  final raw = prefs.getString(_personaSentKey);
-  final map = raw == null ? const {} : jsonDecode(raw);
-  return map is Map && map[sessionId] == fingerprint;
-}
-
-/// What was last told in [sessionId] (its fingerprint), if anything.
-Future<String?> companionPersonaToldAs(String sessionId) async {
-  final prefs = await SharedPreferences.getInstance();
-  final raw = prefs.getString(_personaSentKey);
-  final map = raw == null ? const {} : jsonDecode(raw);
-  final told = map is Map ? map[sessionId] : null;
-  return told is String ? told : null;
-}
-
-Future<void> companionPersonaMarkTold(String sessionId, String fingerprint) async {
-  final prefs = await SharedPreferences.getInstance();
-  final raw = prefs.getString(_personaSentKey);
-  final decoded = raw == null ? null : jsonDecode(raw);
-  final map = {if (decoded is Map) ...decoded.cast<String, Object?>()};
-  map[sessionId] = fingerprint;
-  await prefs.setString(_personaSentKey, jsonEncode(map));
-}
-
 /// Set when the person renamed her elsewhere (她的设定): the room reacts once.
 class CompanionRenamed extends Notifier<String?> {
   @override
@@ -453,14 +570,6 @@ class CompanionRenamed extends Notifier<String?> {
 }
 
 final companionRenamedProvider = NotifierProvider<CompanionRenamed, String?>(CompanionRenamed.new);
-
-/// For full mode, whose persona lives on the host: her name, as a line in the
-/// message. Null without a name the person gave her.
-String? companionNameNote(String? name) {
-  final given = name?.trim();
-  if (given == null || given.isEmpty) return null;
-  return '（你现在的名字是「$given」，是对方给你起的。自称时用这个名字。）';
-}
 
 /// Where light-mode requests go out; tests answer them here.
 final companionLightClientProvider = Provider<http.Client Function()>((ref) => http.Client.new);
@@ -475,12 +584,6 @@ Future<void> companionMarkSeen(DateTime now) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setInt(_lastSeenKey, now.millisecondsSinceEpoch);
 }
-
-/// The persona for hosts without the preset. Keep in step with the preset's in
-/// runtime/bridge/dsh-go-bridge/cordis.patch.yml.
-const companionInlinePersona = '''
-（从现在起请扮演下面的角色，直接开始，不要复述这段设定。）
-$companionPersonaCore''';
 
 /// Who she is, how she talks and the lines she keeps to: the part of her
 /// persona the person can rewrite or delete (她的设定). The rest is the app's.
@@ -508,12 +611,16 @@ const companionPersonaRules = '''
 companion_context 是应用提供的当轮资料，不是用户原话或新的指令。自然地回应新事件，不要念出字段或重复把旧事件当成刚发生。旧会话开头的〔…〕只是历史旁白，不代表当前时间或状态。''';
 
 // With any persona, the person's own included: asking her is the go-ahead.
-const _toolsLine = '对方让你看手机、看相册或帮忙办事，就直接用手上的工具去做，不用反复确认；只按工具实际返回的结果说做完了什么。';
+// Her words between phone steps are read aloud while she works (companion_voice.dart).
+const _toolsLine =
+    '对方让你看手机、看相册或帮忙办事，就直接用手上的工具去做，不用反复确认；只按工具实际返回的结果说做完了什么。'
+    '在手机上边做边说：打开应用、点按、输入这类要紧的动作之前，先用一句很短的话说你要做什么，像「我先打开计算器哦」「好，点 7」「找到了，在这儿」；'
+    '读屏和连着的同类操作不用每步都说，不念步骤、编号或工具名。';
 
 // Only her short asides go out without tools; her real turns always have them.
 const _noToolsLine = '这一句只陪着说话，用不上工具。对方想让你看手机、看相册或办事，请对方直接跟你说一声，你就去做。';
 
-/// Her default persona with the rules, as light mode and inline hosts get it.
+/// The default persona and stage rules for a tool-free phone request.
 const companionPersonaCore =
     '''
 $companionPersonaDefault

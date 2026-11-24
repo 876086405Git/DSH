@@ -3156,6 +3156,23 @@
       }
     }
   },
+  "companionPhoneConnectionReplaced": "另一条手机连接已接手这个会话。请回到当前伙伴会话后再试。",
+  "companionPhoneSessionUnavailable": "主机找不到当前的伙伴会话，或这个会话已换了预设。请重新打开伙伴小屋。",
+  "companionPhoneToolsConflict": "主机没有接入这次手机工具连接。请重新打开当前伙伴会话后再试。",
+  "companionHostSelectionChanged": "主机会话的模型选择已改变。请检查当前会话后再发送。",
+  "companionLocalDisconnected": "未连上本机引擎。请检查引擎是否正在运行。",
+  "companionLocalUnavailable": "本机引擎暂时不能打开伙伴会话。请检查引擎及其伙伴预设。",
+  "companionLocalModelUnavailable": "本机引擎无法使用这个伙伴原先选择的模型。请检查模型设置。",
+  "companionContinuedOnPhone": "主机尚未收到这句话，这一轮已转为轻量模式。",
+  "companionLogOnDevice": "手机上的记录",
+  "companionSessionUsingTool": "正在用 {tool}",
+  "@companionSessionUsingTool": {
+    "placeholders": {
+      "tool": {
+        "type": "String"
+      }
+    }
+  },
   "companionTitle": "伙伴小屋",
   "companionEntrySubtitle": "和她待一会儿",
   "companionDefaultName": "她",
@@ -3194,7 +3211,7 @@
   "companionLogOpenChat": "在主对话里看",
   "companionLogOlder": "加载更早的记录",
   "companionMenuHistory": "查看聊天记录",
-  "companionMenuRestart": "重新认识",
+  "companionMenuRestart": "清空对话",
   "companionMenuRestartHint": "开始一段新对话",
   "companionMenuRestartConfirm": "她会忘记这段对话。旧的记录还留在主机上，不会被删除。",
   "companionMenuRemovePack": "移除素材",

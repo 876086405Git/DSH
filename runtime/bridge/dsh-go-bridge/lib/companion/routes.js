@@ -1,10 +1,11 @@
 import { CompanionError, MAX_BODY_BYTES, invalid, ioError } from "./schema.js";
 import { createCompanionStore } from "./store.js";
-import { contextId, FULL_PRESET, validatePromptContext } from './prompt-context.js';
+import { cleanPhoneSession, contextId, FULL_PRESET, validatePromptContext } from './prompt-context.js';
 import { createRecallCoordinator } from "./recall.js";
 import { recallError } from "./recall-schema.js";
 import { createCompanionAuxiliaryRoutes } from './auxiliary.js';
 import { createCompanionLookupRoutes } from './lookup.js';
+import { createSessionToolRoutes } from './session-tools.js';
 
 const ROOT = "/dsh-go/v1/companion";
 
@@ -75,7 +76,7 @@ function readJson(req, maxBytes = MAX_BODY_BYTES, strictKeys = false) {
 // Store construction does no I/O, including on hosts that never open this page.
 export function createCompanionRoutes({ send, store = createCompanionStore(), signals, ctx, promptContext,
   recall = createRecallCoordinator({ store, promptContext }) }) {
-  let tasks;
+  let tasks, sessionTools;
   const auxiliary = createCompanionAuxiliaryRoutes({ ctx, send, readJson });
   const lookup = createCompanionLookupRoutes({ ctx, send, readJson, resolve: auxiliary.resolve });
   function usageRoute(req) {
@@ -98,7 +99,7 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
     // resolve a new Agent with the same id to authenticate an old receipt.
     return promptContext.usageSnapshot(Object.fromEntries(names.map(name => [name, params.get(name)])));
   }
-  async function promptRoute(req) {
+  async function promptRoute(req, restoringModel) {
     const connection = ctx?.get('connection');
     if (!promptContext || typeof connection?.admit !== 'function') {
       throw new CompanionError(503, 'unavailable', 'Companion prompt context is unavailable');
@@ -107,7 +108,7 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
     if (admission?.peer?.principal?.kind !== 'owner') {
       throw new CompanionError(admission?.rejection ?? 403, 'forbidden', 'Companion prompt context requires the host owner');
     }
-    if (req.method !== 'GET' && req.method !== 'POST') {
+    if (req.method !== 'POST' && (req.method !== 'GET' || restoringModel)) {
       throw new CompanionError(405, 'invalid-request', 'Use GET or POST');
     }
     let body;
@@ -115,7 +116,14 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
       if (String(req.headers['content-type']).split(';', 1)[0].trim().toLowerCase() !== 'application/json') {
         throw new CompanionError(415, 'content-type', 'Content-Type must be application/json');
       }
-      body = validatePromptContext(await readJson(req, 32768));
+      if (restoringModel) {
+        body = await readJson(req);
+        const model = body?.model;
+        if (!model || !contextId(model.provider) || !contextId(model.model) ||
+            (model.reasoningEffort !== undefined && !contextId(model.reasoningEffort))) throw invalid();
+      } else {
+        body = validatePromptContext(await readJson(req, 1024 * 1024));
+      }
     }
     const sessionId = body?.sessionId ?? new URL(req.url, 'http://dsh-go.invalid').searchParams.get('sessionId');
     if (!contextId(sessionId)) throw invalid();
@@ -133,6 +141,29 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
     const current = () => ctx.get('agents')?.get(sessionId) === found.agent &&
       found.agent.session === session && presets.presetForSession(session) === FULL_PRESET;
     if (!current()) throw new CompanionError(409, 'session-unavailable', 'Companion session changed; retry after synchronization');
+    if (restoringModel) {
+      const { agent } = found;
+      const llm = (agent.loopCtx ?? agent.ctx)?.get('llm');
+      const selected = agent.model?.current();
+      const { provider, model, reasoningEffort } = body.model;
+      if (!cleanPhoneSession(session) || typeof llm?.resolveCallConfig !== 'function' ||
+          typeof agent.model?.select !== 'function') {
+        throw new CompanionError(409, 'model-restore-unavailable', 'Restore requires a clean companion session');
+      }
+      if (selected?.provider !== provider || selected?.model !== model || selected?.reasoningEffort !== reasoningEffort) {
+        // Preserve an intervening explicit selection, even in a blank session.
+        const seq = session.seq;
+        if (Array.from({length: seq}, (_, i) => session.eventAt(i)).some(e => e?.type === 'model/selection')) {
+          throw new CompanionError(409, 'selection-changed', 'The session already has a different model selection');
+        }
+        const restore = { provider, model, ...(reasoningEffort === undefined ? {} : { reasoningEffort }) };
+        try { await llm.resolveCallConfig(restore); }
+        catch { throw new CompanionError(409, 'model-unavailable', 'The previous companion model is unavailable'); }
+        if (!current() || session.seq !== seq) throw new CompanionError(409, 'selection-changed', 'Companion session changed');
+        agent.model.select(restore);
+      }
+      return { sessionId, model: agent.model.current() };
+    }
     if (!body) return promptContext.info(found.agent);
     const memoryTicket = promptContext.captureMemory(found.agent);
     const recalled = body.query === undefined || !memoryTicket.allowed
@@ -175,6 +206,10 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
           return true;
         }
       }
+      if (path.startsWith(ROOT + '/session-tools/')) {
+        sessionTools ??= createSessionToolRoutes({ ctx, readJson, send });
+        if (await sessionTools.handle(req, res, path)) return true;
+      }
       if (await auxiliary.handle(req, res, path)) return true;
       if (await lookup.handle(req, res, path)) return true;
       if (signals && await signals.handle(req, res, path, send)) return true;
@@ -186,8 +221,8 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
           if (!res.destroyed) send(res, 200, result);
           return true;
         }
-        if (path === `${ROOT}/prompt-context`) {
-          const result = await promptRoute(req);
+        if (path === `${ROOT}/prompt-context` || path === `${ROOT}/restore-model`) {
+          const result = await promptRoute(req, path === `${ROOT}/restore-model`);
           req.resume();
           if (!res.destroyed) send(res, 200, result);
           return true;
@@ -228,6 +263,6 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
       }
       return true;
     },
-    dispose() { lookup.dispose(); auxiliary.dispose(); },
+    dispose() { lookup.dispose(); auxiliary.dispose(); return sessionTools?.dispose(); },
   };
 }

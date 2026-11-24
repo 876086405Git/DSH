@@ -2276,6 +2276,8 @@
     "app/test/flutter_test_config.dart",
     "app/test/support/bundle.dart",
     "app/test/support/bundle_widgets.dart",
+    "app/test/support/companion_notes_peer.dart",
+    "app/test/support/companion_session_peer.dart",
     "app/test/support/test_defaults.dart",
     "app/test/support/test_fonts.dart",
     "app/tool/companion_memory_replay_test.dart",

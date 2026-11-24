@@ -5037,6 +5037,38 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get companionPhoneConnectionReplaced => '另一条手机连接已接手这个会话。请回到当前伙伴会话后再试。';
+
+  @override
+  String get companionPhoneSessionUnavailable => '主机找不到当前的伙伴会话，或这个会话已换了预设。请重新打开伙伴小屋。';
+
+  @override
+  String get companionPhoneToolsConflict => '主机没有接入这次手机工具连接。请重新打开当前伙伴会话后再试。';
+
+  @override
+  String get companionHostSelectionChanged => '主机会话的模型选择已改变。请检查当前会话后再发送。';
+
+  @override
+  String get companionLocalDisconnected => '未连上本机引擎。请检查引擎是否正在运行。';
+
+  @override
+  String get companionLocalUnavailable => '本机引擎暂时不能打开伙伴会话。请检查引擎及其伙伴预设。';
+
+  @override
+  String get companionLocalModelUnavailable => '本机引擎无法使用这个伙伴原先选择的模型。请检查模型设置。';
+
+  @override
+  String get companionContinuedOnPhone => '主机尚未收到这句话，这一轮已转为轻量模式。';
+
+  @override
+  String get companionLogOnDevice => '手机上的记录';
+
+  @override
+  String companionSessionUsingTool(String tool) {
+    return '正在用 $tool';
+  }
+
+  @override
   String get companionTitle => '伙伴小屋';
 
   @override
@@ -5132,7 +5164,7 @@ class L10nZh extends L10n {
   String get companionMenuHistory => '查看聊天记录';
 
   @override
-  String get companionMenuRestart => '重新认识';
+  String get companionMenuRestart => '清空对话';
 
   @override
   String get companionMenuRestartHint => '开始一段新对话';

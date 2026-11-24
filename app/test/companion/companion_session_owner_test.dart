@@ -4,9 +4,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dsh_app/companion/companion_state.dart';
+import 'package:dsh_app/companion/companion_pack.dart' show companionBundledCharacterKey;
+import 'package:dsh_app/phone/phone_channel.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/phone_state.dart' show phoneChannelProvider;
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/state/workspaces_state.dart';
 import 'package:dsh_client/dsh_client.dart';
@@ -87,6 +90,16 @@ class _Runtime extends LocalRuntimeController {
   LocalRuntimeState build() => const LocalRuntimeState(loaded: true);
 }
 
+/// Native phone control's copy of her sessions, as last pushed.
+class _Phone extends PhoneChannel {
+  final pushed = <Set<String>>[];
+  @override
+  Future<bool> setCompanionSessions(Set<String> ids) async {
+    pushed.add(ids);
+    return true;
+  }
+}
+
 class _Room {
   _Room() {
     add(HostRef.local, a);
@@ -99,6 +112,7 @@ class _Room {
         workspacesProvider.overrideWith(_Workspaces.new),
         workspacePrefsProvider.overrideWith(() => selection),
         localRuntimeProvider.overrideWith(_Runtime.new),
+        phoneChannelProvider.overrideWithValue(phone),
       ],
     );
     container.read(activeConnectionProvider);
@@ -114,6 +128,7 @@ class _Room {
   final b = _RpcHost('b');
   final host = _ActiveHost();
   final selection = _Selection();
+  final phone = _Phone();
   final connections = <HostRef, HostConnection>{};
   final clients = <DshClient>[];
   late final ProviderContainer container;
@@ -155,6 +170,146 @@ void _savedA() => SharedPreferences.setMockInitialValues({
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('legacy whale and two different pack sources never lend a conversation to one another', () async {
+    _savedA();
+    final room = _Room();
+    await room.loaded();
+    final whale = await room.sessions.ensureForCharacter(companionBundledCharacterKey);
+    expect(whale.sessionId, 'a-existing');
+    expect(room.sessions.ofCharacter(HostRef.local, null), isNull);
+    const imported = 'import:鲸鱼娘';
+    const workshop = 'workshop:鲸鱼娘';
+    final creation = Completer<RpcResult>();
+    room.a.held['session/create'] = (_) => creation.future;
+    final first = room.sessions.ensureForCharacter(imported);
+    final second = room.sessions.ensureForCharacter(imported);
+    await _flush();
+    expect(room.a.argsOf('session/create'), hasLength(1));
+    creation.complete(const RpcOk({'sessionId': 'imported'}));
+    expect((await first).sessionId, 'imported');
+    expect((await second).sessionId, 'imported');
+    expect(room.a.argsOf('session/create'), hasLength(1));
+    expect((await room.sessions.ensureForCharacter(workshop)).sessionId, 'a-created');
+    expect(room.a.argsOf('workspace/archiveSession'), isEmpty);
+    final hidden = room.container.read(companionSessionFilterProvider);
+    for (final id in ['a-existing', 'imported', 'a-created']) {
+      expect(hidden(HostRef.local, id), isTrue);
+      expect(hidden(_Room.bHost, id), isFalse);
+    }
+    await room.sessions.forgetCharacter(imported);
+    expect(room.sessions.ofCharacter(HostRef.local, imported), isNull);
+    expect(room.sessions.ofCharacter(HostRef.local, workshop)?.sessionId, 'a-created');
+    expect(room.sessions.of(HostRef.local), same(whale));
+  });
+
+  test('a new conversation archives only the current role after its in-flight creation', () async {
+    _savedA();
+    final room = _Room();
+    await room.loaded();
+    const role = 'import:one';
+    const other = 'workshop:two';
+    const archive = 'phone-archive';
+    final loading = Completer<RpcResult>();
+    final started = Completer<void>();
+    room.a.held['session/create'] = (_) {
+      started.complete();
+      return loading.future;
+    };
+    final first = room.sessions.ensureForCharacter(role, memoryArchiveId: archive, memoryControlRevision: 4);
+    await started.future.timeout(const Duration(seconds: 5));
+    final fresh = room.sessions.startNewForCharacter(role, memoryArchiveId: archive, memoryControlRevision: 4);
+    room.a.held['session/create'] = (_) async => const RpcOk({'sessionId': 'other-still-live'});
+    expect((await room.sessions.ensureForCharacter(other)).sessionId, 'other-still-live');
+    expect(room.a.argsOf('workspace/archiveSession'), isEmpty);
+    room.a.held['session/create'] = (_) async => const RpcOk({'sessionId': 'fresh-role'});
+    loading.complete(const RpcOk({'sessionId': 'previous-role'}));
+    expect((await first).sessionId, 'previous-role');
+    expect((await fresh).sessionId, 'fresh-role');
+    expect(room.a.argsOf('workspace/archiveSession').single['request'], {
+      'sessionId': 'previous-role', 'stopActivity': false,
+    });
+    expect(room.sessions.of(HostRef.local)?.sessionId, 'a-existing');
+    expect(room.sessions.ofCharacter(HostRef.local, other)?.sessionId, 'other-still-live');
+    expect(room.sessions.ofCharacter(HostRef.local, role)?.sessionId, 'fresh-role');
+    expect(room.sessions.ofCharacter(_Room.bHost, role), isNull);
+    expect(room.a.calls.where((call) => call.$1.toLowerCase().contains('delete')), isEmpty);
+    final reuse = await room.sessions.ensureForCharacter(role, memoryArchiveId: archive, memoryControlRevision: 4);
+    expect(reuse.sessionId, 'fresh-role');
+    expect(room.a.argsOf('session/create'), hasLength(3));
+    final prefs = await SharedPreferences.getInstance();
+    final saved = jsonDecode(prefs.getString('companion_sessions')!) as Map;
+    expect((saved['character:"local:local":"import:one"'] as Map)['id'], 'fresh-role');
+  });
+
+  test('a queued new conversation never continues on a replacement host', () async {
+    _savedA();
+    final room = _Room();
+    await room.loaded();
+    final entered = Completer<void>();
+    final archive = Completer<RpcResult>();
+    room.a.held['workspace/archiveSession'] = (_) {
+      entered.complete();
+      return archive.future;
+    };
+    final result = _outcome(room.sessions.startNewForCharacter(
+      companionBundledCharacterKey, memoryArchiveId: 'phone', memoryControlRevision: 0,
+    ));
+    await entered.future.timeout(const Duration(seconds: 5));
+    room.host.change(_Room.bHost);
+    room.container.read(activeConnectionProvider);
+    archive.complete(const RpcOk({'archivedSessionIds': ['a-existing']}));
+    expect(await result, isA<DshClosedException>());
+    expect(room.b.calls, isEmpty);
+    expect(room.a.argsOf('session/create'), isEmpty);
+    expect(room.sessions.of(_Room.bHost), isNull);
+  });
+
+  test('changing the character retires a fresh creation before it can publish', () async {
+    final room = _Room();
+    await room.loaded();
+    final entered = Completer<void>();
+    final created = Completer<RpcResult>();
+    room.a.held['session/create'] = (_) {
+      entered.complete();
+      return created.future;
+    };
+    final retiring = _outcome(room.sessions.startNewForCharacter(
+      'pack:first', memoryArchiveId: 'phone', memoryControlRevision: 0,
+    ));
+    await entered.future.timeout(const Duration(seconds: 5));
+    // The actual visit calls retirePending synchronously in updateCharacter.
+    room.sessions.retirePending();
+    final next = await room.sessions.startNewForCharacter(
+      'pack:next', memoryArchiveId: 'phone', memoryControlRevision: 0,
+    );
+    created.complete(const RpcOk({'sessionId': 'late-first'}));
+    expect(await retiring, isA<DshClosedException>());
+    expect(room.sessions.ofCharacter(HostRef.local, 'pack:first'), isNull);
+    expect(room.sessions.ofCharacter(HostRef.local, 'pack:next'), same(next));
+    expect(room.a.argsOf('workspace/archiveSession'), isEmpty);
+    expect(room.a.argsOf('agentPresets/select'), hasLength(1));
+  });
+
+  test('a missing preset recovers in place; a denied projection does not fabricate deletion', () async {
+    final room = _Room();
+    await room.loaded();
+    room.a.hasPreset = false;
+    final pending = await room.sessions.ensure();
+    expect(pending.inlinePersona, isTrue);
+    room.a.hasPreset = true;
+    final selected = await room.sessions.ensure();
+    expect(selected.sessionId, pending.sessionId);
+    expect(selected.inlinePersona, isFalse);
+    room.a.held['session/projections'] = (_) async => const RpcError(DshRemoteException('session/forbidden', 'private'));
+    expect(await _outcome(room.sessions.ensure()), isA<DshRemoteException>());
+    expect(room.a.argsOf('session/create'), hasLength(1));
+    expect(room.a.argsOf('workspace/archiveSession'), isEmpty);
+    room.a.held['session/projections'] = (_) async => const RpcOk(null);
+    await room.sessions.ensure();
+    expect(room.a.argsOf('session/create'), hasLength(2));
+    expect(room.a.argsOf('workspace/archiveSession'), isEmpty);
+  });
+
   test('a legacy untagged session is replaced before phone memory enters its context', () async {
     _savedA();
     final room = _Room();
@@ -164,7 +319,7 @@ void main() {
     expect(binding.memoryArchiveId, 'phone-archive');
     expect(binding.memoryControlRevision, 0);
     expect(room.a.argsOf('session/create'), hasLength(1));
-    expect(room.a.argsOf('session/projections'), isEmpty);
+    expect(room.a.argsOf('session/projections'), hasLength(1));
     final prefs = await SharedPreferences.getInstance();
     final saved = jsonDecode(prefs.getString('companion_sessions')!) as Map;
     expect((saved['local:local'] as Map)['memoryArchiveId'], 'phone-archive');
@@ -199,6 +354,7 @@ void main() {
       'stopActivity': false,
     });
     expect(room.a.calls.map((call) => call.$1), [
+      'session/projections',
       'session/projections',
       'workspace/archiveSession',
       'session/create',
@@ -485,5 +641,41 @@ void main() {
     expect(binding.sessionId, 'a-created');
     expect(binding.full, true);
     expect(room.a.argsOf('commands/execute'), isEmpty);
+  });
+
+  test('only her full sessions on this phone reach native phone control, and leave with the host', () async {
+    SharedPreferences.setMockInitialValues({
+      'companion_sessions': jsonEncode({
+        'local:local': {'id': 'a-whale', 'full': true},
+        'character:"local:local":"import:x"': {'id': 'a-pack', 'full': true},
+        'character:"local:local":"import:y"': {'id': 'a-inline', 'full': true, 'inline': true},
+        'character:"local:local":"import:z"': {'id': 'a-old'},
+        'ssh:b': {'id': 'b-whale', 'full': true},
+      }),
+    });
+    final room = _Room();
+    room.container.listen(companionPhoneSessionsBridgeProvider, (_, _) {});
+    await room.loaded();
+    final pushed = room.phone.pushed;
+    expect(pushed.last, {'a-whale', 'a-pack'});
+    final settled = pushed.length;
+    await room.sessions.rememberModel(HostRef.local, companionBundledCharacterKey, 'a-whale',
+        const ModelSelection(provider: 'p', model: 'm'));
+    await _flush();
+    expect(pushed, hasLength(settled), reason: 'the same ids are not pushed again');
+
+    room.host.change(_Room.bHost);
+    await _flush();
+    expect(pushed.last, isEmpty, reason: "a computer's sessions never get the exemption");
+    room.host.change(HostRef.local);
+    await _flush();
+    expect(pushed.last, {'a-whale', 'a-pack'});
+
+    await room.sessions.forget();
+    await _flush();
+    expect(pushed.last, {'a-pack'});
+    await room.container.read(companionModeProvider.notifier).choose(CompanionMode.light);
+    await _flush();
+    expect(pushed.last, isEmpty, reason: 'light mode runs her on the phone bridge, not this session');
   });
 }

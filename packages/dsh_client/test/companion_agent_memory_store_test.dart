@@ -1217,6 +1217,38 @@ void main() {
     expect(store.cards(), afterLateExtraction);
     expect(_captured(store, laterRaw), laterRaw);
     expect(store.pendingRawErase(characterId: null), isNull);
+
+    // Expiry must never bless a new raw plan over a stale literal closure.
+    final retrySource = say('late-declined-source', '我在种长寿花。');
+    final author = begin(retrySource);
+    final root = call(author, 'root', 'remember', {'text': '我在种长寿花。'}).targetId!;
+    store.closeAgentTurn(author);
+    final request = begin(say('late-declined-request', '忘掉长寿花，原话也删。'), [actualCard(root)]);
+    final proposed = call(request, 'delete', 'forget', {'card': root, 'deleteChat': true});
+    final pending = proposed.pendingRawEraseId!;
+    store.closeAgentTurn(request);
+    expect(store.markRawEraseOffered(pending, characterId: null).state, 'awaiting');
+    now += 5 * 60000;
+    expect(store.confirmRawErase(pending, characterId: null).state, 'expired');
+    final stable = store.archive['control_revision'];
+    final late = say('new-plant-literal', '我在种长寿花，喜欢看它开花。');
+    final batch = store.nextBatch(forceTail: true, estimateTokens: (text) => text.length)!;
+    final changes = parseExtractionProposal(jsonEncode({
+      'schema_version': 2, 'batch_id': batch.id, 'covered_message_ids': [late['id']],
+      'completion': 'complete',
+      'operations': [{
+        'op': 'create', 'kind': 'fact', 'text': late['text'], 'keywords': ['长寿花'],
+        'evidence': [{'message_id': late['id'], 'quote': late['text']}],
+      }],
+    }), batch);
+    expect(store.commitExtraction(batch, changes), isTrue);
+    expect(store.archive['control_revision'], stable);
+    final fresh = begin(say('after-late-literal', '请重新发起上次的原话删除。'));
+    expect(call(fresh, 'retry-read', 'related', {'rawEraseRetry': true}).applied, isFalse);
+    expect(store.confirmRawErase(pending, characterId: null).state, 'expired');
+    expect(_captured(store, retrySource), retrySource);
+    expect(_captured(store, late), late);
+    store.closeAgentTurn(fresh);
   });
 
   test(
@@ -1259,6 +1291,10 @@ void main() {
         reason: 'this is a new claim after the manual control, not a stale run',
       );
       final control = store.archive['control_revision'];
+      expect(call(turnId, 'retry-denied-read', 'related', {'rawEraseRetry': true}).code, 'not_a_chat_turn');
+      expect(call(turnId, 'retry-denied-proposal', 'forget',
+          {'rawEraseRetry': 'opaque', 'deleteChat': true}).code, 'not_a_chat_turn');
+      expect(store.pendingRawErase(characterId: null), isNull);
       expect(
         call(turnId, 'old-again', 'revise', {'card': interview, 'source': old['id'], 'text': '面试安排在周四。'}).code,
         'older_than_current',
@@ -1386,6 +1422,41 @@ void main() {
     expect(store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']), containsAll([parent, child]));
   });
 
+  test('related does not read or grant an independent quiet topic from the same source without an invitation', () {
+    final making = begin(say('two-facts', '我每天喝白茶。竹笛课在周五。'));
+    final tea = call(making, 'tea', 'remember', {'text': '我每天喝白茶。', 'keywords': ['白茶']}).targetId!;
+    final flute = call(making, 'flute', 'remember', {'text': '竹笛课在周五。', 'keywords': ['竹笛']}).targetId!;
+    expect(actualCard(tea)['topic_id'], isNot(actualCard(flute)['topic_id']));
+    expect(call(making, 'quiet', 'quiet', {'card': flute, 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(making);
+
+    for (final sample in [
+      (key: 'neutral', text: '我想问白茶。', invited: false),
+      (key: 'invited', text: '我想问竹笛。', invited: true),
+      (key: 'again', text: '说说白茶。', invited: false),
+    ]) {
+      final turn = begin(say(sample.key, sample.text), [actualCard(tea)]);
+      final input = {'card': tea};
+      for (final replay in [false, true]) {
+        final result = call(turn, 'related', 'related', input);
+        expect(result.applied, isTrue);
+        expect(result.replayed, replay);
+        final related = {for (final row in result.relatedCards!) row['id']: row};
+        expect(related[tea]?['required_effect'], isTrue);
+        expect(related.containsKey(flute), sample.invited);
+        if (sample.invited) {
+          expect(related[flute]?['text'], '竹笛课在周五。');
+          expect(related[flute]?['required_effect'], isFalse);
+        }
+      }
+      final access = call(turn, 'flute-access', 'related', {'card': flute});
+      expect(access.applied, sample.invited);
+      if (!sample.invited) expect(access.code, 'card_not_in_turn');
+      store.closeAgentTurn(turn);
+      expect(actualCard(flute)['topic_mode'], 'never');
+    }
+  });
+
   test('an external control invalidates a turn after recall grants only its actual returned IDs', () {
     final card = seed('我喜欢蓝色', keywords: ['蓝色']);
     final other = seed('另一个独立事实');
@@ -1433,7 +1504,18 @@ void main() {
     final expiringTurn = begin(say('expiring-request', '海盐饼干的记忆连原话也删。'), [actualCard(expiringCard)]);
     final expiring = call(expiringTurn, 'expiring-delete', 'forget', {'card': expiringCard, 'deleteChat': true});
     final expiringId = expiring.pendingRawEraseId!;
+    final premature = begin(say('premature-retry', '请再次确认。'));
+    expect(call(premature, 'deferred-retry', 'related', {'rawEraseRetry': true}).applied, isFalse);
+    expect(store.pendingRawErase(characterId: null)!.id, expiringId);
     expect(store.markRawEraseOffered(expiringId, characterId: null).state, 'awaiting');
+    final deadline = store.pendingRawErase(characterId: null)!.expiresAtUtcMs;
+    expect(call(premature, 'awaiting-retry', 'related', {'rawEraseRetry': true}).applied, isFalse);
+    expect(store.pendingRawErase(characterId: null)!.expiresAtUtcMs, deadline);
+    // A delayed model continuation cannot reuse this already-submitted source.
+    // The caller can even provide a future speech time; the Store admission time governs.
+    final futureDated = store.submitMessage(id: 'early-expiry-source', sessionId: 'light:agent',
+        text: '我想再申请。', saidAtUtc: now + 86400000, offsetMinutes: 0);
+
     final beforeExpiry = store.archive;
     now += const Duration(minutes: 5).inMilliseconds;
     expect(store.confirmRawErase(expiringId, characterId: null).state, 'expired');
@@ -1441,7 +1523,108 @@ void main() {
     expect(store.archive, beforeExpiry);
     expect(_captured(store, expiringRaw), expiringRaw);
     expect(store.pendingRawErase(characterId: null), isNull);
+    const retryRead = {'rawEraseRetry': true};
+    expect(call(premature, 'late-model-continuation', 'related', retryRead).code, 'raw_retry_needs_new_request');
+    store.closeAgentTurn(premature);
+    final lateTurn = begin(futureDated);
+    expect(call(lateTurn, 'turn-opened-after-expiry', 'related', retryRead).code, 'raw_retry_needs_new_request');
+    store.closeAgentTurn(lateTurn);
+    expect(call(expiringTurn, 'same-source', 'related', retryRead).applied, isFalse);
+    final wrongRole = begin(sayAs('retry-other-role', '请再删原话。', character('local:other-retry')));
+    expect(call(wrongRole, 'related', 'related', retryRead).applied, isFalse);
+    store.closeAgentTurn(wrongRole);
     store.closeAgentTurn(expiringTurn);
+    final newSource = say('new-expiry-request', '请再确认一次，删掉海盐饼干的原话。');
+    final newTurn = begin(newSource);
+    final stableControl = store.archive['control_revision'];
+    final stableCutoff = store.archive['history_after_seq'];
+    // An unrelated pin updates memory, but does not change this raw deletion closure.
+    final otherId = other['id']! as String;
+    store.setPinned(id: otherId, expectedRowRev: actualCard(otherId)['row_rev']! as int, pinned: true);
+    expect(store.archive['control_revision'], stableControl);
+    for (final invalid in <MemoryRow>[
+      {'rawEraseRetry': false}, {'rawEraseRetry': true, 'card': expiringCard}, {'rawEraseRetry': true, 'extra': 1},
+    ]) {
+      expect(call(newTurn, 'bad-read-${invalid.keys.join()}-${invalid.values.first}', 'related', invalid).applied, isFalse);
+    }
+    expect(call(newTurn, 'old-id', 'forget', {'rawEraseRetry': expiringId, 'deleteChat': true}).applied, isFalse);
+    final located = call(newTurn, 'locate', 'related', retryRead);
+    expect(located.applied, isTrue);
+    expect(located.relatedCards, isEmpty);
+    expect(located.targetId, isNotNull);
+    expect(located.targetId, isNot(expiringId));
+    final again = call(newTurn, 'locate', 'related', retryRead);
+    expect(again.replayed, isTrue);
+    expect(again.targetId, located.targetId);
+    const receiptOnly = {'rawEraseRetry': true};
+    final another = begin(say('unread-retry', '也要重新确认。'));
+    final input = {'rawEraseRetry': located.targetId, 'deleteChat': true};
+    expect(call(another, 'guessed', 'forget', input).applied, isFalse);
+    expect(call(another, 'ordinary', 'related', {}).applied, isTrue);
+    expect(call(another, 'after-ordinary', 'forget', input).applied, isFalse);
+    final sameAnchor = call(another, 'real-read', 'related', receiptOnly);
+    expect(sameAnchor.targetId, located.targetId);
+    for (final invalid in <MemoryRow>[{...input, 'card': expiringCard}, {...input, 'changes': []},
+      {...input, 'deleteChat': false}, {'rawEraseRetry': located.targetId}]) {
+      expect(call(another, 'bad-write-${jsonEncode(invalid)}', 'forget', invalid).applied, isFalse);
+    }
+    // The new receipt is staged, then SQLite rejects the real COMMIT.
+    // The original terminal holder must survive and the call must be retryable.
+    database.execute('CREATE TEMP TABLE retry_parent (id INTEGER PRIMARY KEY)');
+    database.execute('CREATE TEMP TABLE retry_child (p INTEGER REFERENCES retry_parent(id) DEFERRABLE INITIALLY DEFERRED)');
+    database.execute("""CREATE TEMP TRIGGER fail_retry_commit AFTER UPDATE OF state ON main.memory_agent_calls
+       WHEN NEW.call_id='request' AND NEW.state='applied'
+       BEGIN INSERT INTO retry_child VALUES(99); END""");
+    expect(() => call(another, 'request', 'forget', input), throwsA(isA<SqliteException>()));
+    expect(store.agentToolCall(turnId: another, callId: 'request'), isNull);
+    expect(store.pendingRawErase(characterId: null), isNull);
+    expect(store.confirmRawErase(expiringId, characterId: null).state, 'expired');
+    database.execute('DROP TRIGGER fail_retry_commit');
+    final renewed = call(another, 'request', 'forget', input);
+    expect(renewed.applied, isTrue);
+    expect(renewed.changedCardIds, isEmpty);
+    expect(renewed.controlRevision, stableControl);
+    expect(store.archive['history_after_seq'], stableCutoff);
+    expect(store.confirmRawErase(expiringId, characterId: null).state, 'not_found');
+    final proposal = store.pendingRawErase(characterId: null)!;
+    expect(proposal.id, renewed.pendingRawEraseId);
+    expect(proposal.expiresAtUtcMs, isNull);
+    expect(store.confirmRawErase(proposal.id, characterId: null).state, 'deferred');
+    expect(call(newTurn, 'locate', 'related', retryRead).relatedCards, isNull);
+    expect(store.markRawEraseOffered(proposal.id, characterId: null).state, 'awaiting');
+    expect(store.pendingRawErase(characterId: null)!.expiresAtUtcMs, now + 5 * 60000);
+    expect(store.confirmRawErase(proposal.id, characterId: null).state, 'confirmed');
+    expect(store.messages().any((row) => row['id'] == expiringRaw['id']), isFalse);
+    expect(store.messages().any((row) => row['id'] == newSource['id']), isTrue);
+    expect(store.archive['history_after_seq'], stableCutoff);
+    store.closeAgentTurn(newTurn);
+    store.closeAgentTurn(another);
+
+    // The first observation of expiry can be the related call. A source first
+    // admitted at the absolute deadline already belongs to the next opportunity.
+    final lazyRaw = say('lazy-expiry-raw', '我看到了木雕。');
+    final made = begin(lazyRaw);
+    final lazyCard = call(made, 'remember', 'remember', {'text': '我看到了木雕。'}).targetId!;
+    store.closeAgentTurn(made);
+    final lazyFirst = begin(say('lazy-expiry-original', '忘掉木雕，删原话。'), [actualCard(lazyCard)]);
+    final lazyId = call(lazyFirst, 'first', 'forget', {'card': lazyCard, 'deleteChat': true}).pendingRawEraseId!;
+    expect(store.markRawEraseOffered(lazyId, characterId: null).state, 'awaiting');
+    store.closeAgentTurn(lazyFirst);
+    now += 5 * 60000 - 1;
+    final justBefore = say('one-ms-before-expiry', '重新发起原话删除。');
+    now++;
+    final exactlyAt = store.submitMessage(id: 'at-unobserved-expiry', sessionId: 'light:agent',
+        text: '现在重新发起原话删除。', saidAtUtc: now - 86400000, offsetMinutes: 0);
+    final atTurn = begin(exactlyAt);
+    final onTime = call(atTurn, 'locate-at-deadline', 'related', retryRead);
+    expect(onTime.applied, isTrue);
+    final tooSoon = begin(justBefore);
+    expect(call(tooSoon, 'late-after-expiry', 'related', retryRead).code, 'raw_retry_needs_new_request');
+    expect(store.declineRawErase(lazyId, characterId: null).state, 'expired');
+    expect(call(atTurn, 'renew-after-late-click', 'forget',
+        {'rawEraseRetry': onTime.targetId, 'deleteChat': true}).pendingRawEraseId, isNotNull);
+    store.closeAgentTurn(atTurn);
+    store.closeAgentTurn(tooSoon);
   });
 
   test('structured ask-later reaches real reserve and once-only presentation without a raw invitation regex', () {
@@ -1552,6 +1735,7 @@ void main() {
     final declining = begin(say('decline-request', '这条标本记忆连原话也删。'), [actualCard(keptCard)]);
     final offered = call(declining, 'decline-delete', 'forget', {'card': keptCard, 'deleteChat': true});
     final declinedId = offered.pendingRawEraseId!;
+    final alreadySubmitted = say('same-ms-before-decline', '我现在再申请一次。');
     final beforeDecline = store.archive, beforeDeclineMessages = store.messages(), beforeDeclineCards = store.cards();
     expect(store.declineRawErase(declinedId, characterId: null).state, 'declined');
     expect(store.confirmRawErase(declinedId, characterId: null).state, 'declined');
@@ -1559,7 +1743,57 @@ void main() {
     expect(store.messages(), beforeDeclineMessages);
     expect(store.cards(), beforeDeclineCards);
     expect(_captured(store, keptRaw), keptRaw);
+    expect(call(declining, 'decliner-cannot-reoffer', 'related', {'rawEraseRetry': true}).applied, isFalse);
     store.closeAgentTurn(declining);
+    final second = begin(say('declined-again', '重新确认原来那句标本的话。'));
+    final beforeDecision = begin(alreadySubmitted);
+    expect(call(beforeDecision, 'late-after-click', 'related', {'rawEraseRetry': true}).code,
+        'raw_retry_needs_new_request');
+    store.closeAgentTurn(beforeDecision);
+    // This second click must not move the first decline's sequence boundary.
+    expect(store.declineRawErase(declinedId, characterId: null).state, 'declined');
+    final retried = call(second, 'get-anchor', 'related', {'rawEraseRetry': true});
+    expect(retried.applied, isTrue);
+    expect(retried.relatedCards, isEmpty);
+    final asked = call(second, 'retry-declined', 'forget', {'rawEraseRetry': retried.targetId, 'deleteChat': true});
+    expect(asked.pendingRawEraseId, isNotNull);
+    expect(asked.pendingRawEraseId, isNot(declinedId));
+    expect(store.declineRawErase(asked.pendingRawEraseId!, characterId: null).state, 'declined');
+    final originalRequestRow = store.messages().singleWhere((row) => row['id'] == 'decline-request');
+    store.editMessage(id: 'decline-request', expectedSourceRev: originalRequestRow['source_rev'] as int,
+        text: '我已经修改了最初的请求。');
+    final changedOwner = begin(say('changed-original-owner', '请确认。'));
+    expect(call(changedOwner, 'locate', 'related', {'rawEraseRetry': true}).applied, isFalse);
+    store.closeAgentTurn(changedOwner);
+    expect(store.invalidateRawErase(), isFalse);
+    final afterLeave = begin(say('after-owner-leave', '还在吗？'));
+    expect(call(afterLeave, 'get-anchor', 'related', {'rawEraseRetry': true}).applied, isFalse);
+    expect(store.confirmRawErase(asked.pendingRawEraseId!, characterId: null).state, 'declined');
+    expect(_captured(store, keptRaw), keptRaw);
+    store.closeAgentTurn(afterLeave);
+    store.closeAgentTurn(second);
+    // Clear a still-locatable declined anchor, then replay the same applied read.
+    final leavingSource = say('retry-live-leave-source', '我收藏灰色水晶。');
+    final leavingAuthor = begin(leavingSource);
+    final leavingCard = call(leavingAuthor, 'memory', 'remember', {'text': '我收藏灰色水晶。'}).targetId!;
+    store.closeAgentTurn(leavingAuthor);
+    final leavingTurn = begin(say('retry-live-leave-original', '忘掉水晶，请删原话。'), [actualCard(leavingCard)]);
+    final leavingOffer = call(leavingTurn, 'original', 'forget', {'card': leavingCard, 'deleteChat': true});
+    expect(store.declineRawErase(leavingOffer.pendingRawEraseId!, characterId: null).state, 'declined');
+    store.closeAgentTurn(leavingTurn);
+    final after = begin(say('retry-live-leave-next', '请重新申请。'));
+    const readInput = {'rawEraseRetry': true};
+    final live = call(after, 'locate', 'related', readInput);
+    expect(live.applied, isTrue);
+    expect(live.relatedCards, isEmpty);
+    expect(store.invalidateRawErase(), isFalse);
+    expect(call(after, 'locate', 'related', readInput).relatedCards, isNull);
+    expect(call(after, 'new-read', 'related', readInput).applied, isFalse);
+    expect(call(after, 'old-target', 'forget', {'rawEraseRetry': live.targetId, 'deleteChat': true}).applied, isFalse);
+    expect(store.confirmRawErase(leavingOffer.pendingRawEraseId!, characterId: null).state, 'declined');
+    expect(_captured(store, leavingSource), leavingSource);
+    store.closeAgentTurn(after);
+
 
     final coldRaw = say('cold-raw', '我保存蓝色贝壳。');
     final coldMaking = begin(coldRaw);
@@ -1587,6 +1821,9 @@ void main() {
     expect(coldReplay.pendingRawEraseId, isNull);
     expect(_captured(store, coldRaw), coldRaw);
     expect(call(coldDeleting, 'cold-new-delete', 'forget', coldInput).code, 'turn_closed');
+    final freshAfterReopen = begin(say('cold-retry-source', '请再确认。'));
+    expect(call(freshAfterReopen, 'locate', 'related', {'rawEraseRetry': true}).applied, isFalse);
+    store.closeAgentTurn(freshAfterReopen);
   });
 
   test('durable ordinals share original task fingerprints and late accepted receipts can drain', () {
@@ -2100,6 +2337,51 @@ void main() {
     expect(captured(refreshR30), refreshR30);
     expect(store.requests(), paid);
     store.closeAgentTurn(refreshDeleting);
+
+    {
+      // A manually backed fact survives the first operation and is a real
+      // one-card residual. Three unrelated forgotten cards would exceed the
+      // retry turn's limit even though publishing the proposal wrote zero cards.
+      final otherCards = [seed('报名陶艺课。'), seed('喜欢观云。'), seed('常去书展。')];
+      final source = say('retry-manual-source', '我住柏树路，也喜欢印章。');
+      final setup = begin(source);
+      final rootId = call(setup, 'root', 'remember', {'text': '我住柏树路。'}).targetId!;
+      final duplicateId = call(setup, 'raw-seals', 'remember', {'text': '我喜欢印章。'}).targetId!;
+      store.closeAgentTurn(setup);
+      final standalone = seed('我喜欢印章。');
+      final survivor = standalone['id']! as String;
+      final merge = begin(say('retry-manual-merge', '这两条印章的事相同。'), [standalone, actualCard(duplicateId)]);
+      expect(call(merge, 'merge', 'merge', {'card': survivor, 'from': [duplicateId]}).applied, isTrue);
+      store.closeAgentTurn(merge);
+      final originalRequest = begin(say('retry-manual-first', '忘掉柏树路，包括原话。'), [actualCard(rootId)]);
+      expect(call(originalRequest, 'get-affected', 'related', {'card': rootId}).relatedCards!
+          .map((row) => row['id']), contains(survivor));
+      final first = call(originalRequest, 'first', 'forget', {'card': rootId, 'deleteChat': true});
+      expect(first.changedCardIds, [rootId]);
+      expect(store.declineRawErase(first.pendingRawEraseId!, characterId: null).state, 'declined');
+      store.closeAgentTurn(originalRequest);
+      final later = begin(say('retry-manual-second', '重新确认删除上次的原话。'), otherCards);
+      final read = call(later, 'get-affected', 'related', {'rawEraseRetry': true});
+      expect(read.relatedCards!.map((row) => row['id']), [survivor]);
+      expect(read.relatedCards!.single['required_effect'], isTrue);
+      final fresh = call(later, 'proposal', 'forget', {'rawEraseRetry': read.targetId, 'deleteChat': true});
+      expect(fresh.changedCardIds, isEmpty);
+      final freshId = fresh.pendingRawEraseId!;
+      final tooMany = call(later, 'three-others', 'forget', {
+        'changes': [for (final card in otherCards) {'card': card['id'], 'forget': true}],
+      });
+      expect(tooMany.code, 'card_limit');
+      for (final card in otherCards) {
+        expect(actualCard(card['id'] as String), card);
+      }
+      expect(store.markRawEraseOffered(freshId, characterId: null).state, 'awaiting');
+      expect(store.confirmRawErase(freshId, characterId: null).changedCardIds, unorderedEquals([survivor]));
+      expect(actualCard(survivor)['manual'], isTrue);
+      expect(actualCard(survivor)['text'], standalone['text']);
+      expect(actualCard(survivor)['evidence'], isEmpty);
+      expect(store.messages().any((row) => row['id'] == source['id']), isFalse);
+      store.closeAgentTurn(later);
+    }
   });
 
   test('retrieval checks matching and obsolete paths to the same ancestor in one query', () {
@@ -2660,6 +2942,9 @@ void main() {
     now = DateTime.utc(2026, 10, 1, 12).millisecondsSinceEpoch;
     final firstRole = character('local:keeper-first');
     final secondRole = character('local:keeper-second');
+    final quietCard = seed('很想念那株银杏。', keywords: ['银杏']);
+    final quietId = quietCard['id']! as String;
+    store.applyControl(topicIds: [quietCard['topic_id']! as String], kind: 'never');
     final firstSource = sayAs('day-first', '今天喝了红茶。', firstRole);
     sayAs('day-second', '今天散步了。', secondRole);
     now += 86400000;
@@ -2676,6 +2961,17 @@ void main() {
     expect(claim['scope_characters'], [null, firstRole, secondRole]);
     final shared = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
     final sharedId = shared['id']! as String;
+    expect((shared['cards'] as List<MemoryRow>).map((row) => row['id']), isNot(contains(quietId)));
+    for (final ranked in <List<String>?>[null, [quietId]]) {
+      final recalled = store.applyAgentMemoryTool(
+        turnId: sharedId, callId: ranked == null ? 'lexical-quiet' : 'ranked-quiet', toolName: 'recall',
+        input: {'query': '聊聊银杏'}, rankedRecallIds: ranked,
+      );
+      expect(recalled.applied, isTrue);
+      expect(recalled.recallSelection!.ids, isNot(contains(quietId)));
+    }
+    final reviewed = store.beginAgentMaintenance(kind: 'organize', claimId: claim['id']! as String);
+    expect((reviewed['shown_cards'] as Map).containsKey(quietId), isFalse);
     expect(
       estimatedContexts,
       contains(
@@ -2924,12 +3220,28 @@ void main() {
     final controlsBeforeFixedReads = store.topicControls();
     final archiveBeforeFixedReads = store.archive;
     final requestsBeforeFixedReads = store.requests();
-    expect(
-      store
-          .memoryFixedLayerCards(characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04')
-          .map((row) => row['id']),
-      isNot(contains(editingImpressionId)),
-    );
+    List<String> fixedIds(String? input, int expectedDomainSelects) {
+      var selects = 0;
+      database.trace = SqliteTraceCallback((event) {
+        if (event is SqliteTraceStatement && (event.sql?.contains('SELECT c.*,t.mode AS topic_mode') ?? false)) {
+          selects++;
+        }
+        return 0;
+      });
+      try {
+        final rows = store.memoryFixedLayerCards(
+          characterId: firstRole, fromDay: '2026-10-02', beforeDay: '2026-10-04', explicitUserInput: input,
+        );
+        expect(selects, expectedDomainSelects, reason: 'one fixed-layer SELECT, plus one for an invitation');
+        return [for (final row in rows) row['id']! as String];
+      } finally {
+        database.trace = null;
+      }
+    }
+    for (final input in [null, '  ', '今天看见玉兰了。', '如果玉兰怎么样？', '「聊聊玉兰」']) {
+      expect(fixedIds(input, 1), isNot(contains(editingImpressionId)));
+    }
+    expect(fixedIds('请，聊聊玉兰？！', 2), contains(editingImpressionId));
     expect(
       store
           .memoryFixedLayerCards(

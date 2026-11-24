@@ -113,12 +113,13 @@ extension CompanionMemoryScopeStore on CompanionMemoryStore {
         if (_memoryReferencesCurrent(card['id'] as String)) card,
     ];
     var explicit = const <String>{};
-    if (explicitUserInput != null &&
-        explicitUserInput.trim().isNotEmpty &&
-        fixed.any((card) => card['topic_mode'] == 'never')) {
-      // A card outside these fixed layers can make the target ambiguous, or
-      // identify the same topic with a different keyword. Use the whole domain.
-      explicit = explicitMemoryTopics(explicitUserInput, _memoryDomainCards(characterId));
+    if (explicitUserInput != null && fixed.any((card) => card['topic_mode'] == 'never')) {
+      // Only an invitation needs the whole domain to resolve ambiguity. Matching
+      // reads text, keywords and aliases, so the domain need not load evidence.
+      Iterable<MemoryRow> domain() sync* {
+        yield* _memoryDomainCards(characterId, includeEvidence: false);
+      }
+      explicit = explicitMemoryTopics(explicitUserInput, domain());
     }
     final at = _checkedNow();
     return [

@@ -53,11 +53,16 @@ class Report:
                     else:
                         item['done'] = event
                 elif kind == 'done':
-                    self.complete = event['success'] is not None
-                    self.success = event['success']
+                    success = event.get('success')
+                    if type(success) is not bool:
+                        self.issue = 'done.success must be a boolean'
+                    elif self.success is not False:
+                        self.success = success
         except (ValueError, KeyError, TypeError) as error:
-            self.complete = False
             self.issue = f'incomplete reporter stream: {error}'
+        self.complete = self.issue is None and self.success is not None
+        if not self.complete and self.success is not False:
+            self.success = None
 
     def check(self, name):
         found = [item for item in self.tests.values() if item['test']['name'] == name]
@@ -162,6 +167,11 @@ class BatchReport:
                 raise ValueError('a batch has no actual child exit')
             if any(not report.complete for _, report in results.values()):
                 raise ValueError('a Dart batch did not complete')
+            for identifier, (_, report) in results.items():
+                for item in report.tests.values():
+                    owner = self.owners.get(item['test']['name'])
+                    if owner is not None and owner != identifier:
+                        raise ValueError('required test appeared in another batch')
             if any(report.check(name)[0] != 'PASS' for _, report in results.values() for name in self.guards):
                 raise ValueError('every batch must complete every guard')
             successful = all(code == 0 and report.success is True and
@@ -445,9 +455,10 @@ def run_windows_suite(root, key, suite, cases, output, log):
         if comspec is None:
             raise OSError('COMSPEC is missing or cannot be resolved')
         comspec = os.path.abspath(comspec)
-    with tempfile.TemporaryDirectory(prefix=f'{key}-replay-') as folder:
+    folder = Path(tempfile.mkdtemp(prefix=f'{key}-replay-'))
+    try:
         # Resolve the actual temporary paths before measuring any command.
-        batches = windows_batches(key, suite, cases, Path(folder), executable, environment, comspec)
+        batches = windows_batches(key, suite, cases, folder, executable, environment, comspec)
         codes = []
         with (output / f'{key}.jsonl').open('w', encoding='utf-8', newline='\n') as canonical:
             def emit(event):
@@ -477,6 +488,11 @@ def run_windows_suite(root, key, suite, cases, output, log):
                       'report_base64': base64.b64encode(raw).decode('ascii') if raw is not None else None})
             emit({'type': 'replayBatchesDone'})
         return batch_exit(codes)
+    finally:
+        try:
+            shutil.rmtree(folder)
+        except OSError as error:
+            log.write(f'Could not clean up {folder}: {error}\n')
 
 
 def run_suites(root, data, output, engine_report=None):

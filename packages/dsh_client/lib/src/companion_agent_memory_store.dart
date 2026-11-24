@@ -147,22 +147,34 @@ class _RawErasePlan {
   late final Set<String> changed;
 }
 
+class _RawEraseAnchor {
+  _RawEraseAnchor(this.id, this.archiveId, this.characterId, this.controlRevision, this.messageId,
+      this.sourceRev, this.fingerprint, this.plan);
+  final String id, archiveId, messageId, fingerprint;
+  final String? characterId;
+  final int controlRevision, sourceRev;
+  final _RawErasePlan plan;
+}
+
 class _PendingRawErase {
   _PendingRawErase({
     required this.id, required this.turnId, required this.callId, required this.archiveId,
     required this.messageId, required this.sourceRev, required this.characterId,
-    required this.controlRevision, required this.fingerprint, required this.plan,
+    required this.controlRevision, required this.fingerprint, required this.plan, required this.anchor,
   });
   final String id, turnId, callId, archiveId, messageId, fingerprint;
   final String? characterId;
   final int sourceRev, controlRevision;
   _RawErasePlan? plan;
+  _RawEraseAnchor? anchor;
+  ({int nextSeq, int atUtcMs})? declinedAt;
   String state = 'deferred';
   int? expiresAtUtcMs;
 
   void finish(String value) {
     state = value;
     plan = null;
+    if (value != 'expired' && value != 'declined') anchor = null;
   }
 }
 
@@ -188,6 +200,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
   CompanionPendingRawErase? pendingRawErase({required String? characterId}) {
     final pending = _pendingRawErase;
     if (pending == null) return null;
+    if (pending.characterId != characterId) pending.anchor = null;
     final state = _rawEraseState(pending, characterId);
     if (state != 'deferred' && state != 'awaiting') {
       pending.finish(state);
@@ -219,14 +232,26 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
   CompanionRawEraseResult declineRawErase(String id, {required String? characterId}) {
     final pending = _pendingRawErase;
     if (pending == null || pending.id != id) return CompanionRawEraseResult(id: id, state: 'not_found');
-    final state = _rawEraseState(pending, characterId);
-    pending.finish(state == 'deferred' || state == 'awaiting' ? 'declined' : state);
+    final decision = _transaction<({String state, ({int nextSeq, int atUtcMs})? fence})>(() {
+      final at = _checkedNow();
+      final state = _rawEraseState(pending, characterId, nowUtcMs: at);
+      if (state == 'deferred' || state == 'awaiting') {
+        return (state: 'declined', fence: (nextSeq: archive['next_seq'] as int, atUtcMs: at));
+      }
+      return (state: state, fence: null);
+    });
+    // Do not move a previous refusal or turn a late click into a new deadline.
+    if (decision.fence != null) pending.declinedAt = decision.fence;
+    pending.finish(decision.state);
     return CompanionRawEraseResult(id: id, state: pending.state);
   }
 
   bool invalidateRawErase() {
     final pending = _pendingRawErase;
-    if (pending == null || (pending.state != 'deferred' && pending.state != 'awaiting')) return false;
+    if (pending == null) return false;
+    if (pending.state == 'awaiting' && _checkedNow() >= pending.expiresAtUtcMs!) pending.finish('expired');
+    pending.anchor = null;
+    if (pending.state != 'deferred' && pending.state != 'awaiting') return false;
     pending.finish('invalidated');
     return true;
   }
@@ -296,20 +321,106 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     return result;
   }
 
-  String _rawEraseState(_PendingRawErase pending, String? characterId) {
+  String _rawEraseState(_PendingRawErase pending, String? characterId, {int? nowUtcMs}) {
     if (pending.state != 'deferred' && pending.state != 'awaiting') return pending.state;
     if (pending.characterId != characterId) return 'invalidated';
-    if (pending.expiresAtUtcMs != null && _checkedNow() >= pending.expiresAtUtcMs!) return 'expired';
+    if (pending.expiresAtUtcMs != null && (nowUtcMs ?? _checkedNow()) >= pending.expiresAtUtcMs!) return 'expired';
+    if (!_rawEraseCurrent(pending, characterId)) return 'invalidated';
+    return pending.state;
+  }
+
+  // Retry and physical confirmation independently recheck the original and
+  // most recent requester against the frozen post-forget database state.
+  bool _rawEraseCurrent(_PendingRawErase pending, String? characterId) {
+    final anchor = pending.anchor;
+    if (anchor == null || anchor.characterId != characterId || pending.characterId != characterId) return false;
     final meta = archive;
-    if (meta['id'] != pending.archiveId || meta['control_revision'] != pending.controlRevision) return 'invalidated';
-    final owner = _db.select('SELECT * FROM memory_messages WHERE id=?', [pending.messageId]);
-    if (owner.isEmpty || owner.single['source_rev'] != pending.sourceRev ||
-        owner.single['character_id'] != pending.characterId || owner.single['role'] != 'user' ||
-        owner.single['scope'] != 'real') {
-      return 'invalidated';
+    if (meta['id'] != anchor.archiveId || meta['control_revision'] != anchor.controlRevision ||
+        meta['id'] != pending.archiveId || meta['control_revision'] != pending.controlRevision) {
+      return false;
     }
-    return _rawEraseFingerprint(pending.plan!, characterId, pending.messageId) == pending.fingerprint
-        ? pending.state : 'invalidated';
+    bool matches(String message, int revision, String fingerprint) {
+      final rows = _db.select('SELECT * FROM memory_messages WHERE id=?', [message]);
+      return rows.isNotEmpty && rows.single['source_rev'] == revision &&
+          rows.single['character_id'] == characterId && rows.single['role'] == 'user' &&
+          rows.single['scope'] == 'real' && _rawEraseFingerprint(anchor.plan, characterId, message) == fingerprint;
+    }
+    return matches(anchor.messageId, anchor.sourceRev, anchor.fingerprint) &&
+        (pending.messageId == anchor.messageId || matches(pending.messageId, pending.sourceRev, pending.fingerprint));
+  }
+
+  _RawEraseAnchor _rawRetryAnchor(Row turn) {
+    final source = _agentCurrentSource(turn);
+    final pending = _pendingRawErase;
+    final character = turn['character_id'] as String?;
+    if (pending == null || pending.anchor == null ||
+        (pending.state != 'declined' && pending.state != 'expired' &&
+         !(pending.state == 'awaiting' && _checkedNow() >= pending.expiresAtUtcMs!)) ||
+        !_rawEraseCurrent(pending, character)) {
+      throw const _AgentMemoryRejected('raw_retry_unavailable');
+    }
+    // first_seq identifies the original admission event. A later edit and the
+    // caller-supplied said_at_utc must never make an earlier submission fresh.
+    final firstSeq = source['first_seq'] as int;
+    final originalEvent = _db.select(
+      'SELECT queued_at_ms FROM memory_events WHERE seq=? AND message_id=? AND source_rev=1',
+      [firstSeq, source['id']],
+    );
+    final cutoff = pending.declinedAt;
+    final afterUtcMs = cutoff?.atUtcMs ?? pending.expiresAtUtcMs;
+    if (afterUtcMs == null || originalEvent.isEmpty ||
+        (originalEvent.single['queued_at_ms'] as int) < afterUtcMs ||
+        (cutoff != null && firstSeq < cutoff.nextSeq)) {
+      throw const _AgentMemoryRejected('raw_retry_needs_new_request');
+    }
+    final prior = _db.select('SELECT first_seq FROM memory_messages WHERE id=?', [pending.messageId]).single;
+    if (turn['id'] == pending.turnId || source['id'] == pending.messageId ||
+        source['role'] != 'user' || source['scope'] != 'real' ||
+        firstSeq <= (prior['first_seq'] as int)) {
+      throw const _AgentMemoryRejected('raw_retry_needs_new_request');
+    }
+    return pending.anchor!;
+  }
+
+  _RawEraseAnchor _readRawRetry(Row turn, MemoryRow input, {Row? receipt}) {
+    if (input.length != 1 || input['rawEraseRetry'] != true) {
+      throw const _AgentMemoryRejected('invalid_raw_retry');
+    }
+    final anchor = _rawRetryAnchor(turn);
+    if (receipt != null && (receipt['target_id'] != anchor.id ||
+        receipt['after_control_revision'] != archive['control_revision'])) {
+      throw const _AgentMemoryRejected('raw_retry_needs_read');
+    }
+    return anchor;
+  }
+
+  Set<String> _rawRetryParents(_RawErasePlan plan) => {
+    for (final write in plan.writes) ...write.references.keys,
+    for (final row in _db.select(
+      'SELECT DISTINCT parent_card_id FROM memory_card_references WHERE card_id IN (SELECT value FROM json_each(?))',
+      [jsonEncode(plan.raw.refreshValues.keys.toList())],
+    )) row['parent_card_id'] as String,
+  };
+
+  _RawEraseAnchor _prepareRawRetry(Row turn, MemoryRow input) {
+    final id = input['rawEraseRetry'];
+    if (input.length != 2 || input['deleteChat'] != true || id is! String) {
+      throw const _AgentMemoryRejected('invalid_raw_retry');
+    }
+    final anchor = _rawRetryAnchor(turn);
+    final digest = sha256.convert(utf8.encode(_canonicalJson({'rawEraseRetry': true}))).toString();
+    if (id != anchor.id || _db.select(
+      '''SELECT 1 FROM memory_agent_calls WHERE turn_id=? AND tool_name='related' AND state='applied'
+         AND target_id=? AND after_control_revision=? AND input_sha256=? LIMIT 1''',
+      [turn['id'], id, archive['control_revision'], digest],
+    ).isEmpty) {
+      throw const _AgentMemoryRejected('raw_retry_needs_read');
+    }
+    _agentBudget(turn, anchor.plan.changed);
+    for (final id in _rawRetryParents(anchor.plan)) {
+      _agentCard(turn, id);
+    }
+    return anchor;
   }
 
   String _rawEraseFingerprint(_RawErasePlan plan, String? characterId, String ownerId) {
@@ -491,8 +602,8 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         List<MemoryRow>? related;
         if (toolName == 'recall' && call['state'] == 'applied') {
           try {
-            _agentCheckCurrent(turn);
-            selection = _agentRecallSelection(turn, input, rankedRecallIds);
+            final source = _agentCheckCurrent(turn);
+            selection = _agentRecallSelection(turn, input, rankedRecallIds, source?['text'] as String?);
             _grantAgentSelection(turn, selection);
             control = _agentRecallControl(turn, input, replayedCall: call);
           } on _AgentMemoryRejected {
@@ -501,8 +612,9 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         }
         if (toolName == 'related' && call['state'] == 'applied') {
           try {
-            _agentCheckCurrent(turn);
-            related = _agentRelated(turn, input);
+            final source = _agentCheckCurrent(turn);
+            final anchor = input.containsKey('rawEraseRetry') ? _readRawRetry(turn, input, receipt: call) : null;
+            related = _agentRelated(turn, input, source?['text'] as String?, retry: anchor?.plan);
           } on _AgentMemoryRejected {
             /* A saved read is not a new grant. */
           }
@@ -521,18 +633,25 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       List<MemoryRow>? relatedCards;
       var forgotten = false;
       _RawErasePlan? rawPlan;
+      _RawEraseAnchor? retry;
       try {
-        _agentCheckCurrent(turn);
+        final source = _agentCheckCurrent(turn);
         final ({Set<String> changed, String? target}) effect;
         switch (toolName) {
           case 'remember':
             effect = _agentRemember(turn, input);
           case 'forget':
-            final result = _agentControlGroup(turn, input, forgetting: true);
-            effect = (changed: result.changed, target: result.target);
-            forgotten = result.forgotten;
-            rawPlan = result.raw;
-            if (runtimeState == 'unavailable' && rawPlan == null) runtimeState = 'no_originals';
+            if (input.containsKey('rawEraseRetry')) {
+              retry = _prepareRawRetry(turn, input);
+              rawPlan = retry.plan;
+              effect = (changed: <String>{}, target: retry.id);
+            } else {
+              final result = _agentControlGroup(turn, input, forgetting: true);
+              effect = (changed: result.changed, target: result.target);
+              forgotten = result.forgotten;
+              rawPlan = result.raw;
+              if (runtimeState == 'unavailable' && rawPlan == null) runtimeState = 'no_originals';
+            }
           case 'revise':
             final result = _agentControlGroup(turn, input, forgetting: false);
             effect = (changed: result.changed, target: result.target);
@@ -546,8 +665,9 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           case 'merge':
             effect = _agentMerge(turn, input);
           case 'related':
-            relatedCards = _agentRelated(turn, input);
-            effect = (changed: <String>{}, target: null);
+            final anchor = input.containsKey('rawEraseRetry') ? _readRawRetry(turn, input) : null;
+            relatedCards = _agentRelated(turn, input, source?['text'] as String?, retry: anchor?.plan);
+            effect = (changed: <String>{}, target: anchor?.id);
           case 'relationship':
             effect = _agentRelationship(turn, input);
           case 'quiet':
@@ -568,7 +688,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           case 'ask_later':
             effect = _agentAskLater(turn, _agentToolSource(turn, input), callId, input);
           case 'recall':
-            recallSelection = _agentRecallSelection(turn, input, rankedRecallIds);
+            recallSelection = _agentRecallSelection(turn, input, rankedRecallIds, source?['text'] as String?);
             recalledControl = _agentRecallControl(turn, input);
             effect = (changed: <String>{}, target: recalledControl?['topic_id'] as String?);
           default:
@@ -609,14 +729,19 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       } on _AgentMemoryRejected catch (error) {
         _finishAgentCall(turnId, callId, state: 'ignored', before: before, after: before, code: error.code);
       }
-      if (rawPlan != null) {
+      if (rawPlan != null && _agentStoredCall(turnId, callId)['state'] == 'applied') {
         final character = turn['character_id'] as String?;
         final message = turn['source_message_id'] as String;
+        final revision = turn['source_rev'] as int;
+        final control = archive['control_revision'] as int;
+        final archiveId = archive['id'] as String;
+        final fingerprint = _rawEraseFingerprint(rawPlan, character, message);
+        final anchor = retry ?? _RawEraseAnchor(_createId(), archiveId, character, control,
+            message, revision, fingerprint, rawPlan);
         candidate = _PendingRawErase(
-          id: _createId(), turnId: turnId, callId: callId, archiveId: archive['id'] as String,
-          messageId: message, sourceRev: turn['source_rev'] as int, characterId: character,
-          controlRevision: archive['control_revision'] as int,
-          fingerprint: _rawEraseFingerprint(rawPlan, character, message), plan: rawPlan,
+          id: _createId(), turnId: turnId, callId: callId, archiveId: archiveId,
+          messageId: message, sourceRev: revision, characterId: character,
+          controlRevision: control, fingerprint: fingerprint, plan: rawPlan, anchor: anchor,
         );
       }
       return _agentResult(
@@ -628,15 +753,15 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       );
     });
     // A read-only rejection or rollback never replaces another valid pending.
-    // Only this successfully committed ordinary forget publishes its raw plan.
+    // Only a committed ordinary forget or fresh retry publishes a new confirmation.
     if (candidate != null) _pendingRawErase = candidate;
     return _rawEraseResult(result, fallback: runtimeState);
   }
 
-  MemorySelection _agentRecallSelection(Row turn, MemoryRow input, List<String>? rankedIds) {
+  MemorySelection _agentRecallSelection(Row turn, MemoryRow input, List<String>? rankedIds, String? explicitUserInput) {
     final query = _agentText(input, 'query');
     final candidates = [
-      for (final card in memoryRetrievalCandidates(characterId: turn['character_id'] as String?, input: query))
+      for (final card in memoryRetrievalCandidates(characterId: turn['character_id'] as String?, input: explicitUserInput))
         if (turn['origin_kind'] == 'chat' || card['collection'] != 'recent') card,
     ];
     final explicit = <String>{
@@ -760,13 +885,11 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     'changed_cards': _agentIds(row['changed_cards'] as String),
   };
 
-  Row _agentCurrentSource(Row turn) {
-    _agentCheckCurrent(turn);
-    if (turn['origin_kind'] != 'chat') throw const _AgentMemoryRejected('not_a_chat_turn');
-    return _db.select('SELECT * FROM memory_messages WHERE id=?', [turn['source_message_id']]).single;
-  }
+  Row _agentCurrentSource(Row turn) =>
+      _agentCheckCurrent(turn) ?? (throw const _AgentMemoryRejected('not_a_chat_turn'));
 
-  void _agentCheckCurrent(Row turn) {
+  // Chat owns the source admitted by _taskSource; a maintenance turn has no user invitation.
+  Row? _agentCheckCurrent(Row turn) {
     if (turn['closed'] != 0) throw const _AgentMemoryRejected('turn_closed');
     if (turn['archive_id'] != archive['id']) throw const _AgentMemoryRejected('archive_changed');
     if (turn['control_revision'] != archive['control_revision']) {
@@ -779,12 +902,13 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           sources.single['character_id'] != turn['character_id']) {
         throw const _AgentMemoryRejected('source_changed');
       }
-    } else {
-      final claim = _agentClaim(turn['claim_id'] as String);
-      if (!_agentParentCurrent(claim) || claim['kind'] != turn['origin_kind']) {
-        throw const _AgentMemoryRejected('maintenance_changed');
-      }
+      return sources.single;
     }
+    final claim = _agentClaim(turn['claim_id'] as String);
+    if (!_agentParentCurrent(claim) || claim['kind'] != turn['origin_kind']) {
+      throw const _AgentMemoryRejected('maintenance_changed');
+    }
+    return null;
   }
 
   MemoryRow _agentToolSource(Row turn, MemoryRow input) {
@@ -828,7 +952,13 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     final prior = turn['origin_kind'] == 'chat'
         ? _agentIds(turn['changed_cards'] as String)
         : _agentIds(_agentClaim(turn['claim_id'] as String)['changed_cards'] as String);
-    if ({...prior, ...changed}.length > 3) {
+    final pending = _pendingRawErase;
+    var reserved = const <String>{};
+    if (pending != null && pending.turnId == turn['id'] && pending.plan != null) {
+      final state = _rawEraseState(pending, turn['character_id'] as String?);
+      if (state == 'deferred' || state == 'awaiting') reserved = pending.plan!.changed;
+    }
+    if ({...prior, ...changed, ...reserved}.length > 3) {
       throw const _AgentMemoryRejected('card_limit');
     }
   }
@@ -1114,7 +1244,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     return affected;
   }
 
-  List<MemoryRow> _agentRelated(Row turn, MemoryRow input) {
+  List<MemoryRow> _agentRelated(Row turn, MemoryRow input, String? explicitUserInput, {_RawErasePlan? retry}) {
     final character = turn['character_id'] as String?;
     final domain = [
       for (final card in _memoryDomainCards(character))
@@ -1123,7 +1253,10 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     final wanted = <String>{};
     final requiredEffects = <String>{};
     final root = input['card'];
-    if (root != null) {
+    if (retry != null) {
+      requiredEffects.addAll(retry.changed);
+      wanted.addAll({...requiredEffects, ..._rawRetryParents(retry)});
+    } else if (root != null) {
       final card = _agentCard(turn, _agentText(input, 'card'));
       requiredEffects.addAll(_agentEffectSet(turn, {card['id'] as String}));
       wanted.addAll(requiredEffects);
@@ -1131,7 +1264,11 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           .select('SELECT DISTINCT message_id FROM memory_card_sources WHERE card_id=?', [root])
           .map((row) => row['message_id'])
           .toSet();
+      // Two independent facts may have been stated together. Reading one
+      // does not invite a never-proactive topic from the other.
+      final invited = explicitUserInput == null ? const <String>{} : explicitMemoryTopics(explicitUserInput, domain);
       for (final candidate in domain) {
+        if (candidate['topic_mode'] == 'never' && !invited.contains(candidate['topic_id'])) continue;
         if (!_memoryReferencesCurrent(candidate['id'] as String)) continue;
         if (_db
             .select('SELECT message_id FROM memory_card_sources WHERE card_id=?', [candidate['id']])
@@ -1147,7 +1284,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
       final expiredNotice = card['collection'] == 'recent' && (card['expires_at_ms'] as int) <= _checkedNow();
       if (expiredNotice) continue;
       final stale = !_memoryReferencesCurrent(id);
-      if (card['status'] == 'withdrawn' || (!wanted.contains(id) && !stale)) continue;
+      if (card['status'] == 'withdrawn' || (!wanted.contains(id) && (retry != null || !stale))) continue;
       shown[id] = card['row_rev'] as int;
       result.add({
         'id': id,
@@ -1169,6 +1306,9 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           ],
         },
       });
+    }
+    if (retry != null && !result.map((row) => row['id']).toSet().containsAll(wanted)) {
+      throw const _AgentMemoryRejected('raw_retry_unavailable');
     }
     _db.execute('UPDATE memory_agent_turns SET shown_cards=? WHERE id=?', [_canonicalJson(shown), turn['id']]);
     return result;

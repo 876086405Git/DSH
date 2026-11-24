@@ -136,7 +136,11 @@ class CompanionAgentMemoryTools {
       CompanionAgentTool(
         name: definition.name,
         description: _maintenanceDescriptions[definition.name]!,
-        inputSchema: _maintenanceSchema(definition.inputSchema),
+        inputSchema: _maintenanceSchema(switch (definition.name) {
+          'forget' => _ordinaryForget,
+          'related' => _ordinaryRelated,
+          _ => definition.inputSchema,
+        }),
       ),
   ];
 
@@ -234,6 +238,9 @@ class CompanionAgentMemoryTools {
         // The commit is real even if a caller rejects its presentation context.
         memory.changed();
       }
+    } else if (!receipt.replayed && receipt.pendingRawEraseId != null) {
+      // Only a committed new retry publishes a confirmation without a control write.
+      memory.changed();
     }
     final result = <String, Object?>{
       'applied': true,
@@ -247,8 +254,9 @@ class CompanionAgentMemoryTools {
     if (receipt.rawEraseState case final state?) {
       result['rawEraseState'] = state;
       result['rawEraseMessage'] = switch (state) {
-        'pending' =>
-          'The card changes are committed. Original chat remains and needs the owner\'s separate confirmation.',
+        'pending' => call.input.containsKey('rawEraseRetry')
+            ? 'The original chat still exists. The owner must give fresh, separate confirmation.'
+            : 'The card changes are committed. Original chat remains and needs the owner\'s separate confirmation.',
         'maintenance' =>
           'The card changes are committed. Maintenance cannot erase original chat or request confirmation.',
         'no_originals' => 'The card changes are committed. There are no original chat messages to confirm erasing.',
@@ -401,6 +409,24 @@ class CompanionAgentMemoryTools {
     ],
     'additionalProperties': false,
   };
+  static const _ordinaryForget = {
+    'type': 'object',
+    'properties': _forgetProperties,
+    'anyOf': _forgetTargets,
+    'additionalProperties': false,
+  };
+  static const _forgetProperties = {
+    'card': _card,
+    'deleteChat': {'type': 'boolean', 'default': false},
+    'changes': {'type': 'array', 'minItems': 1, 'items': _change},
+  };
+  static const _forgetTargets = [
+    {'required': ['card']},
+    {'required': ['changes']},
+  ];
+  static const _ordinaryRelated = {
+    'type': 'object', 'properties': {'card': _card}, 'additionalProperties': false,
+  };
   static const definitions = <CompanionAgentTool>[
     CompanionAgentTool(
       name: 'remember',
@@ -424,20 +450,15 @@ class CompanionAgentMemoryTools {
     ),
     CompanionAgentTool(
       name: 'forget',
-      description: 'First use related to inspect same-source candidates: sharing a source does not mean the same fact. Forget the intended entries atomically; changes must explicitly include all true literal/reference dependencies and preserve independent facts by nonempty rewrites. To request erasing original chat too, set deleteChat=true and supply top-level card as the single original-source target, also forgotten in changes if present. This only prepares a separate owner confirmation: original chat remains until the person confirms through the app. Other changes are not additional original-source targets. All affected entries must be granted and fit the shared budget. Report the actual card changes and pending confirmation; never claim raw erasure from the model request alone.',
+      description: 'First use related to inspect same-source candidates: sharing a source does not mean the same fact. Forget the intended entries atomically; changes must explicitly include all true literal/reference dependencies and preserve independent facts by nonempty rewrites. To request erasing original chat too, set deleteChat=true and supply top-level card as the single original-source target, also forgotten in changes if present. This only prepares a separate owner confirmation: original chat remains until the person confirms through the app. Other changes are not additional original-source targets. All affected entries must be granted and fit the shared budget. Report the actual card changes and pending confirmation; never claim raw erasure from the model request alone. Only if the person explicitly asks again after expiry or refusal, first call related(rawEraseRetry: true) and then send exactly its targetId as rawEraseRetry with deleteChat: true to request fresh confirmation.',
       inputSchema: {
         'type': 'object',
-        'properties': {
-          'card': _card,
-          'deleteChat': {'type': 'boolean', 'default': false},
-          'changes': {'type': 'array', 'minItems': 1, 'items': _change},
-        },
+        'properties': {..._forgetProperties, 'rawEraseRetry': _text},
         'anyOf': [
+          {'anyOf': _forgetTargets, 'not': {'required': ['rawEraseRetry']}},
           {
-            'required': ['card'],
-          },
-          {
-            'required': ['changes'],
+            'required': ['rawEraseRetry', 'deleteChat'], 'maxProperties': 2,
+            'properties': {'deleteChat': {'enum': [true]}},
           },
         ],
         'additionalProperties': false,
@@ -465,11 +486,12 @@ class CompanionAgentMemoryTools {
     ),
     CompanionAgentTool(
       name: 'related',
-      description: 'Read and grant actual same-source candidates and required literal/reference effects for a supplied card. Decide meaning from their text; do not equate a shared proof with the same fact. With no card, return only stale cleanup IDs without obsolete text.',
+      description: 'Read and grant actual same-source candidates and required literal/reference effects for a supplied card. Decide meaning from their text; do not equate a shared proof with the same fact. With no card, return only stale cleanup IDs without obsolete text. For an explicit new request to erase the same original chat after a refusal or timeout, use only rawEraseRetry: true. An empty cards list is valid and targetId identifies the same original set.',
       inputSchema: {
         'type': 'object',
-        'properties': {'card': _card},
+        'properties': {'card': _card, 'rawEraseRetry': {'type': 'boolean', 'enum': [true]}},
         'additionalProperties': false,
+        'maxProperties': 1,
       },
     ),
     CompanionAgentTool(

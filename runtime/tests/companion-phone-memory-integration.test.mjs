@@ -116,3 +116,22 @@ integration('actual Session replay and compaction contain no request-only phone 
   assert.doesNotMatch(JSON.stringify(f.requests.at(-1).body.messages), /A03_PHONE_SELECTED/);
   assert.doesNotMatch(JSON.stringify(f.events(agent.session)), /A03_PHONE_SELECTED/);
 });
+
+integration('actual provider receives phone-zone and attributed notice on matching RPC only', async t => {
+  const f = await fixture(t), { agent } = await f.createAgent('PHONE_NOTICE');
+  const deviceContext = { window: 'notification', localTime: '2026-11-24T16:50+08:00', zoneId: 'Asia/Shanghai',
+    noticeReply: { source: 'notice', phase: 'draft', app: '测试', package: 'test.notice', observed_at_ms: 1,
+      summary: 'DEVICE_NOTICE_ONLY_ONCE' } };
+  f.promptContext.prepare(agent, { v: 1, instanceId: f.promptContext.info(agent).instanceId,
+    sessionId: agent.id, requestId: 'notice', events: [], deviceContext });
+  await f.send(agent, 'notice');
+  assert.equal(f.requests.length, 1);
+  const blocks = f.requests[0].body.messages.flatMap(message => message.content).filter(item => item.text?.includes('DEVICE_NOTICE_ONLY_ONCE'));
+  assert.equal(blocks.length, 1);
+  assert.match(blocks[0].text, /Asia\/Shanghai/);
+  assert.doesNotMatch(requestSystemText(f.requests[0]), /DEVICE_NOTICE_ONLY_ONCE/);
+  assert.doesNotMatch(JSON.stringify(f.events(agent.session)), /DEVICE_NOTICE_ONLY_ONCE/);
+  await f.send(agent, 'ordinary');
+  assert.equal(f.requests.length, 2);
+  assert.doesNotMatch(JSON.stringify(f.requests[1].body), /DEVICE_NOTICE_ONLY_ONCE/);
+});

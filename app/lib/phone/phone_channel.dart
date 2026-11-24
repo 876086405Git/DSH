@@ -1327,6 +1327,10 @@ class PhoneChannel {
 
   Future<bool> setEnabled(bool enabled) => _bool('setEnabled', {'enabled': enabled});
 
+  /// Her full-mode sessions on this phone's engine, replacing the last set.
+  /// Native lets exactly these operate the phone with the switch off.
+  Future<bool> setCompanionSessions(Set<String> ids) => _bool('setCompanionSessions', {'ids': ids.toList()});
+
   /// Explicit preference only; native snapshots it when a new background driver is created.
   Future<PhoneResult> setBackgroundViewport(PhoneBackgroundViewport preset) =>
       _result('setBackgroundViewport', {'preset': preset.name});

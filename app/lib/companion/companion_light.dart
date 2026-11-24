@@ -73,7 +73,7 @@ List<CompanionLine> companionLightContext(Iterable<CompanionLine> lines, {int wi
 
 enum CompanionLightFailure { noKey, badKey, busy, network, server }
 
-enum CompanionHostFailure { disconnected, modelUnavailable, unavailable, busy, requestFailed }
+enum CompanionHostFailure { disconnected, modelUnavailable, unavailable, busy, requestFailed, deviceConflict, retryClosed, selectionChanged }
 
 // Host failures keep their route identity through the Agent's existing error
 // channel. In particular they never ask for a phone-only DeepSeek key.
@@ -82,6 +82,7 @@ CompanionHostFailure companionHostFailure(String? code, {int? httpStatus}) => sw
   'RATE_LIMIT' || 'companion/auxiliary-busy' => CompanionHostFailure.busy,
   'companion/auxiliary-model-unavailable' || 'UNKNOWN_MODEL' || 'MISSING_MODEL' =>
     CompanionHostFailure.modelUnavailable,
+  'companion/auxiliary-selection-changed' => CompanionHostFailure.selectionChanged,
   'transport-error' || 'cancelled' => CompanionHostFailure.disconnected,
   'route-unavailable' ||
   'companion/auxiliary-unavailable' ||

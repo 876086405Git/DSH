@@ -540,7 +540,12 @@ class _Replay {
           isCurrent: isTurnCurrent,
           onCommitted: currentAgent.confirmControlRevision,
           forgottenNotice: '已忘记。',
-          semanticRecall: (query) => memory.recallIds(query, characterId: role, isCurrent: isTurnCurrent),
+          semanticRecall: (query) => memory.recallIds(
+            query,
+            explicitUserInput: source['text']! as String,
+            characterId: role,
+            isCurrent: isTurnCurrent,
+          ),
         );
         final taskTools = CompanionAgentTaskTools(
           memoryTools: tools,

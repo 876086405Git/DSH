@@ -223,7 +223,8 @@ class CompanionMemoryOwner extends ChangeNotifier {
     // this phone Owner survives. The next real room reads the same deferred
     // id. Actual room departure and an already offered record both revoke it.
     final pending = actualRoomLeave ? null : store.pendingRawErase(characterId: characterId);
-    final invalidated = (actualRoomLeave || pending?.expiresAtUtcMs != null) && store.invalidateRawErase();
+    final invalidated = (actualRoomLeave || pending == null || pending.expiresAtUtcMs != null) &&
+        store.invalidateRawErase();
     _cancelRawEraseExpiry();
     _roomReady = false;
     _worker?.cancel();
@@ -359,6 +360,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
 
   Future<List<String>?> recallIds(
     String query, {
+    String? explicitUserInput,
     required String? characterId,
     required bool Function() isCurrent,
   }) async {
@@ -368,7 +370,7 @@ class CompanionMemoryOwner extends ChangeNotifier {
       store: store,
       characterId: characterId,
       query: query,
-      explicitInput: query,
+      explicitInput: explicitUserInput,
       isCurrent: current,
     );
     if (!current()) throw const CompanionMemoryRetrievalCancelled();

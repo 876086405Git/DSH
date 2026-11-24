@@ -386,8 +386,10 @@ class CompanionPromptCapability {
     this.memoryMode = 'query',
     this.memoryEpoch,
     this.phoneMemory = false,
+    int? phoneMemoryVersion,
+    this.selectedPage = false,
     this.chatUsage = false,
-  });
+  }) : phoneMemoryVersion = phoneMemoryVersion ?? (phoneMemory ? 2 : 0);
   final String instanceId;
   final String sessionId;
   final int profileRevision;
@@ -405,6 +407,12 @@ class CompanionPromptCapability {
   /// The runtime can attach the phone's already selected block to this
   /// request without writing it into the Session or system projections.
   final bool phoneMemory;
+
+  /// v3 preserves the phone's selected layers and source labels, and supports deviceContext.
+  final int phoneMemoryVersion;
+
+  /// This bridge accepts a shared page in the matching request-only sidecar.
+  final bool selectedPage;
 
   /// Owner-only observations for marked ordinary chat calls. This is not
   /// complete billing coverage for background, compaction, or other agents.
@@ -428,6 +436,8 @@ class CompanionPromptCapability {
         revision > 9007199254740991 ||
         (memoryMode != 'query' && memoryMode != 'automatic' && memoryMode != 'phone') ||
         (map.containsKey('phoneMemory') && map['phoneMemory'] is! bool) ||
+        (map.containsKey('phoneMemoryVersion') &&
+            (map['phoneMemory'] != true || map['phoneMemoryVersion'] is! int || (map['phoneMemoryVersion'] as int) < 2)) ||
         (map.containsKey('chatUsage') && map['chatUsage'] is! bool) ||
         (memoryMode == 'phone' && map['phoneMemory'] != true) ||
         (map.containsKey('memoryEpoch') &&
@@ -443,6 +453,8 @@ class CompanionPromptCapability {
       memoryMode: memoryMode!,
       memoryEpoch: memoryEpoch,
       phoneMemory: map['phoneMemory'] == true,
+      phoneMemoryVersion: map['phoneMemoryVersion'] as int?,
+      selectedPage: map['selectedPage'] == true,
       chatUsage: map['chatUsage'] == true,
     );
   }
@@ -547,6 +559,30 @@ extension CompanionApi on DshClient {
       return null;
     }
     return _promptCapability(path, response, sessionId);
+  }
+
+  /// Restore a replaced companion session without changing the Host default.
+  /// An old bridge or relay can already have the desired default. If it does
+  /// not, keep the requested model for a later retry on an upgraded host.
+  Future<void> restoreCompanionSessionModel(String sessionId, ModelSelection model) async {
+    bool same(ModelSelection? selected) => selected?.provider == model.provider &&
+        selected?.model == model.model && selected?.reasoningEffort == model.reasoningEffort;
+    if (canReachDshGo) {
+      const path = '$dshGoCompanionPath/restore-model';
+      final response = await _bridge.postJson(path, {'sessionId': sessionId, 'model': model.toJson()});
+      if (response.statusCode == 200) {
+        final body = asMap(tryDecodeJson(response.text));
+        if (body?['sessionId'] == sessionId && same(ModelSelection.fromJson(body?['model']))) return;
+        throw const DshProtocolException('Unconfirmed companion model restoration');
+      }
+      if (response.statusCode != 404 || (_codeOf(response) != null && _codeOf(response) != 'companion/not-found')) {
+        throw companionHttpError(path, response);
+      }
+    }
+    final projection = await projections(sessionId);
+    if (projection == null) throw const DshRemoteException('session/not-found', 'Missing companion session');
+    if (same(projection.nextModel ?? (await listModels()).defaultSelection)) return;
+    throw const DshRemoteException('companion/model-restore-unavailable', 'Select the previous model on this host');
   }
 
   /// Send the pure App plan's update, then prompt with the SAME requestId.

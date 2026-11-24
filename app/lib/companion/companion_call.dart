@@ -8,7 +8,12 @@ import '../speech/call/voice_call.dart';
 
 class CompanionCallConversation implements CallConversation {
   /// [_send] sends a line the way the room's composer does; [_stop] stops her reply.
-  CompanionCallConversation(this._send, this._stop);
+  CompanionCallConversation(this._send, this._stop, {this.session, this.waitingForOwner, this.fullMode});
+
+  final String? Function()? session;
+  final bool Function()? waitingForOwner;
+  final bool Function()? fullMode;
+  String? get sessionId => session?.call();
 
   final Future<bool> Function(String text) _send;
   final Future<void> Function() _stop;
@@ -20,9 +25,8 @@ class CompanionCallConversation implements CallConversation {
   @override
   Stream<CallReply> get replies => _replies.stream;
 
-  /// Her room answers approvals itself; nothing waits on the call.
   @override
-  bool get waiting => false;
+  bool get waiting => waitingForOwner?.call() ?? false;
 
   @override
   Future<bool> send(String text) async {
@@ -44,11 +48,11 @@ class CompanionCallConversation implements CallConversation {
   /// Her reply so far, as the room reads it.
   void reply(String words, {required bool running}) {
     if (!_tracking) return;
-    if (words != _last && words.length >= _last.length) {
+    if (words != _last && (words.length >= _last.length || fullMode?.call() == true)) {
       _last = words;
       if (!_replies.isClosed) _replies.add(CallReply(words, done: false));
     }
-    if (!running && words.isNotEmpty) done();
+    if (!running && (words.isNotEmpty || fullMode?.call() == true)) done();
   }
 
   /// The turn is over (finished or failed).
