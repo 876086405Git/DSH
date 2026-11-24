@@ -88,6 +88,7 @@ class AssistantMessage extends StatefulWidget {
 }
 
 class _AssistantMessageState extends State<AssistantMessage> {
+  ThinkingPill? _thinking;
   Widget? _body;
   String? _bodyText;
   bool? _bodyStreaming;
@@ -131,6 +132,19 @@ class _AssistantMessageState extends State<AssistantMessage> {
         item.text.trimRight().isNotEmpty) {
       _textAfterThinking = true;
     }
+  }
+
+  /// 正文还在长、思考没变时复用同一个思考栏实例,Flutter 不会再往下走。
+  ThinkingPill _thinkingPill(String reasoning, bool active, bool streaming) {
+    final pill = _thinking;
+    if (pill != null &&
+        pill.reasoning == reasoning &&
+        pill.active == active &&
+        pill.streaming == streaming &&
+        pill.growIn == _waited) {
+      return pill;
+    }
+    return _thinking = ThinkingPill(reasoning: reasoning, active: active, streaming: streaming, growIn: _waited);
   }
 
   /// 同一段文字只建一次 Markdown 子树:列表每 32ms 重建一次时,
@@ -197,7 +211,7 @@ class _AssistantMessageState extends State<AssistantMessage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (reasoning.isNotEmpty) ...[
-          ThinkingPill(reasoning: reasoning, active: streaming && text.isEmpty, streaming: streaming, growIn: _waited),
+          _thinkingPill(reasoning, streaming && text.isEmpty, streaming),
           if (text.isNotEmpty && !_textAfterThinking) const SizedBox(height: 8),
         ],
         // Always wrapped, streaming too: the Markdown subtree keeps its place

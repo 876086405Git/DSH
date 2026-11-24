@@ -19,6 +19,7 @@ import 'package:dsh_app/ui/chat/media/media_paths.dart';
 import 'package:dsh_app/ui/chat/turn_summary.dart' show debugToolSummaryCaches;
 import 'package:dsh_app/ui/chat/widgets/assistant_message.dart';
 import 'package:dsh_app/ui/chat/widgets/notice_row.dart';
+import 'package:dsh_app/ui/chat/widgets/thinking_pill.dart';
 import 'package:dsh_app/ui/chat/widgets/tool_row.dart';
 import 'package:dsh_app/ui/chat/widgets/turn_process.dart';
 import 'package:dsh_app/ui/chat/widgets/user_bubble.dart';
@@ -346,6 +347,33 @@ void main() {
 
   testWidgets('a streaming reply with queued messages derives no rows per delta', (tester) async {
     await streamText(tester, queued: ['排队一', '排队二']);
+  });
+
+  testWidgets('text deltas reuse the unchanged reasoning control', (tester) async {
+    final g = _Guard();
+    addTearDown(g.dispose);
+    await g.mount(tester);
+    g.snapshot();
+    await g.settle(tester);
+    g.startStream();
+    g.chunk(const ReasoningDeltaChunk(0, '思考'));
+    await g.settle(tester);
+    final row = find.byWidgetPredicate((w) => w is AssistantMessage && w.item.streaming);
+    final pill = find.descendant(of: row, matching: find.byType(ThinkingPill));
+    expect(tester.widget<ThinkingPill>(pill).active, isTrue);
+
+    g.chunk(const BlockStartChunk(1, 'text'));
+    g.chunk(const TextDeltaChunk(1, '答'));
+    await g.settle(tester);
+    final stable = tester.widget<ThinkingPill>(pill);
+    expect(stable.active, isFalse);
+    for (var i = 0; i < 3; i++) {
+      g.chunk(const TextDeltaChunk(1, '字'));
+      await tester.pump(const Duration(milliseconds: 32));
+      expect(tester.widget<ThinkingPill>(pill), same(stable));
+    }
+    expect(g.state.items.whereType<AssistantChatItem>().last.text, '答字字字');
+    await g.unmount(tester);
   });
 
   testWidgets('plain streaming replies do not build the media path projection', (tester) async {
