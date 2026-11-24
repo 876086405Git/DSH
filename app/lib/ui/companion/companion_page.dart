@@ -3822,10 +3822,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: _input,
                   builder: (context, value, _) => CompanionComposer(
-                    onUserInput: () {
-                      _acted();
-                      _hush();
-                    },
+                    // Reaching for the keyboard is not talking over her: she finishes
+                    // her sentence; sending (or the microphone) is what stops her.
+                    onUserInput: _acted,
                     input: _input,
                     focus: _focus,
                     hint: l10n.companionInputHint(name),
