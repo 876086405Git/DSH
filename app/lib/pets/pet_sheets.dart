@@ -131,6 +131,15 @@ class PetSheets {
     }
   }
 
+  /// The system is short of memory: only the pinned sheets stay decoded. A
+  /// sprite still drawing one keeps its own handle; the next load decodes it
+  /// again.
+  void trim() {
+    for (final key in [..._images.keys]) {
+      if (!_pinned.contains(key)) _images.remove(key)?.dispose();
+    }
+  }
+
   /// Drops [packId]'s sheets: a brought pet replaced or removed. Its decodes
   /// still running never land, and no new load waits on them.
   void forget(String packId) {
