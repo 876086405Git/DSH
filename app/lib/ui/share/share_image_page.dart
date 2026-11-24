@@ -19,6 +19,7 @@ import '../../l10n/l10n.dart';
 import '../../state/artifacts.dart' show saveWindowDismissed;
 import '../../usage/usage_stats.dart';
 import '../common/app_sheet.dart';
+import '../common/display_image.dart';
 import '../common/pressable.dart';
 import '../common/scroll_edge_fade.dart';
 import '../common/segmented_pill.dart';
@@ -236,7 +237,8 @@ Future<void> settleShareCard(BuildContext context, ShareContent content) async {
         precacheImage(ResizeImage(image, width: (ShareCard.width * 3).round(), policy: ResizeImagePolicy.fit), context),
       );
     } else if (block case SharePlugin(:final icon?) when icon.startsWith('https://')) {
-      pending.add(precacheImage(ResizeImage(NetworkImage(icon), width: (64 * dpr).round()), context));
+      // The same provider PluginAvatar paints with, so this waits for the picture the card shows.
+      pending.add(precacheImage(imageForDisplay(NetworkImage(icon), width: 64, height: 64, pixelRatio: dpr), context));
     }
   }
   try {
