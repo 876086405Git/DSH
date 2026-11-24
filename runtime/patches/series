@@ -229,6 +229,7 @@ ohos-client-hmr-idle.diff
 ohos-skill-root-events.diff
 ohos-piai-empty-models.diff
 projection-current-state.diff
+brotli-packed-dictionary.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
