@@ -897,6 +897,8 @@ def dsh_drop_reason(rel, abi, prune_dev):
     if "node-pty/third_party/conpty" in rel:
         return "foreign-binary"
     if prune_dev:
+        if rel.startswith("node_modules/@agentclientprotocol/sdk/dist/") and rel.endswith(".test.js"):
+            return "package-tests"
         if rel.startswith((
                 "node_modules/@mixmark-io/domino/test/",
                 "node_modules/gaxios/build/esm/test/",
