@@ -404,10 +404,16 @@ jobs:
           flutter pub get --enforce-lockfile
           flutter gen-l10n
 
+      # The regression runs only on this arm64 runner's simulator, so it builds only arm64.
+      # Full runs, and the compile job on main, still build both simulator architectures.
       - name: Run the engine inside the app
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
-          (cd app && bash ../tooling/ios/build.sh --simulator --debug -t integration_test/ios_engine_check.dart)
+          (
+            cd app
+            if [[ "${{ inputs.regression_only }}" == "true" ]]; then export FLUTTER_XCODE_ARCHS=arm64; fi
+            bash ../tooling/ios/build.sh --simulator --debug -t integration_test/ios_engine_check.dart
+          )
           node="$(ls -d "$DSH_IOS_ENGINE_WORK"/node-v*-darwin-arm64/bin/node)"
           "$node" tooling/ios/engine-smoke/app-check.mjs --simulator "$DSH_SIMULATOR"             --app app/build/ios/iphonesimulator/Runner.app --mode engine
 
