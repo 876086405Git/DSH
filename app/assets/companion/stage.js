@@ -698,22 +698,20 @@
 
   async function loadTexture(gl, url, sizes) {
     const blob = await (await fetch(url, { signal: floatAbort?.signal })).blob();
-    const size = await createImageBitmap(blob);
-    if (floatDisposed) { size.close(); throw new Error('float_disposed'); }
-    sizes?.push([size.width, size.height]);
-    const limit = Math.min(MAX_TEXTURE, gl.getParameter(gl.MAX_TEXTURE_SIZE));
-    const scale = Math.min(1, limit / Math.max(size.width, size.height));
-    const width = Math.round(size.width * scale);
-    const height = Math.round(size.height * scale);
-    size.close();
-    const bitmap = await createImageBitmap(blob, {
-      resizeWidth: width,
-      resizeHeight: height,
-      resizeQuality: 'high',
-      premultiplyAlpha: 'premultiply',
-      colorSpaceConversion: 'none',
-    });
+    const options = { premultiplyAlpha: 'premultiply', colorSpaceConversion: 'none' };
+    // One decode when it fits; only an oversized image is decoded again, scaled.
+    let bitmap = await createImageBitmap(blob, options);
     if (floatDisposed) { bitmap.close(); throw new Error('float_disposed'); }
+    sizes?.push([bitmap.width, bitmap.height]);
+    const limit = Math.min(MAX_TEXTURE, gl.getParameter(gl.MAX_TEXTURE_SIZE));
+    const scale = limit / Math.max(bitmap.width, bitmap.height);
+    if (scale < 1) {
+      const resizeWidth = Math.round(bitmap.width * scale);
+      const resizeHeight = Math.round(bitmap.height * scale);
+      bitmap.close();
+      bitmap = await createImageBitmap(blob, { ...options, resizeWidth, resizeHeight, resizeQuality: 'high' });
+      if (floatDisposed) { bitmap.close(); throw new Error('float_disposed'); }
+    }
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);

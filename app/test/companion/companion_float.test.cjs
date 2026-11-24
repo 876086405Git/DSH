@@ -332,7 +332,8 @@ for (const phase of ['metadata', 'resize']) test(`dispose during texture ${phase
   const entered = new Promise(resolve => { enter = resolve; });
   const delayed = new Promise(resolve => { finish = resolve; });
   let calls = 0, closed = 0;
-  const bitmap = () => ({ width: 20, height: 30, close() { closed++; } });
+  // Over the stage's 1024 limit, so a second, scaled decode follows.
+  const bitmap = () => ({ width: 2000, height: 30, close() { closed++; } });
   const s = stage(true, async () => ({ blob: async () => ({}) }), {
     createImageBitmap() {
       calls++;
@@ -349,6 +350,19 @@ for (const phase of ['metadata', 'resize']) test(`dispose during texture ${phase
   assert.equal(closed, phase === 'metadata' ? 1 : 2);
   assert.equal(s.counts().textures, 0);
   assert.equal(s.counts().lost, 1);
+});
+
+test('a texture within the limit is decoded once', async () => {
+  const calls = [];
+  const s = stage(true, async () => ({ blob: async () => ({}) }), {
+    createImageBitmap(_, options) {
+      calls.push({ ...options });
+      return Promise.resolve({ width: 1024, height: 512, close() {} });
+    },
+  });
+  s.install();
+  await s.api.texture('http://127.0.0.1/synthetic.png');
+  assert.deepEqual(calls, [{ premultiplyAlpha: 'premultiply', colorSpaceConversion: 'none' }]);
 });
 
 test('real boot cancels a late optional motion and releases its unfinished Core owner once', async () => {
