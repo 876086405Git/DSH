@@ -8,7 +8,7 @@ import { record } from './pet-catalog';
 import { readBounded, storedAsset } from './pet-market-io';
 import { account, admin, enabled, features, jsonBody, limitBurst, quota, user } from './workshop-auth';
 import { WORKSHOP_ADMIN_HTML, WORKSHOP_ADMIN_SCRIPT } from './workshop-admin-page';
-import { assetUrl, blobKey, encoder, EXPANDED_CAP, id, KINDS, kind, LICENSES, MEMBER_CAP, metadata, PREVIEW_CONTRACT, previewKey, releaseId,
+import { assetUrl, blobKey, encoder, EXPANDED_CAP, id, identity, KINDS, kind, LICENSES, MEMBER_CAP, metadata, PREVIEW_CONTRACT, previewKey, previewUrl, releaseId,
   requireWorkshop as need, sha256, validVersion, text, UPLOAD_CAP, WorkshopError, type PublicPreview, type SubmissionMeta } from './workshop-common';
 import { validatePack } from './workshop-pack';
 import { checkPreviewRequest, derivePreview, validatePublicPng } from './workshop-preview';
@@ -298,6 +298,16 @@ async function userRoute(request: Request, env: Env, ctx: Ctx, url: URL): Promis
   withdrawSubmission(state, submission, now, explanation, owner);
   await commitState(env, previous, state, now); return json(200, { submission });
 }
+/** A fresh submission id for an admin-repair row, derived like an author
+ *  submission: sha256(origin, accountId, requestId) truncated to 32 hex. */
+async function newSubmissionId(state: State, owner: Owner): Promise<string> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const requestId = crypto.randomUUID().replaceAll('-', '');
+    const submissionId = (await sha256(`${owner.accountOrigin}\n${owner.accountId}\n${requestId}`)).slice(0, 32);
+    if (!state.submissions.some(submission => submission.submissionId === submissionId)) return submissionId;
+  }
+  throw new WorkshopError('state_conflict', 409);
+}
 async function adminRoute(request: Request, env: Env, ctx: Ctx, url: URL): Promise<Response> {
   await admin(request, env);
   const path = url.pathname.slice(`${API}/admin`.length);
@@ -341,7 +351,7 @@ async function adminRoute(request: Request, env: Env, ctx: Ctx, url: URL): Promi
     audit(state, now, { action: 'withdraw', actor: 'admin', releaseId: releaseId(release), reason: explanation });
     await commitState(env, previous, state, now); return json(200, { withdrawn });
   }
-  const match = /^\/submissions\/([a-f0-9]{32})(?:\/(archive|review|withdraw|preview|public-preview))?$/.exec(path); need(match, 'not_found', 404);
+  const match = /^\/submissions\/([a-f0-9]{32})(?:\/(archive|review|withdraw|preview|public-preview|rework))?$/.exec(path); need(match, 'not_found', 404);
   const sid = match[1]!;
   if (!match[2]) {
     method(request, 'GET'); await limitBurst(request, env, false); const paging = inspectionPage(url), detail = await submissionDetail(env, sid);
@@ -373,6 +383,60 @@ async function adminRoute(request: Request, env: Env, ctx: Ctx, url: URL): Promi
   if (match[2] === 'archive') {
     method(request, 'GET', 'HEAD'); const submission = find((await loadState(env)).state, sid);
     need(submission.submittedAt, 'not_found', 404); return serveBlob(request, env, ctx, submission.metadata);
+  }
+  if (match[2] === 'rework') {
+    // Admin repair: rebuild one submission from the author's existing archive
+    // with a corrected id/version and/or a supplied preview, then publish it.
+    // Ownership stays with the author; release bytes stay the same ZIP.
+    method(request, 'POST');
+    const body = await jsonBody(request), explanation = reason(body);
+    const previous = await loadState(env), source = find(previous.state, sid);
+    need(source.submittedAt, 'submission_state', 409);
+    enabled(env, source.metadata.kind);
+    // An uploaded preview is registered against a declared source, exactly
+    // like an author submission; the kind decides which source that is.
+    let uploaded: Uint8Array | undefined;
+    if (body.preview !== undefined) {
+      need(typeof body.preview === 'string' && body.preview.length > 0 && body.preview.length <= 2_800_000, 'bad_preview');
+      try { uploaded = Uint8Array.from(atob(body.preview), value => value.charCodeAt(0)); } catch { throw new WorkshopError('bad_preview'); }
+    }
+    // The archive binds its own work id; a row cannot be moved to another id
+    // without repacking the author's bytes. Only the version can be replaced.
+    need(body.id === undefined || body.id === source.metadata.id, 'bad_request');
+    const sourceName = source.metadata.kind === 'pet' ? 'pet-idle' : source.metadata.kind === 'theme' ? 'theme-preview' : 'companion-preview';
+    const meta = metadata({ ...source.metadata,
+      ...(body.version === undefined ? {} : { version: body.version }),
+      ...(uploaded === undefined ? {} : { previewSource: sourceName }) });
+    const target = releaseId(meta), existing = previous.state.releases.find(release => releaseId(release) === target);
+    const holder = previous.state.releases.find(release => identity(release) === identity(meta))?.owner;
+    need(!holder || sameOwner(holder, source.owner), 'owner_conflict', 409);
+    need(!previous.state.withdrawn.some(withdrawal => releaseId(withdrawal) === target), 'version_withdrawn', 409);
+    need(!existing || existing.sha256 === meta.sha256 && existing.size === meta.size, 'version_rewritten', 409);
+    const bytes = await blobBytes(env, source.metadata), validation = validatePack(bytes, meta, MAX_MOC_VERSION);
+    // An explicit PNG replaces derivation; otherwise a declared preview source
+    // is derived from the archive exactly as a normal submission would be.
+    let preview: PublicPreview | undefined, image: Uint8Array | undefined;
+    if (uploaded !== undefined) {
+      const info = validatePublicPng(uploaded), digest = await sha256(uploaded);
+      preview = { path: previewUrl(meta, digest), sha256: digest, size: uploaded.length, width: info.width, height: info.height };
+      image = uploaded;
+    } else if (meta.previewSource !== undefined) {
+      const derived = await derivePreview(bytes, meta);
+      if (derived) { preview = derived.descriptor; image = derived.bytes; }
+    }
+    if (preview && image) await putPreview(env, preview, image);
+    const now = new Date().toISOString(), state = editState(previous), fresh = await newSubmissionId(state, source.owner);
+    const submission: Submission = { submissionId: fresh, owner: source.owner, metadata: meta, status: 'pending',
+      createdAt: now, updatedAt: now, submittedAt: now, validation, ...(preview ? { preview } : {}) };
+    state.submissions.push(submission);
+    audit(state, now, { action: 'create', actor: 'admin', submissionId: fresh, reason: explanation });
+    audit(state, now, { action: 'submit', actor: 'admin', submissionId: fresh });
+    approve(state, submission, now, explanation);
+    // Only a live pending row is superseded; approved/rejected/withdrawn rows
+    // stay as retained history for the same author.
+    if (source.status === 'pending') withdrawSubmission(state, source, now, `已被管理员修正版 ${fresh} 取代`, 'admin');
+    await commitState(env, previous, state, now);
+    return json(200, { submission, replaced: source.submissionId });
   }
   method(request, 'POST'); const body = await jsonBody(request), explanation = reason(body);
   if (match[2] === 'withdraw') {
