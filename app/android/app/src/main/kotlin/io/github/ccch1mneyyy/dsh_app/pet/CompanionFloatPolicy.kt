@@ -67,6 +67,54 @@ internal class CompanionFloatFreeze {
     }
 }
 
+/**
+ * When her float in 「一直在」 sits half past the edge: idle long enough (no touch, no bubble), or put
+ * away by hand (a fling, 「收到边上」). Put away by hand, the bubble up then goes with her and the
+ * rest of that reply stays tucked; a new reply brings her out. Pure, for the JVM tests.
+ */
+internal class CompanionTuck(private val idleMs: Long) {
+    /** Half past the edge now, or sliding there. */
+    var tucked = false
+    private var byHand = false
+    private var heldAt = 0L
+    private var putAwayBubble: String? = null
+
+    /**
+     * Whether she should be tucked at [now]. [bubble]: one is up; [held]: something keeps her out
+     * (a bubble's time, the bar, an answer on its way); [blocked]: a drag, the bar or the menu;
+     * [lastCallAt]: the last touch or call for attention.
+     */
+    fun wanted(resident: Boolean, bubble: Boolean, held: Boolean, blocked: Boolean, dimmed: Boolean, lastCallAt: Long, now: Long): Boolean {
+        // Counted from her last bubble too, not just the last touch: a reply gets read before she goes.
+        if (held || bubble) heldAt = now
+        val idle = dimmed && now - maxOf(lastCallAt, heldAt) >= idleMs
+        val want = resident && !bubble && !blocked && (byHand || idle)
+        if (!want) byHand = false
+        return want
+    }
+
+    /** Flung at the side or 「收到边上」: her bubble up now ([bubbleId]) goes with her. */
+    fun putAway(bubbleId: String?) {
+        byHand = true
+        putAwayBubble = bubbleId
+    }
+
+    /** More of the reply she was put away during stays tucked with her. */
+    fun keeps(bubbleId: String) = tucked && bubbleId == putAwayBubble
+
+    /** A touch, a drag, the menu or the bar: putting her away by hand is over. */
+    fun letGo() {
+        byHand = false
+    }
+
+    fun reset() {
+        tucked = false
+        byHand = false
+        heldAt = 0L
+        putAwayBubble = null
+    }
+}
+
 /** No GL survives a known hidden/capture/screen-off/power-save state. */
 internal fun companionCanRender(
     selected: Boolean, fallback: Boolean, shown: Boolean, interactive: Boolean,

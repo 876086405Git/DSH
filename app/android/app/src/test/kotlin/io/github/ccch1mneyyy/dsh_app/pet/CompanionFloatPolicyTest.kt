@@ -169,4 +169,34 @@ class CompanionFloatPolicyTest {
         val duringSlide = CompanionFloatGeometry.move(WindowPos(150, 250), boxes.first(), boxes.last())
         assertEquals(WindowPos(170, 260), duringSlide)
     }
+
+    @Test fun sheTucksWhenIdleSinceHerLastBubbleAndOnlyWhileResident() {
+        val tuck = CompanionTuck(30_000)
+        fun at(now: Long, bubble: Boolean = false, held: Boolean = bubble, blocked: Boolean = false,
+            resident: Boolean = true) = tuck.wanted(resident, bubble, held, blocked, dimmed = true, lastCallAt = 0, now = now)
+        assertTrue(at(30_000))
+        assertFalse(at(30_000, resident = false))
+        assertFalse(at(40_000, bubble = true)) // She has something to say.
+        assertFalse(at(60_000)) // A reply gets read: counted from her last bubble, not the last touch.
+        assertTrue(at(70_000))
+        assertFalse(at(70_000, blocked = true)) // A drag, the bar or the menu.
+    }
+
+    @Test fun putAwayByHandTakesHerReplyAlongButNotTheNextOne() {
+        val tuck = CompanionTuck(30_000)
+        fun want(bubble: Boolean = false) = tuck.wanted(true, bubble, held = false, blocked = false,
+            dimmed = false, lastCallAt = 0, now = 1_000)
+        tuck.putAway("companion:r1")
+        assertTrue(want()) // At once, long before idle.
+        tuck.tucked = true
+        assertTrue(tuck.keeps("companion:r1")) // The rest of that reply stays tucked with her.
+        assertFalse(tuck.keeps("companion:r2"))
+        assertFalse(want(bubble = true)) // A new reply's bubble brings her out, and ends the put-away.
+        tuck.tucked = false
+        assertFalse(tuck.keeps("companion:r1"))
+        assertFalse(want())
+        tuck.putAway(null)
+        tuck.letGo() // A tap.
+        assertFalse(want())
+    }
 }

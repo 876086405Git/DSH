@@ -177,10 +177,8 @@ internal object PetOverlay {
     private var companionNotice: String? = null
     /** Her first picture has docked the window by what she draws (the viewport is not hers to keep clear). */
     private var companionDocked = false
-    /** Her float is half past the side it docks on ([tuck]); [tuckedByHand]: flung there or 「收到边上」. */
-    private var tucked = false
-    private var tuckedByHand = false
-    private var heldAt = 0L
+    /** Whether her float is half past the side it docks on ([tuck]). */
+    private val tucking = CompanionTuck(TUCK_AFTER_MS)
     private var bubbleView: BubbleView? = null
     private var bubbleId: String? = null
     private var menuView: PetMenuView? = null
@@ -350,6 +348,8 @@ internal object PetOverlay {
         val words = PetPush.clean(text, 600) ?: return false
         // One bubble per reply: a streaming reply's later words go into the bubble already out.
         val key = "companion:${id.orEmpty()}"
+        // Put away during this reply: its later words stay tucked with her; a new reply brings her out.
+        if (tucking.keeps(key)) return false
         companionBubble = PetBubble(key, "companion", words, companionName, null, null, now() + 15_000)
         evaluate()
         val shown = bubbleId == key && bubbleView?.isAttachedToWindow == true
@@ -677,49 +677,57 @@ internal object PetOverlay {
 
     /**
      * Where the rest frame docks now. Her float's window is already cropped to what she draws, so
-     * it leans on the side ([EdgeSnap.hug]), half past it while [tucked]; the pixel pet keeps room
+     * it leans on the side ([EdgeSnap.hug]), half past it while tucked; the pixel pet keeps room
      * for every frame it may play.
      */
     private fun dockedRest(v: PetView, area: SafeArea = safeArea()): WindowPos =
         if (v.companionGeometry == null) EdgeSnap.position(dock, v.reach, area, edge(v.context))
-        else EdgeSnap.hug(dock, v.frame.width, v.frame.height, area, edge(v.context), v.context.dp(HUG_DP), tucked)
+        else EdgeSnap.hug(dock, v.frame.width, v.frame.height, area, edge(v.context), v.context.dp(HUG_DP), tucking.tucked)
 
-    /**
-     * Her float in 「一直在」 goes half past the edge once nothing has gone on for a while, or at
-     * once when flung there or tucked from her menu. Anything she has to show, a touch, the menu
-     * or the bar brings her out.
-     */
+    /** Slides her float in or out of the edge as [CompanionTuck] says. */
     private fun tuck(bubble: PetBubble?, t: Long) {
         val v = petView ?: return
         val p = petParams ?: return
         // The pixel pet (or her fallback to it) never tucks, and its place never depended on it.
         if (v.companionGeometry == null) {
-            tucked = false
-            tuckedByHand = false
+            tucking.tucked = false
+            tucking.letGo()
             return
         }
-        // Counted from her last bubble too, not just the last touch: a reply gets read before she goes.
-        if (machine.holding || bubble != null) heldAt = t
-        val idle = dimmed && t - maxOf(machine.lastCallAt, heldAt) >= TUCK_AFTER_MS
-        val want = companionResident && bubble == null && !dragging && askView == null && menuView == null &&
-            (tuckedByHand || idle)
-        if (!want) tuckedByHand = false
-        if (want == tucked) return
-        // Out for a bubble at once: it is placed against her in this same turn.
-        if (!want && bubble != null) return untuckNow(v, p)
-        tucked = want
+        val want = tucking.wanted(
+            companionResident, bubble != null, machine.holding,
+            blocked = dragging || askView != null || menuView != null,
+            dimmed = dimmed, lastCallAt = machine.lastCallAt, now = t,
+        )
+        // A bubble while she is tucked or still sliding (out after a tap, in on her own): at rest at
+        // once, so it is placed against her and shows in this same turn, not after the slide's poll.
+        if (bubble != null && !dragging && (tucking.tucked || slideAnim != null)) return untuckNow(v, p)
+        if (want == tucking.tucked) return
+        tucking.tucked = want
         // Called from evaluate: no evaluate after it (nothing waits on this slide; the poll follows).
         slide(v, p, dockedRest(v), null)
     }
 
-    /** Out from the edge at once, for what is placed around her right after (a bubble, the menu, the bar). */
+    /** At rest out of the edge at once, for what is placed around her right after (a bubble, the menu, the bar). */
     private fun untuckNow(v: PetView, p: WindowManager.LayoutParams) {
-        tuckedByHand = false
-        if (!tucked) return
-        tucked = false
+        tucking.letGo()
+        if (!tucking.tucked && slideAnim == null) return
+        tucking.tucked = false
         slideAnim?.cancel()
         placeRest(v, p, dockedRest(v))
         update(v, p)
+    }
+
+    /**
+     * Put away by hand (a fling, 「收到边上」): the bubble she has up goes with her, else a reply
+     * still showing would keep her out (the menu and the drag only remove its window).
+     */
+    private fun putAway() {
+        tucking.putAway(companionBubble?.id)
+        companionBubble = null
+        companionDisplayedId = null
+        main.removeCallbacks(companionExpiry)
+        companionView?.speech(0, false)
     }
 
     private fun companionFailed(code: String) {
@@ -1084,8 +1092,7 @@ internal object PetOverlay {
         petParams = null
         dragging = false
         dimmed = false
-        tucked = false
-        tuckedByHand = false
+        tucking.reset()
         player.endReaction()
         speaksForResults = false
         host = OverlayHost.NONE
@@ -1237,10 +1244,18 @@ internal object PetOverlay {
             if (!alive(ticket)) return
             val v = petView ?: return
             val p = petParams ?: return
+            val area = safeArea()
+            // Picked up from the edge (tucked, or still partly past it on the way out): at the
+            // untucked dock first, else the drag clamps her on screen and she stays put until
+            // the finger has covered the hidden part. Picked up while out, she stays where she is.
+            val offEdge = v.companionGeometry != null && (tucking.tucked || p.x < 0 || p.x + p.width > area.screenW)
             slideAnim?.cancel()
-            // Picked up from the edge she was tucked into: the drag brings her out whole.
-            tucked = false
-            tuckedByHand = false
+            tucking.letGo()
+            if (offEdge) {
+                tucking.tucked = false
+                placeRest(v, p, dockedRest(v, area))
+                update(v, p)
+            }
             // Kept as the rest frame's place: the window grows around the lifted pose (fitFrame).
             dragStart = restPos(v, p)
             dropAt = dragStart
@@ -1295,9 +1310,9 @@ internal object PetOverlay {
             dock = if (v.companionGeometry == null) EdgeSnap.dockFor(drop, v.pixelWidth, v.reach, area, edge(v.context), velocityX)
                 else EdgeSnap.dockFor(drop.x, drop.y, v.frame.width, v.frame.height, area, edge(v.context), velocityX)
             // Flung at a side, she tucks into it (hers in 「一直在」); a tap brings her back.
-            if (v.companionGeometry != null && companionResident) {
-                tuckedByHand = abs(velocityX) >= EdgeSnap.FLING_PX_PER_S
-                tucked = tuckedByHand
+            if (v.companionGeometry != null && companionResident && abs(velocityX) >= EdgeSnap.FLING_PX_PER_S) {
+                putAway()
+                tucking.tucked = true
             }
             prefs.edit().putString(K_SIDE, if (dock.side == Side.LEFT) "left" else "right").putFloat(K_Y, dock.yFraction).apply()
             slide(v, p, dockedRest(v, area)) { evaluate() }
@@ -1318,8 +1333,8 @@ internal object PetOverlay {
             if (!alive(ticket)) return
             machine.onTouch(now())
             // Tucked away, a tap only brings her back out (evaluate slides her).
-            if (tucked) {
-                tuckedByHand = false
+            if (tucking.tucked) {
+                tucking.letGo()
                 evaluate()
                 return
             }
@@ -1792,7 +1807,7 @@ internal object PetOverlay {
             }
             PetMenuItem.TUCK -> {
                 dismissMenu(animated = true)
-                tuckedByHand = true
+                putAway()
                 evaluate()
             }
             PetMenuItem.HIDE_HOUR -> {
@@ -2418,7 +2433,7 @@ internal object PetOverlay {
         "dragging" to dragging,
         "dock" to "${dock.side.name.lowercase()}@${"%.2f".format(dock.yFraction)}",
         "dimmed" to dimmed,
-        "tucked" to tucked,
+        "tucked" to tucking.tucked,
         "alpha" to petView?.alpha,
         "looping" to looping,
         "bubble" to bubbleId,
