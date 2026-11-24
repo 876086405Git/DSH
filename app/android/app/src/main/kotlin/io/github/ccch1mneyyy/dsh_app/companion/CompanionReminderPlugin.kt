@@ -4,8 +4,6 @@ import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -63,11 +61,6 @@ class CompanionReminderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                             .putExtra(Settings.EXTRA_CHANNEL_ID,
                                 io.github.ccch1mneyyy.dsh_app.phone.SystemActions.CHANNEL_NOTIFY)
-                        "exact" -> {
-                            require(Build.VERSION.SDK_INT >= 31) { "Exact alarm settings are not used on this Android version" }
-                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                                Uri.parse("package:${context.packageName}"))
-                        }
                         else -> throw IllegalArgumentException("Unknown reminder settings")
                     }
                     context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
