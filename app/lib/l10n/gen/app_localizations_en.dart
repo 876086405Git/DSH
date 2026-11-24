@@ -5471,6 +5471,10 @@ class L10nEn extends L10n {
       'I may have already started on that, and I don\'t want to do it twice. Take a look in Tasks, then tell me whether to carry on?';
 
   @override
+  String get companionPhoneRunStopped =>
+      'The phone work stopped partway, so I paused rather than repeat a step. Check the phone as it is now, and tell me if I should carry on.';
+
+  @override
   String get companionLogTitle => 'Log';
 
   @override

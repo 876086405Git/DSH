@@ -1931,13 +1931,24 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   /// once her page or panel is open, not before: reading holds the pack store.
   List<CompanionRosterEntry> _roster = const [];
   bool _rosterWanted = false;
+  int _rosterLoads = 0;
 
   Future<void> _loadRoster() async {
     final store = _store;
     if (store == null) return;
     try {
       final roster = await store.roster();
-      if (mounted) setState(() => _roster = roster);
+      // A cover's path stays the same when another moves in or she's updated,
+      // so each roster decodes its covers afresh, in rows made anew.
+      for (final CompanionRosterEntry(:cover) in roster) {
+        if (cover != null) unawaited(companionRosterCover(cover).evict());
+      }
+      if (mounted) {
+        setState(() {
+          _roster = roster;
+          _rosterLoads++;
+        });
+      }
     } on Object {
       // Shown again on the next change.
     }
@@ -2453,6 +2464,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       CompanionLightError(failure: CompanionLightFailure.badKey) => l10n.companionLightBadKey,
       CompanionLightError(failure: CompanionLightFailure.busy) => l10n.companionLightBusy,
       DshRemoteException(code: 'companion/agent-retry-closed') => l10n.companionAgentRetryClosed,
+      DshRemoteException(code: 'companion/phone-run-stopped') => l10n.companionPhoneRunStopped,
       DshRemoteException(code: 'companion/cleanup-source-unknown') => l10n.companionMemoryCleanupUnknown,
       // Full mode only because nobody picked a mode yet: light would work without a host.
       DshClosedException() when ref.read(companionModeProvider) == null => l10n.companionNotConnectedTryLight,
@@ -3203,7 +3215,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         children: [
           for (final entry in _roster)
             CompanionRosterRow(
-              key: ValueKey('roster-${entry.key}'),
+              key: ValueKey('roster-${entry.key}-$_rosterLoads'),
               name: entry.active ? _name(l10n) : entry.character.name ?? l10n.companionDefaultName,
               active: entry.active,
               cover: entry.cover,
@@ -3337,9 +3349,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
               subtitle: l10n.workshopEntrySubtitle,
               onTap: () => run(
                 () => unawaited(
-                  Navigator.of(context)
-                      .push(MaterialPageRoute<void>(builder: (_) => const WorkshopScreen()))
-                      .then((_) => _afterWorkshop()),
+                  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WorkshopScreen())).then((_) {
+                    // She may have been updated there, her cover with her.
+                    if (_rosterWanted) unawaited(_loadRoster());
+                    return _afterWorkshop();
+                  }),
                 ),
               ),
             ),

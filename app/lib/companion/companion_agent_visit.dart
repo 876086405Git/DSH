@@ -6,6 +6,14 @@ const _agentRetryClosed = DshRemoteException(
   {'status': 409},
 );
 
+// Phone steps never become tasks, so 交代的事 has nothing to show for them:
+// the phone itself is where to look, and asking again simply starts over.
+const _phoneRunStopped = DshRemoteException(
+  'companion/phone-run-stopped',
+  'The phone work stopped partway; check the phone before asking again.',
+  {'status': 409},
+);
+
 /// Window facts and immediate presentation effects. No BuildContext or
 /// WidgetRef crosses this port; the Page still owns its actual routes.
 abstract interface class CompanionFallbackUi {
@@ -57,7 +65,7 @@ class CompanionAgentAttachment {
     // Only a turn that already ran a tool is closed: retrying it could repeat
     // the tool's effect. A dropped stream with words only is an ordinary failure.
     if (run != null && run.error != null && run.toolDispatchStarted) {
-      return _agentRetryClosed;
+      return run.onlyPhoneSteps ? _phoneRunStopped : _agentRetryClosed;
     }
     return run?.error;
   }
@@ -935,7 +943,7 @@ class _CompanionAgentVisit {
       changed();
       await work;
       if (!current() || !identical(run, submittedRun)) return;
-      if ((!useSession || submittedRun!.phoneOnly) && submittedRun!.text.trim().isNotEmpty) {
+      if ((!useSession || submittedRun!.phoneRoute) && submittedRun!.text.trim().isNotEmpty) {
         events = companionConsumeEvents(events, turnContext.eventIds);
         if (turnContext.hasClock) lastClockAt = turnContext.sampledAt;
       }
@@ -943,7 +951,13 @@ class _CompanionAgentVisit {
         // say has returned after its physical request's first cancel drain.
         // No tool callback has entered, so the original clock and budget can
         // survive until a later explicit click in this same live visit.
-        if (submittedRun.toolDispatchStarted) {
+        if (submittedRun.onlyPhoneSteps) {
+          // The person's new message is the go-ahead, the same words included.
+          // A turn that also saved a reminder or memory keeps the closed path
+          // below: a fresh source would commit that a second time.
+          retrySource = null;
+          failed(_phoneRunStopped);
+        } else if (submittedRun.toolDispatchStarted) {
           failed(_agentRetryClosed);
         } else if (memoryTools.isCurrent) {
           // No tool ran, with or without words: retrying reuses the same line.
@@ -1513,14 +1527,12 @@ class _CompanionAgentVisit {
     }
   }
 
-  void connectionChanged({bool generationChanged = false}) {
+  void connectionChanged() {
     if (!active) return;
     final host = ref.read(activeHostProvider);
     final client = ref.read(activeConnectionProvider).value?.client;
     final nextLight = light;
-    final differs =
-        nextLight != boundLight ||
-        (!nextLight && (generationChanged || host != boundHost || !identical(client, boundClient)));
+    final differs = nextLight != boundLight || (!nextLight && (host != boundHost || !identical(client, boundClient)));
     boundHost = host;
     boundClient = client;
     boundLight = nextLight;

@@ -239,8 +239,8 @@ class CompanionAgent extends ChangeNotifier {
           final eligible = failure is CompanionHostError && {
             CompanionHostFailure.disconnected, CompanionHostFailure.unavailable, CompanionHostFailure.modelUnavailable,
           }.contains(failure.hostFailure);
-          if (run.phoneOnly || !_current(run) || retry?.sourceId == id || !eligible || !phone.agentConfigured) rethrow;
-          run.phoneOnly = true;
+          if (run.phoneRoute || !_current(run) || retry?.sourceId == id || !eligible || !phone.agentConfigured) rethrow;
+          run.phoneRoute = true;
           visit.phoneAttempt = (sourceId: id, page: run.assistantPage);
           if (visit.runOrigin case final CompanionFallbackUi ui) ui.continuedOnPhone(id);
           await _loop(run);
@@ -380,7 +380,7 @@ class CompanionAgent extends ChangeNotifier {
 
   List<CompanionAgentTool> _definitions(_CompanionAgentRun run) => [
     for (final tool in run.tools)
-      if ((!run.phoneOnly || !_sessionOnlyTools.contains(tool.definition.name)) &&
+      if ((!run.phoneRoute || !_sessionOnlyTools.contains(tool.definition.name)) &&
           (!run.externalNoticeContent || CompanionAgentMemoryTools.allowedAfterNotice(tool.definition.name)) &&
           (!run.externalWebContent || !_afterWebMemoryChanges.contains(tool.definition.name)))
         if (run.externalNoticeContent && tool.definition.name == 'forget')
@@ -403,7 +403,7 @@ class CompanionAgent extends ChangeNotifier {
 
   List<CompanionAgentToolBinding> _bindings(_CompanionAgentRun run) => [
     for (final binding in run.tools)
-      if (!run.phoneOnly || !_sessionOnlyTools.contains(binding.definition.name))
+      if (!run.phoneRoute || !_sessionOnlyTools.contains(binding.definition.name))
       (
         definition: binding.definition,
         execute: (call) async {
@@ -425,6 +425,11 @@ class CompanionAgent extends ChangeNotifier {
             );
           }
           if (call.name == 'public_lookup') run.externalWebContent = true;
+          if (call.name.startsWith(companionPhoneToolPrefix)) {
+            run.phoneUsed = true;
+          } else {
+            run.otherToolUsed = true;
+          }
           final result = await binding.execute(call);
           if (result.externalWebContent) run.externalWebContent = true;
           if (result.externalNoticeContent) _markNoticeContent(run);
@@ -438,58 +443,99 @@ class CompanionAgent extends ChangeNotifier {
       tools: _bindings(run),
       retainToolOutcomes: true,
       exchanges: run.exchanges,
-      isCurrent: () => _current(run),
+      // A model route answers only for its own request (see _round): a Host
+      // reconnect while she works on the phone must not end her turn.
+      isCurrent: () => _turnCurrent(run),
       controlRevision: () => run.controlRevision,
       onToolDispatch: () => run.toolDispatchStarted = true,
       onNotice: (requestId, callId, words) => _notice(run, requestId, callId, words),
       request: () async {
-        final selection = await run.memory.selectForAgent(
-          run.source['text'] as String,
-          explicitUserInput: run.source['text'] as String,
-          characterId: run.source['character_id'] as String?,
-          offsetMinutes: run.source['offset_minutes']! as int,
-          isCurrent: () => _current(run),
-        );
-        if (!_current(run)) return null;
-        if (companionSelectionHasNotice(selection)) _markNoticeContent(run);
-        run.onSelected?.call(selection);
-
-        // Current control has already filtered the historical raw lines. The
-        // active instruction is kept separately: forget can move it below the
-        // history cutoff to prevent extraction from recreating a deleted card.
-        final history = run.memory.store.modelMessages(
-          sessionId: run.source['session_id'] as String,
-          characterId: run.source['character_id'] as String?,
-          limit: CompanionLightHistory.window + run.savedRows,
-        );
-        final oldLines = [
-          for (final row in history)
-            if ((row['first_seq'] as int) < (run.source['first_seq'] as int))
-              row['role'] == 'user'
-                  ? CompanionLine.user(row['text'] as String)
-                  : CompanionLine.her(row['text'] as String),
-        ];
-        List<Map<String, Object?>> messagesFrom(int skip) {
-          final lines = companionLightContext([
-            ...oldLines.skip(skip),
-            CompanionLine.user(run.source['text'] as String),
-          ]);
-          final messages = companionRequestMessages(
-            [for (final line in lines) (role: line.role, text: line.text)],
-            context: run.context,
-            memory: selection,
-            assistantPage: run.assistantPage,
-          );
-          for (final exchange in run.exchanges) {
-            messages.add(exchange.assistant.toRequest());
-            messages.add({'role': 'user', 'content': exchange.results});
+        for (var attempt = 1; ; attempt++) {
+          Object? failure;
+          StackTrace? trace;
+          try {
+            final response = await _round(run);
+            if (response != null) return response;
+          } on Object catch (error, stack) {
+            failure = error;
+            trace = stack;
           }
-          return messages;
+          if (!_retryRound(run, attempt, failure)) {
+            if (run.phoneUsed && _turnCurrent(run)) {
+              // Her phone work is still on and she is giving up: the person
+              // hears so, even when the last thing to go was the model route.
+              run.modelCurrent = null;
+              failure ??= const CompanionLightError(CompanionLightFailure.network, 'no reply after phone steps');
+            }
+            if (failure == null) return null;
+            Error.throwWithStackTrace(failure, trace ?? StackTrace.current);
+          }
+          await Future<void>.delayed(roundRetryDelay(attempt));
         }
-
-        return _request(run, messagesFrom, oldLines.length);
       },
     );
+  }
+
+  /// Waits before her next try at a failed round; tests shorten it.
+  @visibleForTesting
+  Duration Function(int attempt) roundRetryDelay = (attempt) => Duration(seconds: 1 << attempt);
+
+  // Once she has acted on the phone the person cannot simply resend the turn,
+  // so a round that failed or lost its route (the app in the background, the
+  // link reconnecting) is hers to try again. A bad key or model will not heal.
+  bool _retryRound(_CompanionAgentRun run, int attempt, [Object? error]) =>
+      attempt < 4 &&
+      run.phoneUsed &&
+      _turnCurrent(run) &&
+      switch (error) {
+        CompanionHostError(hostFailure: CompanionHostFailure.modelUnavailable) => false,
+        CompanionLightError(failure: CompanionLightFailure.noKey || CompanionLightFailure.badKey) => false,
+        _ => true,
+      };
+
+  Future<({CompanionAgentMessage message, String requestId})?> _round(_CompanionAgentRun run) async {
+    // The last round's route no longer decides; _request picks the current one.
+    run.modelCurrent = null;
+    final selection = await run.memory.selectForAgent(
+      run.source['text'] as String,
+      explicitUserInput: run.source['text'] as String,
+      characterId: run.source['character_id'] as String?,
+      offsetMinutes: run.source['offset_minutes']! as int,
+      isCurrent: () => _current(run),
+    );
+    if (!_current(run)) return null;
+    if (companionSelectionHasNotice(selection)) _markNoticeContent(run);
+    run.onSelected?.call(selection);
+
+    // Current control has already filtered the historical raw lines. The
+    // active instruction is kept separately: forget can move it below the
+    // history cutoff to prevent extraction from recreating a deleted card.
+    final history = run.memory.store.modelMessages(
+      sessionId: run.source['session_id'] as String,
+      characterId: run.source['character_id'] as String?,
+      limit: CompanionLightHistory.window + run.savedRows,
+    );
+    final oldLines = [
+      for (final row in history)
+        if ((row['first_seq'] as int) < (run.source['first_seq'] as int))
+          row['role'] == 'user' ? CompanionLine.user(row['text'] as String) : CompanionLine.her(row['text'] as String),
+    ];
+    List<Map<String, Object?>> messagesFrom(int skip) {
+      final lines = companionLightContext([...oldLines.skip(skip), CompanionLine.user(run.source['text'] as String)]);
+      final messages = companionRequestMessages(
+        [for (final line in lines) (role: line.role, text: line.text)],
+        context: run.context,
+        memory: selection,
+        assistantPage: run.assistantPage,
+      );
+      for (final exchange in run.exchanges) {
+        messages.add(exchange.assistant.toRequest());
+        messages.add({'role': 'user', 'content': exchange.results});
+      }
+      return messages;
+    }
+
+    return _request(run, messagesFrom, oldLines.length);
   }
 
   Future<({CompanionAgentMessage message, String requestId})?> _request(
@@ -497,7 +543,7 @@ class CompanionAgent extends ChangeNotifier {
     List<Map<String, Object?>> Function(int skip) messagesFrom,
     int historyCount,
   ) async {
-    final selected = run.phoneOnly
+    final selected = run.phoneRoute
         ? CompanionLightMemoryTransport(apiKey: _apiKey, client: _client)
         : await _modelTransport(isCurrent: () => _turnCurrent(run));
     if (!_current(run)) return null;
@@ -509,7 +555,7 @@ class CompanionAgent extends ChangeNotifier {
       throw const CompanionHostError(CompanionHostFailure.unavailable);
     }
     // A phone fallback still belongs to this captured Host selection and turn.
-    if (!run.phoneOnly) run.modelCurrent = () => selected.current;
+    if (!run.phoneRoute) run.modelCurrent = () => selected.current;
     if (!_current(run)) return null;
     final system = '${run.system}${run.memory.relationshipContext(run.source['character_id'] as String?)}';
     final definitions = _definitions(run);
@@ -530,6 +576,7 @@ class CompanionAgent extends ChangeNotifier {
       run.request = request;
       run.memory.retainReceipt(request.settled.future);
       final priorText = run.text;
+      var answered = false;
       CompanionLightMemoryTransport? fallback;
       try {
         if (route is CompanionHostMemoryTransport) {
@@ -586,6 +633,7 @@ class CompanionAgent extends ChangeNotifier {
           run.text = [if (priorText.isNotEmpty) priorText, if (request.text.isNotEmpty) request.text].join('\n');
           notifyListeners();
         }
+        answered = message != null;
         return message == null ? null : (message: message, requestId: requestId);
       } on CompanionHostError {
         final phone = CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
@@ -606,9 +654,19 @@ class CompanionAgent extends ChangeNotifier {
             if (request.notSentProven && !request.sent) {
               run.memory.store.finishRequest(requestId, terminal: 'not_sent');
             } else if (!request.finalized) {
-              run.memory.store.finishRequest(requestId, terminal: request.sent || request.uncertain ? 'cancelled' : 'not_sent');
+              run.memory.store.finishRequest(
+                requestId,
+                terminal: request.sent || request.uncertain ? 'cancelled' : 'not_sent',
+              );
             }
-            _saveReply(run, request);
+            if (answered || !run.phoneUsed || !_turnCurrent(run)) {
+              _saveReply(run, request);
+            } else if (run.text != priorText) {
+              // After phone steps a broken round is tried again or ends in her
+              // failure line; its unfinished words are not a reply to keep.
+              run.text = priorText;
+              if (!_disposed) notifyListeners();
+            }
           } finally {
             request.settled.complete();
             if (identical(run.request, request)) run.request = null;
@@ -686,7 +744,9 @@ class CompanionAgent extends ChangeNotifier {
 
   void modelRouteChanged() {
     screenRouteChanged();
-    _visit?.connectionChanged(generationChanged: true);
+    // A reconnect or a newly picked model reaches her turn at its next round
+    // (_round); only a different host, client or mode resets the visit.
+    _visit?.connectionChanged();
   }
 
   void stop({bool discard = false, bool cancelSession = true}) {
@@ -770,7 +830,14 @@ class _CompanionAgentRun {
   bool cancelled = false;
   bool discard = false;
   bool toolDispatchStarted = false;
-  bool phoneOnly = false;
+  // Her own phone model answers this turn (the Host route was unavailable).
+  bool phoneRoute = false;
+  // She acted on the phone: a failed model round is hers to retry.
+  bool phoneUsed = false;
+  // A reminder, task or memory tool ran too: resending could commit it twice.
+  bool otherToolUsed = false;
+  // Only phone steps ran. They never become tasks, and saying it again is a new go-ahead.
+  bool get onlyPhoneSteps => phoneUsed && !otherToolUsed;
   // This capability narrowing belongs only to this original user run.
   bool externalWebContent = false;
   // Monotonic for this logical user turn, including later HTTP continuations.

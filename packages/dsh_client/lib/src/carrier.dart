@@ -169,7 +169,9 @@ class DshHttpCarrier extends DshCarrier {
       }
       decoded = decodeBinaryResponse(response.body, boundary);
     } else {
-      final json = _decodeJsonText(response.text);
+      final json = endpoint == 'session/page' && response.body.length < _largeJson
+          ? _parseJsonBody(response.body)
+          : _decodeJsonText(response.text);
       decoded = asMap(json is Future<Object?> ? await json : json);
     }
     tracer?.call(
@@ -286,9 +288,20 @@ FutureOr<Object?> _decodeMuxFrame(Object? data) {
   return _decodeJsonText(data);
 }
 
+const _largeJson = 1024 * 1024;
+final _utf8Json = const Utf8Decoder(allowMalformed: true).fuse(json.decoder);
+
+Object? _parseJsonBody(List<int> bytes) {
+  try {
+    return _utf8Json.convert(bytes);
+  } on FormatException {
+    return null;
+  }
+}
+
 /// Large JSON (follow snapshots, HTTP results with images) must not block
 /// input while decoding; small texts stay synchronous.
 FutureOr<Object?> _decodeJsonText(String text) {
-  if (text.length < 1024 * 1024) return tryDecodeJson(text);
+  if (text.length < _largeJson) return tryDecodeJson(text);
   return Isolate.run(() => tryDecodeJson(text), debugName: 'dsh-large-json');
 }

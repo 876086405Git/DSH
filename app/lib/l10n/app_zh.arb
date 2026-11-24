@@ -3200,6 +3200,7 @@
   "companionNotConnected": "现在连不上引擎，等一下再和我说吧。",
   "companionSendFailed": "这句话没送出去，要不要再说一次？",
   "companionAgentRetryClosed": "刚才那件事我可能已经动手了，怕做两遍。你先在「交代的事」里看一眼，再告诉我要不要接着来？",
+  "companionPhoneRunStopped": "手机上的事做到一半断了，我怕重复操作就先停在这儿。你看一眼手机现在的样子，要接着来就再跟我说一声。",
   "companionLogTitle": "聊天记录",
   "companionContextUnsupported": "这台主机还不支持她的上下文：名字、设定、刚才发生的事和手机里的记忆都传不过去，只发你说的话。升级主机或换成轻量模式就好。",
   "companionLogEmpty": "还没有说过话。",

@@ -18,7 +18,7 @@ extension on _CompanionAgentVisit {
     run.modelCurrent = routeCurrent;
     bool current() => agent._current(run);
     if (phoneAttempt?.sourceId == sourceId) {
-      run.phoneOnly = true;
+      run.phoneRoute = true;
       await agent._loop(run);
       return;
     }

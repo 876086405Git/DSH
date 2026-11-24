@@ -1564,6 +1564,7 @@
   "companionNotConnected": "I can't reach the engine right now. Tell me again in a bit?",
   "companionSendFailed": "That didn't get through. Say it again?",
   "companionAgentRetryClosed": "I may have already started on that, and I don't want to do it twice. Take a look in Tasks, then tell me whether to carry on?",
+  "companionPhoneRunStopped": "The phone work stopped partway, so I paused rather than repeat a step. Check the phone as it is now, and tell me if I should carry on.",
   "companionLogTitle": "Log",
   "companionContextUnsupported": "This host can't take her context yet: her name, persona, recent events and memories on your phone won't reach her, only what you say. Update the host or switch to light mode.",
   "companionLogEmpty": "Nothing said yet.",
