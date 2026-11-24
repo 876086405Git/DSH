@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/state/artifact_files.dart';
 import 'package:dsh_app/state/artifacts.dart';
 import 'package:dsh_app/state/connection_state.dart';
+import 'package:dsh_app/ui/chat/render/markdown_image.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +16,7 @@ const _artifact = Artifact(path: '/home/me/a.png', origin: ArtifactOrigin.linked
 class _Carrier extends DshCarrier {
   String version = 'v1';
   int? size = 4;
+  int stats = 0;
   final requests = <Completer<RpcResult>>[];
   final requestSessions = <String>[];
   String? drainSession;
@@ -29,6 +32,7 @@ class _Carrier extends DshCarrier {
   @override
   Future<RpcResult> call(String endpoint, Map<String, Object?> args, {Duration? timeout}) async {
     if (endpoint == 'workspaceFiles/stat') {
+      stats++;
       return RpcOk({'absolutePath': args['path'], 'version': version, 'bytes': size});
     }
     if (endpoint == 'workspaceFiles/readBytes') {
@@ -152,6 +156,27 @@ void main() {
   tearDown(() async {
     await rig.client.close();
     await rig.cache.delete(recursive: true);
+  });
+
+  test('a warm chat image checks the remote version once and still reports the inline size limit', () async {
+    final download = rig.files.materialize('s1', _artifact);
+    await rig.carrier.entered[0].future;
+    rig.carrier.succeed(0);
+    final cached = await download;
+
+    final reader = ArtifactImageReader(rig.files);
+    final previous = rig.carrier.stats;
+    final image = await reader.read('s1', _artifact.path) as RasterImage;
+    expect((image.provider as FileImage).file.path, cached.path);
+    expect(rig.carrier.stats - previous, 1);
+    expect(rig.carrier.requests, hasLength(1));
+
+    rig.carrier.size = maxMarkdownImageBytes + 1;
+    await expectLater(
+      reader.read('s1', _artifact.path),
+      throwsA(isA<ImageTooLarge>().having(imageErrorText, 'message', appL10n.chatImageTooLarge)),
+    );
+    expect(rig.carrier.requests, hasLength(1));
   });
 
   for (final thumbnailFirst in [true, false]) {
