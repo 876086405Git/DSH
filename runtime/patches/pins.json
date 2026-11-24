@@ -1216,6 +1216,14 @@
         }
       }
     },
+    "sqlite-highlight-byte-count.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-query-sqlite/lib/index.js": {
+          "after": "392c63e10dc6f89762435e3a6b34c91d0738bb9e713faafe6de7ae0ad8815a17",
+          "before": "f226f15108bd2079a6a88f3cc5d9e7e022b6b46bf6628fde38df66f0c1ec83a4"
+        }
+      }
+    },
     "str-editor-view-prefix.diff": {
       "0.2.1-rc.4": {
         "node_modules/@deepseek-ai/dsh-tool-str-replace-editor/lib/index.js": {
@@ -3090,6 +3098,7 @@
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff",
       "session-cold-unused-fingerprint.diff",
+      "sqlite-highlight-byte-count.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff",
       "jsonl-materialize-rename.diff",
       "jsonl-migration-link-fallback.diff",
@@ -3319,6 +3328,7 @@
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff",
       "session-cold-unused-fingerprint.diff",
+      "sqlite-highlight-byte-count.diff",
       "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff",
       "jsonl-materialize-rename.diff",
       "jsonl-migration-link-fallback.diff",

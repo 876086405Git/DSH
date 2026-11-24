@@ -1,0 +1,21 @@
+--- a/node_modules/@deepseek-ai/dsh-session-query-sqlite/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-session-query-sqlite/lib/index.js
+@@ -990,1 +990,2 @@
+-        highlight(persisted_docs, 0, ?, ?) AS marked_text,
++        highlight(persisted_docs, 0, ?, ?) AS marked_text,
++        length(CAST(pd.text AS BLOB)) AS source_bytes,
+@@ -1013,1 +1014,2 @@
+-        highlight(live_docs, 0, ?, ?) AS marked_text,
++        highlight(live_docs, 0, ?, ?) AS marked_text,
++        length(CAST(ld.text AS BLOB)) AS source_bytes,
+@@ -1020,4 +1022,1 @@
+-        (
+-          length(CAST(marked_text AS BLOB))
+-          - length(CAST(replace(marked_text, ?, '') AS BLOB))
+-        ) / ? AS match_count
++        (length(CAST(marked_text AS BLOB)) - source_bytes) / (? + ?) AS match_count
+@@ -1039,2 +1038,2 @@
+-		"﷐",
+-		Buffer.byteLength("﷐", "utf8")
++		Buffer.byteLength("﷐", "utf8"),
++		Buffer.byteLength("﷑", "utf8")

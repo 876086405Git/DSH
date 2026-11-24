@@ -135,6 +135,7 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-instruction-encoding-reuse.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff
 session-cold-unused-fingerprint.diff
+sqlite-highlight-byte-count.diff
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff
 jsonl-materialize-rename.diff
 jsonl-migration-link-fallback.diff
