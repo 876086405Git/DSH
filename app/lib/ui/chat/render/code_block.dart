@@ -407,7 +407,7 @@ class _CodeBlockState extends State<CodeBlock> {
   double? _cachedFontSize;
 
   /// 复制成功后图标原地闪成对勾再回退 —— 比 SnackBar 轻。
-  bool _copied = false;
+  late _CopyButton _copyButton = _CopyButton(copied: false, onTap: _copy);
 
   /// 长行折回显示,而不是横向滚动。
   bool _wrap = false;
@@ -438,12 +438,14 @@ class _CodeBlockState extends State<CodeBlock> {
     return code;
   }
 
+  void _setCopied(bool copied) => setState(() => _copyButton = _CopyButton(copied: copied, onTap: _copy));
+
   void _copy() {
     Clipboard.setData(ClipboardData(text: _trimmedCode));
     HapticFeedback.lightImpact();
-    setState(() => _copied = true);
+    _setCopied(true);
     Future.delayed(const Duration(milliseconds: 1200), () {
-      if (mounted) setState(() => _copied = false);
+      if (mounted) _setCopied(false);
     });
   }
 
@@ -655,7 +657,7 @@ class _CodeBlockState extends State<CodeBlock> {
                           selected: _wrap,
                           onTap: () => setState(() => _wrap = !_wrap),
                         ),
-                      _CopyButton(copied: _copied, onTap: _copy),
+                      _copyButton,
                       const SizedBox(width: 8),
                     ],
                   ),
