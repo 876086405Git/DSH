@@ -192,6 +192,10 @@ class CompanionSpeaker {
   int _generation = 0;
   // The room and shared voice settings use the same native player and cache.
   static int _previews = 0;
+  // Private native receipts distinguish the parts of a single failed external line.
+  static const _fallbackPrefix = 'companion-fallback-';
+  static int _fallbackSerial = 0;
+  void Function(CompanionVoiceEvent)? _fallbackReceipt;
   bool _pumping = false;
   final _queue = Queue<_Line>();
   final _ends = <String, Completer<void>>{};
@@ -366,6 +370,10 @@ class CompanionSpeaker {
           if (line.generation != _generation) continue;
           if (!started && _phoneReady) {
             _events.add(CompanionVoiceEvent(CompanionVoiceEventType.fallback, line.id));
+            if (line.text.length > _systemSpeechLimit) {
+              await _speakLongFallback(line);
+              continue;
+            }
             started = await _voice.speak(line.id, line.text);
           }
           if (!started) {
@@ -382,7 +390,83 @@ class CompanionSpeaker {
     }
   }
 
+  /// One paid request has already failed. Admit one short native utterance at
+  /// a time; the page and any reader keep the original ID until the last one.
+  Future<void> _speakLongFallback(_Line line) async {
+    var announced = false;
+    var offset = 0;
+    try {
+      // Use the reader's normal group size under the existing one-minute
+      // watchdog. A 3999-unit utterance can take many minutes to say.
+      for (final part in companionSystemSpeechParts(line.text, limit: SpeechChunker().target)) {
+        final nativeId = '$_fallbackPrefix${++_fallbackSerial}';
+        final end = _ends[line.id] = Completer<void>();
+        var result = CompanionVoiceEventType.error;
+        void finish(CompanionVoiceEventType type) {
+          if (end.isCompleted) return;
+          result = type;
+          end.complete();
+        }
+
+        Timer? watchdog;
+        void progress() {
+          watchdog?.cancel();
+          watchdog = Timer(const Duration(minutes: 1), () => finish(CompanionVoiceEventType.error));
+        }
+
+        _fallbackReceipt = (event) {
+          if (event.id != nativeId || end.isCompleted || line.generation != _generation) return;
+          switch (event.type) {
+            case CompanionVoiceEventType.start:
+              progress();
+              if (announced) return;
+              announced = true;
+              _events.add(CompanionVoiceEvent(event.type, line.id));
+            case CompanionVoiceEventType.range:
+              progress();
+              _events.add(
+                CompanionVoiceEvent(
+                  event.type,
+                  line.id,
+                  start: event.start == null ? null : offset + event.start!,
+                  end: event.end == null ? null : offset + event.end!,
+                ),
+              );
+            case CompanionVoiceEventType.done || CompanionVoiceEventType.stopped || CompanionVoiceEventType.error:
+              finish(event.type);
+            case CompanionVoiceEventType.fallback:
+              break;
+          }
+        };
+        progress();
+        unawaited(
+          _voice.speak(nativeId, part).then((ok) {
+            if (!ok) finish(CompanionVoiceEventType.error);
+          }),
+        );
+        await end.future;
+        watchdog?.cancel();
+        if (line.generation != _generation) {
+          if (!_events.isClosed) _events.add(CompanionVoiceEvent(CompanionVoiceEventType.stopped, line.id));
+          return;
+        }
+        if (result != CompanionVoiceEventType.done) {
+          _events.add(CompanionVoiceEvent(result, line.id));
+          return;
+        }
+        offset += part.length;
+      }
+      _events.add(CompanionVoiceEvent(CompanionVoiceEventType.done, line.id));
+    } finally {
+      _fallbackReceipt = null;
+    }
+  }
+
   void _heard(CompanionVoiceEvent event) {
+    if (event.id.startsWith(_fallbackPrefix)) {
+      _fallbackReceipt?.call(event);
+      return;
+    }
     switch (event.type) {
       case CompanionVoiceEventType.start:
         _events.add(CompanionVoiceEvent(event.type, event.id, loudness: _loudness[event.id]));
@@ -454,6 +538,29 @@ final speechSpeakerProvider = Provider<CompanionSpeaker>((ref) {
   ref.onDispose(speaker.dispose);
   return speaker;
 });
+
+// Android 9 rejects even exactly getMaxSpeechInputLength() (4000 UTF-16 units).
+const _systemSpeechLimit = 3999;
+final companionSentenceEnd = RegExp(r'[。！？!?…~～]');
+
+/// Lossless, bounded pieces for the phone's synthesizer. Keep surrogate pairs
+/// together and prefer the last sentence end inside the available space.
+Iterable<String> companionSystemSpeechParts(String text, {int limit = _systemSpeechLimit}) sync* {
+  for (var start = 0; start < text.length;) {
+    var end = text.length;
+    if (end - start > limit) {
+      end = start + limit;
+      final boundary = companionSentenceEnd.allMatches(text.substring(start, end)).lastOrNull;
+      if (boundary != null) {
+        end = start + boundary.end;
+      } else if ((text.codeUnitAt(end - 1) & 0xfc00) == 0xd800) {
+        end--;
+      }
+    }
+    yield text.substring(start, end);
+    start = end;
+  }
+}
 
 /// The sentences ready to be read aloud in [words] after [from]: up to the last
 /// sentence end, or all of it once [final_] (a reply that has finished).

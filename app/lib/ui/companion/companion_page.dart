@@ -103,8 +103,6 @@ const _packRemovedKey = 'companion_pack_removed';
 const _hintDoneKey = 'companion_touch_hint_done';
 const _homeHintDoneKey = 'companion_home_hint_done';
 
-final _sentenceEnd = RegExp(r'[。！？!?…~～]');
-
 enum _Phase { checking, setup, stage, failed }
 
 typedef CompanionStageBuilder = Widget Function(CompanionStageController controller, CompanionStageEvents events);
@@ -1576,24 +1574,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (flush) _ttsPending.clear();
     // Native completion can follow the old window's stop after a new window
     // speaks. Reuse the room identity so its receipt cannot consume our ID.
-    // Android 9 rejects even exactly getMaxSpeechInputLength() (4000 UTF-16 units).
-    // A final Host message can arrive in one piece even when it has many sentences.
-    const systemLimit = 3999;
-    for (var start = 0; start < text.length;) {
-      var end = text.length;
-      if (_ttsSource == CompanionVoiceSource.system && end - start > systemLimit) {
-        end = start + systemLimit;
-        final boundary = _sentenceEnd.allMatches(text.substring(start, end)).lastOrNull;
-        if (boundary != null) {
-          end = start + boundary.end;
-        } else if ((text.codeUnitAt(end - 1) & 0xfc00) == 0xd800) {
-          end--; // Keep a surrogate pair in the same utterance.
-        }
-      }
+    final parts = _ttsSource == CompanionVoiceSource.system ? companionSystemSpeechParts(text) : [text];
+    var replace = flush;
+    for (final part in parts) {
       final id = 'v$_page-${++_ttsSerial}';
-      _ttsPending[id] = end - start;
-      _speaker.speak(id, text.substring(start, end), flush: flush && start == 0);
-      start = end;
+      _ttsPending[id] = part.length;
+      _speaker.speak(id, part, flush: replace);
+      replace = false;
     }
     return true;
   }
@@ -2227,7 +2214,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (fresh > 0) {
       // Read aloud, her mouth follows the voice instead of the text.
       if (!aloud) _stage.command('say', {'chars': fresh});
-      if (_sentenceEnd.hasMatch(reply.words.substring(_wordsSpoken))) _stage.command('beat');
+      if (companionSentenceEnd.hasMatch(reply.words.substring(_wordsSpoken))) _stage.command('beat');
     }
     _wordsSpoken = reply.words.length;
     if (aloud) {
