@@ -55,6 +55,7 @@ export function createCompanionUsage({ instanceId, now = Date.now, limits = {} }
     throw new TypeError('Invalid companion usage cache limits');
   }
   const roots = new Map(), receipts = new Map();
+  const sameOwner = (group, owner) => group?.retiredOwner ? group.retiredOwner.has(owner) : group?.owner === owner;
   let revision = 0, bytes = 0, disposed = false;
   const next = () => ++revision;
   const at = () => { try { const value = now(); return count(value) ? value : null; } catch { return null; } };
@@ -245,7 +246,7 @@ export function createCompanionUsage({ instanceId, now = Date.now, limits = {} }
       const id = key(sessionId, requestId), binding = { archiveId, controlRevision, historyAfterSeq };
       const prior = roots.get(id);
       if (prior) {
-        const same = prior.owner === owner && JSON.stringify(prior.binding) === JSON.stringify(binding);
+        const same = sameOwner(prior, owner) && JSON.stringify(prior.binding) === JSON.stringify(binding);
         if (!same) gap([prior], 'binding-conflict');
         return same;
       }
@@ -278,16 +279,22 @@ export function createCompanionUsage({ instanceId, now = Date.now, limits = {} }
       return openCall(groups, config, observed === true);
     },
     failed(owner, sessionId, requestIds) {
-      gap(requestIds.map(id => roots.get(key(sessionId, id))).filter(group => group?.owner === owner), 'observer-error');
+      gap(requestIds.map(id => roots.get(key(sessionId, id))).filter(group => sameOwner(group, owner)), 'observer-error');
     },
     end(owner, turn) {
-      for (const group of roots.values()) if (group.owner === owner && group.claimed && group.turn === turn) {
+      for (const group of roots.values()) if (sameOwner(group, owner) && group.claimed && group.turn === turn) {
         group.ended = true; group.revision = next();
         if (group.calls === 0) gap([group], 'no-call-observation');
       }
     },
     retire(owner) {
+      let retiredOwner;
       for (const group of roots.values()) if (group.owner === owner) {
+        if (owner !== null && (typeof owner === 'object' || typeof owner === 'function')) {
+          // Old receipts still recognize the exact owner without retaining its Session log.
+          group.retiredOwner = retiredOwner ??= new WeakSet([owner]);
+          group.owner = undefined;
+        }
         if (!group.ended) gap([group], group.claimed ? 'session-retired' : 'not-claimed');
         group.ended = true;
       }
