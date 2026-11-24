@@ -327,7 +327,7 @@ class _WebEntryHostState extends ConsumerState<WebEntryHost> {
       // A cold start may still be reading her saved sessions.
       await ref.read(companionSessionsProvider.notifier).ready;
       if (!mounted) return;
-      entry = entry.forCompanion(ref.read(companionSessionFilterProvider));
+      entry = entry.forCompanion(ref.read(companionSessionFilterProvider), active: ref.read(activeHostProvider));
     }
     switch (entry) {
       case NewChatEntry(:final text):
