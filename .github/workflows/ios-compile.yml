@@ -181,6 +181,24 @@ jobs:
           fi
           ls -la app/ios/Engine
 
+      # Embed DSH Engine spends 20 to 60 seconds compiling three small unsigned host frameworks for
+      # the simulator. Main compiles them from source as always and keeps them; the PR regression
+      # restores them, and embed-engine.sh finds its stamp current and skips the compile. The key
+      # covers everything build-engine-native.sh reads, including the headers that embed-engine.sh's
+      # own stamp leaves out, so any change to the host or its prepared inputs compiles again.
+      - name: Restore the simulator host frameworks
+        id: sim-host
+        if: inputs.regression_only || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          lookup-only: ${{ !inputs.regression_only }}
+          key: ${{ runner.os }}-${{ runner.arch }}-sim-host-${{ env.DEVELOPER_DIR }}-${{ hashFiles('runtime/ios/host/**', 'runtime/ohos/host/**', 'app/ohos/entry/src/main/cpp/**', 'tooling/ios/prepare-engine.sh', 'tooling/ios/build-engine-native.sh', 'tooling/ios/embed-engine.sh', 'app/ios/Engine/include/**', 'app/ios/Engine/addons/**') }}
+          path: |
+            app/ios/Engine/build/iphonesimulator/.inputs
+            app/ios/Engine/build/iphonesimulator/DshNodeHost.framework
+            app/ios/Engine/build/iphonesimulator/DshFlock.framework
+            app/ios/Engine/build/iphonesimulator/DshRequireBuiltin.framework
+
       - name: Install the iSH build tools
         run: |
           # Homebrew ships ld.lld in its own formula now, not with llvm.
@@ -548,6 +566,17 @@ jobs:
           name: ios-launch-screenshot
           path: ${{ runner.temp }}/launch.png
           if-no-files-found: ignore
+
+      - name: Save the simulator host frameworks
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.sim-host.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ steps.sim-host.outputs.cache-primary-key }}
+          path: |
+            app/ios/Engine/build/iphonesimulator/.inputs
+            app/ios/Engine/build/iphonesimulator/DshNodeHost.framework
+            app/ios/Engine/build/iphonesimulator/DshFlock.framework
+            app/ios/Engine/build/iphonesimulator/DshRequireBuiltin.framework
 
       - name: Say how a crashed process died
         if: ${{ failure() }}
