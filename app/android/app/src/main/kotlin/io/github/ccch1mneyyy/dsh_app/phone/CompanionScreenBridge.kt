@@ -301,7 +301,8 @@ private class ScreenSettings(private val app: Context) {
     fun reserve(tier: String): Boolean = synchronized(lock) {
         val now = System.currentTimeMillis()
         val entries = (if (tier == "cheap") cheap else serious).filter { it > now - 3600000 }.toMutableList()
-        val limit = if (tier == "cheap") 30 else seriousPerHour
+        // Cheap glances follow the Dart cadence of one per 30 seconds.
+        val limit = if (tier == "cheap") 120 else seriousPerHour
         if (entries.size >= limit) return false
         entries.add(now)
         if (!prefs.edit().putString(tier, entries.joinToString(",")).commit()) return false
