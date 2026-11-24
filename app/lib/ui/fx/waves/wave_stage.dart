@@ -306,7 +306,7 @@ class RenderWaveStage extends RenderBox with SlottedContainerRenderObjectMixin<W
   void attach(PipelineOwner owner) {
     super.attach(owner);
     _progress.addListener(_onProgress);
-    _lastLive = _live;
+    _onProgress();
   }
 
   @override
