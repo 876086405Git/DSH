@@ -416,6 +416,28 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('an emoji fades in whole, never half of its surrogate pair', (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: RevealText(
+          text: '甲🪴乙🪴',
+          style: TextStyle(fontSize: 14, color: Colors.white),
+        ),
+      ),
+    );
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      for (final caption in tester.widgetList<CaptionWindow>(find.byType(CaptionWindow))) {
+        caption.span.visitChildren((child) {
+          final text = (child as TextSpan).text ?? '';
+          expect(text.runes.where((r) => r >= 0xD800 && r <= 0xDFFF), isEmpty, reason: text);
+          return true;
+        });
+      }
+    }
+  });
+
   test('less motion: the colours hold still; only a voice changes the size', () {
     final scene = CallScene();
     addTearDown(scene.dispose);
