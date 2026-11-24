@@ -199,7 +199,7 @@ private class ScreenSettings(private val app: Context) {
         private set
     private var residentOwner: Any? = null
     private var frequency = prefs.getString("frequency", "normal")!!
-    private var seriousPerHour = prefs.getInt("serious_per_hour", 6)
+    private var seriousPerHour = prefs.getInt("serious_per_hour", 12)
     private var mutedUntil = prefs.getLong("muted_until_ms", 0)
     private var day = prefs.getString("activity_day", "")!!
     private var activities = prefs.getStringSet("activities", emptySet())!!.toSet()

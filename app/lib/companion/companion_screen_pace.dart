@@ -10,6 +10,9 @@ class CompanionScreenPace {
   String _scene = 'other';
   final List<String> _recentQuips = [];
 
+  /// Salience at which she speaks up even while the person is busy.
+  static const busySalience = .85;
+
   int get unanswered => _unanswered;
 
   void userSpoke(int? at) {
@@ -19,11 +22,8 @@ class CompanionScreenPace {
   }
 
   double _factor(int now) {
-    final backoff = _unanswered < 2
-        ? 1.0
-        : _unanswered == 2
-        ? 1.5
-        : (2.0 + (_unanswered - 3) * .5).clamp(2.0, 3.0).toDouble();
+    // Lines nobody answered slow her down a quarter each, to twice at most.
+    final backoff = (1 + (_unanswered - 1) * .25).clamp(1.0, 2.0).toDouble();
     final chosen = switch (frequency) {
       'quiet' => 2.0,
       'chatty' => .8,
@@ -40,10 +40,10 @@ class CompanionScreenPace {
   }
 
   bool seriousDue(int now, CompanionScreenReading reading, {required bool userBusy}) {
-    if (reading.salience <= .85) return false;
+    if (reading.salience < .7) return false;
     if (_userAt != null && (now < _userAt! || now - _userAt! < 10000)) return false;
-    if ((userBusy || reading.busy) && reading.salience < .95) return false;
-    return _seriousAt == null || now >= _seriousAt! && now - _seriousAt! >= (180000 * _factor(now)).ceil();
+    if ((userBusy || reading.busy) && reading.salience < busySalience) return false;
+    return _seriousAt == null || now >= _seriousAt! && now - _seriousAt! >= (90000 * _factor(now)).ceil();
   }
 
   void seriousStarted(int now) {

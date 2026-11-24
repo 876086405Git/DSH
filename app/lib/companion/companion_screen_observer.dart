@@ -358,7 +358,8 @@ class CompanionScreenObserver {
             'salience': reading.salience,
             'emotion': reading.emotion,
           },
-          isCurrentObservation: () => _valid(token, generation, requireIdle: reading.salience < .95),
+          isCurrentObservation: () =>
+              _valid(token, generation, requireIdle: reading.salience < CompanionScreenPace.busySalience),
         );
         if (shown) _pace.shown(spokeAt, reading, quip: false);
       }

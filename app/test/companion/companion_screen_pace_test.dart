@@ -34,16 +34,16 @@ void main() {
     pace.shown(1000, reading(), quip: true);
     pace.shown(2000, reading(), quip: true);
     expect(pace.unanswered, 2);
+    expect(pace.cheapDue(38499), isFalse);
+    expect(pace.cheapDue(38500), isTrue);
+    pace.shown(3000, reading(), quip: true);
     expect(pace.cheapDue(45999), isFalse);
     expect(pace.cheapDue(46000), isTrue);
-    pace.shown(3000, reading(), quip: true);
-    expect(pace.cheapDue(60999), isFalse);
-    expect(pace.cheapDue(61000), isTrue);
     for (final at in [4000, 5000, 6000]) {
       pace.shown(at, reading(), quip: true);
     }
-    expect(pace.cheapDue(90999), isFalse);
-    expect(pace.cheapDue(91000), isTrue);
+    expect(pace.cheapDue(60999), isFalse);
+    expect(pace.cheapDue(61000), isTrue, reason: 'unanswered lines slow her to twice at most');
     pace.userSpoke(7000);
     expect(pace.unanswered, 0);
     pace.cheapStarted(7000);
@@ -54,22 +54,32 @@ void main() {
     expect(pace.unanswered, 1, reason: 'the same old user timestamp is not a new reply');
   });
 
-  test('serious turns respect salience, busy, recent user and three-minute gates', () {
+  test('serious turns respect salience, busy, recent user and ninety-second gates', () {
     final pace = CompanionScreenPace();
-    expect(pace.seriousDue(100000, reading(salience: .85), userBusy: false), isFalse);
-    expect(pace.seriousDue(100000, reading(salience: .86), userBusy: false), isTrue);
-    expect(pace.seriousDue(100000, reading(salience: .94), userBusy: true), isFalse);
-    expect(pace.seriousDue(100000, reading(salience: .95), userBusy: true), isTrue);
-    expect(pace.seriousDue(100000, reading(busy: true), userBusy: false), isFalse);
+    expect(pace.seriousDue(100000, reading(salience: .69), userBusy: false), isFalse);
+    expect(pace.seriousDue(100000, reading(salience: .7), userBusy: false), isTrue);
+    expect(pace.seriousDue(100000, reading(salience: .84), userBusy: true), isFalse);
+    expect(pace.seriousDue(100000, reading(salience: .85), userBusy: true), isTrue);
+    expect(pace.seriousDue(100000, reading(salience: .8, busy: true), userBusy: false), isFalse);
     pace.userSpoke(100000);
     expect(pace.seriousDue(109999, reading(salience: 1), userBusy: false), isFalse);
     expect(pace.seriousDue(110000, reading(), userBusy: false), isTrue);
     pace.seriousStarted(110000);
+    expect(pace.seriousDue(181999, reading(), userBusy: false), isFalse);
+    expect(pace.seriousDue(182000, reading(), userBusy: false), isTrue, reason: 'a recent reply applies 0.8');
+    pace.observed(reading(scene: 'idle'));
     expect(pace.seriousDue(289999, reading(), userBusy: false), isFalse);
     expect(pace.seriousDue(290000, reading(), userBusy: false), isTrue);
-    pace.observed(reading(scene: 'idle'));
-    expect(pace.seriousDue(469999, reading(), userBusy: false), isFalse);
-    expect(pace.seriousDue(470000, reading(), userBusy: false), isTrue);
+
+    final chosen = CompanionScreenPace()..seriousStarted(0);
+    expect(chosen.seriousDue(89999, reading(), userBusy: false), isFalse);
+    expect(chosen.seriousDue(90000, reading(), userBusy: false), isTrue);
+    chosen.frequency = 'quiet';
+    expect(chosen.seriousDue(179999, reading(), userBusy: false), isFalse);
+    expect(chosen.seriousDue(180000, reading(), userBusy: false), isTrue);
+    chosen.frequency = 'chatty';
+    expect(chosen.seriousDue(71999, reading(), userBusy: false), isFalse);
+    expect(chosen.seriousDue(72000, reading(), userBusy: false), isTrue);
   });
 
   test('short structured readings and recent similar quips are bounded', () {
