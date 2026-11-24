@@ -406,10 +406,17 @@ void main() {
       }
     });
 
-    Future<void> native(String type, String id) =>
+    Future<void> native(String type, String id, {int? start, int? end}) =>
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           channel.name,
-          const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': type, 'id': id})),
+          const StandardMethodCodec().encodeMethodCall(
+            MethodCall('event', {
+              'type': type,
+              'id': id,
+              'start': ?start,
+              'end': ?end,
+            }),
+          ),
           (_) {},
         );
 
@@ -484,6 +491,154 @@ void main() {
         expect(events.singleWhere((e) => e.id == 'c').type, CompanionVoiceEventType.error);
       },
     );
+
+    test('one failed long fetch reads the whole line once, with its original progress and terminal ID', () async {
+      final long = '${'甲' * 119}🐳${'乙' * 4000}。';
+      final fetched = <String>[];
+      final voice = CompanionVoice();
+      final speaker = CompanionSpeaker(
+        voice,
+        () => MockClient((request) async {
+          final text = (jsonDecode(request.body) as Map)['input'] as String;
+          fetched.add(text);
+          return text == long ? http.Response('unavailable', 503) : http.Response.bytes(_wav(), 200);
+        }),
+        () async => folder,
+      );
+      final other = CompanionSpeaker(voice, () => throw StateError('no fetch'), () async => folder);
+      addTearDown(speaker.dispose);
+      addTearDown(other.dispose);
+      final events = <CompanionVoiceEvent>[];
+      final unrelated = <CompanionVoiceEvent>[];
+      speaker.events.listen(events.add);
+      other.events.listen(unrelated.add);
+      await speaker.ready(const CompanionVoiceSettings(on: true, source: CompanionVoiceSource.openai));
+      expect(await speaker.warmPhone(), isTrue);
+      speaker
+        ..speak('long', long)
+        ..speak('next', '下一句。');
+
+      final heard = StringBuffer();
+      final ids = <String>{};
+      var count = 0;
+      while (heard.length < long.length) {
+        count++;
+        await until(() => calls.where((c) => c.method == 'speak').length == count);
+        expect(calls.where((c) => c.method == 'play'), isEmpty);
+        final args = calls.lastWhere((c) => c.method == 'speak').arguments as Map;
+        final id = args['id'] as String;
+        final text = args['text'] as String;
+        expect(ids.add(id), isTrue);
+        expect(text.length, inInclusiveRange(1, 3999));
+        if (count == 1) expect(text, '甲' * 119);
+        await native('start', id);
+        await native('range', id, start: 0, end: text.length);
+        await until(() => events.any((e) => e.type == CompanionVoiceEventType.range && e.start == heard.length));
+        expect(events.last.end, heard.length + text.length);
+        expect(events.any((e) => e.type == CompanionVoiceEventType.done), isFalse);
+        heard.write(text);
+        await native('done', id);
+        await native('done', id); // Duplicate receipts can arrive after the next piece is admitted.
+      }
+      await until(() => calls.any((c) => c.method == 'play'));
+      expect(heard.toString(), long);
+      expect(fetched, unorderedEquals([long, '下一句。']));
+      expect(events.every((e) => e.id == 'long'), isTrue);
+      for (final type in [
+        CompanionVoiceEventType.fallback,
+        CompanionVoiceEventType.start,
+        CompanionVoiceEventType.done,
+      ]) {
+        expect(events.where((e) => e.type == type), hasLength(1));
+      }
+      expect(unrelated, isEmpty);
+      expect(calls.singleWhere((c) => c.method == 'play').arguments['id'], 'next');
+      await native('done', 'next');
+      await until(() => folder.listSync().isEmpty);
+    });
+
+    testWidgets('ongoing fallback progress renews the minute guard; a silent engine errors without advancing', (
+      tester,
+    ) async {
+      final speaker = CompanionSpeaker(
+        CompanionVoice(),
+        () => MockClient((_) async => http.Response('', 503)),
+        () async => folder,
+      );
+      addTearDown(speaker.dispose);
+      final events = <CompanionVoiceEvent>[];
+      speaker.events.listen(events.add);
+      await speaker.ready(const CompanionVoiceSettings(on: true, source: CompanionVoiceSource.openai));
+      expect(await speaker.warmPhone(), isTrue);
+      speaker.speak('slow', '读' * 4000);
+      await tester.pump();
+      final first = calls.singleWhere((c) => c.method == 'speak').arguments['id'] as String;
+      await tester.pump(const Duration(seconds: 59));
+      await native('range', first, start: 0, end: 2);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 59));
+      expect(events.map((e) => e.type), [CompanionVoiceEventType.fallback, CompanionVoiceEventType.range]);
+      await tester.pump(const Duration(seconds: 1));
+      await native('done', first);
+      await tester.pump();
+      expect(events.last.id, 'slow');
+      expect(events.last.type, CompanionVoiceEventType.error);
+      expect(events.where((e) => e.type == CompanionVoiceEventType.done), isEmpty);
+      expect(calls.where((c) => c.method == 'speak'), hasLength(1));
+    });
+
+    for (final cancel in [false, true]) {
+      test('a long clip refused by native stops between parts (explicit stop: $cancel)', () async {
+        var fetched = 0;
+        final speaker = CompanionSpeaker(
+          CompanionVoice(),
+          () => MockClient((_) async {
+            fetched++;
+            return http.Response.bytes(_wav(), 200);
+          }),
+          () async => folder,
+        );
+        addTearDown(speaker.dispose);
+        final events = <CompanionVoiceEvent>[];
+        speaker.events.listen(events.add);
+        final secondAdmission = Completer<bool>();
+        var admitted = 0;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+          call,
+        ) async {
+          calls.add(call);
+          if (call.method == 'ready') return true;
+          if (call.method == 'play') return false;
+          if (call.method == 'speak') return ++admitted == 1 ? true : secondAdmission.future;
+          return null;
+        });
+        await speaker.ready(const CompanionVoiceSettings(on: true, source: CompanionVoiceSource.openai));
+        expect(await speaker.warmPhone(), isTrue);
+        speaker.speak('long', '答' * 4000);
+        await until(() => admitted == 1);
+        final first = calls.lastWhere((c) => c.method == 'speak').arguments['id'] as String;
+        await native('start', first);
+        await native('done', first);
+        await until(() => admitted == 2);
+        final second = calls.lastWhere((c) => c.method == 'speak').arguments['id'] as String;
+        if (cancel) speaker.stop();
+        secondAdmission.complete(cancel);
+        final terminal = cancel ? CompanionVoiceEventType.stopped : CompanionVoiceEventType.error;
+        await until(() => events.any((e) => e.type == terminal));
+        await native('start', second);
+        await native('done', second);
+        await Future<void>.delayed(Duration.zero);
+        expect(events.map((e) => (e.id, e.type)), [
+          ('long', CompanionVoiceEventType.fallback),
+          ('long', CompanionVoiceEventType.start),
+          ('long', terminal),
+        ]);
+        expect(admitted, 2);
+        expect(fetched, 1);
+        expect(calls.where((c) => c.method == 'play'), hasLength(1));
+        await until(() => folder.listSync().isEmpty);
+      });
+    }
 
     test('each fetched preview keeps its own file until native admission answers', () async {
       const external = CompanionVoiceSettings(on: true, source: CompanionVoiceSource.openai);

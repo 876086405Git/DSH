@@ -72,7 +72,7 @@
     },
     {
       "path": "app/test/companion/companion_stream_state_test.dart",
-      "sha256": "b6e67ee905b3cfb57987808405e12fc1965dd6cddd7efae89e56fd7f0655d8a9"
+      "sha256": "80f83a453317b13e3a5bb9957374569981728049815e12e071fd27cac95a2eac"
     },
     {
       "path": "app/test/companion/companion_test_settle.dart",

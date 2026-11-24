@@ -60,6 +60,7 @@ class CompanionAgentAttachment {
   }
 
   String? get replyId => _visit.run?.replyId;
+  int get phoneSteps => _visit.run?.phoneSteps ?? 0;
   Object? get error {
     final run = _visit.run;
     // Only a turn that already ran a tool is closed: retrying it could repeat
@@ -205,6 +206,9 @@ class CompanionAgentResident {
   }
 
   bool get ownsCurrentRun => active && identical(_visit.runOrigin, _ui) && identical(_visit.run, _visit.agent._run);
+
+  /// Her room is open (even behind another app): it reads her words aloud then.
+  bool get roomOpen => _visit.window != null;
 
   Future<bool> deliverReply(String replyId, String text, Future<bool> Function(int? noticeEpoch) deliver) {
     final run = _visit.run;
@@ -1049,9 +1053,12 @@ class _CompanionAgentVisit {
       }
       if (!still()) return;
     }
+    final clearsLight = light || old == null;
     if (!fresh) await sessions.forgetCharacter(key);
     if (!still()) return;
-    owner.store.startLightConversation();
+    // The phone's conversation pointer is shared by every role: clearing her
+    // DSH session leaves the light history (hers and the others') as it was.
+    if (clearsLight) owner.store.startLightConversation();
     retrySource = null;
     phoneAttempt = null;
     lastSpokenAt = null;

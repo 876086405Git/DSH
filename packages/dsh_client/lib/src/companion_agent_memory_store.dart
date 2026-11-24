@@ -612,9 +612,9 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
         }
         if (toolName == 'related' && call['state'] == 'applied') {
           try {
-            _agentCheckCurrent(turn);
+            final source = _agentCheckCurrent(turn);
             final anchor = input.containsKey('rawEraseRetry') ? _readRawRetry(turn, input, receipt: call) : null;
-            related = _agentRelated(turn, input, retry: anchor?.plan);
+            related = _agentRelated(turn, input, source?['text'] as String?, retry: anchor?.plan);
           } on _AgentMemoryRejected {
             /* A saved read is not a new grant. */
           }
@@ -666,7 +666,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
             effect = _agentMerge(turn, input);
           case 'related':
             final anchor = input.containsKey('rawEraseRetry') ? _readRawRetry(turn, input) : null;
-            relatedCards = _agentRelated(turn, input, retry: anchor?.plan);
+            relatedCards = _agentRelated(turn, input, source?['text'] as String?, retry: anchor?.plan);
             effect = (changed: <String>{}, target: anchor?.id);
           case 'relationship':
             effect = _agentRelationship(turn, input);
@@ -1244,7 +1244,7 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
     return affected;
   }
 
-  List<MemoryRow> _agentRelated(Row turn, MemoryRow input, {_RawErasePlan? retry}) {
+  List<MemoryRow> _agentRelated(Row turn, MemoryRow input, String? explicitUserInput, {_RawErasePlan? retry}) {
     final character = turn['character_id'] as String?;
     final domain = [
       for (final card in _memoryDomainCards(character))
@@ -1264,7 +1264,11 @@ extension CompanionAgentMemoryStore on CompanionMemoryStore {
           .select('SELECT DISTINCT message_id FROM memory_card_sources WHERE card_id=?', [root])
           .map((row) => row['message_id'])
           .toSet();
+      // Two independent facts may have been stated together. Reading one
+      // does not invite a never-proactive topic from the other.
+      final invited = explicitUserInput == null ? const <String>{} : explicitMemoryTopics(explicitUserInput, domain);
       for (final candidate in domain) {
+        if (candidate['topic_mode'] == 'never' && !invited.contains(candidate['topic_id'])) continue;
         if (!_memoryReferencesCurrent(candidate['id'] as String)) continue;
         if (_db
             .select('SELECT message_id FROM memory_card_sources WHERE card_id=?', [candidate['id']])

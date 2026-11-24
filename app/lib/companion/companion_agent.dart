@@ -148,6 +148,10 @@ class CompanionAgent extends ChangeNotifier {
   bool get hasSessionReply => _run?.hasSessionReply ?? false;
   String? get sessionActivity => _run?.running == true ? _run?.sessionActivity : null;
 
+  /// Phone steps in this reply so far. Each new one is notified as it starts,
+  /// so a presenter can say her line before the step while it happens.
+  int get phoneSteps => _run?.phoneSteps ?? 0;
+
   /// The original SQLite user source, not the tools' separate journal turn ID.
   String? get sourceId => _run?.source['id'] as String?;
 
@@ -230,8 +234,9 @@ class CompanionAgent extends ChangeNotifier {
       if (useSession) {
         final visit = _visit!;
         final id = run.source['id']! as String;
+        final scope = visit.ref.read(modelSelectionScopeProvider);
         try {
-          await visit.sendInSession(run);
+          await visit.sendInSession(run, scope);
         } on Object catch (error) {
           final retry = visit.hostAttempt;
           final phone = CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
@@ -244,6 +249,14 @@ class CompanionAgent extends ChangeNotifier {
           visit.phoneAttempt = (sourceId: id, page: run.assistantPage);
           if (visit.runOrigin case final CompanionFallbackUi ui) ui.continuedOnPhone(id);
           await _loop(run);
+        } finally {
+          // The source can still own this room after its Host connection or model retired.
+          if (!run.phoneRoute && _turnCurrent(run) && run.modelCurrent?.call() == false) {
+            final sameConnection = identical(visit.ref.read(modelSelectionScopeProvider), scope);
+            run.error = CompanionHostError(sameConnection
+                ? CompanionHostFailure.selectionChanged
+                : CompanionHostFailure.disconnected);
+          }
         }
       } else {
         await _loop(run);
@@ -428,7 +441,10 @@ class CompanionAgent extends ChangeNotifier {
           }
           if (call.name == 'public_lookup') run.externalWebContent = true;
           if (call.name.startsWith(companionPhoneToolPrefix)) {
-            run.phoneUsed = true;
+            run.phoneSteps++;
+            // She acts now: what she said before this step is a whole
+            // line, and her presenters read it out as the step happens.
+            if (!_disposed) notifyListeners();
           } else {
             run.otherToolUsed = true;
           }
@@ -835,8 +851,9 @@ class _CompanionAgentRun {
   bool toolDispatchStarted = false;
   // Her own phone model answers this turn (the Host route was unavailable).
   bool phoneRoute = false;
-  // She acted on the phone: a failed model round is hers to retry.
-  bool phoneUsed = false;
+  // Phone steps she started; once she acted, a failed model round is hers to retry.
+  int phoneSteps = 0;
+  bool get phoneUsed => phoneSteps > 0;
   // A reminder, task or memory tool ran too: resending could commit it twice.
   bool otherToolUsed = false;
   // Only phone steps ran. They never become tasks, and saying it again is a new go-ahead.

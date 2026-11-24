@@ -104,6 +104,7 @@ withdrawn 投稿记录不能恢复。撤回尚未获批准的 draft / pending / 
 | `GET` 或 `HEAD /admin/submissions/<id>/archive` | 无 | 200 / 206 私有审核 ZIP，Range 可用 |
 | `POST /admin/submissions/<id>/withdraw` | `{reason}`，1..2000 码点 | 200 `{submission}`；管理员可撤回废弃的 draft / pending / rejected 以及已批准版本，保留审计与历史 |
 | `POST /admin/submissions/<id>/review` | `{decision: "approve" 或 "reject", reason}`，`reason` 1..2000 码点 | 200 `{submission}`；对 pending 的新 approve 重验字节后 CAS；相同终态决策幂等返回 |
+| `POST /admin/submissions/<id>/rework` | `{reason, version?, id?, preview?}`；`reason` 1..2000 码点，`version` / `id` 可省略（不能改 kind），`preview` 为 base64 PNG（≤2 MiB、≤512×512） | 200 `{submission, replaced}`；用该记录现有 ZIP 与原作者身份生成一条新记录并批准为当前版本；原 pending 记录被取代，其他状态保留为历史 |
 | `GET /admin/reports` | `?status=open&kind=pet&limit=20&cursor=<reportId>`；status、kind 可省略 | 200 `{reports, nextCursor}`；先筛选再分页；status 为 open / resolved |
 | `GET /admin/reports/<reportId>` | 无 | 200 `{report, target}`，包括被举报版本的当前指向与撤回记录 |
 | `POST /admin/reports/<reportId>/resolve` | `{decision: "handled" 或 "dismissed", reason}`，理由必填且 1..2000 码点 | 200 `{report, target}`；处理与审计同次 CAS，不自动撤回版本 |
@@ -111,6 +112,8 @@ withdrawn 投稿记录不能恢复。撤回尚未获批准的 draft / pending / 
 | `POST /admin/releases/withdraw` | `{kind, id, version, reason}`，`reason` 1..2000 码点 | 200 `{withdrawn:{kind, id, version, reason, at}}` |
 
 review 重复相同终态决策不重验、不改变当前公开行或原 review 信息，也不新增审计；对相反终态决策或已撤回记录返回 409。要重新发布未撤回的旧版，须使用新的 requestId，以原 SHA / size 创建新投稿、进入 pending 后再批准；对旧 approved 原 sid 重发 approve 只返回历史记录，不会重新上架。已进入版本撤回账本的 release 不能通过新投稿恢复。
+
+rework 是管理员替作者修好卡住记录的唯一路径：保留原 `owner`（作者仍可在「我的投稿」看到并管理新记录）、沿用原 ZIP 的 SHA / size，只替换 `id` / `version`。目标版本若已进入撤回账本返回 409 `workshop_version_withdrawn`，同版本已有不同字节返回 409 `workshop_version_rewritten`，同 id 已归其他作者返回 409 `workshop_owner_conflict`（此时换 `id` 后重试）。预览优先使用请求里的 base64 PNG；未提供时按新 metadata 的 `previewSource` 从包内重新派生（像素宠物取 idle 首帧）；都没有则不发布预览。来源记录只有 pending 会被自动取代，其余状态作为历史保留。审计写入 `create` + `submit` + `approve`，actor 为 `admin`。
 
 公开查询无需身份。创建、上传、本人列表 / 查看、撤回、举报都需要 GitHub 令牌。外层 UI 先让用户明确确认用 GitHub 账号登录并把令牌交给这个 Worker；数据层不隐式授权。
 

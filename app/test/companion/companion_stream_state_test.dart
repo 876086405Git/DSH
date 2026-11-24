@@ -162,9 +162,11 @@ class _Bridge extends DshConnection {
 // The transport boundary for fixture 4. The room still owns prompt context,
 // tool selection/execution, SQLite, ChatController, speech and widget writes.
 class _CorrectionBridge extends _Bridge {
+  _CorrectionBridge({this.tool = 'revise'});
+  final String tool;
   final contexts = <Map<String, Object?>>[];
   final calls = <String, StreamController<Uint8List>>{};
-  final revised = Completer<Map<String, Object?>>();
+  final toolResult = Completer<Map<String, Object?>>();
 
   DshHttpResponse capability(String id) => this.json({
     'v': 1, 'supported': true, 'instanceId': 'correction-peer', 'sessionId': id,
@@ -190,7 +192,7 @@ class _CorrectionBridge extends _Bridge {
       return capability(context['sessionId']! as String);
     }
     if (path.endsWith('/session-tools/result')) {
-      revised.complete(Map<String, Object?>.from(body! as Map));
+      toolResult.complete(Map<String, Object?>.from(body! as Map));
       return this.json({});
     }
     return super.postJson(path, body, timeout: timeout);
@@ -206,7 +208,7 @@ class _CorrectionBridge extends _Bridge {
     }
     final open = body! as Map;
     final id = open['requestId']! as String;
-    expect((open['tools'] as List).cast<Map>().map((tool) => tool['name']), contains('revise'));
+    expect((open['tools'] as List).cast<Map>().map((item) => item['name']), contains(tool));
     final stream = calls[id] = StreamController<Uint8List>();
     stream.add(utf8.encode('${jsonEncode({'type': 'ready', 'token': id})}\n'));
     return DshHttpStreamResponse(200, 'application/x-ndjson', stream.stream, () async {
@@ -214,9 +216,9 @@ class _CorrectionBridge extends _Bridge {
     });
   }
 
-  void revise(String request, Map<String, Object?> input) {
+  void requestTool(String request, Map<String, Object?> input) {
     final frame = {
-      'type': 'call', 'name': 'revise', 'callId': 'call-revise',
+      'type': 'call', 'name': tool, 'callId': 'call-$tool',
       'input': input,
     };
     calls[request]!.add(utf8.encode('${jsonEncode(frame)}\n'));
@@ -1166,6 +1168,72 @@ void main() {
 
   // A1: the correction is the model's own revise call in the next turn; the
   // late words of the turn it replaced must not speak or write a last line.
+  for (final invited in [false, true]) {
+    testWidgets('full related callback honours the owner invitation for shared-source facts: $invited', (tester) async {
+      final bridge = _CorrectionBridge(tool: 'related');
+      final client = _CorrectionClient(bridge);
+      final room = _Room(temporary, client: client);
+      late String tea, flute;
+      await room.open(tester, seed: (memory) {
+        final store = memory.store;
+        final source = store.submitMessage(id: 'mixed-original', sessionId: store.lightSessionId,
+            text: '我每天喝白茶。竹笛课在周五。', saidAtUtc: _now, offsetMinutes: 0);
+        final turn = store.beginAgentTurn(messageId: source['id']! as String,
+            expectedSourceRev: source['source_rev']! as int, shownCardRevisions: const {})['id']! as String;
+        CompanionAgentMemoryResult prepare(String id, String name, MemoryRow input) =>
+            store.applyAgentMemoryTool(turnId: turn, callId: id, toolName: name, input: input);
+        tea = prepare('tea', 'remember', {'text': '我每天喝白茶。', 'keywords': ['白茶']}).targetId!;
+        flute = prepare('flute', 'remember', {'text': '竹笛课在周五。', 'keywords': ['竹笛']}).targetId!;
+        expect(prepare('quiet', 'quiet', {'card': flute, 'mode': 'never'}).applied, isTrue);
+        store.closeAgentTurn(turn);
+        memory.changed();
+      });
+      try {
+        final text = invited ? '我想问竹笛。' : '我想问白茶。';
+        await tester.enterText(find.byType(TextField), text);
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('send')));
+        await settleMixed(tester, client.first.future);
+        final prompt = client.prompts.single;
+        expect(prompt.text, text);
+        final prepared = bridge.contexts.single;
+        expect(prepared['requestId'], prompt.id);
+        final memory = prepared['phoneMemory']! as Map;
+        final initial = (jsonDecode(memory['block']! as String) as Map)['items'] as List;
+        expect(initial.map((row) => (row as Map)['id']), contains(invited ? flute : tea));
+        if (!invited) expect(initial.map((row) => (row as Map)['id']), isNot(contains(flute)));
+        // The scripted Host acts on a card supplied by this exact room prompt.
+        final input = {'card': invited ? flute : tea};
+        final wire = client.wire;
+        wire.finish('tool-calls');
+        wire.settle('assistant/message', text: '', extraParts: [
+          {'type': 'tool-call', 'id': 'call-related', 'name': 'related', 'arguments': jsonEncode(input)},
+        ]);
+        bridge.requestTool(prompt.id, input);
+        final receipt = await settleMixed(tester, bridge.toolResult.future);
+        expect(receipt['sessionId'], prompt.session);
+        expect(receipt['requestId'], prompt.id);
+        expect(receipt['token'], prompt.id);
+        expect(receipt['callId'], 'call-related');
+        expect(receipt['isError'], false);
+        final content = jsonDecode(receipt['content']! as String) as Map;
+        expect(content['applied'], true);
+        final cards = {for (final row in (content['cards']! as List).cast<Map>()) row['id']: row['text']};
+        expect(cards[tea], '我每天喝白茶。');
+        expect(cards.containsKey(flute), invited);
+        if (invited) expect(cards[flute], '竹笛课在周五。');
+        wire.endTurn();
+        await room.drain();
+        expect(room.chats, isEmpty, reason: 'this turn uses the foreground DSH session');
+      } finally {
+        for (final stream in bridge.calls.values) {
+          if (!stream.isClosed) unawaited(stream.close());
+        }
+        await room.close(tester);
+      }
+    });
+  }
+
   testWidgets('fixture 4 a composer correction retires a late full reply before speech and last-line writes', (
     tester,
   ) async {
@@ -1317,8 +1385,8 @@ void main() {
       final tool = {'type': 'tool-call', 'id': 'call-revise', 'name': 'revise', 'arguments': jsonEncode(input)};
       wire.finish('tool-calls');
       wire.settle('assistant/message', text: '', extraParts: [tool]);
-      bridge.revise(second.id, input);
-      final receipt = await settleMixed(tester, bridge.revised.future);
+      bridge.requestTool(second.id, input);
+      final receipt = await settleMixed(tester, bridge.toolResult.future);
       expect(receipt, containsPair('requestId', second.id));
       expect(receipt, containsPair('sessionId', second.session));
       expect(receipt, containsPair('callId', 'call-revise'));
@@ -1447,6 +1515,18 @@ void main() {
           );
           await flush(tester);
           expect(room.commands.where((command) => command.$1 == 'say').length, before);
+          if (sample.moreSpeech.isNotEmpty) {
+            final currentCall = later.singleWhere((c) => c.method == 'speak');
+            final currentId = (currentCall.arguments as Map)['id'];
+            expect(currentId, isNot(oldId));
+            await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+              voice.name,
+              const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': 'start', 'id': currentId})),
+              (_) {},
+            );
+            await flush(tester);
+            expect(room.commands.where((command) => command.$1 == 'say').length, before + 1);
+          }
         }
       } finally {
         for (final stream in bridge.calls.values) {
@@ -1456,6 +1536,87 @@ void main() {
       }
     });
   }
+
+  testWidgets('a long full reply sends bounded system utterances in order and retires their IDs', (tester) async {
+    await tester.runAsync(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('companion_voice_enabled', true);
+      await prefs.setString('companion_voice_v1', '{"source":"system"}');
+    });
+    const voice = MethodChannel('dsh/companion_voice');
+    final calls = <MethodCall>[];
+    final ready = Completer<void>();
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(voice, (call) async {
+      calls.add(call);
+      if (call.method == 'ready') {
+        if (!ready.isCompleted) ready.complete();
+        return true;
+      }
+      if (call.method == 'speak') return ((call.arguments as Map)['text'] as String).length < 4000;
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(voice, null));
+    Future<void> report(String type, String id) async {
+      await messenger.handlePlatformMessage(
+        voice.name,
+        const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': type, 'id': id})),
+        (_) {},
+      );
+      await flush(tester);
+    }
+    final bridge = _CorrectionBridge();
+    final client = _CorrectionClient(bridge);
+    final room = _Room(temporary, client: client);
+    await room.open(tester);
+    try {
+      await settleMixed(tester, ready.future);
+      await tester.enterText(find.byType(TextField), '请把整段读出来。');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('send')));
+      await settleMixed(tester, client.first.future);
+      calls.clear();
+      final expected = ['短句。', '${'甲' * 3996}。', '${'丙' * 3998}。', '乙' * 3998, '😀。'];
+      final words = expected.join();
+      final wire = client.wire;
+      List<Map> spoken() => [for (final call in calls) if (call.method == 'speak') call.arguments as Map];
+      final atLimit = expected.take(2).join();
+      expect(atLimit.length, 4000);
+      wire.text(atLimit);
+      await room.drain();
+      expect(spoken().map((args) => args['text']), expected.take(2));
+      wire.text(expected.skip(2).join());
+      await room.drain();
+      expect(spoken().map((args) => args['text']), expected);
+      expect(spoken().every((args) => args['flush'] == false), isTrue);
+      final ids = spoken().map((args) => args['id'] as String).toList();
+      expect(ids.toSet(), hasLength(expected.length));
+      wire.finish('stop');
+      wire.settle('assistant/message', text: words);
+      wire.endTurn();
+      await room.drain();
+      expect(room.speech(tester), words);
+      expect(spoken().map((args) => args['text']), expected);
+      final before = room.commands.where((c) => c.$1 == 'say').length;
+      await report('start', ids[0]);
+      await report('done', ids[0]);
+      await report('start', ids[0]);
+      await report('start', ids[1]);
+      await tester.enterText(find.byType(TextField), '我说一句。');
+      await tester.pump();
+      expect(calls.where((c) => c.method == 'stop'), hasLength(1));
+      await report('start', ids[2]);
+      await report('done', ids[3]);
+      await report('start', ids[4]);
+      final mouth = room.commands.where((c) => c.$1 == 'say').skip(before);
+      expect(mouth.map((c) => c.$2['chars']), [expected[0].length, expected[1].length]);
+    } finally {
+      for (final stream in bridge.calls.values) {
+        if (!stream.isClosed) unawaited(stream.close());
+      }
+      await room.close(tester);
+    }
+  });
 
   // A1: approvals are answered on the tasks page now; that route covering
   // the room is what holds a captured followup back.

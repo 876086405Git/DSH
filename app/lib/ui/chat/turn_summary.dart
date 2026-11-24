@@ -300,6 +300,8 @@ bool _sameTools(List<ToolChatItem> a, List<ToolChatItem> b) {
 }
 
 List<FileChange> _computeChanges(List<ToolChatItem> tools) {
+  // Read windows only locate a later edit. A read-only turn has no change card.
+  if (!tools.any((tool) => toolKindOf(tool) == ToolKind.edit)) return [];
   final byPath = <String, _FileAccumulator>{};
   // What the turn has seen of each file (read windows, whole writes), kept
   // in step with its own edits, to give hunks real line numbers.

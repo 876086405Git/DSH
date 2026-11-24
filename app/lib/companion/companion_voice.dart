@@ -8,6 +8,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
@@ -15,10 +16,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import '../phone/phone_channel.dart';
 import '../speech/deepseek_speech.dart';
 import '../speech/speech_audio.dart';
 import '../speech/speech_out.dart';
 import '../state/android_features.dart';
+import 'companion_agent_phone_tools.dart' show companionPhoneWindow;
 import 'companion_voice_source.dart';
 
 enum CompanionVoiceEventType {
@@ -192,6 +195,10 @@ class CompanionSpeaker {
   int _generation = 0;
   // The room and shared voice settings use the same native player and cache.
   static int _previews = 0;
+  // Private native receipts distinguish the parts of a single failed external line.
+  static const _fallbackPrefix = 'companion-fallback-';
+  static int _fallbackSerial = 0;
+  void Function(CompanionVoiceEvent)? _fallbackReceipt;
   bool _pumping = false;
   final _queue = Queue<_Line>();
   final _ends = <String, Completer<void>>{};
@@ -366,6 +373,10 @@ class CompanionSpeaker {
           if (line.generation != _generation) continue;
           if (!started && _phoneReady) {
             _events.add(CompanionVoiceEvent(CompanionVoiceEventType.fallback, line.id));
+            if (line.text.length > _systemSpeechLimit) {
+              await _speakLongFallback(line);
+              continue;
+            }
             started = await _voice.speak(line.id, line.text);
           }
           if (!started) {
@@ -382,7 +393,83 @@ class CompanionSpeaker {
     }
   }
 
+  /// One paid request has already failed. Admit one short native utterance at
+  /// a time; the page and any reader keep the original ID until the last one.
+  Future<void> _speakLongFallback(_Line line) async {
+    var announced = false;
+    var offset = 0;
+    try {
+      // Use the reader's normal group size under the existing one-minute
+      // watchdog. A 3999-unit utterance can take many minutes to say.
+      for (final part in companionSystemSpeechParts(line.text, limit: SpeechChunker().target)) {
+        final nativeId = '$_fallbackPrefix${++_fallbackSerial}';
+        final end = _ends[line.id] = Completer<void>();
+        var result = CompanionVoiceEventType.error;
+        void finish(CompanionVoiceEventType type) {
+          if (end.isCompleted) return;
+          result = type;
+          end.complete();
+        }
+
+        Timer? watchdog;
+        void progress() {
+          watchdog?.cancel();
+          watchdog = Timer(const Duration(minutes: 1), () => finish(CompanionVoiceEventType.error));
+        }
+
+        _fallbackReceipt = (event) {
+          if (event.id != nativeId || end.isCompleted || line.generation != _generation) return;
+          switch (event.type) {
+            case CompanionVoiceEventType.start:
+              progress();
+              if (announced) return;
+              announced = true;
+              _events.add(CompanionVoiceEvent(event.type, line.id));
+            case CompanionVoiceEventType.range:
+              progress();
+              _events.add(
+                CompanionVoiceEvent(
+                  event.type,
+                  line.id,
+                  start: event.start == null ? null : offset + event.start!,
+                  end: event.end == null ? null : offset + event.end!,
+                ),
+              );
+            case CompanionVoiceEventType.done || CompanionVoiceEventType.stopped || CompanionVoiceEventType.error:
+              finish(event.type);
+            case CompanionVoiceEventType.fallback:
+              break;
+          }
+        };
+        progress();
+        unawaited(
+          _voice.speak(nativeId, part).then((ok) {
+            if (!ok) finish(CompanionVoiceEventType.error);
+          }),
+        );
+        await end.future;
+        watchdog?.cancel();
+        if (line.generation != _generation) {
+          if (!_events.isClosed) _events.add(CompanionVoiceEvent(CompanionVoiceEventType.stopped, line.id));
+          return;
+        }
+        if (result != CompanionVoiceEventType.done) {
+          _events.add(CompanionVoiceEvent(result, line.id));
+          return;
+        }
+        offset += part.length;
+      }
+      _events.add(CompanionVoiceEvent(CompanionVoiceEventType.done, line.id));
+    } finally {
+      _fallbackReceipt = null;
+    }
+  }
+
   void _heard(CompanionVoiceEvent event) {
+    if (event.id.startsWith(_fallbackPrefix)) {
+      _fallbackReceipt?.call(event);
+      return;
+    }
     switch (event.type) {
       case CompanionVoiceEventType.start:
         _events.add(CompanionVoiceEvent(event.type, event.id, loudness: _loudness[event.id]));
@@ -455,6 +542,29 @@ final speechSpeakerProvider = Provider<CompanionSpeaker>((ref) {
   return speaker;
 });
 
+// Android 9 rejects even exactly getMaxSpeechInputLength() (4000 UTF-16 units).
+const _systemSpeechLimit = 3999;
+final companionSentenceEnd = RegExp(r'[。！？!?…~～]');
+
+/// Lossless, bounded pieces for the phone's synthesizer. Keep surrogate pairs
+/// together and prefer the last sentence end inside the available space.
+Iterable<String> companionSystemSpeechParts(String text, {int limit = _systemSpeechLimit}) sync* {
+  for (var start = 0; start < text.length;) {
+    var end = text.length;
+    if (end - start > limit) {
+      end = start + limit;
+      final boundary = companionSentenceEnd.allMatches(text.substring(start, end)).lastOrNull;
+      if (boundary != null) {
+        end = start + boundary.end;
+      } else if ((text.codeUnitAt(end - 1) & 0xfc00) == 0xd800) {
+        end--;
+      }
+    }
+    yield text.substring(start, end);
+    start = end;
+  }
+}
+
 /// The sentences ready to be read aloud in [words] after [from]: up to the last
 /// sentence end, or all of it once [final_] (a reply that has finished).
 (String, int) companionSpeakable(String words, int from, {required bool final_}) {
@@ -464,4 +574,45 @@ final speechSpeakerProvider = Provider<CompanionSpeaker>((ref) {
   final end = RegExp(r'[。！？!?…~～\n]').allMatches(rest).lastOrNull?.end;
   if (end == null) return ('', from);
   return (rest.substring(0, end).trim(), from + end);
+}
+
+/// One reply's words while she works on the phone, line by line as she goes:
+/// the [line] since her last step for her bubble, and what to [say] now. Whole
+/// sentences as they come; the rest once she starts a step (what she said
+/// before it is done) or the reply is in.
+class CompanionPhoneLines {
+  int _steps = 0;
+  int _said = 0;
+  int _lineFrom = 0;
+
+  ({String line, String say}) read(String words, {required int steps, required bool running}) {
+    final stepped = steps > _steps;
+    _steps = steps;
+    // A retry can take words back; what was said stays said.
+    final (say, said) = companionSpeakable(words, min(_said, words.length), final_: !running || stepped);
+    _said = said;
+    final line = words.substring(min(_lineFrom, words.length)).trim();
+    if (stepped) _lineFrom = words.length;
+    return (line: line, say: say);
+  }
+}
+
+/// Each time the person stops her phone work from outside her room (the
+/// island, the pill, the notification): a task of hers seen running, now
+/// stopped by them. Her voice stops with it.
+Stream<void> companionPhoneUserStops(Stream<PhoneStatus> statuses) {
+  final running = <String>{};
+  return statuses.expand((status) {
+    var stopped = false;
+    for (final task in status.tasks) {
+      final id = task.sessionId;
+      if (id == null || companionPhoneWindow(id) == null) continue;
+      if (!task.stopped) {
+        running.add(id);
+      } else if (running.remove(id) && task.stopSource == 'USER') {
+        stopped = true;
+      }
+    }
+    return [if (stopped) null];
+  });
 }

@@ -1403,6 +1403,41 @@ void main() {
     expect(store.memoryRetrievalCandidates(characterId: null).map((row) => row['id']), containsAll([parent, child]));
   });
 
+  test('related does not read or grant an independent quiet topic from the same source without an invitation', () {
+    final making = begin(say('two-facts', '我每天喝白茶。竹笛课在周五。'));
+    final tea = call(making, 'tea', 'remember', {'text': '我每天喝白茶。', 'keywords': ['白茶']}).targetId!;
+    final flute = call(making, 'flute', 'remember', {'text': '竹笛课在周五。', 'keywords': ['竹笛']}).targetId!;
+    expect(actualCard(tea)['topic_id'], isNot(actualCard(flute)['topic_id']));
+    expect(call(making, 'quiet', 'quiet', {'card': flute, 'mode': 'never'}).applied, isTrue);
+    store.closeAgentTurn(making);
+
+    for (final sample in [
+      (key: 'neutral', text: '我想问白茶。', invited: false),
+      (key: 'invited', text: '我想问竹笛。', invited: true),
+      (key: 'again', text: '说说白茶。', invited: false),
+    ]) {
+      final turn = begin(say(sample.key, sample.text), [actualCard(tea)]);
+      final input = {'card': tea};
+      for (final replay in [false, true]) {
+        final result = call(turn, 'related', 'related', input);
+        expect(result.applied, isTrue);
+        expect(result.replayed, replay);
+        final related = {for (final row in result.relatedCards!) row['id']: row};
+        expect(related[tea]?['required_effect'], isTrue);
+        expect(related.containsKey(flute), sample.invited);
+        if (sample.invited) {
+          expect(related[flute]?['text'], '竹笛课在周五。');
+          expect(related[flute]?['required_effect'], isFalse);
+        }
+      }
+      final access = call(turn, 'flute-access', 'related', {'card': flute});
+      expect(access.applied, sample.invited);
+      if (!sample.invited) expect(access.code, 'card_not_in_turn');
+      store.closeAgentTurn(turn);
+      expect(actualCard(flute)['topic_mode'], 'never');
+    }
+  });
+
   test('an external control invalidates a turn after recall grants only its actual returned IDs', () {
     final card = seed('我喜欢蓝色', keywords: ['蓝色']);
     final other = seed('另一个独立事实');

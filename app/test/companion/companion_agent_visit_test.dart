@@ -22,6 +22,7 @@ import 'package:dsh_app/companion/companion_public_lookup.dart';
 import 'package:dsh_app/companion/companion_signal_consent.dart';
 import 'package:dsh_app/companion/companion_signals.dart';
 import 'package:dsh_app/companion/companion_state.dart';
+import 'package:dsh_app/companion/companion_voice.dart' show CompanionPhoneLines;
 import 'package:dsh_app/companion/companion_widget.dart';
 import 'package:dsh_app/state/android_features.dart';
 import 'package:dsh_app/notify/chat_alerts.dart';
@@ -1208,6 +1209,44 @@ void main() {
     final results = ((visit.requests.last['messages']! as List).last as Map)['content']! as List;
     expect(jsonDecode((results.single as Map)['content']! as String), containsPair('nativeResult', 'screen 完成'));
     expect(visit.attachment.text, endsWith('屏幕上是 7。'));
+  });
+
+  test('her line before a phone step is heard as that step starts, not after it', () async {
+    final phone = _FakePhone();
+    final visit = await _Visit.open([
+      _message(
+        words: '我先打开计算器哦',
+        calls: [
+          ('call_0', 'phone_open', {'app': '计算器'}),
+        ],
+      ),
+      _message(
+        words: '好，点 7',
+        calls: [
+          ('call_1', 'phone_tap', {'id': 7}),
+        ],
+      ),
+      _message(words: '屏幕上是 7。'),
+    ]);
+    // What a presenter reads aloud from the agent's own notifications, and
+    // how many native steps had run by then.
+    final lines = CompanionPhoneLines();
+    final heard = <(String, int)>[];
+    void hear() {
+      final read = lines.read(
+        visit.attachment.text,
+        steps: visit.attachment.phoneSteps,
+        running: visit.attachment.running,
+      );
+      if (read.say.isNotEmpty) heard.add((read.say, phone.steps.length));
+    }
+
+    visit.agent.addListener(hear);
+    addTearDown(() => visit.agent.removeListener(hear));
+    await visit.attachment.submit('打开计算器按一下 7，告诉我屏幕上是什么');
+    expect(phone.steps, ['open', 'tap']);
+    expect(visit.attachment.phoneSteps, 2);
+    expect(heard, [('我先打开计算器哦', 0), ('好，点 7', 1), ('屏幕上是 7。', 2)]);
   });
 
   test('after a phone step she retries a failed round; a lasting failure points at the phone', () async {

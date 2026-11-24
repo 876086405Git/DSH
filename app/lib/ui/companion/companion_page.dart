@@ -54,6 +54,7 @@ import '../../state/chat_state.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
 import '../../state/models_state.dart';
+import '../../state/phone_state.dart' show phoneChannelProvider;
 import '../../state/sessions_state.dart';
 import '../../state/settings_state.dart';
 import '../../state/voice_model_state.dart';
@@ -102,8 +103,6 @@ import 'companion_tasks_page.dart';
 const _packRemovedKey = 'companion_pack_removed';
 const _hintDoneKey = 'companion_touch_hint_done';
 const _homeHintDoneKey = 'companion_home_hint_done';
-
-final _sentenceEnd = RegExp(r'[。！？!?…~～]');
 
 enum _Phase { checking, setup, stage, failed }
 
@@ -320,6 +319,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   int _ttsSerial = 0;
   String _spokenPrefix = '';
   final Map<String, int> _ttsPending = {};
+  // Phone steps of the current reply seen so far, and, while she is on the
+  // phone, a stop from the island or pill that also stops her voice.
+  int _phoneSteps = 0;
+  StreamSubscription<void>? _phoneStops;
   bool _replyClearedWidget = false;
 
   // Her invitation to rest (Pro C451/C452): the installation's owner decides,
@@ -591,6 +594,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     unawaited(_muxStates?.cancel());
     _signals.leave();
     unawaited(_ttsEvents?.cancel());
+    unawaited(_phoneStops?.cancel());
     _voiceNoticeTimer?.cancel();
     _agentPillTimer?.cancel();
     _voice.removeListener(_voiceChanged);
@@ -1576,10 +1580,26 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (flush) _ttsPending.clear();
     // Native completion can follow the old window's stop after a new window
     // speaks. Reuse the room identity so its receipt cannot consume our ID.
-    final id = 'v$_page-${++_ttsSerial}';
-    _ttsPending[id] = text.length;
-    _speaker.speak(id, text, flush: flush);
+    final parts = _ttsSource == CompanionVoiceSource.system ? companionSystemSpeechParts(text) : [text];
+    var replace = flush;
+    for (final part in parts) {
+      final id = 'v$_page-${++_ttsSerial}';
+      _ttsPending[id] = part.length;
+      _speaker.speak(id, part, flush: replace);
+      replace = false;
+    }
     return true;
+  }
+
+  /// While she works on the phone, the person stopping it from the island or
+  /// pill (the room is often behind another app then) stops her voice too.
+  void _watchPhoneStops(bool onPhone) {
+    if (onPhone) {
+      _phoneStops ??= companionPhoneUserStops(ref.read(phoneChannelProvider).statusChanges).listen((_) => _hush());
+    } else if (_phoneStops != null) {
+      unawaited(_phoneStops!.cancel());
+      _phoneStops = null;
+    }
   }
 
   /// She stops talking at once: the person is typing, talking, stopping her or leaving.
@@ -2159,6 +2179,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     String? error,
     bool loading = false,
   }) {
+    final steps = _attachment.phoneSteps;
     if (!_baselineSet) {
       // What's already in the conversation has been said; only news moves her.
       if (loading) return;
@@ -2168,6 +2189,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _marksHandled = old.marks.length;
       _wordsSpoken = old.words.length;
       _spokenPrefix = old.words;
+      _phoneSteps = steps;
       _replyWords = old.words;
       if (!running) {
         setState(() => _needsAttention = attention);
@@ -2181,7 +2203,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _marksHandled = 0;
       _wordsSpoken = 0;
       _spokenPrefix = '';
+      _phoneSteps = 0;
     }
+    // She starts a phone step: what she said before it is a whole line.
+    final stepped = steps > _phoneSteps;
+    _phoneSteps = steps;
+    _watchPhoneStops(running && steps > 0);
 
     var stream = _replyStream;
     // A retry gets a new replyId, even for the same user line.
@@ -2211,7 +2238,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (fresh > 0) {
       // Read aloud, her mouth follows the voice instead of the text.
       if (!aloud) _stage.command('say', {'chars': fresh});
-      if (_sentenceEnd.hasMatch(reply.words.substring(_wordsSpoken))) _stage.command('beat');
+      if (companionSentenceEnd.hasMatch(reply.words.substring(_wordsSpoken))) _stage.command('beat');
     }
     _wordsSpoken = reply.words.length;
     if (aloud) {
@@ -2221,9 +2248,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         _hush();
         _spokenPrefix = '';
       }
-      final (sentences, to) = companionSpeakable(reply.words, _spokenPrefix.length, final_: !running);
+      // Whole sentences as they complete, the rest once she acts on the phone
+      // or the reply is in.
+      final (sentences, to) = companionSpeakable(reply.words, _spokenPrefix.length, final_: !running || stepped);
       if (to != _spokenPrefix.length) _spokenPrefix = reply.words.substring(0, to);
-      if (sentences.isNotEmpty) _speakAloud(sentences);
+      // On the phone her next line can come before the last is out: rather
+      // than fall behind what she is doing, she goes on with the newest.
+      if (sentences.isNotEmpty) _speakAloud(sentences, flush: steps > 0 && _ttsPending.length > 1);
     }
     _showReplyWords(reply.words, fresh);
 
@@ -2362,8 +2393,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _hush();
     _retireGreeting();
     if (_voice.active || _voice.cancelling) {
+      final current = _currentRoom();
       await _voice.cancel();
-      if (!mounted || _attachment.preparing || !_attachment.isAttached) return;
+      if (!mounted || !current() || _attachment.preparing) return;
     }
     _notesSelectionRoutes.clear();
     _bubbleTimer?.cancel();

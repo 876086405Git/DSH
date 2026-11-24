@@ -13,6 +13,7 @@ import 'package:dsh_app/ui/companion/companion_voice_page.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
+import 'package:dsh_app/phone/phone_channel.dart' show PhoneStatus;
 import 'package:dsh_app/speech/speech_settings.dart' show companionEffectiveVoiceProvider;
 import 'package:dsh_app/state/android_features.dart' show operatingSystemProvider;
 import 'package:dsh_app/state/connection_state.dart';
@@ -41,6 +42,76 @@ void main() {
 
     test('a retry that took words back starts over from where it now ends', () {
       expect(companionSpeakable('好。', 10, final_: false), ('', 2));
+    });
+  });
+
+  group('CompanionPhoneLines', () {
+    test('her line before a step is said as the step starts, even without a full stop', () {
+      final lines = CompanionPhoneLines();
+      // Streaming her first line: nothing whole to say yet.
+      expect(lines.read('我先打开计算器哦', steps: 0, running: true), (line: '我先打开计算器哦', say: ''));
+      // She opens the calculator: that line is done.
+      expect(lines.read('我先打开计算器哦', steps: 1, running: true), (line: '我先打开计算器哦', say: '我先打开计算器哦'));
+      // The bubble moves on to the next line; a whole sentence is said as it comes.
+      expect(lines.read('我先打开计算器哦\n好，点 7。', steps: 1, running: true), (line: '好，点 7。', say: '好，点 7。'));
+      // Two steps with nothing said between: nothing to say, the line stays.
+      expect(lines.read('我先打开计算器哦\n好，点 7。', steps: 3, running: true), (line: '好，点 7。', say: ''));
+      // The reply is in: the rest is said.
+      expect(lines.read('我先打开计算器哦\n好，点 7。\n算好了，是 7', steps: 3, running: false), (line: '算好了，是 7', say: '算好了，是 7'));
+    });
+
+    test('a retried round that took words back is not said again', () {
+      final lines = CompanionPhoneLines();
+      lines.read('好，点 7。', steps: 1, running: true);
+      expect(lines.read('好，', steps: 1, running: true).say, '');
+    });
+  });
+
+  group('companionPhoneUserStops', () {
+    PhoneStatus status(List<Map<String, Object?>> tasks) =>
+        PhoneStatus.fromMap({'ready': true, 'taskProtocol': 1, 'tasks': tasks});
+    Map<String, Object?> task(String session, {bool stopped = false, String? source}) => {
+      'sessionId': session,
+      'id': 1,
+      'active': !stopped,
+      'stopped': stopped,
+      'stopSource': ?source,
+    };
+
+    test('only her running phone work stopped by the person stops her voice', () async {
+      final statuses = StreamController<PhoneStatus>();
+      final stops = <void>[];
+      final sub = companionPhoneUserStops(statuses.stream).listen(stops.add);
+      addTearDown(sub.cancel);
+      const her = 'companion:room:t:r';
+      // Stopped before she was seen running (an earlier run): not this one.
+      statuses.add(status([task('companion:room:old:r', stopped: true, source: 'USER')]));
+      statuses.add(status([task(her), task('chat-session')]));
+      // An engine conversation's task stopped: not hers.
+      statuses.add(status([task(her), task('chat-session', stopped: true, source: 'USER')]));
+      await pumpEventQueue();
+      expect(stops, isEmpty);
+      statuses.add(status([task(her, stopped: true, source: 'USER')]));
+      // The same stop reported again counts once.
+      statuses.add(status([task(her, stopped: true, source: 'USER')]));
+      await pumpEventQueue();
+      expect(stops, hasLength(1));
+    });
+
+    test('her run ending on its own, or the screen going off, does not', () async {
+      final statuses = StreamController<PhoneStatus>();
+      final stops = <void>[];
+      final sub = companionPhoneUserStops(statuses.stream).listen(stops.add);
+      addTearDown(sub.cancel);
+      statuses.add(status([task('companion:floating:a:r'), task('companion:room:b:r')]));
+      statuses.add(
+        status([
+          task('companion:floating:a:r', stopped: true),
+          task('companion:room:b:r', stopped: true, source: 'SCREEN_OFF'),
+        ]),
+      );
+      await pumpEventQueue();
+      expect(stops, isEmpty);
     });
   });
 

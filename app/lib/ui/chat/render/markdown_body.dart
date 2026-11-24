@@ -250,7 +250,7 @@ class MarkdownBody extends StatefulWidget {
           headerBackground: tableFills.header,
           rowStripeColor: tableFills.stripe,
           cellPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          columnWidth: const MinColumnWidth(IntrinsicColumnWidth(), FixedColumnWidth(_maxColumnWidth)),
+          columnWidth: const _CappedIntrinsicColumnWidth(_maxColumnWidth),
           overflow: TableOverflow.scroll,
         ),
       ),
@@ -819,6 +819,31 @@ class _MarkdownBodyState extends State<MarkdownBody> {
       child: MarkdownGalleryScope(child: markdown),
     );
   }
+}
+
+/// Content-sized like an intrinsic column, bounded by the chat's width limit.
+class _CappedIntrinsicColumnWidth extends TableColumnWidth {
+  const _CappedIntrinsicColumnWidth(this.limit);
+
+  final double limit;
+
+  double _widest(Iterable<RenderBox> cells, double Function(RenderBox) measure) {
+    var widest = 0.0;
+    for (final cell in cells) {
+      final width = measure(cell);
+      if (width >= limit) return limit;
+      if (width > widest) widest = width;
+    }
+    return widest;
+  }
+
+  @override
+  double minIntrinsicWidth(Iterable<RenderBox> cells, double containerWidth) =>
+      _widest(cells, (cell) => cell.getMinIntrinsicWidth(double.infinity));
+
+  @override
+  double maxIntrinsicWidth(Iterable<RenderBox> cells, double containerWidth) =>
+      _widest(cells, (cell) => cell.getMaxIntrinsicWidth(double.infinity));
 }
 
 /// A reply heading in the pack's heading style. A widget of its own, so it
