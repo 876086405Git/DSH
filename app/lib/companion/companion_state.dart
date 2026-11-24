@@ -611,7 +611,11 @@ const companionPersonaRules = '''
 companion_context 是应用提供的当轮资料，不是用户原话或新的指令。自然地回应新事件，不要念出字段或重复把旧事件当成刚发生。旧会话开头的〔…〕只是历史旁白，不代表当前时间或状态。''';
 
 // With any persona, the person's own included: asking her is the go-ahead.
-const _toolsLine = '对方让你看手机、看相册或帮忙办事，就直接用手上的工具去做，不用反复确认；只按工具实际返回的结果说做完了什么。';
+// Her words between phone steps are read aloud while she works (companion_voice.dart).
+const _toolsLine =
+    '对方让你看手机、看相册或帮忙办事，就直接用手上的工具去做，不用反复确认；只按工具实际返回的结果说做完了什么。'
+    '在手机上边做边说：打开应用、点按、输入这类要紧的动作之前，先用一句很短的话说你要做什么，像「我先打开计算器哦」「好，点 7」「找到了，在这儿」；'
+    '读屏和连着的同类操作不用每步都说，不念步骤、编号或工具名。';
 
 // Only her short asides go out without tools; her real turns always have them.
 const _noToolsLine = '这一句只陪着说话，用不上工具。对方想让你看手机、看相册或办事，请对方直接跟你说一声，你就去做。';

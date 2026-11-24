@@ -72,9 +72,9 @@ export async function quota(request: Request, env: Env, owner: Owner, action: st
   // KV remains an approximate cross-colo limit, as in the existing service.
   await meter.commit();
 }
-export async function jsonBody(request: Request): Promise<Record<string, unknown>> {
+export async function jsonBody(request: Request, cap = 16384): Promise<Record<string, unknown>> {
   need(request.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase() === 'application/json', 'content_type', 415);
-  const bytes = await readCapped(request, 16384); need(bytes, 'body_too_large', 413);
-  try { const value = strictJson(bytes, 16384, 16); need(record(value), 'bad_request'); return value; }
+  const bytes = await readCapped(request, cap); need(bytes, 'body_too_large', 413);
+  try { const value = strictJson(bytes, cap, 16); need(record(value), 'bad_request'); return value; }
   catch { throw new WorkshopError('bad_request'); }
 }

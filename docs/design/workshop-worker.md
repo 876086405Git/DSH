@@ -16,6 +16,8 @@ ZIP 先完整验证，再以 `workshop/blobs/<sha>.zip` 创建一次；R2 还核
 
 新 id 在首次批准时绑定账号来源（`https://github.com`）+ 数值 GitHub 用户 id；draft 不占有 id。版本首次批准后绑定 kind / id / version / SHA / size；升级、撤回、当前行消失均不删历史。未撤回旧版可使用新的 requestId，以原 SHA / size 创建新投稿，上传成为 pending 后再由管理员批准为当前版；相同版本不同字节、另一作者接管、恢复已写入撤回账本的版本都被拒绝。重复对原 approved / rejected 记录发送相同审核决策，只返回已有记录，不重验、不改变当前行、原审核信息或审计；对旧 approved 原 sid 重发 approve 不会重新上架。
 
+管理员可用 `POST /api/workshop/v1/admin/submissions/<sid>/rework` 从一条已有投稿的 ZIP 与原作者身份生成新的修正记录：只允许替换 version（ZIP 内的 manifest 绑定作品 id，换 id 必须由作者重投），可选上传 ≤512×512 PNG 作为公开预览，否则按新 metadata 的 `previewSource` 从包内重新派生（宠物取 idle 首帧）。新记录直接批准为当前版本，原 pending 记录被撤回取代；approved / rejected / withdrawn 原记录保留为历史。审计 actor 为 `admin`。目标版本已进撤回账本、同版本换字节、id 已归其他作者时分别返回 409，不绕过既有绑定。
+
 撤回未获批准的 draft / pending / rejected 只终止该记录，不新增版本封禁。撤回曾获批准的投稿会撤回整个 release，并更新同 release 的全部已批准记录。撤回旧版本不隐藏当前新版，但其 `blockedVersions` 永久携带旧版本；撤回当前版本不会自动回退到旧版。没有当前条目时，目录仍保留 withdrawn 账本。举报针对曾获批准发布的版本，不会自动下架；管理员先查证再撤回。
 
 公开下载授权来自当前条目。仅知道 SHA，或持有 draft / pending / rejected 投稿记录，不会新增授权。若另一投稿已使同 kind / id / version、同 SHA / size 的资源成为当前条目，后来同资源的待审或拒绝记录不撤销既有授权；共享 blob 也不因此变成另一版本的公开下载凭据。

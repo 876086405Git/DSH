@@ -1,6 +1,9 @@
 package io.github.ccch1mneyyy.dsh_app.companion
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -24,6 +27,10 @@ import java.util.Locale
  * sentence of an external voice from a file the app fetched (lib/companion/companion_voice_source.dart);
  * `stop` drops what is speaking, playing and queued. Progress comes back on the same channel as `event` calls: `start`,
  * `range` (Android 8+: the characters being spoken now, for her mouth), `done`, `stopped`, `error`.
+ *
+ * Audio focus for the phone's voice: transient, others duck, held while lines are queued or speaking
+ * and a moment after (she often talks while operating another app). Losing it ends what she is
+ * saying. A refused request still speaks, as before: focus is for the others, not a gate on her voice.
  */
 class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var methods: MethodChannel
@@ -35,6 +42,12 @@ class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private var status: Int? = null
     private val waiting = mutableListOf<Pair<String, MethodChannel.Result>>()
 
+    private val audio by lazy { context.getSystemService(AudioManager::class.java) }
+    private var focus: AudioFocusRequest? = null
+
+    /** Lines handed to the engine and not yet ended: focus is held while there are some. */
+    private val speaking = HashSet<String>()
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
         methods = MethodChannel(binding.binaryMessenger, CHANNEL).also { it.setMethodCallHandler(this) }
@@ -43,6 +56,8 @@ class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         methods.setMethodCallHandler(null)
         tts?.stop()
+        speaking.clear()
+        abandonFocus()
         tts?.shutdown()
         tts = null
         playing = null
@@ -57,6 +72,8 @@ class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             "play" -> result.success(play(call))
             "stop" -> {
                 tts?.stop()
+                speaking.clear()
+                abandonFocus()
                 playing = null
                 player?.release()
                 result.success(null)
@@ -83,6 +100,7 @@ class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 status = code
                 val started = tts
                 started?.setOnUtteranceProgressListener(progress)
+                started?.setAudioAttributes(SPEECH)
                 val answers = waiting.toList()
                 waiting.clear()
                 for ((lang, answer) in answers) answer.success(started != null && use(started, lang))
@@ -107,7 +125,58 @@ class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         engine.setSpeechRate((call.argument<Double>("rate") ?: 1.0).toFloat())
         engine.setPitch((call.argument<Double>("pitch") ?: 1.0).toFloat())
         val queue = if (call.argument<Boolean>("flush") == true) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-        return engine.speak(text, queue, Bundle(), id) == TextToSpeech.SUCCESS
+        if (queue == TextToSpeech.QUEUE_FLUSH) speaking.clear()
+        // Others duck before her first word.
+        requestFocus()
+        if (engine.speak(text, queue, Bundle(), id) != TextToSpeech.SUCCESS) {
+            if (speaking.isEmpty()) abandonFocus()
+            return false
+        }
+        speaking += id
+        return true
+    }
+
+    private fun ended(type: String, id: String?) {
+        send(type, id)
+        main.post {
+            if (speaking.remove(id) && speaking.isEmpty()) {
+                // Her next line often follows within a moment: others don't bob back up in between.
+                main.removeCallbacks(release)
+                main.postDelayed(release, 1_000)
+            }
+        }
+    }
+
+    private val release = Runnable { if (speaking.isEmpty()) abandonFocus() }
+
+    private fun requestFocus() {
+        if (focus != null) return
+        val am = audio ?: return
+        lateinit var request: AudioFocusRequest
+        request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(SPEECH)
+            .setOnAudioFocusChangeListener { change ->
+                if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                    // A late event for an already-abandoned request leaves a newer line alone.
+                    main.post {
+                        if (focus === request) {
+                            tts?.stop()
+                            speaking.clear()
+                            abandonFocus()
+                        }
+                    }
+                }
+            }
+            .build()
+        focus = request
+        am.requestAudioFocus(request)
+    }
+
+    private fun abandonFocus() {
+        main.removeCallbacks(release)
+        val request = focus ?: return
+        focus = null
+        runCatching { audio?.abandonAudioFocusRequest(request) }
     }
 
     // An external voice's sentence, as an audio file the app fetched: one at a time, through the
@@ -148,14 +217,14 @@ class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) = send("start", utteranceId)
 
-            override fun onDone(utteranceId: String?) = send("done", utteranceId)
+            override fun onDone(utteranceId: String?) = ended("done", utteranceId)
 
-            override fun onStop(utteranceId: String?, interrupted: Boolean) = send("stopped", utteranceId)
+            override fun onStop(utteranceId: String?, interrupted: Boolean) = ended("stopped", utteranceId)
 
             @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) = send("error", utteranceId)
+            override fun onError(utteranceId: String?) = ended("error", utteranceId)
 
-            override fun onError(utteranceId: String?, errorCode: Int) = send("error", utteranceId)
+            override fun onError(utteranceId: String?, errorCode: Int) = ended("error", utteranceId)
 
             override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) =
                 send("range", utteranceId, start, end)
@@ -163,5 +232,11 @@ class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     companion object {
         private const val CHANNEL = "dsh/companion_voice"
+
+        /** The same as an external voice's sentences (ClipPlayer): speech on the media volume. */
+        private val SPEECH: AudioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
     }
 }

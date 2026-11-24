@@ -62,6 +62,11 @@ const adminLogic = (() => {
       } else if (operation === 'releaseWithdraw') {
         if (!kinds.includes(p.kind) || typeof p.releaseId !== 'string' || typeof p.version !== 'string') fail('console_invalid_target');
         path = '/releases/withdraw'; body = { kind: p.kind, id: p.releaseId, version: p.version, reason: p.reason };
+      } else if (operation === 'rework') {
+        if (p.version && !/^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$/.test(p.version)) fail('console_invalid_target');
+        if (p.preview !== undefined && p.preview !== null && typeof p.preview !== 'string') fail('console_invalid_target');
+        path = '/submissions/' + checkedId(p.id) + '/rework';
+        body = { reason: p.reason, ...(p.version ? { version: p.version } : {}), ...(p.preview ? { preview: p.preview } : {}) };
       } else fail('console_invalid_action');
     }
     const headers = { 'X-Admin-Key': key, Accept: operation === 'preview' ? 'image/png, image/jpeg, image/webp'
@@ -132,6 +137,9 @@ const adminLogic = (() => {
       const item = submission(value && value.submission);
       const expected = command.operation === 'withdraw' ? 'withdrawn' : command.params.decision === 'approve' ? 'approved' : 'rejected';
       if (item.submissionId !== command.params.id || item.status !== expected) fail();
+    } else if (command.operation === 'rework') {
+      const item = submission(value && value.submission);
+      if (item.status !== 'approved') fail();
     } else if (command.operation === 'resolve') {
       const item = reportDetail(value, command.params.id).report;
       if (item.status !== 'resolved' || !object(item.resolution) || item.resolution.decision !== command.params.decision) fail();
@@ -429,6 +437,8 @@ const adminLogic = (() => {
     }
     for (const id of ['submission-status', 'submission-kind', 'report-status', 'report-kind']) byId(id).disabled = !!mutation;
     byId('submission-refresh').disabled = !!mutation || submissionLoading;
+    byId('rework').disabled = !!mutation || submissionLoading || !!submissionError || !submissionDetail ||
+      !submissionDetail.submission.submittedAt || !!(writes.get('submission:' + selectedSubmission) || {}).requiresRead;
     byId('report-refresh').disabled = !!mutation || reportLoading;
     byId('files-more').disabled = !!mutation || submissionLoading;
     const subBlocked = !!mutation || submissionLoading || !!submissionError || !submissionDetail ||
@@ -527,7 +537,10 @@ const adminLogic = (() => {
     if (!connected || mutation && !afterWrite) return;
     closeConfirmation(); clearPreview();
     const same = selectedSubmission === id;
-    if (!same) { submissionDetail = null; submissionTicket = null; byId('review-reason').value = ''; }
+    if (!same) {
+      submissionDetail = null; submissionTicket = null; byId('review-reason').value = '';
+      byId('rework-version').value = ''; byId('rework-preview').value = '';
+    }
     const previous = same ? submissionDetail : null;
     const cursor = appendFiles && previous ? previous.inspection.nextFileCursor : null;
     if (appendFiles && !cursor) return;
@@ -715,10 +728,38 @@ const adminLogic = (() => {
   function displayedTarget() {
     return activeView === 'submissions' ? 'submission:' + selectedSubmission : activeView === 'reports' ? 'report:' + selectedReport : '';
   }
-  function offerAction(operation, decision) {
+  function previewFile() {
+    const input = byId('rework-preview'), file = input.files && input.files[0];
+    if (!file) return Promise.resolve(null);
+    if (file.type !== 'image/png' || file.size > 2097152) return Promise.reject({ code: 'console_bad_preview', unknown: false });
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const value = String(reader.result || ''), comma = value.indexOf(',');
+        if (comma < 0) reject({ code: 'console_bad_preview', unknown: false }); else resolve(value.slice(comma + 1));
+      };
+      reader.onerror = () => reject({ code: 'console_bad_preview', unknown: false });
+      reader.readAsDataURL(file);
+    });
+  }
+  async function offerAction(operation, decision) {
     if (!connected || mutation) return;
     let params, title, impact, target, readTicket, view, id;
-    if (operation === 'review' || operation === 'withdraw') {
+    if (operation === 'rework') {
+      if (activeView !== 'submissions' || !submissionDetail || submissionLoading || submissionError) return;
+      const item = submissionDetail.submission;
+      if (!item.submittedAt) return;
+      const nextVersion = byId('rework-version').value.trim();
+      let preview;
+      try { preview = await previewFile(); } catch (error) { notice('global-notice', errorText(error), true); return; }
+      id = item.submissionId; target = 'submission:' + id; view = 'submissions'; readTicket = submissionTicket;
+      params = { id, reason: byId('review-reason').value, ...(nextVersion ? { version: nextVersion } : {}), ...(preview ? { preview } : {}) };
+      title = item.metadata.title.zh + ' · ' + item.metadata.kind + ' / ' + item.metadata.id + ' / ' + item.metadata.version + '\n投稿 ' + id
+        + (nextVersion ? '\n新版本：' + nextVersion : '');
+      impact = '用这条投稿现有的压缩包生成一条新记录并直接发布，作者归属保持不变。' +
+        (preview ? '\n使用本次选择的预览图作为公开预览。' : '\n预览图按包内声明由服务器重新生成；没有声明则不发布预览。') +
+        (item.status === 'pending' ? '\n原待审核记录会被本条取代。' : '\n原记录保留为历史。');
+    } else if (operation === 'review' || operation === 'withdraw') {
       if (activeView !== 'submissions' || !submissionDetail || submissionLoading || submissionError) return;
       const item = submissionDetail.submission;
       if (operation === 'review' && (item.status !== 'pending' || decision === 'approve' &&
@@ -744,7 +785,7 @@ const adminLogic = (() => {
     if ((writes.get(target) || {}).requiresRead) return;
     try {
       offered = Object.freeze({ ...L.confirmation(operation, params, title, tickets.session, target, readTicket), view, id, impact });
-      L.text(byId('confirm-title'), '再次确认' + (operation === 'withdraw' || operation === 'releaseWithdraw' ? '撤回' : operation === 'resolve' ? '举报处理' : decision === 'approve' ? '通过审核' : '拒绝投稿'));
+      L.text(byId('confirm-title'), '再次确认' + (operation === 'rework' ? '修正并重新发布' : operation === 'withdraw' || operation === 'releaseWithdraw' ? '撤回' : operation === 'resolve' ? '举报处理' : decision === 'approve' ? '通过审核' : '拒绝投稿'));
       L.text(byId('confirm-target'), offered.title); L.text(byId('confirm-impact'), offered.impact); L.text(byId('confirm-reason'), offered.params.reason);
       focusBeforeConfirmation = document.activeElement; byId('confirm').hidden = false; byId('confirm-cancel').focus();
     } catch (error) { notice('global-notice', errorText(error), true); }
@@ -757,11 +798,12 @@ const adminLogic = (() => {
     }
     closeConfirmation(); mutation = command; const ticket = next('mutation', command.target);
     notice('global-notice', '正在提交已确认的操作…'); updateControls();
-    let error = null;
+    let error = null, created = null;
     try {
       const value = await request(command.operation, command.params, 'mutation');
       try { L.writeResult(value, command); }
       catch (_) { throw { code: 'console_bad_response', unknown: true }; }
+      if (command.operation === 'rework' && value && value.submission) created = value.submission.submissionId;
     } catch (caught) { error = caught; }
     if (!current(ticket, command.target) || mutation !== command) return;
     if (authFailure(error)) return;
@@ -770,7 +812,10 @@ const adminLogic = (() => {
       notice('global-notice', '本次写请求结果未知。请先刷新同一条对象核对状态，不要直接重复操作。\n' + errorText(error), true);
     } else {
       notice('global-notice', error ? errorText(error) : '服务器已确认操作，正在刷新该条…', !!error);
-      if (command.view === 'submissions') await openSubmission(command.id, false, true);
+      if (command.operation === 'rework' && created) {
+        byId('rework-version').value = ''; byId('rework-preview').value = '';
+        await openSubmission(created, false, true);
+      } else if (command.view === 'submissions') await openSubmission(command.id, false, true);
       else await openReport(command.id, true);
     }
     if (!current(ticket, command.target) || mutation !== command) return;
@@ -804,6 +849,7 @@ const adminLogic = (() => {
   byId('preview-clear').addEventListener('click', clearPreview);
   byId('public-preview-retry').addEventListener('click', () => { if (selectedSubmission) return openPublicPreview(selectedSubmission); });
   byId('report-refresh').addEventListener('click', () => { if (selectedReport) return openReport(selectedReport); });
+  byId('rework').addEventListener('click', () => offerAction('rework'));
   byId('approve').addEventListener('click', () => offerAction('review', 'approve'));
   byId('reject').addEventListener('click', () => offerAction('review', 'reject'));
   byId('withdraw').addEventListener('click', () => offerAction('withdraw'));
@@ -860,7 +906,12 @@ input,select,textarea{width:100%;min-height:48px;border:1px solid #aebac9;border
 <details><summary>完整元数据</summary><pre id="submission-metadata"></pre></details><h3 class="spaced">包内文件</h3><p id="files-status" class="muted"></p><ul id="submission-files" class="files"></ul><button id="files-more" type="button" hidden>继续加载文件</button>
 <section id="preview" class="preview" hidden><h3>图片预览</h3><p id="preview-caption" class="preview-caption"></p><p id="preview-status" class="notice" role="status" hidden></p><img id="preview-image" alt="所选包内图片的静态预览" decoding="async" hidden><button id="preview-clear" type="button">关闭预览</button></section>
 <hr><label for="review-reason">操作理由（必填，原文写入审计）</label><textarea id="review-reason" rows="3" maxlength="4000" placeholder="请填写通过、拒绝或撤回的理由"></textarea>
-<div class="stack spaced"><button id="approve" class="primary" type="button">通过此投稿</button><button id="reject" class="danger" type="button">拒绝此投稿</button><button id="withdraw" class="danger" type="button">撤回此已批准版本</button></div><p class="muted">撤回曾获批准的投稿会撤回同一版本的全部已批准记录，不会自动回退到旧版本。</p></section></section>
+<div class="stack spaced"><button id="approve" class="primary" type="button">通过此投稿</button><button id="reject" class="danger" type="button">拒绝此投稿</button><button id="withdraw" class="danger" type="button">撤回此已批准版本</button></div><p class="muted">撤回曾获批准的投稿会撤回同一版本的全部已批准记录，不会自动回退到旧版本。</p>
+<hr><h3>修正并重新发布（管理员）</h3>
+<p class="muted">用这条投稿现有的压缩包生成一条新记录并立即发布，作者归属保持原账号。用于修正已被撤回或被他人占用而卡住的版本号 / 作品标识，或给旧包补预览图。操作理由使用上面的输入框。</p>
+<label for="rework-version">新版本号（留空保持不变）</label><input id="rework-version" maxlength="80" autocomplete="off" spellcheck="false">
+<label for="rework-preview">预览图 PNG（可选，≤512×512、≤2 MiB；不选则按包内声明自动生成）</label><input id="rework-preview" type="file" accept="image/png">
+<div class="stack spaced"><button id="rework" type="button">修正并重新发布</button></div></section></section>
 <section id="view-reports" hidden><div class="card"><h2>举报列表</h2><label for="report-status">处理状态</label><select id="report-status"><option value="open">未处理</option><option value="resolved">已处理</option><option value="">全部状态</option></select><label for="report-kind">作品种类</label><select id="report-kind"><option value="">全部种类</option><option value="pet">像素宠物</option><option value="companion">Live2D 伙伴</option><option value="theme">主题包</option></select>
 <button id="reports-refresh" class="spaced" type="button">刷新举报列表</button><p id="reports-status" class="notice" role="status" hidden></p><div id="reports-rows"></div><div class="stack spaced"><button id="reports-prev" type="button">上一页</button><button id="reports-next" type="button">下一页</button></div></div>
 <section id="report-detail" class="card" hidden><h2>举报详情</h2><button id="report-refresh" type="button">刷新此举报及目标版本</button><p id="report-status-text" class="notice" role="status" hidden></p><div id="report-content"></div>

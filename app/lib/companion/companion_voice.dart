@@ -8,6 +8,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
@@ -15,10 +16,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import '../phone/phone_channel.dart';
 import '../speech/deepseek_speech.dart';
 import '../speech/speech_audio.dart';
 import '../speech/speech_out.dart';
 import '../state/android_features.dart';
+import 'companion_agent_phone_tools.dart' show companionPhoneWindow;
 import 'companion_voice_source.dart';
 
 enum CompanionVoiceEventType {
@@ -571,4 +574,45 @@ Iterable<String> companionSystemSpeechParts(String text, {int limit = _systemSpe
   final end = RegExp(r'[。！？!?…~～\n]').allMatches(rest).lastOrNull?.end;
   if (end == null) return ('', from);
   return (rest.substring(0, end).trim(), from + end);
+}
+
+/// One reply's words while she works on the phone, line by line as she goes:
+/// the [line] since her last step for her bubble, and what to [say] now. Whole
+/// sentences as they come; the rest once she starts a step (what she said
+/// before it is done) or the reply is in.
+class CompanionPhoneLines {
+  int _steps = 0;
+  int _said = 0;
+  int _lineFrom = 0;
+
+  ({String line, String say}) read(String words, {required int steps, required bool running}) {
+    final stepped = steps > _steps;
+    _steps = steps;
+    // A retry can take words back; what was said stays said.
+    final (say, said) = companionSpeakable(words, min(_said, words.length), final_: !running || stepped);
+    _said = said;
+    final line = words.substring(min(_lineFrom, words.length)).trim();
+    if (stepped) _lineFrom = words.length;
+    return (line: line, say: say);
+  }
+}
+
+/// Each time the person stops her phone work from outside her room (the
+/// island, the pill, the notification): a task of hers seen running, now
+/// stopped by them. Her voice stops with it.
+Stream<void> companionPhoneUserStops(Stream<PhoneStatus> statuses) {
+  final running = <String>{};
+  return statuses.expand((status) {
+    var stopped = false;
+    for (final task in status.tasks) {
+      final id = task.sessionId;
+      if (id == null || companionPhoneWindow(id) == null) continue;
+      if (!task.stopped) {
+        running.add(id);
+      } else if (running.remove(id) && task.stopSource == 'USER') {
+        stopped = true;
+      }
+    }
+    return [if (stopped) null];
+  });
 }

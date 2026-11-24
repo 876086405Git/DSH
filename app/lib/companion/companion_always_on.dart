@@ -10,6 +10,7 @@ import '../speech/speech_settings.dart' show companionEffectiveVoiceProvider;
 
 import '../state/companion_agent_state.dart';
 import '../state/models_state.dart' show modelSelectionScopeProvider;
+import '../state/phone_state.dart' show phoneChannelProvider;
 import 'companion_agent.dart';
 import 'companion_agent_task_ui.dart';
 import 'companion_float.dart';
@@ -34,8 +35,9 @@ final companionAlwaysOnOwnerProvider = Provider<CompanionAlwaysOnOwner>((ref) {
   ref.listen(companionEffectiveVoiceProvider, (_, value) {
     if (value?.on != true) owner._hush();
   });
-  ref.listen(petOverlayProvider, (_, value) {
-    if (!value.showing) owner._hush();
+  ref.listen(petOverlayProvider, (previous, value) {
+    // Her phone work hides her floating self; what she says meanwhile goes on.
+    if (previous?.showing == true && !value.showing && !owner._onPhone) owner._hush();
   });
   ref.listen(companionNameProvider, (_, value) => owner._rename(value));
   ref.onDispose(owner.close);
@@ -83,6 +85,9 @@ class CompanionAlwaysOnOwner {
   String? _reply;
   String? _sentText;
   bool? _sentRunning;
+  int _sentSteps = 0;
+  CompanionPhoneLines _phoneLines = CompanionPhoneLines();
+  StreamSubscription<void>? _phoneStops;
   bool _fromFloat = false;
   final _spokenReplies = <String>{};
   final _voices = <String, ({String bubble, int chars})>{};
@@ -182,6 +187,8 @@ class CompanionAlwaysOnOwner {
 
   Future<Object?> _overlayAction(MethodCall call) async {
     if (call.method == 'companionAskTarget') {
+      // The person opens her composer to say something: she stops to listen.
+      _hush();
       return {
         'fresh': {'line': _name},
         'recent': [
@@ -232,6 +239,8 @@ class CompanionAlwaysOnOwner {
       _reply = reply;
       _sentText = null;
       _sentRunning = null;
+      _sentSteps = 0;
+      _phoneLines = CompanionPhoneLines();
       _textAfterControl = 0;
     }
     final text = agent.text;
@@ -248,30 +257,72 @@ class CompanionAlwaysOnOwner {
         (parsed.words.isEmpty && !agent.running && _sentText != null
             ? agent.error == null ? appL10n.stateAlertPublicDone : appL10n.stateAlertPublicFailed
             : parsed.words);
-    if (reply == null || visible.isEmpty || (visible == _sentText && _sentRunning == agent.running)) return;
+    final steps = agent.phoneSteps;
+    _watchPhoneStops(_onPhone);
+    if (reply == null ||
+        visible.isEmpty ||
+        (visible == _sentText && _sentRunning == agent.running && steps == _sentSteps)) {
+      return;
+    }
     _sentText = visible;
     _sentRunning = agent.running;
-    final speak = (parsed?.words ?? raw.trim()).isNotEmpty && !agent.running && _fromFloat && _resident?.ownsCurrentRun == true && _spokenReplies.add(reply);
+    _sentSteps = steps;
+    final resident = _resident;
+    // While her room is open, even behind another app, it reads her words aloud.
+    final voiced = resident != null && !resident.roomOpen;
+    var line = visible;
+    String? phoneSay;
+    if (steps > 0) {
+      // On the phone: her latest line in the bubble, and heard as she goes.
+      final read = _phoneLines.read(
+        parsed?.words ?? companionWithoutMarks(visible, streaming: agent.running),
+        steps: steps,
+        running: agent.running,
+      );
+      line = read.line;
+      if (voiced && read.say.isNotEmpty) phoneSay = read.say;
+    }
+    final speak = steps == 0 &&
+        voiced &&
+        (parsed?.words ?? raw.trim()).isNotEmpty &&
+        !agent.running &&
+        _fromFloat &&
+        resident.ownsCurrentRun &&
+        _spokenReplies.add(reply);
     while (_spokenReplies.length > 64) {
       _spokenReplies.remove(_spokenReplies.first);
     }
-    final resident = _resident;
-    if (resident != null) {
+    final generation = _voiceGeneration;
+    if (resident != null && line.isNotEmpty) {
       unawaited(
-        resident.deliverReply(
-          reply,
-          raw,
-          (noticeEpoch) => _presentLine(
+        resident.deliverReply(reply, raw, (noticeEpoch) async {
+          final shown = await _presentLine(
             id: reply,
-            text: visible,
+            text: line,
             emotion: parsed?.marks.where((m) => m.kind == CompanionMarkKind.emotion).lastOrNull?.name ?? 'neutral',
             speak: speak,
             noticeEpoch: noticeEpoch,
-          ),
-        ),
+          );
+          // Phone work mostly hides her floating self: her words are heard all the same.
+          if (phoneSay != null && noticeEpoch == null) await _speak(reply, phoneSay, generation, keepUp: true);
+          return shown;
+        }),
       );
     }
     _postReply(reply, raw, visible);
+  }
+
+  bool get _onPhone => agent.running && agent.phoneSteps > 0;
+
+  /// While she works on the phone, the person stopping it from the island or
+  /// pill stops her voice too.
+  void _watchPhoneStops(bool onPhone) {
+    if (onPhone) {
+      _phoneStops ??= companionPhoneUserStops(ref.read(phoneChannelProvider).statusChanges).listen((_) => _hush());
+    } else if (_phoneStops != null) {
+      unawaited(_phoneStops!.cancel());
+      _phoneStops = null;
+    }
   }
 
   /// The reply update still waiting in [_notificationQueue].
@@ -375,6 +426,7 @@ class CompanionAlwaysOnOwner {
     overlay.setCompanionActionHandler(null);
     unawaited(_input.cancel());
     unawaited(_voiceEvents.cancel());
+    _watchPhoneStops(false);
     _screen.dispose();
     _screenRoute?.close();
   }
@@ -396,15 +448,23 @@ class CompanionAlwaysOnOwner {
     );
     // Notice-derived words stay on the already-authorized text surface. A
     // voice model warm-up cannot retain authority across a later lock.
-    if (!shown || noticeEpoch != null || !speak || !active || generation != _voiceGeneration) return shown;
-    final settings = ref.read(companionEffectiveVoiceProvider);
-    if (settings?.on != true) return shown;
-    final ready = await _speaker.ready(settings!);
-    if (!ready || !active || generation != _voiceGeneration || !ref.read(petOverlayProvider).showing) return shown;
-    final voiceId = 'float:${_status.epoch}:${++_voiceSerial}';
-    _voices[voiceId] = (bubble: id, chars: text.length);
-    _speaker.speak(voiceId, text);
+    if (!shown || noticeEpoch != null || !speak || !ref.read(petOverlayProvider).showing) return shown;
+    await _speak(id, text, generation);
     return shown;
+  }
+
+  /// Reads [words] aloud in her voice when it is on; her mouth moves along in
+  /// [bubble] while that shows. [keepUp]: on the phone, a line that would wait
+  /// behind two others replaces them, so she never falls behind what she does.
+  Future<void> _speak(String bubble, String words, int generation, {bool keepUp = false}) async {
+    final settings = ref.read(companionEffectiveVoiceProvider);
+    if (settings?.on != true) return;
+    final ready = await _speaker.ready(settings!);
+    if (!ready || !active || generation != _voiceGeneration) return;
+    if (keepUp && _voices.length > 1) _hush();
+    final voiceId = 'float:${_status.epoch}:${++_voiceSerial}';
+    _voices[voiceId] = (bubble: bubble, chars: words.length);
+    _speaker.speak(voiceId, words);
   }
 
   void _voiceEvent(CompanionVoiceEvent event) {
