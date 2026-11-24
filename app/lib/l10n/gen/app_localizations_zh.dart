@@ -6221,16 +6221,13 @@ class L10nZh extends L10n {
   String get companionReminderSecond => '第二次';
 
   @override
-  String get companionReminderExactMissing => '手机还没让我准点提醒，这条没设上。去系统设置里打开「闹钟和提醒」就好。';
+  String get companionReminderNotificationsMissing => '设好了，可通知还关着，到点我叫不到你。去系统设置里打开通知就好。';
 
   @override
-  String get companionReminderNotificationsMissing => '通知没开，这条还没设上。去系统设置里打开通知就好。';
+  String get companionReminderChannelMissing => '设好了，可「提醒」这类通知被关掉了，到点我叫不到你。去系统设置里打开就好。';
 
   @override
-  String get companionReminderChannelMissing => '「提醒」这类通知被关掉了，这条还没设上。去系统设置里打开就好。';
-
-  @override
-  String get companionReminderGroupMissing => '提醒所在的那组通知被关掉了，这条还没设上。去系统设置里打开就好。';
+  String get companionReminderGroupMissing => '设好了，可提醒所在的那组通知被关掉了，到点我叫不到你。去系统设置里打开就好。';
 
   @override
   String get companionReminderTimePassed => '约好的时间已经过了，我就没再补响。';

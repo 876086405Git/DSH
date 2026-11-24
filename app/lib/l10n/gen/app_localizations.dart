@@ -11606,28 +11606,22 @@ abstract class L10n {
   /// **'第二次'**
   String get companionReminderSecond;
 
-  /// No description provided for @companionReminderExactMissing.
-  ///
-  /// In zh, this message translates to:
-  /// **'手机还没让我准点提醒，这条没设上。去系统设置里打开「闹钟和提醒」就好。'**
-  String get companionReminderExactMissing;
-
   /// No description provided for @companionReminderNotificationsMissing.
   ///
   /// In zh, this message translates to:
-  /// **'通知没开，这条还没设上。去系统设置里打开通知就好。'**
+  /// **'设好了，可通知还关着，到点我叫不到你。去系统设置里打开通知就好。'**
   String get companionReminderNotificationsMissing;
 
   /// No description provided for @companionReminderChannelMissing.
   ///
   /// In zh, this message translates to:
-  /// **'「提醒」这类通知被关掉了，这条还没设上。去系统设置里打开就好。'**
+  /// **'设好了，可「提醒」这类通知被关掉了，到点我叫不到你。去系统设置里打开就好。'**
   String get companionReminderChannelMissing;
 
   /// No description provided for @companionReminderGroupMissing.
   ///
   /// In zh, this message translates to:
-  /// **'提醒所在的那组通知被关掉了，这条还没设上。去系统设置里打开就好。'**
+  /// **'设好了，可提醒所在的那组通知被关掉了，到点我叫不到你。去系统设置里打开就好。'**
   String get companionReminderGroupMissing;
 
   /// No description provided for @companionReminderTimePassed.

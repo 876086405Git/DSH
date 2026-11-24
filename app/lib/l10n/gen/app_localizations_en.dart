@@ -6596,20 +6596,16 @@ class L10nEn extends L10n {
   String get companionReminderSecond => 'The second one';
 
   @override
-  String get companionReminderExactMissing =>
-      'Your phone won\'t let me remind you on the dot yet, so this isn\'t set. Turn on “Alarms & reminders” in system settings.';
-
-  @override
   String get companionReminderNotificationsMissing =>
-      'Notifications are off, so this isn\'t set yet. Turn them on in system settings.';
+      'It\'s set, but notifications are off, so I can\'t reach you when it\'s time. Turn them on in system settings.';
 
   @override
   String get companionReminderChannelMissing =>
-      'Reminder notifications are turned off, so this isn\'t set yet. Turn them on in system settings.';
+      'It\'s set, but reminder notifications are turned off, so I can\'t reach you when it\'s time. Turn them on in system settings.';
 
   @override
   String get companionReminderGroupMissing =>
-      'The notification group for reminders is turned off, so this isn\'t set yet. Turn it on in system settings.';
+      'It\'s set, but the notification group for reminders is turned off, so I can\'t reach you when it\'s time. Turn it on in system settings.';
 
   @override
   String get companionReminderTimePassed => 'That time has already passed, so I didn\'t ring late.';

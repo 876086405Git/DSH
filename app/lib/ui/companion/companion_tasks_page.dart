@@ -166,7 +166,7 @@ String companionReminderLine(L10n l10n, MemoryRow task, {required String? execut
     'zone_missing' => l10n.companionReminderZoneMissing,
     'time_gap' => l10n.companionReminderGap,
     'time_overlap' => l10n.companionReminderOverlap,
-    'exact_alarm_unavailable' => l10n.companionReminderExactMissing,
+    // These ride on a reminder that is already set (see CompanionReminderRunner).
     'notifications_disabled' => l10n.companionReminderNotificationsMissing,
     'notification_channel_disabled' => l10n.companionReminderChannelMissing,
     'notification_group_disabled' => l10n.companionReminderGroupMissing,
@@ -531,7 +531,13 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
         return;
       }
       final row = widget.taskId == null ? null : memory.store.task(widget.taskId!);
-      final pending = row != null && (row['state'] == 'waiting' || row['state'] == 'unknown');
+      // A set reminder can still carry a notification switch to turn on;
+      // coming back from the system settings reads it again.
+      final pending =
+          row != null &&
+          (row['state'] == 'waiting' ||
+              row['state'] == 'unknown' ||
+              (row['state'] == 'done' && row['wait_reason'] != null));
       if (!resume && row != null && row['kind'] == 'public.lookup' && row['state'] == 'cancelled') {
         final read = memory.lookups.readReceipts(
           row,
@@ -855,7 +861,6 @@ class _CompanionTasksPageState extends ConsumerState<CompanionTasksPage> {
     );
     final reason = task['wait_reason'];
     final settings = switch (reason) {
-      'exact_alarm_unavailable' => 'exact',
       'notifications_disabled' || 'notification_channel_disabled' || 'notification_group_disabled' => 'notifications',
       _ => null,
     };

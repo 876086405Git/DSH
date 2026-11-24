@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import io.github.ccch1mneyyy.dsh_app.R
 import io.github.ccch1mneyyy.dsh_app.i18n.AppStrings
 import io.github.ccch1mneyyy.dsh_app.phone.SystemActions
@@ -18,7 +19,13 @@ internal class CompanionReminderAndroid(private val context: Context) : Companio
     override fun capabilities(): Map<String, Any> = CompanionReminderPlatform.capabilities(context)
 
     override fun register(key: ReminderKey, epochMs: Long) {
-        alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, epochMs, alarmIntent(key))
+        // Without exact-alarm access it still rings, just possibly a little late
+        // (Android 12+ keeps an inexact alarm within an hour); never not at all.
+        if (Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms()) {
+            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, epochMs, alarmIntent(key))
+        } else {
+            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, epochMs, alarmIntent(key))
+        }
     }
 
     override fun cancel(key: ReminderKey) {
