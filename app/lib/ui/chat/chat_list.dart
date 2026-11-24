@@ -361,6 +361,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   /// fork / regenerate marks ([_clearBuiltRows]) and which callbacks are given
   /// ([didUpdateWidget]).
   final Map<String, ({ChatRow row, double gap, bool divided, Widget widget})> _built = {};
+  SliverList? _historySliver;
   Duration? _builtMotion;
   Locale? _builtLocale;
   ThemeShapeSpec _builtShapes = const ThemeShapeSpec();
@@ -447,13 +448,18 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
         !same(oldWidget.onResend, widget.onResend) ||
         !same(oldWidget.onQuote, widget.onQuote) ||
         !same(oldWidget.onSwitchModel, widget.onSwitchModel)) {
-      _built.clear();
+      _forgetBuiltRows();
     }
+  }
+
+  void _forgetBuiltRows() {
+    _built.clear();
+    _historySliver = null;
   }
 
   void _clearBuiltRows(VoidCallback change) => setState(() {
     change();
-    _built.clear();
+    _forgetBuiltRows();
   });
 
   void _quote(String passage) => widget.onQuote?.call(passage);
@@ -682,7 +688,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     if (_rowsInputs == inputs) {
       // Nothing the rows are made of changed, but what they read from the
       // controller (branch points, reply ids) may have.
-      if (changed) _built.clear();
+      if (changed) _forgetBuiltRows();
       return;
     }
     _rowsInputs = inputs;
@@ -716,7 +722,12 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     // may change what a row shows beyond its own item (running, pending,
     // later items, controller lookups).
     final draftSays = _draftHasWords(s.items);
-    if (!_rowCache.onlyDraftChanged || draftSays != _draftSays) _built.clear();
+    final unchanged = _rowCache.unchangedPrefix;
+    if (unchanged == null || draftSays != _draftSays) {
+      _forgetBuiltRows();
+    } else if (unchanged < previousSplit) {
+      _historySliver = null;
+    }
     _draftSays = draftSays;
     // 被插话切开的轮:前几片的摘要行(`tp<轮起点>@<插话>`)跟最后一片一起收。
     // 这一帧没建出来的(在屏幕外)不留到以后:翻回去时不该再播一遍。
@@ -786,6 +797,8 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
       final folded = _rows.whereType<TurnProcessRow>().where((row) => row.rows.any((child) => child.key == _splitKey));
       _splitKey = folded.isEmpty ? _lastStableKey(beforeSeq: s.runningTurn?.startSeq) : folded.first.key;
     }
+
+    if (_split != previousSplit) _historySliver = null;
 
     if (uiTraceEnabled) {
       uiTrace('chat-list', 'rows', {
@@ -980,7 +993,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
       _builtShapes = shapes;
       _builtDivider = divider;
       _builtDividerColor = dividerColor;
-      _built.clear();
+      _forgetBuiltRows();
     }
 
     // Images in replies read this conversation's workspace.
@@ -1051,7 +1064,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
                             hasMore: s.hasMoreHistory,
                           ),
                         ),
-                        SliverList(
+                        _historySliver ??= SliverList(
                           key: _beforeKey,
                           delegate: SliverChildBuilderDelegate(
                             (context, i) => _buildRow(split - 1 - i),
@@ -1102,6 +1115,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     // A row's first appearance (fade in, settle) plays once: that build is
     // not kept, or scrolling back to the row would play it again.
     if (fresh != null || _settling.contains(row.key)) {
+      if (index < _split) _historySliver = null;
       _built.remove(row.key);
       return _rowFrame(row, gap, fresh, divided);
     }
