@@ -11,6 +11,7 @@ import 'companion/companion_always_on.dart' show companionAlwaysOnOwnerProvider;
 import 'companion/companion_residency.dart' show companionResidencyProvider;
 import 'companion/companion_state.dart' show companionPhoneSessionsBridgeProvider;
 import 'pets/pet_overlay_bridge.dart' show petOverlayBridgeProvider;
+import 'pets/pet_sheets.dart';
 import 'l10n/l10n.dart';
 import 'performance/performance_state.dart';
 import 'performance/refresh_rate.dart';
@@ -106,6 +107,10 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
     // Android re-registers the notification channels under the new language.
     unawaited(ref.read(notifyChannelProvider).status());
   }
+
+  /// Decoded pet sheets nobody pins go, as Flutter's own image cache does.
+  @override
+  void didHaveMemoryPressure() => PetSheets.instance.trim();
 
   /// The system's remove-animations setting changed while the app was open: page
   /// transitions are chosen in [build], so they would keep the old answer.

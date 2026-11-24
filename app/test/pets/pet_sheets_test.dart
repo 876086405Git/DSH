@@ -166,4 +166,20 @@ void main() {
       }
     });
   });
+
+  testWidgets('a trim (memory pressure) drops the sheets nobody pins; a sprite keeps its own handle', (tester) async {
+    await tester.runAsync(() async {
+      final sheets = PetSheets.instance;
+      final bundle = _ReadyBundle();
+      final pinned = _petOf('pinned'), other = _petOf('other');
+      sheets.pin(pinned, _anim);
+      (await sheets.load(pinned, _anim, bundle)).dispose();
+      final drawing = await sheets.load(other, _anim, bundle);
+      sheets.trim();
+      expect(sheets.peek(other, _anim), isNull);
+      sheets.peek(pinned, _anim)!.dispose();
+      expect(drawing.debugDisposed, isFalse);
+      drawing.dispose();
+    });
+  });
 }

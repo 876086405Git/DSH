@@ -401,25 +401,47 @@ class HeardLine extends StatelessWidget {
 
 /// [span] centred in as many lines as it needs, at most [lines]: longer text
 /// keeps its end in view, the top line fading out.
-class CaptionWindow extends StatelessWidget {
+class CaptionWindow extends StatefulWidget {
   const CaptionWindow({super.key, required this.span, required this.lines});
 
   final InlineSpan span;
   final int lines;
 
   @override
+  State<CaptionWindow> createState() => _CaptionWindowState();
+}
+
+class _CaptionWindowState extends State<CaptionWindow> {
+  // Kept across builds: words that only fade in (a color change) keep the
+  // last layout, so the reveal's every tick doesn't lay the caption out again.
+  final _painter = TextPainter(textAlign: TextAlign.center);
+
+  @override
+  void initState() {
+    super.initState();
+    PaintingBinding.instance.systemFonts.addListener(_painter.markNeedsLayout);
+  }
+
+  @override
+  void dispose() {
+    PaintingBinding.instance.systemFonts.removeListener(_painter.markNeedsLayout);
+    _painter.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
+      final span = widget.span;
+      final lines = widget.lines;
       final scaler = MediaQuery.textScalerOf(context);
-      final painter = TextPainter(
-        text: span,
-        textAlign: TextAlign.center,
-        textDirection: Directionality.of(context),
-        textScaler: scaler,
-      )..layout(maxWidth: box.maxWidth);
-      final count = painter.computeLineMetrics().length;
-      final height = painter.height;
-      painter.dispose();
+      _painter
+        ..text = span
+        ..textDirection = Directionality.of(context)
+        ..textScaler = scaler
+        ..layout(maxWidth: box.maxWidth);
+      final count = _painter.computeLineMetrics().length;
+      final height = _painter.height;
       final text = Text.rich(span, textAlign: TextAlign.center, textScaler: scaler);
       if (count <= lines) return SizedBox(width: double.infinity, child: text);
       return SizedBox(
@@ -441,6 +463,13 @@ class CaptionWindow extends StatelessWidget {
     },
   );
 }
+
+/// [i] moved back off the middle of a surrogate pair: half an emoji in a
+/// span of its own is not text, and draws as a replacement mark.
+int _whole(String text, int i) =>
+    i > 0 && i < text.length && (text.codeUnitAt(i) & 0xFC00) == 0xDC00 && (text.codeUnitAt(i - 1) & 0xFC00) == 0xD800
+    ? i - 1
+    : i;
 
 /// Her words as they arrive: the newest characters fade in one after another;
 /// past [lines] lines the oldest fade out at the top.
@@ -514,22 +543,26 @@ class _RevealTextState extends State<RevealText> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final text = widget.text;
     final shown = AppMotion.reduced(context) ? text.length + _tail.toDouble() : _shown;
-    final end = shown.ceil().clamp(0, text.length);
-    final start = math.max(0, end - widget.window);
+    final end = _whole(text, shown.ceil().clamp(0, text.length));
+    // Past an emoji's first half, not back before it: the window stays [window] long.
+    final cut = math.max(0, end - widget.window);
+    final start = _whole(text, cut) == cut ? cut : cut + 1;
     final base = widget.style ?? DefaultTextStyle.of(context).style;
     final color = base.color ?? Colors.white;
     final spans = <InlineSpan>[];
     if (start > 0) spans.add(TextSpan(text: '…', style: base));
-    final solidEnd = math.max(start, end - _tail);
+    final solidEnd = _whole(text, math.max(start, end - _tail));
     if (solidEnd > start) spans.add(TextSpan(text: text.substring(start, solidEnd), style: base));
-    for (var i = solidEnd; i < end; i++) {
+    for (var i = solidEnd; i < end;) {
+      final next = _whole(text, i + 1) == i ? i + 2 : i + 1;
       final fade = ((shown - i) / _tail).clamp(0.0, 1.0);
       spans.add(
         TextSpan(
-          text: text[i],
+          text: text.substring(i, next),
           style: base.copyWith(color: color.withValues(alpha: color.a * fade)),
         ),
       );
+      i = next;
     }
     if (spans.isEmpty) return const SizedBox(width: double.infinity);
     // The newest lines in view: the words grow upward, as tall as they need.
