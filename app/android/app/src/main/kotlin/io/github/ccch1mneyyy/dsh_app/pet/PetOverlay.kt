@@ -516,8 +516,11 @@ internal object PetOverlay {
                 petView?.cancelInteraction()
                 stopLoop()
                 stopCompanion()
+                // What held her out is gone with the screen: decide again, so the service can go.
+                val held = menuView != null || askView != null
                 dismissMenu()
                 removeAsk()
+                if (held) main.post(evaluateRunnable)
             }
             Visibility.SHOWN -> {
                 val before = lastAdd
