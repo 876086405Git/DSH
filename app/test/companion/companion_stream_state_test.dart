@@ -1,8 +1,6 @@
-// A full room's reply state. Since A1 the room chats through the phone model
-// loop in full mode too: the model's HTTP answer is synthetic, while the SSE
-// reader, agent loop and tools, reply parser and page are real. A Host task
-// Agent's approvals (now only on the tasks page) still use a synthetic watch
-// transport with the real wire decoder, ChatController and CompanionAsk.
+// The full room uses Session follow frames for its foreground replies. Light
+// mode exercises the real phone model loop with scripted Messages SSE; Host
+// approvals use the actual decoder, ChatController and CompanionAsk.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -520,6 +518,11 @@ class _Host extends ActiveHostController {
 const _followupLine = '对了，周四的面试后来怎么样啦？';
 const _followupSource = '我周四打算去面试。周五你可以问我面试的进展。';
 
+class _LightMode extends CompanionModeSetting {
+  @override
+  CompanionMode build() => CompanionMode.light;
+}
+
 class _Settings extends SettingsController {
   @override
   AppSettings build() => const AppSettings(loaded: true, apiKey: 'synthetic-test-key');
@@ -734,6 +737,8 @@ class _Room {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
       await tester.pump();
     }
+    expect(container.read(companionModeProvider), CompanionMode.light);
+    expect(host.requests.where((body) => body['kind'] == 'agent'), isEmpty);
     expect(chats, hasLength(count));
     await flush(tester);
   }
@@ -748,7 +753,7 @@ class _Room {
 
   bool get running => tester.widget<CompanionComposer>(find.byType(CompanionComposer)).running;
 
-  Future<void> open(WidgetTester tester, {void Function(CompanionMemoryOwner)? seed}) async {
+  Future<void> open(WidgetTester tester, {void Function(CompanionMemoryOwner)? seed, bool light = false}) async {
     this.tester = tester;
     host.model = newClient;
     (client.connection as _Bridge).host = hostModelConnection(host);
@@ -766,6 +771,7 @@ class _Room {
               ref.onDispose(initiative!.dispose);
               return initiative!;
             }),
+          if (light) companionModeProvider.overrideWith(_LightMode.new),
           activeHostProvider.overrideWith(_Host.new),
           activeConnectionProvider.overrideWithValue(AsyncData(HostConnection(client: client, isLocal: true))),
           companionSessionsProvider.overrideWith(_HostSessions.new),
@@ -1468,7 +1474,7 @@ void main() {
 
   testWidgets('positive control: empty start, monotonic chunks and repeated status preserve one reply', (tester) async {
     final room = _Room(temporary);
-    await room.open(tester);
+    await room.open(tester, light: true);
     try {
       await room.send('说一句话。');
       expect(room.memory.store.messages().where((row) => row['role'] == 'assistant'), isEmpty);
@@ -2113,7 +2119,7 @@ void main() {
   // phone. (The old in-room approval attention has no room surface now.)
   testWidgets('positive control: two assistant messages with a tool round keep one accumulated reply', (tester) async {
     final room = _Room(temporary);
-    await room.open(tester);
+    await room.open(tester, light: true);
     try {
       await room.send('帮我查一下。');
       const first = '[表情:开心]我看一下。';
@@ -2153,7 +2159,7 @@ void main() {
   ]) {
     testWidgets('an explicit resend after a wordless failure replaces it: ${replacement.name}', (tester) async {
       final room = _Room(temporary);
-      await room.open(tester);
+      await room.open(tester, light: true);
       try {
         await room.send('说一句话。');
         await room.drop();
@@ -2178,17 +2184,12 @@ void main() {
     });
   }
 
-  // A1 desired contract, skipped on a product bug: a reply that broke off
-  // after some words, with no tool dispatched, is closed to retry
-  // (companion_agent_visit.dart:424-430 shows companionAgentRetryClosed), and
-  // because retrySource still holds that source, sending the identical line
-  // again is refused the same way (companion_agent_visit.dart:292-301) instead
-  // of getting a fresh reply. The old engine retried such a draft in place.
+  // A second user submission after a word-only failure gets its own action progress.
   testWidgets('buffered failed draft to a resent replacement plays the identical action once per reply', (
     tester,
   ) async {
     final room = _Room(temporary);
-    await room.open(tester);
+    await room.open(tester, light: true);
     try {
       await room.send('说一句话。');
       const text = '[动作:点头]好。';
@@ -2215,7 +2216,7 @@ void main() {
   // companionAgentRetryClosed belongs. The committed prefix and its marker stay.
   testWidgets('a failure after a tool round keeps the committed prefix and its markers', (tester) async {
     final room = _Room(temporary);
-    await room.open(tester);
+    await room.open(tester, light: true);
     try {
       await room.send('帮我查一下。');
       const prefix = '[动作:挥手]前面。';
@@ -2240,7 +2241,7 @@ void main() {
 
   testWidgets('finish makes a draft nonstreaming before normal durable handoff without replay', (tester) async {
     final room = _Room(temporary);
-    await room.open(tester);
+    await room.open(tester, light: true);
     try {
       await room.send('说一句话。');
       const text = '[动作:点头]你好。';
@@ -2260,7 +2261,7 @@ void main() {
 
   testWidgets('a split marker remains hidden until complete and does not replay on commit', (tester) async {
     final room = _Room(temporary);
-    await room.open(tester);
+    await room.open(tester, light: true);
     try {
       await room.send('说一句话。');
       room.words('[表情:担');
@@ -2279,7 +2280,7 @@ void main() {
 
   testWidgets('a new user can receive the same words after the old subtitle expired', (tester) async {
     final room = _Room(temporary);
-    await room.open(tester);
+    await room.open(tester, light: true);
     try {
       const text = '[动作:点头]好。';
       await room.send('说一句话。');
@@ -2300,7 +2301,7 @@ void main() {
 
   testWidgets('an unfinished literal marker revealed at turn end stays stable on duplicate notices', (tester) async {
     final room = _Room(temporary);
-    await room.open(tester);
+    await room.open(tester, light: true);
     try {
       await room.send('说一句话。');
       const text = '文字[表情:';
@@ -2322,13 +2323,10 @@ void main() {
     }
   });
 
-  // A1 desired contract, skipped on the same product bug as above
-  // (companion_agent_visit.dart:424-430 and :292-301): a draft that broke off
-  // without any tool cannot be answered again, so the shorter successful
-  // reply never replaces the failed subtitle and marker.
+  // A shorter replacement must clear the failed draft's text and markers.
   testWidgets('desired contract: successful shorter retry replaces failed attempt subtitle and marker', (tester) async {
     final room = _Room(temporary);
-    await room.open(tester);
+    await room.open(tester, light: true);
     try {
       await room.send('说一句话。');
       const oldText = '这是第一次尝试流出的很长一句话，还没有完成。';
