@@ -1930,6 +1930,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (store == null) return;
     try {
       final roster = await store.roster();
+      // Whoever just moved in has her cover at the same path as the last one.
+      for (final CompanionRosterEntry(:active, :cover) in roster) {
+        if (active && cover != null) unawaited(companionRosterCover(cover).evict());
+      }
       if (mounted) setState(() => _roster = roster);
     } on Object {
       // Shown again on the next change.

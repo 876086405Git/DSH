@@ -243,6 +243,10 @@ class CompanionPanelTiles extends StatelessWidget {
   }
 }
 
+/// A roster cover as its row decodes it. The one in the room keeps the same
+/// path when another moves in, so her page drops it before a new roster shows.
+ImageProvider companionRosterCover(File file) => ResizeImage(FileImage(file), width: 96);
+
 /// One of the companions on this phone, in her page's 伙伴 group: her cover
 /// (or her initial), her name, a check on the one in the room. A tap brings
 /// her in; [onMore] holds what else can be done with her.
@@ -287,10 +291,9 @@ class CompanionRosterRow extends StatelessWidget {
                 child: SizedBox.square(
                   dimension: SettingsMetrics.icon,
                   child: switch (cover) {
-                    final file? => Image.file(
-                      file,
+                    final file? => Image(
+                      image: companionRosterCover(file),
                       fit: BoxFit.cover,
-                      cacheWidth: 96,
                       errorBuilder: (_, _, _) => _Initial(initial),
                     ),
                     null => _Initial(initial),
