@@ -24,6 +24,7 @@ import 'companion_residency.dart';
 import 'companion_screen_observer.dart';
 import 'companion_state.dart' show companionNameProvider;
 import 'companion_voice.dart';
+import 'companion_voice_source.dart' show CompanionVoiceSource;
 
 /// DshApp watches this provider. Merely reading an ordinary Provider does not
 /// retain the Ref.listen dependencies needed by a resident visit.
@@ -84,6 +85,7 @@ class CompanionAlwaysOnOwner {
   String get _name => _givenName ?? _packName ?? 'Companion';
   String? _reply;
   String? _sentText;
+  String? _sentWords;
   bool? _sentRunning;
   int _sentSteps = 0;
   CompanionPhoneLines _phoneLines = CompanionPhoneLines();
@@ -257,14 +259,15 @@ class CompanionAlwaysOnOwner {
         (parsed.words.isEmpty && !agent.running && _sentText != null
             ? agent.error == null ? appL10n.stateAlertPublicDone : appL10n.stateAlertPublicFailed
             : parsed.words);
+    final words = parsed?.words;
     final steps = agent.phoneSteps;
     _watchPhoneStops(_onPhone);
-    if (reply == null ||
-        visible.isEmpty ||
-        (visible == _sentText && _sentRunning == agent.running && steps == _sentSteps)) {
-      return;
-    }
+    if (reply == null || visible.isEmpty) return;
+    // Her status can stay put while her words go on: those are still heard.
+    final fresh = visible != _sentText || _sentRunning != agent.running || steps != _sentSteps;
+    if (!fresh && words == _sentWords) return;
     _sentText = visible;
+    _sentWords = words;
     _sentRunning = agent.running;
     _sentSteps = steps;
     final resident = _resident;
@@ -275,11 +278,13 @@ class CompanionAlwaysOnOwner {
     if (steps > 0) {
       // On the phone: her latest line in the bubble, and heard as she goes.
       final read = _phoneLines.read(
-        parsed?.words ?? companionWithoutMarks(visible, streaming: agent.running),
+        words ?? companionWithoutMarks(visible, streaming: agent.running),
         steps: steps,
         running: agent.running,
       );
-      line = read.line;
+      // No new words since her last step: her status (waiting for you to
+      // confirm) holds the bubble instead.
+      line = read.line.isNotEmpty ? read.line : activity ?? '';
       if (voiced && read.say.isNotEmpty) phoneSay = read.say;
     }
     final speak = steps == 0 &&
@@ -293,7 +298,7 @@ class CompanionAlwaysOnOwner {
       _spokenReplies.remove(_spokenReplies.first);
     }
     final generation = _voiceGeneration;
-    if (resident != null && line.isNotEmpty) {
+    if (resident != null && line.isNotEmpty && (fresh || steps > 0)) {
       unawaited(
         resident.deliverReply(reply, raw, (noticeEpoch) async {
           final shown = await _presentLine(
@@ -309,7 +314,7 @@ class CompanionAlwaysOnOwner {
         }),
       );
     }
-    _postReply(reply, raw, visible);
+    if (fresh) _postReply(reply, raw, visible);
   }
 
   bool get _onPhone => agent.running && agent.phoneSteps > 0;
@@ -462,9 +467,13 @@ class CompanionAlwaysOnOwner {
     final ready = await _speaker.ready(settings!);
     if (!ready || !active || generation != _voiceGeneration) return;
     if (keepUp && _voices.length > 1) _hush();
-    final voiceId = 'float:${_status.epoch}:${++_voiceSerial}';
-    _voices[voiceId] = (bubble: bubble, chars: words.length);
-    _speaker.speak(voiceId, words);
+    // The phone's own synthesizer takes only so much at once, as in her room.
+    final parts = settings.source == CompanionVoiceSource.system ? companionSystemSpeechParts(words) : [words];
+    for (final part in parts) {
+      final voiceId = 'float:${_status.epoch}:${++_voiceSerial}';
+      _voices[voiceId] = (bubble: bubble, chars: part.length);
+      _speaker.speak(voiceId, part);
+    }
   }
 
   void _voiceEvent(CompanionVoiceEvent event) {
