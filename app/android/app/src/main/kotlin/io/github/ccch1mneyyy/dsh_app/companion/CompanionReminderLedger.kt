@@ -124,12 +124,12 @@ internal class CompanionReminderLedger(private val database: SQLiteDatabase) : C
 
     fun effectResult(key: ReminderKey, step: String, attempt: String, effectId: String,
                      executorId: String, now: Long, error: Exception? = null,
-                     completedState: String? = null) = transaction {
+                     completedState: String? = null, completedReason: String? = null) = transaction {
         receipt(key, step, attempt, if (error == null) "returned" else "failed", executorId, now,
             effectId, if (error == null) "succeeded" else "unknown",
             error?.let { org.json.JSONObject().put("errorClass", it.javaClass.simpleName).toString() })
         if (error != null) state(key, "unknown", "system_call_failed", now)
-        else if (completedState != null) state(key, completedState, null, now)
+        else if (completedState != null) state(key, completedState, completedReason, now)
     }
 
     fun skippedEffect(key: ReminderKey, step: String, attempt: String, effectId: String,
@@ -138,12 +138,12 @@ internal class CompanionReminderLedger(private val database: SQLiteDatabase) : C
             org.json.JSONObject().put("reason", reason).toString())
     }
 
-    fun blocked(key: ReminderKey, executorId: String, now: Long, reason: String, failed: Boolean = false) = transaction {
+    fun blocked(key: ReminderKey, executorId: String, now: Long, reason: String) = transaction {
         val row = revision(key) ?: return@transaction
         if (!row.current || row.executorId != executorId) return@transaction
         receipt(key, "executor", UUID.randomUUID().toString(), "blocked", executorId, now,
             outcome = "not_performed", detail = org.json.JSONObject().put("reason", reason).toString())
-        state(key, if (row.state == "unknown") "unknown" else if (failed) "failed" else "waiting", reason, now)
+        state(key, if (row.state == "unknown") "unknown" else "failed", reason, now)
     }
 
     fun finishWithoutEffect(key: ReminderKey, executorId: String, now: Long, result: String,
@@ -179,6 +179,13 @@ internal class CompanionReminderLedger(private val database: SQLiteDatabase) : C
                            event: String, outcome: String?, reason: String? = null) = transaction {
         receipt(key, "notification", claim, event, executorId, now, key.notificationTag, outcome,
             reason?.let { org.json.JSONObject().put("reason", it).toString() })
+        // It rang, so a set reminder's "notifications are off" no longer holds.
+        if (outcome == "succeeded") {
+            database.update("companion_task_revisions", ContentValues().apply {
+                putNull("wait_reason")
+                put("updated_at_ms", now)
+            }, "task_id=? AND task_rev=? AND state='done'", args(key))
+        }
     }
 
     fun activeObserved(key: ReminderKey, executorId: String, now: Long) = transaction {

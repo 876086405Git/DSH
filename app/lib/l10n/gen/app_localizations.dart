@@ -62,8 +62,7 @@ import 'app_localizations_zh.dart';
 /// be consistent with the languages listed in the L10n.supportedLocales
 /// property.
 abstract class L10n {
-  L10n(String locale)
-    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  L10n(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -83,19 +82,15 @@ abstract class L10n {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
-      <LocalizationsDelegate<dynamic>>[
-        delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ];
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
+    delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+  ];
 
   /// A list of this localizations delegate's supported locales.
-  static const List<Locale> supportedLocales = <Locale>[
-    Locale('en'),
-    Locale('zh'),
-  ];
+  static const List<Locale> supportedLocales = <Locale>[Locale('en'), Locale('zh')];
 
   /// No description provided for @a11yRestoreTitle.
   ///
@@ -2771,11 +2766,7 @@ abstract class L10n {
   ///
   /// In zh, this message translates to:
   /// **'{title} {detail}，用时 {duration}'**
-  String activityTraceSpanSemantics(
-    String title,
-    String detail,
-    String duration,
-  );
+  String activityTraceSpanSemantics(String title, String detail, String duration);
 
   /// No description provided for @activityTraceGroupSemantics.
   ///
@@ -8313,13 +8304,7 @@ abstract class L10n {
   ///
   /// In zh, this message translates to:
   /// **'{title}\n{objective}\n{status} · 第 {rounds}/{max} 轮'**
-  String chatCommandGoalSummary(
-    String title,
-    String objective,
-    String status,
-    int rounds,
-    int max,
-  );
+  String chatCommandGoalSummary(String title, String objective, String status, int rounds, int max);
 
   /// No description provided for @chatCommandFailed.
   ///
@@ -11627,28 +11612,22 @@ abstract class L10n {
   /// **'第二次'**
   String get companionReminderSecond;
 
-  /// No description provided for @companionReminderExactMissing.
-  ///
-  /// In zh, this message translates to:
-  /// **'手机还没让我准点提醒，这条没设上。去系统设置里打开「闹钟和提醒」就好。'**
-  String get companionReminderExactMissing;
-
   /// No description provided for @companionReminderNotificationsMissing.
   ///
   /// In zh, this message translates to:
-  /// **'通知没开，这条还没设上。去系统设置里打开通知就好。'**
+  /// **'设好了，可通知还关着，到点我叫不到你。去系统设置里打开通知就好。'**
   String get companionReminderNotificationsMissing;
 
   /// No description provided for @companionReminderChannelMissing.
   ///
   /// In zh, this message translates to:
-  /// **'「提醒」这类通知被关掉了，这条还没设上。去系统设置里打开就好。'**
+  /// **'设好了，可「提醒」这类通知被关掉了，到点我叫不到你。去系统设置里打开就好。'**
   String get companionReminderChannelMissing;
 
   /// No description provided for @companionReminderGroupMissing.
   ///
   /// In zh, this message translates to:
-  /// **'提醒所在的那组通知被关掉了，这条还没设上。去系统设置里打开就好。'**
+  /// **'设好了，可提醒所在的那组通知被关掉了，到点我叫不到你。去系统设置里打开就好。'**
   String get companionReminderGroupMissing;
 
   /// No description provided for @companionReminderTimePassed.
@@ -12588,11 +12567,7 @@ abstract class L10n {
   ///
   /// In zh, this message translates to:
   /// **'查看了 {entries} 项，其中 {supported} 份是所选格式，找到 {matches} 份符合日期的稿件。'**
-  String companionFindCoverage(
-    String entries,
-    String supported,
-    String matches,
-  );
+  String companionFindCoverage(String entries, String supported, String matches);
 
   /// No description provided for @companionFindEnumerationComplete.
   ///
@@ -13006,12 +12981,7 @@ abstract class L10n {
   ///
   /// In zh, this message translates to:
   /// **'修改这次对稿：{deadline}；{exit}；{queue}；{inputs}。两个原文件都别动。'**
-  String companionCompareAmendSource(
-    String deadline,
-    String exit,
-    String queue,
-    String inputs,
-  );
+  String companionCompareAmendSource(String deadline, String exit, String queue, String inputs);
 
   /// No description provided for @companionCompareChooseAgain.
   ///
@@ -17308,21 +17278,13 @@ abstract class L10n {
   ///
   /// In zh, this message translates to:
   /// **'每月 {days} 日且{weekdays}{months}'**
-  String featuresCronMonthDaysAndWeekdays(
-    String days,
-    String weekdays,
-    String months,
-  );
+  String featuresCronMonthDaysAndWeekdays(String days, String weekdays, String months);
 
   /// No description provided for @featuresCronMonthDaysOrWeekdays.
   ///
   /// In zh, this message translates to:
   /// **'每月 {days} 日或{weekdays}{months}'**
-  String featuresCronMonthDaysOrWeekdays(
-    String days,
-    String weekdays,
-    String months,
-  );
+  String featuresCronMonthDaysOrWeekdays(String days, String weekdays, String months);
 
   /// No description provided for @featuresCronHourRange.
   ///
@@ -18540,12 +18502,7 @@ abstract class L10n {
   ///
   /// In zh, this message translates to:
   /// **'更新 Agent 预设「{name}」（{id}）：在工作区写下这两个文件（内容原样），用 plugin_manager 先移除组合包 `{replacing}`，再用 install_bundle 安装 `{directory}` 目录。只做这些。\n\n'**
-  String featuresPresetUpdateRequest(
-    String name,
-    String id,
-    String replacing,
-    String directory,
-  );
+  String featuresPresetUpdateRequest(String name, String id, String replacing, String directory);
 
   /// No description provided for @featuresZoneThisPhone.
   ///
@@ -29351,10 +29308,7 @@ abstract class L10n {
   ///
   /// In zh, this message translates to:
   /// **'需要 DSH {requiredVersion}，当前 {currentVersion}，未加载'**
-  String pluginsRequiresDshVersion(
-    String requiredVersion,
-    String currentVersion,
-  );
+  String pluginsRequiresDshVersion(String requiredVersion, String currentVersion);
 
   /// No description provided for @pluginsLoadFailure.
   ///
@@ -31304,12 +31258,7 @@ abstract class L10n {
   ///
   /// In zh, this message translates to:
   /// **'{mode}：{before} 已校正为 {after}，对比度至少 {minimum}:1'**
-  String plugViewContrastAdjusted(
-    String mode,
-    String before,
-    String after,
-    String minimum,
-  );
+  String plugViewContrastAdjusted(String mode, String before, String after, String minimum);
 
   /// No description provided for @plugViewRichLimit.
   ///
@@ -33775,11 +33724,7 @@ abstract class L10n {
   ///
   /// In zh, this message translates to:
   /// **'确认主机重装或更换后，可在主机设置中重置指纹。\n已记住：{saved}\n这次收到：{received}（{type}）'**
-  String remoteHostKeyMismatchDetail(
-    String saved,
-    String received,
-    String type,
-  );
+  String remoteHostKeyMismatchDetail(String saved, String received, String type);
 
   /// No description provided for @remoteForumCompactReplies.
   ///
@@ -40553,11 +40498,7 @@ abstract class L10n {
   ///
   /// In zh, this message translates to:
   /// **'换用{registry}下载（第 {attempt}/{attempts} 个源）'**
-  String statePluginRegistryProgress(
-    String registry,
-    int attempt,
-    int attempts,
-  );
+  String statePluginRegistryProgress(String registry, int attempt, int attempts);
 
   /// No description provided for @stateProviderServiceUnavailable.
   ///
@@ -53949,8 +53890,7 @@ class _L10nDelegate extends LocalizationsDelegate<L10n> {
   }
 
   @override
-  bool isSupported(Locale locale) =>
-      <String>['en', 'zh'].contains(locale.languageCode);
+  bool isSupported(Locale locale) => <String>['en', 'zh'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_L10nDelegate old) => false;

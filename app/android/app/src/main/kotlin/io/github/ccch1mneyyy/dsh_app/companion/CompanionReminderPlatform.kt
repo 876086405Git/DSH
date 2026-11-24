@@ -1,6 +1,5 @@
 package io.github.ccch1mneyyy.dsh_app.companion
 
-import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -49,7 +48,6 @@ internal object CompanionReminderPlatform {
     }
 
     fun capabilities(context: Context): Map<String, Any> {
-        val alarms = context.getSystemService(AlarmManager::class.java)
         val notifications = context.getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(NotificationChannel(
             SystemActions.CHANNEL_NOTIFY,
@@ -64,7 +62,6 @@ internal object CompanionReminderPlatform {
             notifications.getNotificationChannelGroup(group)?.isBlocked != true
         return mapOf(
             "executorId" to executorId(context),
-            "exact" to (Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms()),
             "notifications" to (appEnabled && channelEnabled && groupEnabled),
             "appNotifications" to appEnabled,
             "channelNotifications" to channelEnabled,

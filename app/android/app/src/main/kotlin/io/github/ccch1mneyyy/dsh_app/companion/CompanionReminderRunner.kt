@@ -54,27 +54,26 @@ internal class CompanionReminderRunner(
             return true
         }
         if (!validInstant(row)) {
-            ledger.blocked(key, executorId, now(), "invalid_time", failed = true)
+            ledger.blocked(key, executorId, now(), "invalid_time")
             return true
         }
         if (row.epochMs <= now()) {
-            ledger.blocked(key, executorId, now(), "time_passed", failed = true)
+            ledger.blocked(key, executorId, now(), "time_passed")
             return true // Recovery does not replay a missed notification.
         }
-        val reason = capabilityReason(effects.capabilities(), exact = true)
-        if (reason != null) {
-            ledger.blocked(key, executorId, now(), reason)
-            return true
-        }
         if (oldSchedules.size == maxEffects) return false
-        call(key, "alarm.register", key.uri("alarm").toString(), completedState = "done") {
+        // Notifications only matter when it rings, so it is set either way and
+        // turning them on any time before then is enough. The reason stays on
+        // the set reminder for her to mention until a later run sees them on.
+        call(key, "alarm.register", key.uri("alarm").toString(), completedState = "done",
+            completedReason = capabilityReason(effects.capabilities())) {
             effects.register(key, row.epochMs)
         }
         return true
     }
 
     private fun call(key: ReminderKey, step: String, effectId: String, completedState: String? = null,
-                     effect: () -> Unit): Boolean {
+                     completedReason: String? = null, effect: () -> Unit): Boolean {
         val attempt = UUID.randomUUID().toString()
         if (!ledger.claimEffect(key, step, attempt, effectId, executorId, now())) return false
         val row = ledger.revision(key)
@@ -90,7 +89,7 @@ internal class CompanionReminderRunner(
         }
         val error = try { effect(); null } catch (error: Exception) { error }
         // If this transaction fails after the API, the committed claim stays unknown.
-        ledger.effectResult(key, step, attempt, effectId, executorId, now(), error, completedState)
+        ledger.effectResult(key, step, attempt, effectId, executorId, now(), error, completedState, completedReason)
         return error == null
     }
 
@@ -100,7 +99,7 @@ internal class CompanionReminderRunner(
         if (!row.current || row.executorId != executorId || row.cancelRequested || row.operation == "cancel") return
         if (row.notificationClaim != null) { observeActive(key); return }
         if (!validInstant(row) || row.epochMs!! > now() || row.text.isNullOrBlank()) return
-        val reason = capabilityReason(effects.capabilities(), exact = false)
+        val reason = capabilityReason(effects.capabilities())
         if (reason != null) {
             ledger.notificationResult(key, UUID.randomUUID().toString(), executorId, now(),
                 "blocked", "not_performed", reason)
@@ -133,8 +132,7 @@ internal class CompanionReminderRunner(
                     .toInstant(ZoneOffset.ofTotalSeconds(row.offsetSeconds)).toEpochMilli() == row.epochMs
         } catch (_: Exception) { false }
 
-        private fun capabilityReason(values: Map<String, Any>, exact: Boolean): String? = when {
-            exact && values["exact"] != true -> "exact_alarm_unavailable"
+        private fun capabilityReason(values: Map<String, Any>): String? = when {
             values["appNotifications"] != true -> "notifications_disabled"
             values["channelNotifications"] != true -> "notification_channel_disabled"
             values["groupNotifications"] != true -> "notification_group_disabled"

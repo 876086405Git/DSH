@@ -230,6 +230,24 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         assertEquals(1L, f.count("task_rev=3 AND step_key='notification' AND event_kind='claimed'"))
     }
 
+    fun testReminderIsSetWhileNotificationsAreOffAndRingsOnceTheyAreOn() {
+        f.revision(1)
+        f.effects.notifications = false
+        assertTrue(f.runner().resume("t"))
+        assertEquals(listOf(ReminderKey("t", 1)), f.effects.registered)
+        assertEquals("done", f.ledger.current("t")!!.state)
+        assertEquals("notifications_disabled", f.ledger.current("t")!!.waitReason)
+
+        // Turned on before it is due, with no run in between: it rings, and
+        // the delivery itself drops the stale reason.
+        f.effects.notifications = true
+        f.now = DUE
+        f.runner().alarm(ReminderKey("t", 1))
+        assertEquals(listOf(ReminderKey("t", 1)), f.effects.notified)
+        assertEquals("done", f.ledger.current("t")!!.state)
+        assertNull(f.ledger.current("t")!!.waitReason)
+    }
+
     fun testLookupUpgradeKeepsReminderRecoveryAndDoesNotExecuteTheLookupTask() {
         f.revision(1)
         f.installLookupSchema()
@@ -358,7 +376,8 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         val notified = mutableListOf<ReminderKey>()
         var beforeRegister: () -> Unit = { }
         var afterNotify: () -> Unit = { }
-        override fun capabilities() = mapOf<String, Any>("exact" to true, "appNotifications" to true,
+        var notifications = true
+        override fun capabilities() = mapOf<String, Any>("appNotifications" to notifications,
             "channelNotifications" to true, "groupNotifications" to true)
         override fun register(key: ReminderKey, epochMs: Long) {
             beforeRegister(); registered.add(key); epochs.add(epochMs)
