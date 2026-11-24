@@ -79,6 +79,10 @@ class ReadBackMismatchTest {
         assertEquals(ReadBackMatch.FORMATTED, readBackMatch("\u200Enew york", "new york", ignoreSpaces = false))
         assertEquals(ReadBackMatch.FORMATTED, readBackMatch("new\u00A0york", "new york", ignoreSpaces = false))
         assertEquals(ReadBackMatch.EMPTY, readBackMatch("", "new york", ignoreSpaces = false))
+        // A line break flattened into a space, or a dropped emoji joiner, is a different message.
+        assertEquals(ReadBackMatch.DIFFERENT, readBackMatch("new york", "new\nyork", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("new\r\nyork", "new\nyork", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.DIFFERENT, readBackMatch("👩💻", "👩‍💻", ignoreSpaces = false))
     }
 
     @Test fun readBackMatchToleratesFormattingOnly() {
