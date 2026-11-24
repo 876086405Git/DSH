@@ -268,7 +268,11 @@ class CompanionSpeech extends StatelessWidget {
           grouped: true,
           borderRadius: BorderRadius.circular(20),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-          child: TypingIndicator(color: theme.colorScheme.onSurfaceVariant),
+          child: Builder(
+            builder: (context) => Visibility.of(context)
+                ? TypingIndicator(color: theme.colorScheme.onSurfaceVariant)
+                : const SizedBox.square(dimension: 20),
+          ),
         ),
       );
     } else if (words != null) {
