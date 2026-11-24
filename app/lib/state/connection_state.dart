@@ -72,7 +72,16 @@ class LocalConnectionController extends AsyncNotifier<HostConnection?> {
     // Riverpod's own retries give up after a while; resume and network
     // changes try a failed connect again.
     final kicks = r.read(networkKicksProvider).listen((_) {
-      if (r.mounted && state.hasError && !state.isLoading) r.invalidateSelf();
+      if (!r.mounted) return;
+      final mux = state.value?.client.mux;
+      if (state.hasError && !state.isLoading) {
+        r.invalidateSelf();
+      } else if (mux?.state == DshConnectionState.reconnecting) {
+        // Back on screen (after a phone task, say) while the link waits out a
+        // backoff of up to 10 s: try now, on the same client, so the chat and
+        // her room just catch up instead of sitting on 「重新连接中」.
+        mux!.reconnect();
+      }
     });
     r.onDispose(() => unawaited(kicks.cancel()));
     final endpoint = r.watch(

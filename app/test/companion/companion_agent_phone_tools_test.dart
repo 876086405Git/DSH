@@ -245,6 +245,8 @@ void main() {
     await ending.future;
     expect(completed, isFalse);
     expect(endIdentity!['sessionId'], startIdentity!['sessionId']);
+    // The way back reads where it was asked for from the same id.
+    expect(companionPhoneWindow(startIdentity!['sessionId'] as String), 'room');
     expect(endIdentity!['runId'], startIdentity!['runId']);
     expect(endIdentity!['stopped'], isTrue);
     approval.complete({'decision': 'allowed-once'});

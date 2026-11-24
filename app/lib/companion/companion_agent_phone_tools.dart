@@ -8,6 +8,13 @@ import 'companion_light.dart';
 import 'companion_memory.dart';
 import 'companion_memory_id.dart';
 
+/// Where a companion phone task was asked for ('room', 'floating' or
+/// 'notification'), read back from its native session id
+/// `companion:<window>:<turn>:<run>`: the native side brings the app back on
+/// that id like a conversation's. Null for an engine conversation's task.
+String? companionPhoneWindow(String? sessionId) =>
+    sessionId != null && sessionId.startsWith('companion:') ? sessionId.split(':')[1] : null;
+
 /// Only a real, current user turn constructs this adapter. Screen observations
 /// never create it. The person asking her is the go-ahead; writes still pass
 /// the native SafetyGate.
@@ -19,6 +26,7 @@ class CompanionAgentPhoneTools {
     required this._isCurrent,
     required this._onStep,
     this._returnToApp = false,
+    String window = 'room',
     this.channel = const MethodChannel('dsh/phone'),
   }) : _source = Map<String, Object?>.unmodifiable(source),
        _runId = companionMemoryId() {
@@ -28,7 +36,7 @@ class CompanionAgentPhoneTools {
         _source['text'] is! String) {
       throw ArgumentError('Phone tools require the actual submitted user source');
     }
-    _sessionId = 'companion:$turnId:$_runId';
+    _sessionId = 'companion:$window:$turnId:$_runId';
   }
 
   final CompanionMemoryOwner memory;

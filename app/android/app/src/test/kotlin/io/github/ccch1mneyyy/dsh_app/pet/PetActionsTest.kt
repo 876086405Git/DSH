@@ -50,6 +50,10 @@ class PetActionsTest {
         val busy = base.copy(canStop = true, hosts = listOf(PetHost("a", "A", true), PetHost("b", "B", false)))
         assertTrue(PetMenuItem.of(busy, screenshots = true).containsAll(listOf(PetMenuItem.STOP, PetMenuItem.SWITCH_HOST)))
         assertEquals(7, PetMenuItem.of(busy, screenshots = true).size)
+        assertEquals(listOf(PetMenuItem.ASK, PetMenuItem.ROOM, PetMenuItem.TUCK, PetMenuItem.HIDE_HOUR),
+            PetMenuItem.companion(base, watching = false, tuck = true))
+        assertEquals(listOf(PetMenuItem.ASK, PetMenuItem.ROOM, PetMenuItem.UNWATCH, PetMenuItem.STOP, PetMenuItem.HIDE_HOUR),
+            PetMenuItem.companion(busy, watching = true, tuck = false))
     }
 
     @Test fun openBarKeepsPetVisibleAndUndimmedButDoesNotOverrideLockOrForeground() {

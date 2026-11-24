@@ -666,7 +666,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     }
 
     /**
-     * Brings the app forward on [sessionId] (just the app when null) after a finished task. Started
+     * Brings the app forward on [sessionId] (just the app when null) after a finished task; Dart
+     * takes a companion task's `companion:` id to her room or leaves the app as it was, never a chat. Started
      * from the accessibility service when bound. This is a best-effort start under Android's
      * background-start restrictions, not a guarantee. False when start threw; the caller must
      * separately observe its ActivityAware host resumed (some vendors block silently).
