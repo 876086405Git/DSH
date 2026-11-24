@@ -332,7 +332,7 @@ class CompanionAgent extends ChangeNotifier {
         identical(ref.read(modelSelectionScopeProvider), scope);
     CompanionMemoryTransport phoneOrFail(CompanionHostError error) {
       if (!current()) throw const DshClosedException('Companion Host route changed');
-      if (phone.configured) return phone;
+      if (phone.configured && error.hostFailure != CompanionHostFailure.selectionChanged) return phone;
       throw error;
     }
 
@@ -637,9 +637,10 @@ class CompanionAgent extends ChangeNotifier {
         }
         answered = message != null;
         return message == null ? null : (message: message, requestId: requestId);
-      } on CompanionHostError {
+      } on CompanionHostError catch (error) {
         final phone = CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
         if (route is! CompanionHostMemoryTransport ||
+            error.hostFailure == CompanionHostFailure.selectionChanged ||
             !request.notSentProven ||
             request.sent ||
             !_current(run) ||

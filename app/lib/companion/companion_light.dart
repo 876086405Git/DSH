@@ -82,6 +82,7 @@ CompanionHostFailure companionHostFailure(String? code, {int? httpStatus}) => sw
   'RATE_LIMIT' || 'companion/auxiliary-busy' => CompanionHostFailure.busy,
   'companion/auxiliary-model-unavailable' || 'UNKNOWN_MODEL' || 'MISSING_MODEL' =>
     CompanionHostFailure.modelUnavailable,
+  'companion/auxiliary-selection-changed' => CompanionHostFailure.selectionChanged,
   'transport-error' || 'cancelled' => CompanionHostFailure.disconnected,
   'route-unavailable' ||
   'companion/auxiliary-unavailable' ||

@@ -236,7 +236,7 @@ test('a pending request reports unknown, busy rejects another, and model changes
     const last = response.body.at(-1);
     assert.equal(last.complete, false); assert.equal(last.usage.complete, false);
     assert.equal(last.terminal, change === 'cancel' ? 'cancelled' : 'provider_error');
-    if (change === 'model') assert.equal(last.error.code, 'companion/auxiliary-selection-changed');
+    assert.equal(last.error.code, 'companion/auxiliary-selection-changed');
     assert.equal(last.dispatched, true); assert.equal(last.dispatchAtMs, 1795280000123);
     assert.equal(last.usage.start_usage.input_tokens, 51); assert.equal(last.usage.output_tokens, 7);
     assert.equal(g.state.invocations, 1);
@@ -274,6 +274,7 @@ test('a pending request reports unknown, busy rejects another, and model changes
   const cancelled = resolved.body.at(-1);
   assert.equal(resolved.status, 200); assert.equal(cancelled.terminal, 'cancelled');
   assert.equal(cancelled.complete, false); assert.equal(cancelled.usage.complete, false);
+  assert.equal(cancelled.error.code, 'companion/auxiliary-selection-changed');
   assert.equal(cancelled.dispatched, false); assert.equal(cancelled.dispatchAtMs, null);
   assert.equal(h.state.prepares, beforeResolve.prepares); assert.equal(h.state.invocations, beforeResolve.invocations);
   const cancelledReceipt = await h.http({ path: receiptPath });

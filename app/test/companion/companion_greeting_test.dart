@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_keeper.dart';
+import 'package:dsh_app/companion/companion_light.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_memory_worker.dart';
 import 'package:dsh_app/companion/companion_state.dart';
@@ -44,6 +45,7 @@ class _Bridge extends DshConnection {
   final postPaths = <String>[];
   final auxiliarySessions = <String?>[];
   final firstAuxiliary = Completer<void>();
+  bool selectionChanged = false;
   DshHttpResponse json(Object body, [int status = 200]) =>
       DshHttpResponse(status, 'application/json', Uint8List.fromList(utf8.encode(jsonEncode(body))));
   int revision = 0;
@@ -79,6 +81,7 @@ class _Bridge extends DshConnection {
     if (path == '$dshGoCompanionPath/auxiliary') {
       auxiliarySessions.add(query?['sessionId']);
       if (!firstAuxiliary.isCompleted) firstAuxiliary.complete();
+      if (selectionChanged) return json({'error': {'code': 'companion/auxiliary-selection-changed'}}, 409);
     }
     if (path == '$dshGoCompanionPath/memories') {
       return json({
@@ -208,6 +211,7 @@ class _Room {
   final replies = <StreamController<List<int>>>[];
   http.Client newClient() => MockClient.streaming((request, body) async {
     asked.add(jsonDecode(await body.bytesToString()) as Map<String, Object?>);
+    if (bridge.selectionChanged) return http.StreamedResponse(const Stream<List<int>>.empty(), 503);
     final reply = StreamController<List<int>>();
     replies.add(reply);
     return http.StreamedResponse(reply.stream, 200, headers: {'content-type': 'text/event-stream; charset=utf-8'});
@@ -436,6 +440,30 @@ void main() {
     expect(room.sessionControllers, 0);
     expect(room.client.projectionCalls, 0);
     await room.close(tester);
+  });
+
+  testWidgets('a retired selection during discovery reserves no phone attempt', (tester) async {
+    final room = _Room(temporary);
+    await room.open(tester, bindRole: true);
+    await settleMixed(tester, room.bridge.firstAuxiliary.future);
+    final agent = room.container.read(companionAgentProvider);
+    final before = room.bridge.auxiliarySessions.length;
+    final requests = room.memory.store.requests().map((row) => row['id']).toSet();
+    final phonePosts = room.asked.length;
+    room.bridge.selectionChanged = true;
+    final source = room.memory.store.submitMessage(
+      id: 'auxiliary-discovery-changed', sessionId: 'existing-role-session', text: '这轮已经换了模型。',
+      saidAtUtc: _now, offsetMinutes: 0,
+    );
+    await settleMixed(tester, agent.say(memory: room.memory, source: source, system: 'test',
+      tools: const [], isCurrent: () => true));
+    expect(room.bridge.auxiliarySessions.skip(before), contains('existing-role-session'));
+    expect(agent.error, isA<CompanionHostError>().having(
+      (error) => error.hostFailure, 'reason', CompanionHostFailure.selectionChanged,
+    ));
+    expect(room.asked.length, phonePosts);
+    expect(room.memory.store.requests().where((row) => row['category'] == 'chat' && !requests.contains(row['id'])),
+        isEmpty);
   });
 
   testWidgets('a touch supersedes a pending greeting without dropping visit state', (tester) async {

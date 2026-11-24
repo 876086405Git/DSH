@@ -210,22 +210,24 @@ void main() {
         void emit(Map<String, Object?> frame) =>
             response.write('${jsonEncode({...frame, 'requestId': body['requestId']})}\n');
         emit({'type': 'accepted', 'instanceId': 'host-generation', 'provider': provider, 'model': model});
-        if (const {'not-sent', 'sent', 'stale'}.contains(p0Mode)) {
+        if (const {'not-sent', 'sent', 'stale', 'selection-changed'}.contains(p0Mode)) {
           if (p0Mode == 'stale') {
             await response.flush();
             staleAccepted.complete();
             await releaseStale.future;
           }
           final dispatched = p0Mode == 'sent';
+          final selectionChanged = p0Mode == 'selection-changed';
+          final failureTerminal = selectionChanged ? 'cancelled' : 'provider_error';
           emit({
             'type': 'finish',
             'dispatched': dispatched,
             'dispatchAtMs': dispatched ? 1795309200000 : null,
-            'terminal': 'provider_error',
+            'terminal': failureTerminal,
             'complete': false,
             'stopReason': null,
             'httpStatus': null,
-            'error': {'code': 'MISSING_CREDENTIAL'},
+            'error': {'code': selectionChanged ? 'companion/auxiliary-selection-changed' : 'MISSING_CREDENTIAL'},
             'usage': {
               'provider': provider,
               'model': model,
@@ -239,7 +241,7 @@ void main() {
               'input_cache_write': null,
               'output_tokens': null,
               'stop_reason': null,
-              'terminal': 'provider_error',
+              'terminal': failureTerminal,
               'complete': false,
               'http_status': null,
             },
@@ -851,6 +853,29 @@ void main() {
     expect(phoneRequests, hasLength(4));
     expect(p0Agent.error, isNull);
     expect(p0Memory.store.requests().singleWhere((row) => row['id'] == posts.last['requestId'])['terminal'], 'not_sent');
+
+    // The Host can learn of the change before this phone sees any local event.
+    p0Mode = 'selection-changed';
+    attemptStartIds = p0Memory.store.requests().map((row) => row['id']! as String).toSet();
+    final beforeChangePosts = posts.length;
+    await p0Agent.say(
+      memory: p0Memory,
+      source: p0Memory.store.submitMessage(
+        id: 'p0-model-switched', sessionId: 'full-session', text: '这轮属于刚切走的模型。',
+        saidAtUtc: 1795309200000, offsetMinutes: 480,
+      ),
+      system: 'protected-system-context', tools: const [], isCurrent: () => true,
+    );
+    expect(routeCurrent, isTrue);
+    expect(posts.length, beforeChangePosts + 1);
+    expect(phoneRequests, hasLength(4));
+    expect(p0Agent.error, isA<CompanionHostError>().having(
+      (error) => error.hostFailure, 'reason', CompanionHostFailure.selectionChanged,
+    ));
+    final retired = p0Memory.store.requests().singleWhere((row) => !attemptStartIds.contains(row['id']));
+    expect(retired['id'], posts.last['requestId']);
+    expect(retired['terminal'], 'not_sent');
+    expect((retired['raw_usage'] as Map)['terminal'], 'cancelled');
 
     // A late proof still settles its original receipt, but cannot resurrect
     // a retired Host selection by replacing its current fence with phone=true.
