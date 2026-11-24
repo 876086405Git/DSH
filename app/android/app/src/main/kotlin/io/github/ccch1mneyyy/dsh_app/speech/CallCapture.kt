@@ -141,6 +141,7 @@ class CallCapture(
         var pcmTap: StreamingPcm.Tap? = null
         var frameEpoch = 0
         var tick = 0
+        var mutedLevelSent = false
         try {
             while (running) {
                 if (filled == 0) {
@@ -162,9 +163,13 @@ class CallCapture(
                     utterance = null
                     preroll.clear()
                     frame.fill(0)
-                    if (++tick % 2 == 0) post(mine) { listener.onLevel(0.0) }
+                    if (++tick % 2 == 0 && !mutedLevelSent) {
+                        mutedLevelSent = true
+                        post(mine) { listener.onLevel(0.0) }
+                    }
                     continue
                 }
+                mutedLevelSent = false
                 val level = SpeechGate.levelOf(frame, frame.size)
                 pcmTap?.let { tap ->
                     val epoch = frameEpoch
