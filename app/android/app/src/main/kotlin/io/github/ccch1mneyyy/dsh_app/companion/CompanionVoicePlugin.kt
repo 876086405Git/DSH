@@ -28,9 +28,9 @@ import java.util.Locale
  * `stop` drops what is speaking, playing and queued. Progress comes back on the same channel as `event` calls: `start`,
  * `range` (Android 8+: the characters being spoken now, for her mouth), `done`, `stopped`, `error`.
  *
- * Audio focus for the phone's voice: transient, others duck, held only while lines are queued or
- * speaking (she often talks while operating another app). Losing it ends what she is saying. A
- * refused request still speaks, as before: focus is for the others, not a gate on her voice.
+ * Audio focus for the phone's voice: transient, others duck, held while lines are queued or speaking
+ * and a moment after (she often talks while operating another app). Losing it ends what she is
+ * saying. A refused request still speaks, as before: focus is for the others, not a gate on her voice.
  */
 class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var methods: MethodChannel
@@ -138,8 +138,16 @@ class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     private fun ended(type: String, id: String?) {
         send(type, id)
-        main.post { if (speaking.remove(id) && speaking.isEmpty()) abandonFocus() }
+        main.post {
+            if (speaking.remove(id) && speaking.isEmpty()) {
+                // Her next line often follows within a moment: others don't bob back up in between.
+                main.removeCallbacks(release)
+                main.postDelayed(release, 1_000)
+            }
+        }
     }
+
+    private val release = Runnable { if (speaking.isEmpty()) abandonFocus() }
 
     private fun requestFocus() {
         if (focus != null) return
@@ -165,6 +173,7 @@ class CompanionVoicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     private fun abandonFocus() {
+        main.removeCallbacks(release)
         val request = focus ?: return
         focus = null
         runCatching { audio?.abandonAudioFocusRequest(request) }
