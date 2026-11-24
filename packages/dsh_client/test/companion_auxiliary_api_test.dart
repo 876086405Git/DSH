@@ -385,6 +385,14 @@ class _Host {
   }
 }
 
+class _Counted {
+  var calls = 0;
+  Object toJson() {
+    calls++;
+    return 'counted';
+  }
+}
+
 class _Probe {
   final events = <String>[];
   final usage = <Map<String, Object?>>[];
@@ -458,6 +466,7 @@ void main() {
 
   test('Agent input is encoded once and posts the old snapshot bytes', () async {
     host.capability['agent'] = {'v': 1, 'tools': 'return-only', 'streaming': true};
+    final counted = _Counted();
     final cap = (await client.readCompanionAuxiliaryCapability(_session))!;
     const system = '看🌏 "hi"\n\\';
     final messages = [
@@ -467,12 +476,11 @@ void main() {
       {
         'name': 'lookup',
         'input_schema': {
-          'enum': [-0.0, 1.5e-9, 1.0, true, null],
+          'enum': [-0.0, 1.5e-9, 1.0, true, null, counted],
         },
       },
     ];
-    final input = CompanionAgentInput(system: system, messages: messages, tools: tools);
-    expect(input.json, jsonEncode({'system': system, 'messages': messages, 'tools': tools}));
+    final estimate = jsonEncode({'system': system, 'messages': messages, 'tools': tools});
     final old = jsonEncode(
       jsonDecode(
         jsonEncode({
@@ -490,6 +498,9 @@ void main() {
         }),
       ),
     );
+    counted.calls = 0;
+    final input = CompanionAgentInput(system: system, messages: messages, tools: tools);
+    expect(input.json, estimate);
     expect(input.requestBytes(cap, requestId: _request, maxTokens: 800), utf8.encode(old).length);
     host.answer = (request) => _json(request, _wire('busy')['body'], status: 409);
     final probe = _Probe();
@@ -507,6 +518,7 @@ void main() {
     messages.single['content'] = 'changed';
     await expectLater(posted, throwsA(isA<CompanionAuxiliaryFailure>()));
     expect(host.texts.last, old);
+    expect(counted.calls, 1);
   });
 
   test('actual HTTP uses one frozen selection, cookie and exact no-tools DTO', () async {
