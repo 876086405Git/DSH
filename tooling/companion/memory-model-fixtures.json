@@ -8,7 +8,7 @@
     },
     {
       "path": "app/test/companion/companion_host_usage_owner_test.dart",
-      "sha256": "357596a29af251eb30c36ccebdeafcad2d98c6ceaeacc975119e0ec70f0a9277"
+      "sha256": "cb9c35c7b763e41fca883abb27030ba01ef90ad200ed145392bcce3ff6d78022"
     },
     {
       "path": "app/test/companion/companion_initiative_owner_test.dart",

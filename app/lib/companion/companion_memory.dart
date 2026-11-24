@@ -279,9 +279,10 @@ class CompanionMemoryOwner extends ChangeNotifier {
               ? first.compareTo(second)
               : (a['observed_at_ms'] as int).compareTo(b['observed_at_ms'] as int);
         });
-    // Bound one read opportunity and let the next room tick visit older roots.
-    // Completed immutable receipts leave the queue even when fees are unknown.
-    for (final delivery in pending.take(4)) {
+    // Read opportunities only come on opening and connection changes now, so
+    // one visits every root. Completed immutable receipts leave the queue even
+    // when fees are unknown.
+    for (final delivery in pending) {
       if (_disposed) break;
       final id = delivery['id']! as String;
       final attempted = _now();
