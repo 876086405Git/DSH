@@ -193,7 +193,9 @@ private class ScreenSettings(private val app: Context) {
     /** A settings change invalidates model observations, not a live OS consent. */
     @Volatile var captureGeneration = 0L
         private set
-    @Volatile var excluded = prefs.getStringSet("excluded_packages", DEFAULT_EXCLUDED)!!.toSet()
+    // Every configure saved the old chat-app default too; read that copy as the new default.
+    @Volatile var excluded = prefs.getStringSet("excluded_packages", null)?.toSet()
+        ?.takeUnless { it == OLD_DEFAULT_EXCLUDED } ?: DEFAULT_EXCLUDED
         private set
     private var residentOwner: Any? = null
     private var frequency = prefs.getString("frequency", "normal")!!
@@ -366,9 +368,10 @@ private class ScreenSettings(private val app: Context) {
                 map.values.any { it !is String || !validChoice(it) }) return null
             return map.entries.associate { it.key as String to it.value as String }
         }
-        // Existing PhonePolicies continue to supply banks/payment exclusions.
-        // These are only the additional screen-companionship defaults.
-        val DEFAULT_EXCLUDED = setOf("com.tencent.mm", "com.tencent.mobileqq", "com.whatsapp",
+        // Existing PhonePolicies continue to supply banks/payment exclusions. The person
+        // switched watching on themselves, so chat apps are not skipped on top of that.
+        val DEFAULT_EXCLUDED = emptySet<String>()
+        private val OLD_DEFAULT_EXCLUDED = setOf("com.tencent.mm", "com.tencent.mobileqq", "com.whatsapp",
             "org.telegram.messenger", "org.thoughtcrime.securesms")
         val SCENES = setOf("gaming", "coding", "video", "reading", "chatting", "idle", "other")
     }

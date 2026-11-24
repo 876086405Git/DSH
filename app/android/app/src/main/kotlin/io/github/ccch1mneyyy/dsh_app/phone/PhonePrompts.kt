@@ -69,7 +69,8 @@ class PhonePrompts(
 
     override fun confirm(request: ConfirmRequest): Decision = confirmFor(tasks, null, request)
 
-    private fun confirmFor(task: PhoneTasks, sessionId: String?, request: ConfirmRequest): Decision {
+    private fun confirmFor(task: PhoneTasks, sessionId: String?, request: ConfirmRequest,
+                           enabled: () -> Boolean = this.enabled): Decision {
         if (Looper.myLooper() == Looper.getMainLooper()) return Decision.UNAVAILABLE
         val taskOwner = request.owner ?: task.activeOwner() ?: return Decision.STOP
         if (!task.isCurrent(taskOwner)) return Decision.STOP
@@ -100,7 +101,8 @@ class PhonePrompts(
     override fun handoff(reason: String, timeoutMs: Long, cause: HandoffCause?, owner: PhoneTasks.Owner): HandoffResult =
         handoffFor(tasks, null, reason, timeoutMs, cause, owner)
 
-    private fun handoffFor(task: PhoneTasks, sessionId: String?, reason: String, timeoutMs: Long, cause: HandoffCause?, owner: PhoneTasks.Owner?): HandoffResult {
+    private fun handoffFor(task: PhoneTasks, sessionId: String?, reason: String, timeoutMs: Long, cause: HandoffCause?, owner: PhoneTasks.Owner?,
+                           enabled: () -> Boolean = this.enabled): HandoffResult {
         if (Looper.myLooper() == Looper.getMainLooper()) return HandoffResult.STOP
         val taskOwner = owner ?: return HandoffResult.STOP
         if (!task.isCurrent(taskOwner)) return HandoffResult.STOP
@@ -119,12 +121,12 @@ class PhonePrompts(
     }
 
     /** One UI arbiter, but every native ticket retains its own task and conversation. */
-    fun scoped(task: PhoneTasks, sessionId: String?): UserGate = object : UserGate {
-        override fun confirm(request: ConfirmRequest): Decision = confirmFor(task, sessionId, request)
+    fun scoped(task: PhoneTasks, sessionId: String?, enabled: () -> Boolean = this.enabled): UserGate = object : UserGate {
+        override fun confirm(request: ConfirmRequest): Decision = confirmFor(task, sessionId, request, enabled)
         override fun handoff(reason: String, timeoutMs: Long): HandoffResult =
-            handoffFor(task, sessionId, reason, timeoutMs, null, task.activeOwner())
+            handoffFor(task, sessionId, reason, timeoutMs, null, task.activeOwner(), enabled)
         override fun handoff(reason: String, timeoutMs: Long, cause: HandoffCause?, owner: PhoneTasks.Owner): HandoffResult =
-            handoffFor(task, sessionId, reason, timeoutMs, cause, owner)
+            handoffFor(task, sessionId, reason, timeoutMs, cause, owner, enabled)
         override fun status(text: String?) = status(text, displaySelection.currentGuard(task))
         override fun status(text: String?, ifCurrent: (() -> Unit) -> Boolean) =
             publishStatus(text, displaySelection.scoped(task, ifCurrent))

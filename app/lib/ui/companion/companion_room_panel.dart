@@ -2,11 +2,17 @@
 // are at the top, the four places people go most as tiles, then the rest in
 // named groups. Drawn on the room's water glass (companionWaterSurfaces).
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
+import '../../l10n/l10n.dart';
 import '../common/app_sheet.dart';
 import '../common/pressable.dart';
+import '../settings/settings_widgets.dart';
+import '../theme/app_icons.dart';
 import '../theme/glass.dart';
+import '../theme/ink_glow.dart';
 import '../theme/motion.dart';
 import '../theme/semantic_colors.dart';
 import '../theme/surfaces.dart';
@@ -235,4 +241,111 @@ class CompanionPanelTiles extends StatelessWidget {
       ),
     );
   }
+}
+
+/// One of the companions on this phone, in her page's 伙伴 group: her cover
+/// (or her initial), her name, a check on the one in the room. A tap brings
+/// her in; [onMore] holds what else can be done with her.
+class CompanionRosterRow extends StatelessWidget {
+  const CompanionRosterRow({
+    super.key,
+    required this.name,
+    required this.active,
+    this.cover,
+    this.subtitle,
+    this.onTap,
+    this.onMore,
+  });
+
+  final String name;
+  final bool active;
+  final File? cover;
+  final String? subtitle;
+  final VoidCallback? onTap;
+  final VoidCallback? onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final colors = DshColors.of(context);
+    final initial = name.characters.firstOrNull ?? '';
+    return InkWell(
+      onTap: active ? null : onTap,
+      onLongPress: onMore,
+      splashFactory: rowSplash(context),
+      highlightColor: scheme.onSurface.withValues(alpha: 0.05),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: subtitle == null ? SettingsMetrics.rowHeight : SettingsMetrics.rowHeightTwoLine,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(SettingsMetrics.inset, 6, SettingsMetrics.trailingPad, 6),
+          child: Row(
+            children: [
+              ClipOval(
+                child: SizedBox.square(
+                  dimension: SettingsMetrics.icon,
+                  child: switch (cover) {
+                    final file? => Image.file(
+                      file,
+                      fit: BoxFit.cover,
+                      cacheWidth: 96,
+                      errorBuilder: (_, _, _) => _Initial(initial),
+                    ),
+                    null => _Initial(initial),
+                  },
+                ),
+              ),
+              const SizedBox(width: SettingsMetrics.iconGap),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: settingsTitleStyle(context)?.copyWith(color: scheme.onSurface),
+                    ),
+                    if (subtitle case final sub?) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        sub,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(color: colors.textTertiary),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (active) ...[const SizedBox(width: 8), Icon(AppIcons.selected, size: 20, color: scheme.primary)],
+              if (onMore case final more?)
+                IconButton(
+                  tooltip: context.l10n.companionMenu,
+                  icon: Icon(AppIcons.more, size: 20, color: scheme.onSurfaceVariant),
+                  onPressed: more,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Initial extends StatelessWidget {
+  const _Initial(this.letter);
+
+  final String letter;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: const Color(0x269FD8F2),
+    child: Center(
+      child: Text(letter, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+    ),
+  );
 }

@@ -120,24 +120,26 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('phone tools require native approval for the actual user source before dispatch', () async {
+  test('phone tools open a native run for the actual user source before dispatch', () async {
     final calls = <MethodCall>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (call) async {
       calls.add(call);
       return switch (call.method) {
         'companionPhoneTools' => _catalog,
-        'companionPhoneBegin' => {'decision': 'rejected'},
+        'companionPhoneBegin' => {'decision': 'unavailable', 'reason': 'busy'},
         'companionPhoneEnd' => null,
-        _ => throw StateError('Native action must not execute after rejection'),
+        _ => throw StateError('Native action must not execute without a run'),
       };
     });
     await phone.prepare();
     expect(phone.bindings.single.definition.name, 'phone_open');
+    expect(phone.bindings.single.definition.description, contains('直接用'));
     final result = await phone.execute(
-      const CompanionAgentToolCall(id: 'rejected-open', name: 'phone_open', input: {'app': 'calendar'}),
+      const CompanionAgentToolCall(id: 'busy-open', name: 'phone_open', input: {'app': 'calendar'}),
     );
     expect(result.isError, isTrue);
-    expect((jsonDecode(result.content) as Map)['code'], 'phone_not_authorized');
+    // A run that could not start is never reported as a missing permission.
+    expect((jsonDecode(result.content) as Map)['code'], 'phone_busy');
     final begin = calls.singleWhere((call) => call.method == 'companionPhoneBegin').arguments as Map;
     expect(begin['sourceId'], source['id']);
     expect(begin['sourceRev'], source['source_rev']);

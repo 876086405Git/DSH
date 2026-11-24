@@ -51,12 +51,13 @@ function cleanPhoneSession(session) {
   return true;
 }
 
+// The person's persona and names, at whatever length they wrote them.
 function profileOf(value) {
-  const limits = { persona: 4000, name: 24, callMe: 40, moves: 1024 };
-  if (!fields(value, Object.keys(limits))) throw invalid();
+  const keys = ['persona', 'name', 'callMe', 'moves'];
+  if (!fields(value, keys)) throw invalid();
   const result = {};
-  for (const [key, limit] of Object.entries(limits)) {
-    if (!text(value[key], limit) || (['name', 'callMe'].includes(key) && /[\r\n\t]/.test(value[key]))) throw invalid();
+  for (const key of keys) {
+    if (typeof value[key] !== 'string') throw invalid();
     result[key] = value[key].trim();
   }
   return Object.freeze(result);
@@ -182,7 +183,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
   }
   const describe = value => ({ v: 1, supported: true, instanceId, sessionId: value.agent.id,
     profileRevision: value.revision, persistence: 'connection', requestBinding: 'rpcId',
-    maxEvents: 8, maxPersonaCodePoints: 4000,
+    maxEvents: 8,
     memoryMode: value.phone ? 'phone' : value.memoryDisabled ? 'automatic' : 'query', memoryEpoch: value.memoryEpoch,
     ...(phoneSupported(value.agent) ? { phoneMemory: true } : {}),
     ...(usageSupported(value.agent) ? { chatUsage: true } : {}) });

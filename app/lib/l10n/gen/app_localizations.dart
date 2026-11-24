@@ -9776,6 +9776,12 @@ abstract class L10n {
   /// **'再摇我要吐泡泡了！'**
   String get companionShake3;
 
+  /// No description provided for @companionShakeDizzy.
+  ///
+  /// In zh, this message translates to:
+  /// **'头好晕……世界在转。'**
+  String get companionShakeDizzy;
+
   /// No description provided for @companionStatusIdle.
   ///
   /// In zh, this message translates to:
@@ -13727,6 +13733,48 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'这次来不及了，原话还留着。'**
   String get companionRawEraseGone;
+
+  /// No description provided for @companionSetupWorkshop.
+  ///
+  /// In zh, this message translates to:
+  /// **'去创意工坊找一位'**
+  String get companionSetupWorkshop;
+
+  /// No description provided for @companionRosterTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'伙伴'**
+  String get companionRosterTitle;
+
+  /// No description provided for @companionRosterHere.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在小屋里'**
+  String get companionRosterHere;
+
+  /// No description provided for @companionRosterAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加伙伴'**
+  String get companionRosterAdd;
+
+  /// No description provided for @companionRosterBring.
+  ///
+  /// In zh, this message translates to:
+  /// **'请她进小屋'**
+  String get companionRosterBring;
+
+  /// No description provided for @companionRosterRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'从手机上移除'**
+  String get companionRosterRemove;
+
+  /// No description provided for @companionRosterRemoveConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'把「{name}」从这台手机上移除？她的文件会删掉，记忆和提醒还在。'**
+  String companionRosterRemoveConfirm(String name);
 
   /// No description provided for @automaticDiagnosticsRecover.
   ///

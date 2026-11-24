@@ -13,6 +13,7 @@ import 'tool_view.dart' show ToolCardPlacement;
 class ChatRowsCache {
   ChatState? _state;
   bool _foldTurns = false;
+  bool _compactTools = false;
   List<TurnArtifacts> _artifacts = const [];
   List<ChatRow> _rows = const [];
   Map<String, int> _index = const {};
@@ -24,12 +25,18 @@ class ChatRowsCache {
   bool get onlyDraftChanged => _onlyDraftChanged;
   bool _onlyDraftChanged = false;
 
-  List<ChatRow> update(ChatState state, {required bool foldTurns, List<TurnArtifacts> artifacts = const []}) {
+  List<ChatRow> update(
+    ChatState state, {
+    required bool foldTurns,
+    List<TurnArtifacts> artifacts = const [],
+    bool compactTools = false,
+  }) {
     final previous = _state;
     _onlyDraftChanged = false;
     List<ChatRow>? reused;
     if (previous != null &&
         foldTurns == _foldTurns &&
+        compactTools == _compactTools &&
         listEquals(artifacts, _artifacts) &&
         state.running == previous.running &&
         listEquals(state.approvals, previous.approvals) &&
@@ -42,6 +49,7 @@ class ChatRowsCache {
     }
     _state = state;
     _foldTurns = foldTurns;
+    _compactTools = compactTools;
     _artifacts = artifacts;
     if (reused != null) {
       _rows = reused;
@@ -57,6 +65,7 @@ class ChatRowsCache {
         turns: state.turns,
         foldTurns: foldTurns,
         artifacts: artifacts,
+        compactTools: compactTools,
       );
       _index = {for (var i = 0; i < _rows.length; i++) _rows[i].key: i};
     }

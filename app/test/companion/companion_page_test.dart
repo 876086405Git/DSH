@@ -1290,11 +1290,14 @@ void main() {
       await tester.enterText(find.byType(TextField), '在吗');
       await tester.pump();
       await tester.tap(find.byIcon(AppIcons.send).last);
-      for (var i = 0; i < 20 && asked.isEmpty; i++) {
+      // Her new persona also gets her own lines written once; the chat is what's checked here.
+      Iterable<Map<String, Object?>> chat() =>
+          asked.where((r) => !(r['system']! as String).startsWith('你在为一个陪伴角色写'));
+      for (var i = 0; i < 20 && chat().isEmpty; i++) {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
         await tester.pump(const Duration(milliseconds: 100));
       }
-      final system = asked.single['system']! as String;
+      final system = chat().single['system']! as String;
       expect(system, startsWith('你的名字是「小蓝」。\n你是一只爱撒娇的猫娘'));
       expect(system, contains('称呼对方为「阿周」。'));
       // The marks her stage reads stay, whatever the persona says; the rest is theirs.

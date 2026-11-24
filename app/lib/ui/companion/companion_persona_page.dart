@@ -15,10 +15,13 @@ import '../settings/settings_widgets.dart';
 import '../shell/page_frame.dart';
 
 class CompanionPersonaPage extends ConsumerStatefulWidget {
-  const CompanionPersonaPage({super.key, this.packName});
+  const CompanionPersonaPage({super.key, this.packName, this.whale = true});
 
   /// Her name in the pack, for the name field's hint and the default persona.
   final String? packName;
+
+  /// She is the app's own whale girl, whose default persona is hers.
+  final bool whale;
 
   @override
   ConsumerState<CompanionPersonaPage> createState() => _CompanionPersonaPageState();
@@ -68,7 +71,7 @@ class _CompanionPersonaPageState extends ConsumerState<CompanionPersonaPage> {
   String? _given(String text) => text.trim().isEmpty ? null : text.trim();
 
   /// The default persona under the name she would go by with [name].
-  String _defaultFor(String? name) => companionPersonaPart(name: name ?? widget.packName);
+  String _defaultFor(String? name) => companionPersonaPart(name: name ?? widget.packName, whale: widget.whale);
 
   void _edited() {
     _saveTimer?.cancel();
@@ -115,7 +118,6 @@ class _CompanionPersonaPageState extends ConsumerState<CompanionPersonaPage> {
                   helper: l10n.companionPersonaNameHelper,
                   child: TextField(
                     controller: _name,
-                    maxLength: companionNameMax,
                     onChanged: (_) => _edited(),
                     decoration: InputDecoration(hintText: widget.packName, counterText: ''),
                   ),
@@ -125,7 +127,6 @@ class _CompanionPersonaPageState extends ConsumerState<CompanionPersonaPage> {
                   helper: l10n.companionPersonaCallMeHelper,
                   child: TextField(
                     controller: _callMe,
-                    maxLength: 20,
                     onChanged: (_) => _edited(),
                     decoration: InputDecoration(hintText: l10n.companionPersonaCallMeHint, counterText: ''),
                   ),
@@ -148,7 +149,6 @@ class _CompanionPersonaPageState extends ConsumerState<CompanionPersonaPage> {
                     controller: _persona,
                     minLines: 10,
                     maxLines: 24,
-                    maxLength: companionPersonaMax,
                     keyboardType: TextInputType.multiline,
                     onChanged: (_) => _edited(),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),

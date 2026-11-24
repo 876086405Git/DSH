@@ -788,6 +788,7 @@ class _CompanionAgentVisit {
           callMe: persona.callMe,
           tools: true,
           moves: moves.rules(),
+          whale: companionIsWhale(characterSourceKey, character.name),
         ),
       );
       memoryTools = CompanionAgentMemoryTools(
@@ -859,6 +860,10 @@ class _CompanionAgentVisit {
         },
       );
       activePhoneTools = phoneTools;
+      final photoTools = CompanionAgentPhotoTools(
+        describe: (image, question) =>
+            agent.describePhoto(owner: owner, image: image, question: question, isCurrent: current),
+      );
       if (noticeReply?.draftOnly != true) await phoneTools.prepare();
       if (!current()) return;
       if (noticeReply != null) {
@@ -875,7 +880,12 @@ class _CompanionAgentVisit {
         context: turnContext,
         assistantPage: assistantPage,
         tools: noticeReply == null
-            ? [...memoryTools.bindings, ...taskTools.bindings, ...phoneTools.bindings]
+            ? [
+                ...memoryTools.bindings,
+                ...taskTools.bindings,
+                ...phoneTools.bindings,
+                if (ref.read(androidSystemFeaturesProvider)) ...photoTools.bindings,
+              ]
             : noticeReply.draftOnly
             ? const []
             : phoneTools.bindings,
@@ -1316,6 +1326,7 @@ class _CompanionAgentVisit {
                 custom: persona.custom,
                 name: ref.read(companionNameProvider) ?? character.name,
                 callMe: persona.callMe,
+                whale: companionIsWhale(characterSourceKey, character.name),
               ) +
               owner.relationshipContext(role, forInitiative: true),
           offsetMinutes: clock().offsetMinutes,

@@ -82,7 +82,10 @@ class _VisitNotices {
             moves: visit.moves.rules() ?? '',
           );
         },
-        defaultPersona: () => companionPersonaDefault,
+        defaultPersona: () => companionPersonaPart(
+          name: visit.ref.read(companionNameProvider) ?? visit.character.name,
+          whale: companionIsWhale(visit.characterSourceKey, visit.character.name),
+        ),
         onUsage: visit.agent._onUsage,
         onUsageSettled: visit.agent._onUsageSettled,
       );

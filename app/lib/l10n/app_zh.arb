@@ -3264,6 +3264,7 @@
   "companionShake1": "哇啊，别摇啦！",
   "companionShake2": "头好晕……水都晃起来了。",
   "companionShake3": "再摇我要吐泡泡了！",
+  "companionShakeDizzy": "头好晕……世界在转。",
   "companionStatusIdle": "在发呆",
   "companionStatusListening": "在听你说",
   "companionStatusThinking": "在想",
@@ -4415,6 +4416,20 @@
   "companionRawErased": "好，原话也删掉了。",
   "companionRawKept": "好，原话留着。",
   "companionRawEraseGone": "这次来不及了，原话还留着。",
+  "companionSetupWorkshop": "去创意工坊找一位",
+  "companionRosterTitle": "伙伴",
+  "companionRosterHere": "正在小屋里",
+  "companionRosterAdd": "添加伙伴",
+  "companionRosterBring": "请她进小屋",
+  "companionRosterRemove": "从手机上移除",
+  "companionRosterRemoveConfirm": "把「{name}」从这台手机上移除？她的文件会删掉，记忆和提醒还在。",
+  "@companionRosterRemoveConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "automaticDiagnosticsRecover": "恢复本地记录",
   "automaticDiagnosticsRecoverHint": "仅在本机恢复分析记录，跳过已留存故障，不重新发送旧请求。",
   "automaticDiagnosticsTitle": "自动故障分析",

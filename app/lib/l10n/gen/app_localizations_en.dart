@@ -5629,6 +5629,9 @@ class L10nEn extends L10n {
   String get companionShake3 => 'Keep that up and I\'ll start blowing bubbles!';
 
   @override
+  String get companionShakeDizzy => 'My head is spinning…';
+
+  @override
   String get companionStatusIdle => 'Daydreaming';
 
   @override
@@ -7851,6 +7854,29 @@ class L10nEn extends L10n {
 
   @override
   String get companionRawEraseGone => 'Too late this time; the original words are still here.';
+
+  @override
+  String get companionSetupWorkshop => 'Find one in the Workshop';
+
+  @override
+  String get companionRosterTitle => 'Companions';
+
+  @override
+  String get companionRosterHere => 'In the room';
+
+  @override
+  String get companionRosterAdd => 'Add a companion';
+
+  @override
+  String get companionRosterBring => 'Bring her into the room';
+
+  @override
+  String get companionRosterRemove => 'Remove from this phone';
+
+  @override
+  String companionRosterRemoveConfirm(String name) {
+    return 'Remove “$name” from this phone? Her files are deleted; memories and reminders stay.';
+  }
 
   @override
   String get automaticDiagnosticsRecover => 'Recover local records';

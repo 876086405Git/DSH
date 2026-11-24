@@ -26,6 +26,7 @@ import '../workshop/workshop_models.dart';
 import '../workshop/workshop_receipt.dart';
 import 'companion_adapt_contract.dart'
     show companionAdaptParams, companionAdaptEmotions, companionAdaptActions, companionAdaptZones;
+import 'companion_lines.dart';
 
 part 'companion_pack_integrity.dart';
 part 'companion_pack_export.dart';
@@ -43,6 +44,13 @@ const CompanionPackSource? companionPackSource = null;
 const companionBundledPack = 'assets/companion/whale-girl.zip';
 const companionBundledCharacterKey = 'builtin:companion/whale-girl';
 const _characterIdentityName = '.companion-character.json';
+
+/// When a pack went onto the shelf, for the roster's order.
+const _shelvedAtName = '.companion-shelved';
+
+/// Written before the active pack goes onto the shelf: the shelf folder that
+/// recovery activates if a swap is cut short with nothing active.
+const _fallbackName = 'pack.fallback';
 
 /// Whether this build carries the pack, without reading it.
 Future<bool> hasBundledCompanionPack([AssetBundle? bundle]) async {
@@ -101,7 +109,7 @@ class CompanionPackException implements Exception {
 /// What the page shows about the installed character.
 @immutable
 class CompanionCharacter {
-  const CompanionCharacter({this.name, this.author, this.license, this.source});
+  const CompanionCharacter({this.name, this.author, this.license, this.source, this.lines});
 
   factory CompanionCharacter.fromJson(Object? json) {
     final map = json is Map ? json : const {};
@@ -112,6 +120,10 @@ class CompanionCharacter {
       author: text('author'),
       license: text('license'),
       source: text('source'),
+      lines: switch (CompanionLines.parse(map['lines'])) {
+        final lines when lines.isEmpty => null,
+        final lines => lines,
+      },
     );
   }
 
@@ -119,6 +131,30 @@ class CompanionCharacter {
   final String? author;
   final String? license;
   final String? source;
+
+  /// Her own words for touches and her things, when the pack brings them.
+  final CompanionLines? lines;
+}
+
+/// One installed character: the active one or one on the shelf.
+@immutable
+class CompanionRosterEntry {
+  const CompanionRosterEntry({
+    required this.key,
+    required this.character,
+    required this.workshop,
+    required this.active,
+    required this.cover,
+  });
+
+  /// The same key [CompanionPackStore.characterKey] gives once she's active.
+  final String key;
+  final CompanionCharacter character;
+  final WorkshopReceipt? workshop;
+  final bool active;
+
+  /// `character/preview.png`, which a Workshop upload carries as its cover.
+  final File? cover;
 }
 
 const _maxBytes = 400 * 1024 * 1024;
@@ -138,7 +174,8 @@ bool isSafePackPath(String path) {
 }
 
 class CompanionPackStore {
-  CompanionPackStore(this.root, {this.expectedRuntime = companionRuntimeDigest}) : _openOutput = null;
+  CompanionPackStore(this.root, {this.expectedRuntime = companionRuntimeDigest, this.shelve = true})
+    : _openOutput = null;
 
   /// Runs the same install transaction in this isolate with one replaceable
   /// output boundary. Production construction keeps the compute isolate.
@@ -146,13 +183,22 @@ class CompanionPackStore {
   CompanionPackStore.withOutputForTesting(
     this.root, {
     this.expectedRuntime = companionRuntimeDigest,
+    this.shelve = true,
     required OutputFileStream Function(String path) this._openOutput,
   });
 
-  /// The app's private folder for this; the pack lands in `<root>/pack`.
+  /// The app's private folder for this; the active pack lands in
+  /// `<root>/pack`, the others in `<root>/shelf/<folder>`.
   final Directory root;
   final String expectedRuntime;
+
+  /// Whether installing a different character keeps the active one on the
+  /// shelf. Off, an install replaces it, as a single-model store wants.
+  final bool shelve;
   final OutputFileStream Function(String path)? _openOutput;
+
+  Directory get _shelf => Directory('${root.path}/shelf');
+  Directory _shelved(String key) => Directory('${_shelf.path}/${_shelfName(key)}');
 
   static final _roots = <String, _CompanionRootState>{};
   _CompanionRootState get _state =>
@@ -182,11 +228,12 @@ class CompanionPackStore {
     return run;
   }
 
-  Future<T> _change<T>(Future<T> Function() body) async {
+  /// [stopReaders] is false for changes that leave `pack/` alone.
+  Future<T> _change<T>(Future<T> Function() body, {bool stopReaders = true}) async {
     final state = _state;
     state.changes.add(++state.revision);
     try {
-      for (final hook in List.of(state.before)) {
+      for (final hook in [if (stopReaders) ...state.before]) {
         try {
           await hook();
         } on Object {
@@ -207,6 +254,17 @@ class CompanionPackStore {
       } else {
         await _forget(previous);
       }
+    }
+    // After pack.previous, which may already have brought one back: a swap
+    // cut short once the active pack was on the shelf ends with the folder
+    // the note names active, so one pack is active again and none is lost.
+    final fallback = File('${root.path}/$_fallbackName');
+    if (await fallback.exists()) {
+      if (!await pack.exists()) {
+        final named = Directory('${_shelf.path}/${await fallback.readAsString()}');
+        if (await named.exists()) await _change(() => named.rename(pack.path));
+      }
+      await fallback.delete();
     }
     await _forget(Directory('${root.path}/pack.staging'));
     await _forget(Directory('${root.path}/pack.trash'));
@@ -242,41 +300,111 @@ class CompanionPackStore {
 
   /// A source key for the phone database's opaque character ID. Package
   /// metadata and display names cannot supply a local installation identity.
-  Future<String?> characterKey() => _exclusive(_readCharacterKey);
+  Future<String?> characterKey() => _exclusive(() => _characterKeyOf(pack));
 
   /// Name and source belong to the same installed pack, even if another
   /// window installs a different character while the caller is awaiting.
   Future<({CompanionCharacter character, String? key})> characterIdentity() =>
-      _exclusive(() async => (character: await _readCharacter(), key: await _readCharacterKey()));
+      _exclusive(() async => (character: await _characterOf(pack), key: await _characterKeyOf(pack)));
 
-  Future<String?> _readCharacterKey() async {
-    if (!await File('${pack.path}/runtime/live2dcubismcore.min.js').exists() ||
-        !await File('${pack.path}/character/index.json').exists()) {
+  /// The active character's key, to keep her on the shelf when another one
+  /// comes. A pack that can't be named is replaced instead, as before.
+  Future<String?> _keepableKey() async {
+    try {
+      return await _characterKeyOf(pack);
+    } on CompanionPackException {
+      return null;
+    } on WorkshopException {
+      return null;
+    } on FormatException {
       return null;
     }
-    final workshop = await WorkshopReceipt.read(pack);
-    if (workshop != null) {
-      return 'workshop:${jsonEncode([workshop.origin.toString(), workshop.kind, workshop.id])}';
-    }
-    final identity = File('${pack.path}/$_characterIdentityName');
-    if (await identity.exists()) {
-      if (await identity.length() > 256) {
-        throw const CompanionPackException(CompanionPackProblem.storage, 'companion_character_identity');
-      }
-      final value = jsonDecode(await identity.readAsString());
-      final key = value is Map && value['schema'] == 1 ? value['key'] : null;
-      if (key is! String ||
-          (key != companionBundledCharacterKey && !RegExp(r'^local:[A-Za-z0-9_-]{24}$').hasMatch(key))) {
-        throw const CompanionPackException(CompanionPackProblem.storage, 'companion_character_identity');
-      }
-      return key;
-    }
-    // A pre-v2 local installation has no trustworthy role identity. Assign
-    // one to this actual pack; do not infer it from its name or runtime.
-    final key = _newCharacterKey();
-    await _writeCharacterKey(pack, key);
-    return key;
   }
+
+  /// The active character first, then the shelf, most recently shelved
+  /// first. A folder that can't be read is left out, not fatal. Read without
+  /// the store's queue, and without naming anyone: it only shows who is here,
+  /// and must not hold up her stage or an install. A change under way can
+  /// leave it a step behind until the next read.
+  Future<List<CompanionRosterEntry>> roster() async {
+    final active = await _rosterEntry(pack, active: true);
+    final shelved = <(CompanionRosterEntry, int)>[];
+    if (await _shelf.exists()) {
+      await for (final folder in _shelf.list(followLinks: false)) {
+        if (folder is! Directory) continue;
+        if (await _rosterEntry(folder, active: false) case final entry?) shelved.add(entry);
+      }
+    }
+    shelved.sort((a, b) => b.$2.compareTo(a.$2));
+    return [if (active != null) active.$1, for (final (entry, _) in shelved) entry];
+  }
+
+  Future<(CompanionRosterEntry, int)?> _rosterEntry(Directory folder, {required bool active}) async {
+    try {
+      final key = await _characterKeyOf(folder, assign: false);
+      if (key == null) return null;
+      final cover = File('${folder.path}/character/preview.png');
+      final stamp = File('${folder.path}/$_shelvedAtName');
+      return (
+        CompanionRosterEntry(
+          key: key,
+          character: await _characterOf(folder),
+          workshop: await WorkshopReceipt.read(folder),
+          active: active,
+          cover: await cover.exists() ? cover : null,
+        ),
+        await stamp.exists() ? int.tryParse(await stamp.readAsString()) ?? 0 : 0,
+      );
+    } on Exception {
+      return null;
+    }
+  }
+
+  /// The shelved character with [key] becomes active and the active one goes
+  /// onto the shelf. Once the active pack is shelved, pack.fallback names the
+  /// chosen one, so recovery from a crash in between activates it.
+  Future<void> activate(String key) => _exclusive(
+    () => _change(() async {
+      final chosen = _shelved(key);
+      if (!await chosen.exists()) {
+        throw const CompanionPackException(CompanionPackProblem.storage, 'companion_not_shelved');
+      }
+      final previous = Directory('${root.path}/pack.previous');
+      final current = await _keepableKey();
+      final outgoing = current == null ? null : _shelved(current);
+      if (outgoing != null) {
+        await _shelve(root.path, outgoing, _shelfName(key));
+      } else if (await pack.exists()) {
+        await _forget(previous);
+        await pack.rename(previous.path);
+      }
+      try {
+        await chosen.rename(pack.path);
+      } on FileSystemException {
+        if (outgoing != null) {
+          await outgoing.rename(pack.path);
+          await _clearFallback(root.path);
+        } else if (await previous.exists()) {
+          await previous.rename(pack.path);
+        }
+        rethrow;
+      }
+      await _forget(previous);
+      await _clearFallback(root.path);
+    }),
+  );
+
+  /// Deletes the shelved character with [key]; the active one stays as is.
+  Future<void> removeShelved(String key) => _exclusive(
+    () => _change(stopReaders: false, () async {
+      final shelved = _shelved(key);
+      if (!await shelved.exists()) return;
+      final trash = Directory('${root.path}/pack.trash');
+      if (await trash.exists()) await trash.delete(recursive: true);
+      await shelved.rename(trash.path);
+      await _forget(trash);
+    }),
+  );
 
   /// Exports model data only. User preferences are never read. Names/persona
   /// must be supplied explicitly for this export; otherwise a neutral name
@@ -318,21 +446,13 @@ class CompanionPackStore {
     return count;
   });
 
-  Future<CompanionCharacter> character() => _exclusive(_readCharacter);
-
-  Future<CompanionCharacter> _readCharacter() async {
-    try {
-      return CompanionCharacter.fromJson(
-        jsonDecode(await File('${pack.path}/character/character.json').readAsString()),
-      );
-    } catch (_) {
-      return const CompanionCharacter();
-    }
-  }
+  Future<CompanionCharacter> character() => _exclusive(() => _characterOf(pack));
 
   /// Unpacks [zip] next to the current pack and swaps it in. If the swap fails,
   /// attempts to restore the old pack; a failed restoration leaves it in
   /// `pack.previous`. A zip with only `character/` keeps the installed runtime.
+  /// The same character (same key) is replaced, wherever she was; a different
+  /// active one goes onto the shelf (see [shelve]).
   Future<void> install(String zip, {WorkshopReceipt? workshop, bool replaceExisting = false}) =>
       _installPackage(zip, workshop: workshop, replaceExisting: replaceExisting);
 
@@ -348,9 +468,27 @@ class CompanionPackStore {
   }) => _exclusive(
     () => _change(() async {
       if (workshop != null && workshop.kind != 'companion') workshopInvalid('workshop_install_record');
-      if (workshop != null) await workshopCheckReplacement(pack, workshop, replaceExisting: replaceExisting);
       final key = workshop == null ? (bundled ? companionBundledCharacterKey : _newCharacterKey()) : null;
-      final args = (zip, root.path, expectedRuntime, workshop == null ? null : jsonEncode(workshop.toJson()), key);
+      final incoming = key ?? _workshopKey(workshop!);
+      final current = shelve ? await _keepableKey() : null;
+      if (workshop != null) {
+        // Only an active pack this install replaces needs the Workshop's
+        // rules or the person's say; a different one just goes on the shelf.
+        if (current == null || current == incoming) {
+          await workshopCheckReplacement(pack, workshop, replaceExisting: replaceExisting);
+        }
+        // A shelved copy of the same item is replaced too, under the same rules.
+        await workshopCheckReplacement(_shelved(incoming), workshop, replaceExisting: true);
+      }
+      final _InstallArgs args = (
+        zip,
+        root.path,
+        expectedRuntime,
+        workshop == null ? null : jsonEncode(workshop.toJson()),
+        key,
+        _shelfName(incoming),
+        current == null || current == incoming ? null : _shelfName(current),
+      );
       final openOutput = _openOutput;
       if (openOutput == null) {
         await compute(_install, args);
@@ -365,9 +503,11 @@ class CompanionPackStore {
       if (expectedWorkshop != null) await workshopCheckRemoval(pack, expectedWorkshop);
       final trash = Directory('${root.path}/pack.trash');
       if (await trash.exists()) await trash.delete(recursive: true);
-      // A leftover backup must never resurrect an intentional removal.
+      // A leftover backup or swap note must never resurrect an intentional
+      // removal. The shelf stays; nothing is activated in her place.
       final previous = Directory('${root.path}/pack.previous');
       if (await previous.exists()) await previous.delete(recursive: true);
+      await _clearFallback(root.path);
       if (await pack.exists()) await pack.rename(trash.path);
       await _forget(trash);
     }),
@@ -381,14 +521,15 @@ class _CompanionRootState {
   final before = <Future<void> Function()>[];
 }
 
-Future<void> _install((String, String, String, String?, String?) args) =>
-    _installWithOutput(args, (path) => OutputFileStream(path));
+/// (zip, root, expected runtime, receipt JSON, identity key to write, the
+/// newcomer's shelf folder, the active pack's shelf folder or null to
+/// replace it).
+typedef _InstallArgs = (String, String, String, String?, String?, String, String?);
 
-Future<void> _installWithOutput(
-  (String, String, String, String?, String?) args,
-  OutputFileStream Function(String path) openOutput,
-) async {
-  final (zipPath, rootPath, expected, receiptJson, characterKey) = args;
+Future<void> _install(_InstallArgs args) => _installWithOutput(args, (path) => OutputFileStream(path));
+
+Future<void> _installWithOutput(_InstallArgs args, OutputFileStream Function(String path) openOutput) async {
+  final (zipPath, rootPath, expected, receiptJson, characterKey, incomingFolder, outgoingFolder) = args;
   final staging = Directory('$rootPath/pack.staging');
   final previous = Directory('$rootPath/pack.previous');
   final live = Directory('$rootPath/pack');
@@ -525,18 +666,36 @@ Future<void> _installWithOutput(
     }
     if (characterKey != null) await _writeCharacterKey(staging, characterKey);
 
-    // Discard the old pack only after the new one is live. If promotion fails,
-    // restore it; if that also fails, keep pack.previous for recovery.
+    // The same character's old pack, active or shelved, waits in
+    // pack.previous and is discarded only after the new one is live. If
+    // promotion fails, restore it; if that also fails, keep pack.previous for
+    // recovery. A different active character goes onto the shelf first, so
+    // pack.previous can never hold her.
     await _forget(previous);
-    final hadLive = await live.exists();
-    if (hadLive) await live.rename(previous.path);
+    final shelved = Directory('$rootPath/shelf/$incomingFolder');
+    final outgoing = outgoingFolder != null && await live.exists() ? outgoingFolder : null;
+    final Directory? replaced;
+    if (outgoing != null) {
+      await _shelve(rootPath, Directory('$rootPath/shelf/$outgoing'), outgoing);
+      replaced = await shelved.exists() ? shelved : null;
+    } else {
+      replaced = await live.exists() ? live : (await shelved.exists() ? shelved : null);
+    }
+    if (replaced != null) await replaced.rename(previous.path);
     try {
       await staging.rename(live.path);
     } on FileSystemException {
-      if (hadLive) await previous.rename(live.path);
+      if (replaced != null) await previous.rename(replaced.path);
+      if (outgoing != null) {
+        await Directory('$rootPath/shelf/$outgoing').rename(live.path);
+        await _clearFallback(rootPath);
+      }
       rethrow;
     }
     await _forget(previous);
+    // Still there only if an active pack that couldn't be named was replaced.
+    await _forget(shelved);
+    if (outgoing != null) await _clearFallback(rootPath);
     succeeded = true;
   } on CompanionPackException {
     await _forget(staging);
@@ -560,6 +719,67 @@ Future<void> _installWithOutput(
 String _newCharacterKey() {
   final random = math.Random.secure();
   return 'local:${base64Url.encode(List<int>.generate(18, (_) => random.nextInt(256)))}';
+}
+
+String _workshopKey(WorkshopReceipt workshop) =>
+    'workshop:${jsonEncode([workshop.origin.toString(), workshop.kind, workshop.id])}';
+
+/// A key holds `:`, `/` and a whole origin; its hash is a folder name.
+String _shelfName(String key) => sha256.convert(utf8.encode(key)).toString().substring(0, 32);
+
+/// [assign]: a pre-v2 pack without an identity gets one now (otherwise null).
+Future<String?> _characterKeyOf(Directory pack, {bool assign = true}) async {
+  if (!await File('${pack.path}/runtime/live2dcubismcore.min.js').exists() ||
+      !await File('${pack.path}/character/index.json').exists()) {
+    return null;
+  }
+  final workshop = await WorkshopReceipt.read(pack);
+  if (workshop != null) return _workshopKey(workshop);
+  final identity = File('${pack.path}/$_characterIdentityName');
+  if (await identity.exists()) {
+    if (await identity.length() > 256) {
+      throw const CompanionPackException(CompanionPackProblem.storage, 'companion_character_identity');
+    }
+    final value = jsonDecode(await identity.readAsString());
+    final key = value is Map && value['schema'] == 1 ? value['key'] : null;
+    if (key is! String ||
+        (key != companionBundledCharacterKey && !RegExp(r'^local:[A-Za-z0-9_-]{24}$').hasMatch(key))) {
+      throw const CompanionPackException(CompanionPackProblem.storage, 'companion_character_identity');
+    }
+    return key;
+  }
+  // A pre-v2 local installation has no trustworthy role identity. Assign
+  // one to this actual pack; do not infer it from its name or runtime.
+  if (!assign) return null;
+  final key = _newCharacterKey();
+  await _writeCharacterKey(pack, key);
+  return key;
+}
+
+Future<CompanionCharacter> _characterOf(Directory pack) async {
+  try {
+    return CompanionCharacter.fromJson(jsonDecode(await File('${pack.path}/character/character.json').readAsString()));
+  } catch (_) {
+    return const CompanionCharacter();
+  }
+}
+
+/// Moves the active pack to [target] on the shelf. The note goes down first:
+/// if nothing is active after a crash, recovery activates shelf/[fallback].
+Future<void> _shelve(String rootPath, Directory target, String fallback) async {
+  final live = Directory('$rootPath/pack');
+  await File('${live.path}/$_shelvedAtName').writeAsString('${DateTime.now().microsecondsSinceEpoch}', flush: true);
+  await File('$rootPath/$_fallbackName').writeAsString(fallback, flush: true);
+  // A crash between promoting a character and dropping her older shelved
+  // copy is the only way one can already be there.
+  await _forget(target);
+  await target.parent.create(recursive: true);
+  await live.rename(target.path);
+}
+
+Future<void> _clearFallback(String rootPath) async {
+  final note = File('$rootPath/$_fallbackName');
+  if (await note.exists()) await note.delete();
 }
 
 Future<void> _writeCharacterKey(Directory directory, String key) async {

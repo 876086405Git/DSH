@@ -204,9 +204,81 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
     required bool Function() current,
     required Future<bool> Function() isCurrentObservation,
   }) async {
+    final text = await _visionText(
+      owner: owner,
+      vision: vision,
+      image: image,
+      system: system,
+      input: input,
+      maxTokens: 220,
+      current: current,
+      stillShown: isCurrentObservation,
+    );
+    if (text == null) return null;
+    try {
+      final decoded = jsonDecode(text.trim());
+      if (decoded is! Map || decoded.keys.any((key) => key is! String)) return null;
+      return Map<String, Object?>.from(decoded);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// The person asked her to look at one of their photos: it goes to the same
+  /// selected picture model as screen images. The 「允许发送屏幕图片」 switch is
+  /// about watching on her own and does not apply.
+  Future<CompanionPhotoSight> describePhoto({
+    required CompanionMemoryOwner owner,
+    required CompanionScreenImage image,
+    required String question,
+    required bool Function() isCurrent,
+  }) async {
+    // Stop on this turn must reach the picture request too.
+    final turn = _run;
+    Object? state;
+    try {
+      state = await const MethodChannel('dsh/phone').invokeMethod<Object?>('companionScreenState');
+    } on Object {
+      return const CompanionPhotoSight.failed();
+    }
+    if (state is! Map || !isCurrent()) return const CompanionPhotoSight.failed();
+    final vision = await prepareScreenVision({...Map<String, Object?>.from(state), 'vision_enabled': true});
+    if (!isCurrent()) return const CompanionPhotoSight.failed();
+    if (vision == null || !vision.available) return const CompanionPhotoSight.noModel();
+    final text = await _visionText(
+      owner: owner,
+      vision: vision,
+      image: image,
+      system:
+          '你在替伙伴看对方相册里的一张照片。照实描述画面：人、地点、物品、文字和氛围，有文字就摘录要点；'
+          '看不清的就说看不清，不编。只输出描述。',
+      input: jsonEncode({'question': question}),
+      maxTokens: 600,
+      current: () => isCurrent() && vision.isCurrent() && turn?.cancelled != true,
+      turn: turn,
+    );
+    return text == null || text.trim().isEmpty
+        ? const CompanionPhotoSight.failed()
+        : CompanionPhotoSight.seen(text.trim());
+  }
+
+  /// One picture request on the selected vision route. Without [turn] it is
+  /// screen watching's cancellable aside; with one, that turn's Stop aborts it.
+  Future<String?> _visionText({
+    required CompanionMemoryOwner owner,
+    required CompanionScreenVisionRoute vision,
+    required CompanionScreenImage image,
+    required String system,
+    required String input,
+    required int maxTokens,
+    required bool Function() current,
+    Future<bool> Function()? stillShown,
+    _CompanionAgentRun? turn,
+  }) async {
+    final aside = turn == null;
     final capability = vision.capability;
-    if (capability == null || !vision.available || !await isCurrentObservation() || !current()) return null;
-    const outputTokens = 220;
+    Future<bool> live() async => (stillShown == null || await stillShown()) && current();
+    if (capability == null || !vision.available || !await live()) return null;
     // Include all transient pixels in the conservative local input estimate.
     // This is not a claim about provider visual tokens; raw usage stays final.
     final body = {
@@ -216,45 +288,54 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
       'system': system,
       'input': input,
       'image': image.toJson(),
-      'maxTokens': outputTokens,
+      'maxTokens': maxTokens,
     };
     final id = owner.store.reserveRequest(
       category: 'chat',
       provider: vision.selection.provider,
       model: vision.selection.model,
       inputTokens: estimateTokens(jsonEncode(body)).ceil(),
-      outputTokens: outputTokens,
+      outputTokens: maxTokens,
     );
     if (id == null || !current()) {
       if (id != null) owner.store.finishRequest(id, terminal: 'not_sent');
       return null;
     }
-    final request = _asideRequest = CompanionAgentModelRequest(id);
-    final abort = _asideAbort = DshHttpAbort();
+    final request = CompanionAgentModelRequest(id);
+    final abort = DshHttpAbort();
+    if (aside) {
+      _asideRequest = request;
+      _asideAbort = abort;
+    }
+    turn?.aborts.add(abort);
+    void cost() {
+      if (aside) recordScreenObservationCost(owner.store, id);
+    }
+
     owner.retainReceipt(request.settled.future);
     var terminal = 'not_sent';
     try {
-      if (!await isCurrentObservation() || !current()) return null;
+      if (!await live()) return null;
       final result = await vision.client.callCompanionScreen(
         capability,
         requestId: id,
         system: system,
         input: input,
         image: image,
-        maxTokens: outputTokens,
+        maxTokens: maxTokens,
         abort: abort,
         onDispatchUncertain: () {
           if (!current()) throw const DshClosedException('Screen observation changed');
           owner.store.markRequestUncertain(id);
           terminal = 'incomplete';
-          recordScreenObservationCost(owner.store, id);
+          cost();
         },
         onSent: () {
           // This is a fact about an already-invoked request, even if its
           // presentation was just revoked. Settle against the captured store.
           owner.store.markRequestSent(id);
           request.sent = true;
-          recordScreenObservationCost(owner.store, id);
+          cost();
           if (!current()) abort.abort();
         },
         onUsage: (raw) {
@@ -270,9 +351,7 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
       );
       terminal = result.dispatched == false ? 'not_sent' : result.terminal;
       if (!current() || !result.complete || result.terminal != 'complete' || result.errorCode != null) return null;
-      final decoded = jsonDecode(result.text.trim());
-      if (decoded is! Map || decoded.keys.any((key) => key is! String)) return null;
-      return Map<String, Object?>.from(decoded);
+      return result.text;
     } on CompanionAuxiliaryFailure catch (error) {
       terminal = error.notSent ? 'not_sent' : error.terminal;
       return null;
@@ -282,9 +361,10 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
       abort.abort();
       try {
         owner.store.finishRequest(id, terminal: terminal);
-        recordScreenObservationCost(owner.store, id);
+        cost();
       } finally {
         request.settled.complete();
+        turn?.aborts.remove(abort);
         if (identical(_asideRequest, request)) _asideRequest = null;
         if (identical(_asideAbort, abort)) _asideAbort = null;
       }

@@ -1,10 +1,14 @@
 package io.github.ccch1mneyyy.dsh_app.media
 
 import android.Manifest
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
@@ -20,6 +24,8 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
 import io.github.ccch1mneyyy.dsh_app.files.FilesPlugin
+import io.github.ccch1mneyyy.dsh_app.share.ShareImages
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.OutputStream
@@ -41,9 +47,12 @@ import kotlin.concurrent.thread
  *   under Movies/DSH Go, sharing the image permission queue and retry flow.
  * - `openSettings` → the app's system settings page (to grant storage after a
  *   "don't ask again").
+ * - `recentPhotos {limit}` → the newest gallery pictures (id, name, taken_at_ms, album,
+ *   width, height); `readPhoto {id, maxEdge}` → one of them as a JPEG no longer than
+ *   maxEdge on either side, upright. Both ask for the photo permission the usual way.
  *
  * Errors: `invalid` (no bytes, not an image type), `permission` (storage write
- * refused), `failed`.
+ * refused, or photo access refused), `missing` (no such photo), `failed`.
  */
 class MediaPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandler,
     PluginRegistry.RequestPermissionsResultListener {
@@ -52,6 +61,7 @@ class MediaPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
     private lateinit var context: Context
     private var activity: ActivityPluginBinding? = null
     private val permissions = MediaPermissionQueue()
+    private val reads = MediaPermissionQueue()
     private val main = Handler(Looper.getMainLooper())
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -62,6 +72,7 @@ class MediaPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         methods.setMethodCallHandler(null)
         permissions.retire()
+        reads.retire()
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
@@ -81,6 +92,7 @@ class MediaPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
         onDetachedFromActivityForConfigChanges()
         // The engine outlives the activity: a request left open would never be answered.
         permissions.retire()
+        reads.retire()
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -88,8 +100,94 @@ class MediaPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
             "saveImage" -> saveImage(call, result)
             "saveVideoFile" -> saveVideoFile(call, result)
             "openSettings" -> result.success(openSettings())
+            "recentPhotos" -> withPhotoAccess(result) { recentPhotos(call.argument<Int>("limit") ?: 20) }
+            "readPhoto" -> withPhotoAccess(result) { readPhoto(call.argument<String>("id"), call.argument<Int>("maxEdge") ?: 512) }
             else -> result.notImplemented()
         }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Read (伙伴看相册)
+
+    /** Asks Android for photo access the normal way when it is missing, then reads off the main thread. */
+    private fun withPhotoAccess(result: MethodChannel.Result, read: () -> Any?) {
+        val run = {
+            thread(name = "dsh-media-read", isDaemon = true) {
+                val outcome = runCatching(read)
+                main.post { outcome.fold({ result.success(it) }, { fail(result, it) }) }
+            }
+            Unit
+        }
+        if (canReadPhotos()) return run()
+        val denied = { result.error("permission", "photo access denied", null) }
+        val host = activity?.activity
+        if (!reads.waiting && host == null) return result.error("permission", "no activity to ask for photo access", null)
+        if (!reads.enqueue(reads.owner, { if (canReadPhotos()) run() else denied() }, denied)) return
+        try {
+            host!!.requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), READ_REQUEST)
+        } catch (_: Exception) {
+            reads.resolve(false)
+        }
+    }
+
+    private fun canReadPhotos(): Boolean =
+        context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED ||
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
+
+    private fun recentPhotos(limit: Int): List<Map<String, Any?>> {
+        val columns = arrayOf(
+            MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATE_TAKEN,
+            MediaStore.Images.Media.DATE_ADDED, MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
+            MediaStore.Images.Media.WIDTH, MediaStore.Images.Media.HEIGHT,
+        )
+        val wanted = limit.coerceIn(1, 50)
+        val photos = ArrayList<Map<String, Any?>>()
+        val cursor = context.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, null, null,
+            "${MediaStore.Images.Media.DATE_ADDED} DESC") ?: throw IOException("MediaStore is unavailable")
+        cursor.use {
+            while (photos.size < wanted && it.moveToNext()) {
+                photos += mapOf(
+                    "id" to it.getLong(0).toString(),
+                    "name" to it.getString(1),
+                    "taken_at_ms" to (it.getLong(2).takeIf { taken -> taken > 0 } ?: (it.getLong(3) * 1000)),
+                    "album" to it.getString(4),
+                    "width" to it.getInt(5),
+                    "height" to it.getInt(6),
+                )
+            }
+        }
+        return photos
+    }
+
+    private fun readPhoto(id: String?, maxEdge: Int): Map<String, Any?> {
+        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            id?.toLongOrNull() ?: throw MediaError("invalid", "no photo id"))
+        val resolver = context.contentResolver
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        try {
+            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        } catch (e: java.io.FileNotFoundException) {
+            throw MediaError("missing", e.message)
+        }
+        val edge = maxEdge.coerceIn(64, 2048)
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= edge) sample *= 2
+        val decoded = resolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+        } ?: throw MediaError("failed", "photo could not be decoded")
+        // Floor each side so neither ends up past the edge the caller can send on.
+        val scale = minOf(1.0, edge.toDouble() / maxOf(decoded.width, decoded.height))
+        val scaled = Bitmap.createScaledBitmap(decoded, maxOf(1, (decoded.width * scale).toInt()),
+            maxOf(1, (decoded.height * scale).toInt()), true)
+        // The same EXIF handling as shared photos, mirrored orientations included.
+        val turn = ShareImages.upright(Matrix(), ShareImages.orientation(resolver, uri))
+        val upright = if (turn.isIdentity) scaled
+            else Bitmap.createBitmap(scaled, 0, 0, scaled.width, scaled.height, turn, true)
+        val bytes = ByteArrayOutputStream().use { out ->
+            upright.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            out.toByteArray()
+        }
+        return mapOf("bytes" to bytes, "width" to upright.width, "height" to upright.height, "mime_type" to "image/jpeg")
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -214,9 +312,12 @@ class MediaPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray): Boolean {
-        if (requestCode != STORAGE_REQUEST) return false
-        val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-        this.permissions.resolve(granted)
+        val queue = when (requestCode) {
+            STORAGE_REQUEST -> this.permissions
+            READ_REQUEST -> reads
+            else -> return false
+        }
+        queue.resolve(grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED })
         return true
     }
 
@@ -301,6 +402,7 @@ class MediaPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
          *  `Download/DSH-Go`, a path the agent types). */
         private const val ALBUM = "DSH Go"
         private const val STORAGE_REQUEST = 0x5d7
+        private const val READ_REQUEST = 0x5d8
 
         /** Own the chosen name before writing; another save must choose its own target. */
         internal fun writeUnique(dir: File, name: String, bytes: ByteArray): File =

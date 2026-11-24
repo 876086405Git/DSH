@@ -1038,16 +1038,18 @@ void main() {
         expect(agent.text, '她的临时通知回答。');
         expect(userTaskCalls, 1);
         expect(memory.store.messages().map((r) => r['role']), ['user']);
-        expect(memory.store.cards().map((r) => r['text']), [summary]);
+        // A new memory asked for beside a notice is kept; the notice card is not rewritten.
+        expect(memory.store.cards().map((r) => r['text']), unorderedEquals([summary, '越界推断']));
         final firstNames = (requests.first['tools'] as List).map((t) => t['name']);
-        expect(firstNames.contains('remember'), route != 'selection');
+        expect(firstNames, contains('remember'));
         final results = (requests[1]['messages'] as List).last['content'] as List;
-        for (final id in ['new-card', 'overwrite']) {
-          final result = results.singleWhere((r) => r['tool_use_id'] == id);
-          expect(jsonDecode(result['content'])['code'], 'memory_change_after_notice');
-        }
+        expect(jsonDecode(results.singleWhere((r) => r['tool_use_id'] == 'new-card')['content'])['applied'], isTrue);
+        final overwrite = results.singleWhere((r) => r['tool_use_id'] == 'overwrite');
+        expect(jsonDecode(overwrite['content'])['code'], 'memory_change_after_notice');
         final offered = (requests[1]['tools'] as List).map((t) => t['name']);
-        expect(offered, unorderedEquals(['recall', 'related', 'forget', 'task_status']));
+        expect(offered, unorderedEquals(['recall', 'related', 'forget', 'remember', 'task_status']));
+        final remember = (requests[1]['tools'] as List).singleWhere((t) => t['name'] == 'remember');
+        expect((remember['input_schema'] as Map)['properties'] as Map, isNot(contains('card')));
         final next = memory.store.submitMessage(
           id: 'ordinary-next',
           sessionId: memory.store.lightSessionId,

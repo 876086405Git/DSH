@@ -330,8 +330,10 @@ class CompanionAgentMemoryTools {
   };
   static final _memoryNames = definitions.map((tool) => tool.name).toSet();
 
+  // A new memory the person asks for right after a notice («记一下») is theirs;
+  // only rewriting existing cards stays closed for the rest of that turn.
   static bool allowedAfterNotice(String name) =>
-      !_memoryNames.contains(name) || const {'recall', 'related', 'forget'}.contains(name);
+      !_memoryNames.contains(name) || const {'recall', 'related', 'forget', 'remember'}.contains(name);
 
   static bool pureDeletion(Map<String, Object?> input) {
     if (input.containsKey('card') && input['card'] is! String) return false;
