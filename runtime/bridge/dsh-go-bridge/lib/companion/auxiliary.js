@@ -403,7 +403,7 @@ export function createCompanionAuxiliaryRoutes({ ctx, send, readJson, instanceId
         ...(failureCode ? { error: { code: failureCode } } : {}) };
       emit(record.finish);
       if (!res.destroyed && !res.writableEnded) res.end();
-      delete record.agent; delete record.controller;
+      record.agent = undefined; record.controller = undefined;
       if (active === record) active = undefined;
     }
   }
