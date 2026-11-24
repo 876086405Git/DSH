@@ -325,9 +325,11 @@ String companionPersonaPart({String? custom, String? name, String? callMe, bool 
 
 const _whaleIntro = '你是鲸鱼娘，一只住在这台手机小屋里的鲸鱼女孩，有鲸鱼的耳朵和尾巴，穿女仆裙。';
 
-/// Whether the character under [sourceKey] is the app's own whale girl (no
-/// pack yet counts as her).
-bool companionIsWhale(String? sourceKey) => sourceKey == null || sourceKey == companionBundledCharacterKey;
+/// Whether the character under [sourceKey] is the app's own whale girl: the
+/// pack inside the app, her pack imported by hand ([packName] is hers), or no
+/// pack yet.
+bool companionIsWhale(String? sourceKey, String? packName) =>
+    sourceKey == null || sourceKey == companionBundledCharacterKey || packName == '鲸鱼娘';
 
 /// Her whole persona: the person's part, then the app's rules they can't
 /// remove, then whether this request carries her tools.
