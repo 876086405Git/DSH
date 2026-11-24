@@ -285,8 +285,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     private fun createSessionCore(task: PhoneTasks, sessionId: String?): PhoneCore {
         // The master switch is the person's choice for the engine's agent. Her runs start
-        // from the person asking her directly, which is its own go-ahead.
-        val companion = sessionId?.startsWith("companion:") == true
+        // from the person asking her directly, which is its own go-ahead. Only her own
+        // bridge marks that admission; a session id the engine picks proves nothing.
+        val companion = companionAdmission.get() == true
         val gate = if (companion) prompts.scoped(task, sessionId) { true } else prompts.scoped(task, sessionId)
         val observations = PhoneTaskObservations(task)
         val env = object : PhoneEnv by this@PhoneControl {
@@ -544,6 +545,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     internal fun companionPhoneEpoch(): Long = companionRunEpoch
 
+    /** Set only on this thread while [companionPhoneCall] admits: the Task it creates is hers. */
+    private val companionAdmission = ThreadLocal<Boolean>()
+
     /** Local Agent transport; the original managed admission/Core/Gate stay authoritative. */
     internal fun companionPhoneCall(caller: PhoneCaller, name: String, args: Map<String, Any?>,
                                     expectedEpoch: Long, isCurrent: () -> Boolean,
@@ -553,7 +557,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
                 McpServer.result(caller.callId, McpServer.toolResult(ToolOutput(
                     "手机操控已重新启动，原授权已结束；请重新发起。", isError = true))) // l10n:keep agent error
             })
-            sessions.admit(caller)
+            companionAdmission.set(true)
+            try { sessions.admit(caller) } finally { companionAdmission.remove() }
         }
         val commit = PhoneReplyCommit()
         return PhoneCallWork(

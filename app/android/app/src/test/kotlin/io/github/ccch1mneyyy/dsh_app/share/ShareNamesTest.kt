@@ -116,6 +116,18 @@ class ShareNamesTest {
         assertEquals(2560 to 1, ShareImages.fit(30000, 2))
     }
 
+    @Test fun everyExifOrientationStandsUpright() {
+        // EXIF values 1–8; anything else is treated as normal.
+        val expected = mapOf(
+            1 to ShareImages.Upright(0, false), 2 to ShareImages.Upright(0, true),
+            3 to ShareImages.Upright(180, false), 4 to ShareImages.Upright(180, true),
+            5 to ShareImages.Upright(90, true), 6 to ShareImages.Upright(90, false),
+            7 to ShareImages.Upright(270, true), 8 to ShareImages.Upright(270, false),
+            0 to ShareImages.Upright(0, false),
+        )
+        expected.forEach { (orientation, turn) -> assertEquals("EXIF $orientation", turn, ShareImages.upright(orientation)) }
+    }
+
     @Test fun onlyStillImagesAreScaled() {
         assertTrue(ShareImages.scalable("image/jpeg"))
         assertTrue(ShareImages.scalable("image/heic"))

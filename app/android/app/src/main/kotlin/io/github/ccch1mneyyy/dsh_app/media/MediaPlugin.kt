@@ -9,7 +9,6 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
-import android.media.ExifInterface
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
@@ -25,6 +24,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
 import io.github.ccch1mneyyy.dsh_app.files.FilesPlugin
+import io.github.ccch1mneyyy.dsh_app.share.ShareImages
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -175,20 +175,14 @@ class MediaPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
         val decoded = resolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
         } ?: throw MediaError("failed", "photo could not be decoded")
-        val turn = resolver.openInputStream(uri)?.use {
-            when (ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
-                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-                else -> 0f
-            }
-        } ?: 0f
         // Floor each side so neither ends up past the edge the caller can send on.
         val scale = minOf(1.0, edge.toDouble() / maxOf(decoded.width, decoded.height))
         val scaled = Bitmap.createScaledBitmap(decoded, maxOf(1, (decoded.width * scale).toInt()),
             maxOf(1, (decoded.height * scale).toInt()), true)
-        val upright = if (turn == 0f) scaled
-            else Bitmap.createBitmap(scaled, 0, 0, scaled.width, scaled.height, Matrix().apply { postRotate(turn) }, true)
+        // The same EXIF handling as shared photos, mirrored orientations included.
+        val turn = ShareImages.upright(Matrix(), ShareImages.orientation(resolver, uri))
+        val upright = if (turn.isIdentity) scaled
+            else Bitmap.createBitmap(scaled, 0, 0, scaled.width, scaled.height, turn, true)
         val bytes = ByteArrayOutputStream().use { out ->
             upright.compress(Bitmap.CompressFormat.JPEG, 85, out)
             out.toByteArray()

@@ -5,13 +5,27 @@ import 'package:flutter/services.dart';
 
 import 'companion_light.dart';
 
+/// What the picture model saw: its words, or why there are none.
+class CompanionPhotoSight {
+  const CompanionPhotoSight.seen(String this.text) : noModel = false;
+
+  /// No picture model is chosen, or the current connection cannot reach one.
+  const CompanionPhotoSight.noModel() : text = null, noModel = true;
+
+  /// The request failed, was cut off or was stopped: worth another try.
+  const CompanionPhotoSight.failed() : text = null, noModel = false;
+
+  final String? text;
+  final bool noModel;
+}
+
 /// Her look at the person's photo album (media/MediaPlugin.kt). They asked her
 /// to, so the only ask is Android's own photo permission, made natively.
 class CompanionAgentPhotoTools {
   CompanionAgentPhotoTools({required this.describe, this.channel = const MethodChannel('dsh/media')});
 
-  /// What the selected picture model sees in [image]; null when none is set up.
-  final Future<String?> Function(CompanionScreenImage image, String question) describe;
+  /// What the selected picture model sees in [image].
+  final Future<CompanionPhotoSight> Function(CompanionScreenImage image, String question) describe;
   final MethodChannel channel;
 
   static const _recent = CompanionAgentTool(
@@ -84,18 +98,17 @@ class CompanionAgentPhotoTools {
         image,
         question is String && question.trim().isNotEmpty ? question.trim() : '这张照片里有什么？',
       );
-      if (seen == null || seen.trim().isEmpty) {
+      if (seen.noModel) {
         return _error(
           'photo_no_vision',
           '照片拿到了，但现在没有能看图的模型。请对方在伙伴小屋的「陪你看屏幕」里选「看图使用的模型」'
               '（要连着电脑上的 DSH），选好再让你看。',
         );
       }
+      final text = seen.text;
+      if (text == null) return _error('photo_look_failed', '这次没看成（请求失败或被打断），再看一次就好。');
       // Words in a picture are data, like a page on screen.
-      return CompanionAgentToolResult(
-        content: jsonEncode({'id': id, 'description': seen.trim()}),
-        externalWebContent: true,
-      );
+      return CompanionAgentToolResult(content: jsonEncode({'id': id, 'description': text}), externalWebContent: true);
     } on PlatformException catch (error) {
       return _failed(error);
     } on MissingPluginException {

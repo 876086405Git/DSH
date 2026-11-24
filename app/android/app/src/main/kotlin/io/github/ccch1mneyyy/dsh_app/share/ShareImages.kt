@@ -98,16 +98,11 @@ internal object ShareImages {
         val height = bounds.outHeight
         if (width <= 0 || height <= 0) return null
         val (w, h) = fit(width, height)
-        val orientation = try {
-            resolver.openInputStream(uri)?.use {
-                ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-            } ?: ExifInterface.ORIENTATION_NORMAL
-        } catch (_: Exception) {
-            ExifInterface.ORIENTATION_NORMAL
-        }
-        val rotation = exifRotation(orientation)
-        // Keep the existing passthrough: a copied original retains its mirror tag.
-        if (bounds.outMimeType in keepAsIs && w == width && h == height && rotation == 0) return null
+        val orientation = orientation(resolver, uri)
+        val turn = upright(orientation)
+        // Keep the existing passthrough: a copied original retains its mirror tag,
+        // so only a plain rotation forces a re-encode here.
+        if (bounds.outMimeType in keepAsIs && w == width && h == height && (turn.mirror || turn.degrees == 0)) return null
         var sample = 1
         while (max(width, height) / (sample * 2) >= MAX_SIDE) sample *= 2
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
@@ -115,32 +110,42 @@ internal object ShareImages {
         val matrix = Matrix().apply {
             val (fw, fh) = fit(decoded.width, decoded.height)
             postScale(fw.toFloat() / decoded.width, fh.toFloat() / decoded.height)
-            if (rotation != 0) postRotate(rotation.toFloat())
-            when (orientation) {
-                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> postScale(-1f, 1f)
-                ExifInterface.ORIENTATION_FLIP_VERTICAL -> postScale(1f, -1f)
-                ExifInterface.ORIENTATION_TRANSPOSE -> {
-                    postRotate(90f)
-                    postScale(-1f, 1f)
-                }
-                ExifInterface.ORIENTATION_TRANSVERSE -> {
-                    postRotate(270f)
-                    postScale(-1f, 1f)
-                }
-                else -> Unit
-            }
         }
+        upright(matrix, orientation)
         if (matrix.isIdentity) return decoded
         val transformed = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
         if (transformed !== decoded) decoded.recycle()
         return transformed
     }
 
-    private fun exifRotation(orientation: Int): Int =
-        when (orientation) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> 90
-            ExifInterface.ORIENTATION_ROTATE_180 -> 180
-            ExifInterface.ORIENTATION_ROTATE_270 -> 270
-            else -> 0
-        }
+    /** The EXIF orientation of the image at [uri]; normal when it has none or can't be read. */
+    internal fun orientation(resolver: ContentResolver, uri: Uri): Int = try {
+        resolver.openInputStream(uri)?.use {
+            ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        } ?: ExifInterface.ORIENTATION_NORMAL
+    } catch (_: Exception) {
+        ExifInterface.ORIENTATION_NORMAL
+    }
+
+    /** A clockwise turn, then a horizontal mirror: what one EXIF orientation needs to stand upright. */
+    internal data class Upright(val degrees: Int, val mirror: Boolean)
+
+    /** A vertical flip is the half turn mirrored; transpose and transverse are quarter turns mirrored. */
+    internal fun upright(orientation: Int): Upright = when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> Upright(90, false)
+        ExifInterface.ORIENTATION_ROTATE_180 -> Upright(180, false)
+        ExifInterface.ORIENTATION_ROTATE_270 -> Upright(270, false)
+        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> Upright(0, true)
+        ExifInterface.ORIENTATION_FLIP_VERTICAL -> Upright(180, true)
+        ExifInterface.ORIENTATION_TRANSPOSE -> Upright(90, true)
+        ExifInterface.ORIENTATION_TRANSVERSE -> Upright(270, true)
+        else -> Upright(0, false)
+    }
+
+    /** Adds [orientation]'s turn after whatever [matrix] already does. */
+    internal fun upright(matrix: Matrix, orientation: Int): Matrix = matrix.apply {
+        val turn = upright(orientation)
+        if (turn.degrees != 0) postRotate(turn.degrees.toFloat())
+        if (turn.mirror) postScale(-1f, 1f)
+    }
 }

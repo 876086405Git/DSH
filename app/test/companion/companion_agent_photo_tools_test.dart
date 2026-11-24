@@ -41,7 +41,7 @@ void main() {
     final tools = CompanionAgentPhotoTools(
       describe: (image, question) async {
         asked.add(question);
-        return '海边的日落。';
+        return const CompanionPhotoSight.seen('海边的日落。');
       },
     );
     final list = await tools.bindings.first.execute(
@@ -58,7 +58,7 @@ void main() {
     expect(asked, ['在哪拍的？']);
   });
 
-  test('a refused permission or a missing picture model says what to do instead', () async {
+  test('a refused permission, a missing picture model or a failed look each say what to do', () async {
     messenger.setMockMethodCallHandler(_media, (call) async {
       if (call.method == 'recentPhotos') throw PlatformException(code: 'permission');
       return {
@@ -68,14 +68,15 @@ void main() {
         'mime_type': 'image/jpeg',
       };
     });
-    final tools = CompanionAgentPhotoTools(describe: (_, _) async => null);
+    var sight = const CompanionPhotoSight.noModel();
+    final tools = CompanionAgentPhotoTools(describe: (_, _) async => sight);
     final list = await tools.bindings.first.execute(
       const CompanionAgentToolCall(id: 'list', name: 'photos_recent', input: {}),
     );
     expect((jsonDecode(list.content) as Map)['code'], 'photos_permission');
-    final view = await tools.bindings.last.execute(
-      const CompanionAgentToolCall(id: 'view', name: 'photo_view', input: {'id': '41'}),
-    );
-    expect((jsonDecode(view.content) as Map)['code'], 'photo_no_vision');
+    const look = CompanionAgentToolCall(id: 'view', name: 'photo_view', input: {'id': '41'});
+    expect((jsonDecode((await tools.bindings.last.execute(look)).content) as Map)['code'], 'photo_no_vision');
+    sight = const CompanionPhotoSight.failed();
+    expect((jsonDecode((await tools.bindings.last.execute(look)).content) as Map)['code'], 'photo_look_failed');
   });
 }

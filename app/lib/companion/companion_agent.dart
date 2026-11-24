@@ -658,6 +658,10 @@ class CompanionAgent extends ChangeNotifier {
     run.cancelled = true;
     run.running = false;
     run.discard = discard;
+    // A photo she is looking at for this turn is a request of its own.
+    for (final abort in run.aborts.toList()) {
+      abort.abort();
+    }
     final request = run.request;
     if (request != null) {
       try {
@@ -730,6 +734,8 @@ class _CompanionAgentRun {
   bool externalNoticeContent = false;
   int? noticeDeliveryEpoch;
   int savedRows = 0;
+  // Tool-side model requests (a photo look) that Stop must abort with the turn.
+  final aborts = <DshHttpAbort>{};
   String text = '';
   CompanionLightError? error;
   _CompanionAgentRequest? request;

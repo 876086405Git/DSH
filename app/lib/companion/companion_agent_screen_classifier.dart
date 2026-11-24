@@ -226,23 +226,26 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
 
   /// The person asked her to look at one of their photos: it goes to the same
   /// selected picture model as screen images. The 「允许发送屏幕图片」 switch is
-  /// about watching on her own and does not apply. Null without such a model.
-  Future<String?> describePhoto({
+  /// about watching on her own and does not apply.
+  Future<CompanionPhotoSight> describePhoto({
     required CompanionMemoryOwner owner,
     required CompanionScreenImage image,
     required String question,
     required bool Function() isCurrent,
   }) async {
+    // Stop on this turn must reach the picture request too.
+    final turn = _run;
     Object? state;
     try {
       state = await const MethodChannel('dsh/phone').invokeMethod<Object?>('companionScreenState');
     } on Object {
-      return null;
+      return const CompanionPhotoSight.failed();
     }
-    if (state is! Map || !isCurrent()) return null;
+    if (state is! Map || !isCurrent()) return const CompanionPhotoSight.failed();
     final vision = await prepareScreenVision({...Map<String, Object?>.from(state), 'vision_enabled': true});
-    if (vision == null || !vision.available || !isCurrent()) return null;
-    return _visionText(
+    if (!isCurrent()) return const CompanionPhotoSight.failed();
+    if (vision == null || !vision.available) return const CompanionPhotoSight.noModel();
+    final text = await _visionText(
       owner: owner,
       vision: vision,
       image: image,
@@ -251,13 +254,16 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
           '看不清的就说看不清，不编。只输出描述。',
       input: jsonEncode({'question': question}),
       maxTokens: 600,
-      current: () => isCurrent() && vision.isCurrent(),
-      aside: false,
+      current: () => isCurrent() && vision.isCurrent() && turn?.cancelled != true,
+      turn: turn,
     );
+    return text == null || text.trim().isEmpty
+        ? const CompanionPhotoSight.failed()
+        : CompanionPhotoSight.seen(text.trim());
   }
 
-  /// One picture request on the selected vision route. Screen watching is the
-  /// cancellable aside; a photo the person asked for belongs to their own turn.
+  /// One picture request on the selected vision route. Without [turn] it is
+  /// screen watching's cancellable aside; with one, that turn's Stop aborts it.
   Future<String?> _visionText({
     required CompanionMemoryOwner owner,
     required CompanionScreenVisionRoute vision,
@@ -267,8 +273,9 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
     required int maxTokens,
     required bool Function() current,
     Future<bool> Function()? stillShown,
-    bool aside = true,
+    _CompanionAgentRun? turn,
   }) async {
+    final aside = turn == null;
     final capability = vision.capability;
     Future<bool> live() async => (stillShown == null || await stillShown()) && current();
     if (capability == null || !vision.available || !await live()) return null;
@@ -300,6 +307,7 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
       _asideRequest = request;
       _asideAbort = abort;
     }
+    turn?.aborts.add(abort);
     void cost() {
       if (aside) recordScreenObservationCost(owner.store, id);
     }
@@ -356,6 +364,7 @@ extension CompanionAgentScreenClassifier on CompanionAgent {
         cost();
       } finally {
         request.settled.complete();
+        turn?.aborts.remove(abort);
         if (identical(_asideRequest, request)) _asideRequest = null;
         if (identical(_asideAbort, abort)) _asideAbort = null;
       }
