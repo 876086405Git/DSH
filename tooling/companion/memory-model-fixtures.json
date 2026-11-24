@@ -60,7 +60,7 @@
     },
     {
       "path": "app/test/companion/companion_recall_room_test.dart",
-      "sha256": "5ac7dd39e6b4488b20b03dba5e7a15d29375ceddde037d1589d7c487562143b3"
+      "sha256": "2a2a8a20eb9ac58f3d4535340f6af13bbdfd259f1f0fe70bf8c4b88889ef146c"
     },
     {
       "path": "app/test/companion/companion_signal_initiative_test.dart",
@@ -72,7 +72,7 @@
     },
     {
       "path": "app/test/companion/companion_stream_state_test.dart",
-      "sha256": "b41d1d8fc21be2509d8bb13a15c93cfa315f37b515b651299569d1eafb625f15"
+      "sha256": "b6e67ee905b3cfb57987808405e12fc1965dd6cddd7efae89e56fd7f0655d8a9"
     },
     {
       "path": "app/test/companion/companion_test_settle.dart",
@@ -101,6 +101,14 @@
     {
       "path": "app/test/support/bundle_widgets.dart",
       "sha256": "f05642e65cc15318c82fa1410fc6a3a0326c98baa1a3be4db73375a8bac720fe"
+    },
+    {
+      "path": "app/test/support/companion_notes_peer.dart",
+      "sha256": "869963b1411be28b7b8fe0298b42ab910247a60d164e198d2c6d5cc94b6179b5"
+    },
+    {
+      "path": "app/test/support/companion_session_peer.dart",
+      "sha256": "bf376f300aec0b23138febee7783de0647a7bf68bbf17e0f7add607600ec99e2"
     },
     {
       "path": "app/test/support/test_defaults.dart",
