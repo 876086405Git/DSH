@@ -2365,8 +2365,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _hush();
     _retireGreeting();
     if (_voice.active || _voice.cancelling) {
+      final current = _currentRoom();
       await _voice.cancel();
-      if (!mounted || _attachment.preparing || !_attachment.isAttached) return;
+      if (!mounted || !current() || _attachment.preparing) return;
     }
     _notesSelectionRoutes.clear();
     _bubbleTimer?.cancel();

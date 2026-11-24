@@ -13,6 +13,8 @@ import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
+import 'package:dsh_app/state/voice_state.dart';
+import 'package:dsh_app/ui/chat/voice/voice_bridge.dart';
 import 'package:dsh_app/ui/companion/companion_chrome.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
@@ -26,6 +28,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../chat/support/composer_fakes.dart' show FakeVoiceBridge;
 import '../support/companion_session_peer.dart';
 import 'phone_keeper_fake.dart';
 import 'companion_test_settle.dart';
@@ -251,8 +254,27 @@ class _Phone extends FakePhoneKeeper {
   }
 }
 
+class _DelayedVoiceCancel extends FakeVoiceBridge {
+  final started = Completer<void>();
+  final cancelling = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<void> startRecognizer({String? language}) async {
+    await super.startRecognizer(language: language);
+    started.complete();
+  }
+
+  @override
+  Future<void> cancel() async {
+    await super.cancel();
+    if (!cancelling.isCompleted) cancelling.complete();
+    await release.future;
+  }
+}
+
 class _Room {
-  _Room(this.root, {this.sessionPeer = false}) {
+  _Room(this.root, {this.sessionPeer = false, this.voice}) {
     final bridge = _Bridge('store-a');
     a = bridge;
     final client = sessionPeer ? CompanionSessionPeer(bridge) : DshClient(bridge);
@@ -265,6 +287,7 @@ class _Room {
   }
   final Directory root;
   final bool sessionPeer;
+  final VoiceBridge? voice;
   final phone = _Phone();
   Directory? phoneDirectory;
   late final _Bridge a;
@@ -312,6 +335,7 @@ class _Room {
   Widget app(Widget child) => ProviderScope(
     overrides: [
       activeHostProvider.overrideWith(() => host),
+      if (voice case final bridge?) voiceBridgeProvider.overrideWithValue(bridge),
       activeConnectionProvider.overrideWith((ref) => AsyncData(connections[ref.watch(activeHostProvider)])),
       companionSessionsProvider.overrideWith(() => sessions),
       if (!sessionPeer) chatProvider.overrideWith2((id) => chats.putIfAbsent(id, () => _Chat(id))),
@@ -476,6 +500,55 @@ void main() {
     expect(replacement.posts, isEmpty);
     await room.close(tester);
   });
+
+  for (final switchHost in [false, true]) {
+    testWidgets('dictated send keeps its recipient while native cancellation is pending (switch: $switchHost)', (tester) async {
+      SharedPreferences.setMockInitialValues({'companion_mode': 'full', 'voice_recognition_mode': 'system'});
+      final voice = _DelayedVoiceCancel();
+      final room = _Room(temporary, sessionPeer: true, voice: voice);
+      const nextHost = HostRef.ssh('b');
+      room.connect(nextHost);
+      final hostA = room.connections[HostRef.local]!.client as CompanionSessionPeer;
+      final hostB = room.connections[nextHost]!.client as CompanionSessionPeer;
+      await room.open(tester);
+      try {
+        final field = tester.widget<TextField>(find.byType(TextField)).controller!;
+        final here = tester.widget<CompanionComposer>(find.byType(CompanionComposer));
+        here.onVoice();
+        await settleMixed(tester, voice.started.future);
+        await tester.pump();
+        const words = '只交给原来的小屋。';
+        voice.emit(const VoicePartial(words));
+        await tester.pump();
+        expect(field.text, words);
+        expect(find.byKey(const ValueKey('send')), findsOneWidget);
+        // Retain the actual handler's Future so the negative checks wait for its whole submission.
+        final send = (tester.widget<CompanionComposer>(find.byType(CompanionComposer)).onSend as Future<void> Function())();
+        await settleMixed(tester, voice.cancelling.future);
+        expect(hostA.prompts, isEmpty);
+        expect(hostB.prompts, isEmpty);
+        if (switchHost) {
+          room.host.change(nextHost);
+          await flush(tester);
+          expect(room.container.read(activeConnectionProvider).value!.client, same(hostB));
+          expect(tester.widget<TextField>(find.byType(TextField)).controller, same(field));
+          await tester.enterText(find.byType(TextField), '新小屋未发送的草稿。');
+        }
+        voice.release.complete();
+        await settleMixed(tester, send);
+        await flush(tester);
+        final memory = room.container.read(companionMemoryOwnerProvider(room.root.absolute.path)).value!;
+        expect(hostA.prompts.map((request) => request.text), switchHost ? isEmpty : [words]);
+        expect(hostB.prompts, isEmpty);
+        expect(memory.store.messages().where((row) => row['text'] == words), hasLength(switchHost ? 0 : 1));
+        expect(room.lightAsked, isEmpty);
+        if (switchHost) expect(field.text, '新小屋未发送的草稿。');
+      } finally {
+        if (!voice.release.isCompleted) voice.release.complete();
+        await room.close(tester);
+      }
+    });
+  }
 
   testWidgets('switching host retires a pending send without restoring its draft into B', (tester) async {
     SharedPreferences.setMockInitialValues({'companion_mode': 'full'});
