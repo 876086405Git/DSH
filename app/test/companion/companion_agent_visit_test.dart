@@ -1411,6 +1411,44 @@ void main() {
     }
   });
 
+  test('a later memory write retains the terminal no-originals receipt', () async {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const newText = '我喜欢竹木书签。';
+    final visit = await _Visit.open([
+      _message(calls: [('find', 'recall', {'query': '手账'})]),
+      _message(calls: [
+        ('drop', 'forget', {'card': id, 'deleteChat': true}),
+        ('write', 'remember', {'text': newText, 'keywords': ['竹木书签']}),
+      ]),
+      _message(words: '处理好了。'),
+    ]);
+    final store = visit.memory.store;
+    store.saveManual(
+      const CompanionMemory(id: id, text: '封面选用青色的布料。', keywords: ['手账']),
+      expectedRowRev: null,
+      currentValueChange: true,
+      realityKnown: true,
+    );
+    visit.memory.changed();
+    await visit.attachment.submit('把手账那张卡连原话也忘掉。另记：$newText');
+    expect(visit.attachment.error, isNull);
+    expect(visit.requests, hasLength(3));
+    final blocks = [
+      for (final message in (visit.requests.last['messages']! as List).cast<Map>())
+        if (message['role'] == 'user' && message['content'] is List)
+          for (final block in (message['content'] as List).cast<Map>())
+            if (block['type'] == 'tool_result') block,
+    ];
+    final receipt = jsonDecode(blocks.singleWhere((block) => block['tool_use_id'] == 'drop')['content'] as String) as Map;
+    expect(receipt['applied'], true);
+    expect(receipt['changedCardIds'], [id]);
+    expect(receipt['rawEraseState'], 'no_originals');
+    expect(receipt['rawEraseMessage'], contains('no original chat'));
+    expect(receipt.containsKey('pendingRawEraseId'), isFalse);
+    expect(visit.attachment.pendingRawErase, isNull);
+    expect(store.cards().single['text'], newText);
+  });
+
   test('public attachment keeps outcome IDs but retires recalled text and old revise arguments after forget', () async {
     const id = '11111111-1111-4111-8111-111111111111';
     const oldText = '凭证的旧私密正文：BLUE-ORIGINAL。';

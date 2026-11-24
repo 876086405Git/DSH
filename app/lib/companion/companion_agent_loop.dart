@@ -112,11 +112,9 @@ Map<String, Object?> _withoutRawEraseFields(Map<String, Object?> result) {
   } on FormatException {
     return result;
   }
-  if (decoded is! Map) return result;
-  const fields = ['pendingRawEraseId', 'rawEraseState', 'rawEraseMessage'];
-  if (!fields.any(decoded.containsKey)) return result;
+  if (decoded is! Map || !const {'pending', 'awaiting'}.contains(decoded['rawEraseState'])) return result;
   final remaining = Map<String, Object?>.from(decoded);
-  for (final field in fields) {
+  for (final field in const ['pendingRawEraseId', 'rawEraseState', 'rawEraseMessage']) {
     remaining.remove(field);
   }
   return {...result, 'content': jsonEncode(remaining)};
