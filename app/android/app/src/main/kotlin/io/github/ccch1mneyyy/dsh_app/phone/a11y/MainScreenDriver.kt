@@ -1608,9 +1608,15 @@ internal fun readBackMatch(got: String?, expected: String, ignoreSpaces: Boolean
 
 /** Fields reformat what they get (138 0013 8000, 12×3, full-width digits); compare without that. */
 private fun typedForm(s: String, ignoreSpaces: Boolean): String = buildString {
-    for (c in s) {
-        if (Character.getType(c) == Character.FORMAT.toInt()) continue // invisible marks such as U+200E
-        if (c.isWhitespace()) { if (!ignoreSpaces) append(' '); continue }
+    for ((i, c) in s.withIndex()) {
+        // Invisible marks such as U+200E; the joiners U+200C/U+200D change what is shown, so they count.
+        if (Character.getType(c) == Character.FORMAT.toInt() && c != '‌' && c != '‍') continue
+        if (c.isWhitespace()) {
+            if (ignoreSpaces || (c == '\r' && s.getOrNull(i + 1) == '\n')) continue
+            // Before a submit a line break turned into a space is a different message.
+            append(if (c == '\n' || c == '\r' || c == ' ' || c == ' ') '\n' else ' ')
+            continue
+        }
         append(when (c) {
             in '\uFF01'..'\uFF5E' -> c - 0xFEE0
             '\u2212', '\u2010', '\u2011' -> '-'
