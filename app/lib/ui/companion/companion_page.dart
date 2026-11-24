@@ -2228,11 +2228,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     }
     final reply = stream.reader.read(text, streaming: running);
     // Behind her panel only the subtitle changes while this same request
-    // extends already visible words. Its pending words keep both history
-    // actions available. Tool rounds with a prefix take the normal path.
+    // extends already visible words. Phone words keep both history actions
+    // available; behind a Full Session reply the panel catches up when the
+    // turn ends. Tool rounds with a prefix take the normal path.
     final subtitleOnly = _tab == _CompanionTab.her &&
         running && _running && attention == _needsAttention && _bubble != null && _bubbleReplyId == user &&
-        identical(text, _attachment.pendingText) && text.length > (_lastReply?.text.length ?? 0) &&
+        (identical(text, _attachment.pendingText) || _agent.hasSessionReply) &&
+        text.length > (_lastReply?.text.length ?? 0) &&
         reply.words.isNotEmpty && reply.words != _bubble;
     _lastReply = (text: text, streaming: running, reply: reply);
     for (final mark in reply.marks.skip(_marksHandled)) {
