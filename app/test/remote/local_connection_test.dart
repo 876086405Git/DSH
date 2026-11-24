@@ -29,9 +29,21 @@ class _Settings extends SettingsController {
   AppSettings build() => const AppSettings(loaded: true);
 }
 
+/// Waiting out a reconnect backoff until asked to try now.
+class _BackoffMux extends ReadyMux {
+  var current = DshConnectionState.connected;
+  var reconnects = 0;
+
+  @override
+  DshConnectionState get state => current;
+
+  @override
+  void reconnect() => reconnects++;
+}
+
 class _Client extends DshClient {
-  _Client() : super(DshConnection(Uri.parse('http://127.0.0.1:9')));
-  final _readyMux = ReadyMux();
+  _Client([DshMux? mux]) : _readyMux = mux ?? ReadyMux(), super(DshConnection(Uri.parse('http://127.0.0.1:9')));
+  final DshMux _readyMux;
   @override
   DshMux get mux => _readyMux;
   bool closed = false;
@@ -103,5 +115,30 @@ void main() {
     kicks.add(null);
     await until(c, localConnectionProvider, (s) => s.value != null, what: '网络恢复后连接');
     expect(attempts, 2);
+  });
+
+  test('back on screen, a link waiting out its backoff tries again now on the same client', () async {
+    final kicks = StreamController<void>.broadcast(sync: true);
+    addTearDown(kicks.close);
+    final mux = _BackoffMux();
+    final client = _Client(mux);
+    final c = ProviderContainer(
+      overrides: [
+        settingsProvider.overrideWith(_Settings.new),
+        localRuntimeProvider.overrideWith(_Runtime.new),
+        networkKicksProvider.overrideWithValue(kicks.stream),
+        localClientConnectorProvider.overrideWithValue(({required baseUri, required token}) async => client),
+      ],
+    );
+    addTearDown(c.dispose);
+    final sub = c.listen(localConnectionProvider, (_, _) {});
+    addTearDown(sub.close);
+    await until(c, localConnectionProvider, (s) => s.value != null && !s.isLoading, what: '本机连接');
+    kicks.add(null);
+    expect(mux.reconnects, 0);
+    mux.current = DshConnectionState.reconnecting;
+    kicks.add(null);
+    expect(mux.reconnects, 1);
+    expect(c.read(localConnectionProvider).value!.client, same(client));
   });
 }

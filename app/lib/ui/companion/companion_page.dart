@@ -63,6 +63,7 @@ import '../chat/model_sheet.dart';
 import '../chat/voice/voice_controller.dart';
 import '../common/app_dialog.dart';
 import '../common/app_sheet.dart';
+import '../common/discard_guard.dart';
 import '../common/empty_view.dart';
 import '../common/sheet_title_bar.dart';
 import '../modes/mode_switch.dart';
@@ -101,15 +102,28 @@ enum _Phase { checking, setup, stage, failed }
 
 typedef CompanionStageBuilder = Widget Function(CompanionStageController controller, CompanionStageEvents events);
 
-typedef _AssistantReceiver = bool Function(CompanionAssistantEntry);
-final _assistantRooms = Provider((_) => <_AssistantReceiver>[]);
+/// The rooms open now, oldest first.
+final _openRooms = Provider((_) => <_CompanionPageState>[]);
 
 Future<void> openCompanionAssistant(BuildContext context, WidgetRef ref, CompanionAssistantEntry entry) async {
-  if (ref.read(_assistantRooms).reversed.any((receive) => receive(entry))) return;
+  if (ref.read(_openRooms).reversed.any((room) => room._receiveAssistant(entry))) return;
   await Navigator.of(
     context,
     rootNavigator: true,
   ).push(MaterialPageRoute<void>(builder: (_) => CompanionPage(assistantEntry: entry)));
+}
+
+/// Back after a phone task asked for in her room: the room still open, as
+/// the person left it and her reply in it, comes out from under anything
+/// opened over it. Only when none is open (closed meanwhile) does a new one
+/// come up.
+Future<void> showCompanionRoom(BuildContext context, WidgetRef ref) async {
+  final rooms = ref.read(_openRooms);
+  if (rooms.isNotEmpty) return rooms.last._comeForward();
+  await Navigator.of(
+    context,
+    rootNavigator: true,
+  ).push(MaterialPageRoute<void>(builder: (_) => const CompanionPage(sections: true)));
 }
 
 class CompanionPage extends ConsumerStatefulWidget {
@@ -153,7 +167,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   final _focus = FocusNode();
   final _random = Random();
   late final VoiceInputController _voice;
-  late final List<_AssistantReceiver> _assistantReceivers;
+  late final List<_CompanionPageState> _rooms;
   bool _assistantVoicePending = false;
   bool _assistantReturnToApp = false;
   String? _assistantPage;
@@ -471,7 +485,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     }, fireImmediately: true);
     _focus.addListener(_refreshMood);
     _input.addListener(_inputChanged);
-    _assistantReceivers = ref.read(_assistantRooms)..add(_receiveAssistant);
+    _rooms = ref.read(_openRooms)..add(this);
     if (widget.assistantEntry case final entry?) {
       _assistantVoicePending = true;
       _assistantPage = entry.page;
@@ -491,6 +505,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     });
     _startAssistantVoice();
     return true;
+  }
+
+  /// Closes what was opened over this room (her tasks, her page, the
+  /// workshop…) so the room itself shows, kept as it was. Unsaved edits up
+  /// there are asked about first, as on any way back to the chat.
+  Future<void> _comeForward() async {
+    final route = ModalRoute.of(context);
+    if (_leaving || route == null || route.isCurrent) return;
+    if (!await DiscardGuard.confirmLeave(context) || !mounted) return;
+    Navigator.of(context).popUntil((other) => other == route);
   }
 
   void _startAssistantVoice() {
@@ -541,7 +565,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   @override
   void dispose() {
-    _assistantReceivers.remove(_receiveAssistant);
+    _rooms.remove(this);
     _mapHandoff.close();
     // Leaving her: no invitation follows, and nothing comes back to this page.
     _leaving = true;

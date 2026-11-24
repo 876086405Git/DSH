@@ -1137,7 +1137,7 @@ internal class ControlOverlay(private val service: AccessibilityService) : UserG
     }
 
     /**
-     * 回到 DSH Go: the chat this task belongs to. A task on the person's own screen is paused first —
+     * 回到 DSH Go: the chat (or companion room) this task belongs to. A task on the person's own screen is paused first —
      * DSH would otherwise go on tapping in whatever app is in front, now DSH Go itself; one on the
      * background screen goes on.
      */
