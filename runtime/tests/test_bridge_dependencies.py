@@ -40,7 +40,7 @@ class BridgeDependencyTests(unittest.TestCase):
         self.pdf = self.prefix / 'node_modules/pdfjs-dist'
         self.selected = {
             'package.json', 'README.md', 'LICENSE',
-            'legacy/build/pdf.mjs', 'legacy/build/pdf.worker.mjs',
+            'legacy/build/pdf.min.mjs', 'legacy/build/pdf.worker.min.mjs',
             'cmaps/LICENSE', 'standard_fonts/LICENSE_FOXIT', 'standard_fonts/LICENSE_LIBERATION',
             'cmaps/78-EUC-H.bcmap',
             *(f'cmaps/fixture-{index:03}.bcmap' for index in range(167)),

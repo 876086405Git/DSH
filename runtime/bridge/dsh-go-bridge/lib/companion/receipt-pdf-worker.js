@@ -212,7 +212,8 @@ try {
       return new Uint8Array(await readFile(new URL(relative, root)));
     }
   }
-  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist/legacy/build/pdf.min.mjs');
+  GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
   loading = getDocument({
     data: workerData.data,
     BinaryDataFactory, useWorkerFetch: false, useSystemFonts: false,
