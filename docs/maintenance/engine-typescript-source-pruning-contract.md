@@ -7,3 +7,5 @@
 同一开关也裁掉 `.d.mts.map`、`.d.cts.map`（对应的声明本来就裁了），普通 `.mts.map`、`.cts.map` 保留；包测试目录规则另含 gaxios 7.3.1 的 `build/{esm,cjs}/test/`，exports 只指向 `build/*/src/`。
 
 同一开关省略 Koffi 3.1.1 的 C/C++ 编译输入（`.cc`、`.h`、`.hh`）。加载器只找预编译的 `koffi.node`，没有回退到源码编译的路径，引擎构建本来就带 `--ignore-scripts`；JS 加载器、汇编和许可证保留。升级 Koffi 时复查加载器有没有加编译回退。
+
+Android 默认裁剪也省略 @agentclientprotocol/sdk 1.4.0 的 `dist/` 下以 `.test.js` 结尾的 Vitest 测试。升级时复核包的 exports 和运行时导入。
