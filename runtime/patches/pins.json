@@ -1004,6 +1004,14 @@
         }
       }
     },
+    "projection-current-state.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-projection/lib/index.js": {
+          "after": "0ac9591a6e67373ed39acf3f068753a7ab4ff327f6a87deb63440b88ad146c1d",
+          "before": "6ed6c37be5e1bea75b0e8b01c4a58fa819297d25158107a6e051d4048c8f601b"
+        }
+      }
+    },
     "provider-discovery-headers.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-api-remotes/lib/client.js": {
@@ -3162,7 +3170,8 @@
       "input-recovery.diff",
       "ohos-client-hmr-idle.diff",
       "ohos-skill-root-events.diff",
-      "ohos-piai-empty-models.diff"
+      "ohos-piai-empty-models.diff",
+      "projection-current-state.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -3390,6 +3399,7 @@
       "ohos-client-hmr-idle.diff",
       "ohos-skill-root-events.diff",
       "ohos-piai-empty-models.diff",
+      "projection-current-state.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",
