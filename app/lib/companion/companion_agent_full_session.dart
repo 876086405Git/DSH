@@ -3,25 +3,64 @@ part of 'companion_agent.dart';
 extension on _CompanionAgentVisit {
   Future<void> sendInSession(_CompanionAgentRun run) async {
     final connection = ref.read(activeConnectionProvider).value;
-    if (connection == null) throw const CompanionHostError(CompanionHostFailure.disconnected);
     final host = ref.read(activeHostProvider);
     final scope = ref.read(modelSelectionScopeProvider);
+    final role = characterSourceKey;
+    final sourceId = run.source['id']! as String;
+    final prior = hostAttempt;
+    final retry = prior?.sourceId == sourceId ? prior : null;
     bool routeCurrent() =>
         ref.mounted &&
         ref.read(activeHostProvider) == host &&
-        identical(ref.read(activeConnectionProvider).value?.client, connection.client) &&
-        identical(ref.read(modelSelectionScopeProvider), scope);
+        identical(ref.read(activeConnectionProvider).value?.client, connection?.client) &&
+        identical(ref.read(modelSelectionScopeProvider), scope) &&
+        characterSourceKey == role;
     run.modelCurrent = routeCurrent;
     bool current() => agent._current(run);
-    final binding = await ref.read(companionSessionsProvider.notifier).ensure();
-    if (!current()) return;
-    if (binding.inlinePersona) throw const CompanionHostError(CompanionHostFailure.unavailable);
-    var session = fullSession;
-    if (session == null || session.id != binding.sessionId || !identical(session.client, connection.client)) {
-      session?.close();
-      session = fullSession = _CompanionFullSession(this, connection.client, binding.sessionId);
+    if (phoneAttempt?.sourceId == sourceId) {
+      run.phoneOnly = true;
+      await agent._loop(run);
+      return;
     }
-    await session.send(run, current);
+    if (connection == null) throw const CompanionHostError(CompanionHostFailure.disconnected);
+    final bindings = ref.read(companionSessionsProvider.notifier);
+    // A retry already capable of reaching a Host must not create a replacement
+    // there, even when that Host has since deleted its session.
+    if (retry != null && retry.host != host) {
+      throw _agentRetryClosed;
+    }
+    String? replaceId;
+    while (true) {
+      final binding = await bindings.ensureForCharacter(
+        role,
+        memoryArchiveId: run.memory.store.archive['id']! as String,
+        memoryControlRevision: run.controlRevision,
+        replaceSessionId: replaceId,
+        requireSessionId: retry?.sessionId,
+      );
+      if (!current()) return;
+      if (retry != null && retry.sessionId != binding.sessionId) throw _agentRetryClosed;
+      if (binding.inlinePersona) throw const CompanionHostError(CompanionHostFailure.unavailable);
+      var session = fullSession;
+      if (session == null || session.id != binding.sessionId || !identical(session.client, connection.client)) {
+        session?.close();
+        session = fullSession = _CompanionFullSession(this, connection.client, binding.sessionId);
+      }
+      try {
+        await session.send(run, current, retryId: retry?.requestId);
+        if (agent._turnCurrent(run) && !current()) {
+          run.error = const CompanionHostError(CompanionHostFailure.selectionChanged);
+        }
+        return;
+      } on DshRemoteException catch (error) {
+        if (error.code != 'companion/memory-context-stale' || retry != null ||
+            hostAttempt?.sourceId == sourceId || replaceId != null || !current()) rethrow;
+        // A restarted bridge lost its verified phone-memory generation. The
+        // failed preparation ran before prompt(), so this source is still new.
+        replaceId = binding.sessionId;
+        run.modelCurrent = routeCurrent;
+      }
+    }
   }
 }
 
@@ -29,7 +68,27 @@ extension on _CompanionAgentVisit {
 /// explicit retry. A room and its resident share one follow subscription.
 class _CompanionFullSession {
   _CompanionFullSession(this.visit, this.client, this.id) {
-    follow = visit.ref.listen(chatProvider(id), (_, next) => observe?.call(next));
+    follow = visit.ref.listen(chatProvider(id), (_, next) {
+      _observeModel(next);
+      observe?.call(next);
+    });
+  }
+
+  // A single stable generation also catches changing A → B → A before an
+  // awaited preparation finishes. Stream deltas do not rescan old messages.
+  int modelGeneration = 0;
+  (String?, String?, String?)? _model;
+  void _observeModel(ChatState next) {
+    if (!next.controlReady || !visit.active || !identical(visit.boundClient, client)) return;
+    final model = next.model;
+    final key = (model?.provider, model?.model, model?.reasoningEffort);
+    if (key == _model) return;
+    if (_model != null) modelGeneration++;
+    _model = key;
+    if (model != null) {
+      unawaited(visit.ref.read(companionSessionsProvider.notifier).rememberModel(
+        visit.boundHost, visit.characterSourceKey, id, model));
+    }
   }
 
   final _CompanionAgentVisit visit;
@@ -46,13 +105,18 @@ class _CompanionFullSession {
   ChatController get chat => visit.ref.read(chatProvider(id).notifier);
   void close() => follow.close();
 
-  Future<void> send(_CompanionAgentRun run, bool Function() current) async {
+  Future<void> send(_CompanionAgentRun run, bool Function() current, {String? retryId}) async {
     final controller = chat;
     final provider = chatProvider(id);
     if (!await controller.waitForSync(isCurrent: current) || !current()) {
       if (current()) throw const CompanionHostError(CompanionHostFailure.disconnected);
       return;
     }
+    _observeModel(visit.ref.read(provider));
+    if (retryId != null && visit.hostAttempt?.model != _model) throw _agentRetryClosed;
+    final selection = modelGeneration;
+    final routeCurrent = run.modelCurrent!;
+    run.modelCurrent = () => routeCurrent() && modelGeneration == selection;
     final cap = await client.companionPromptCapability(id);
     if (!current()) return;
     if (run.assistantPage != null && cap?.selectedPage != true) {
@@ -185,19 +249,32 @@ class _CompanionFullSession {
       devices?.close();
       finish();
     };
+    Object? prepareError;
     try {
       final accepted = await controller.send(
         run.source['text']! as String,
         verbatim: true,
         mode: SendMode.interrupt,
+        originalRequestId: retryId,
         deliveryAllowed: () {
-          handedOff = current();
-          return handedOff;
+          if (!current()) return false;
+          // _deliver invokes this synchronously immediately before client.prompt.
+          visit.hostAttempt = (
+            sourceId: run.source['id']! as String, host: visit.boundHost,
+            sessionId: id, requestId: requestId!, model: _model,
+          );
+          handedOff = true;
+          return true;
         },
         beforeDeliver: (req) async {
           if (!current()) return false;
           requestId = req;
-          if (cap != null) await prepare(run, cap, req, current);
+          try {
+            if (cap != null) await prepare(run, cap, req, current);
+          } on Object catch (error) {
+            prepareError = error;
+            return false;
+          }
           if (!current()) return false;
           devices = await CompanionSessionTools.open(
             client,
@@ -222,6 +299,7 @@ class _CompanionFullSession {
       );
       if (!accepted && requestId != null && !controller.awaitingPromptOutcome(requestId!)) clearStop?.call();
       if (!current()) return;
+      if (!accepted && prepareError != null) throw prepareError!;
       if (!accepted) throw CompanionHostError(CompanionHostFailure.requestFailed, visit.ref.read(provider).error);
       observeTurn(visit.ref.read(provider));
       await ended.future;

@@ -75,7 +75,7 @@ function deviceContextOf(value) {
   return value;
 }
 
-function cleanPhoneSession(session) {
+export function cleanPhoneSession(session) {
   if (session.header?.isSeeded !== false || session.header.parentSession !== undefined ||
     session.inheritedEventCount !== 0 || !sequence(session.seq) || typeof session.eventAt !== 'function') return false;
   for (let seq = 0; seq < session.seq; seq++) {

@@ -228,13 +228,29 @@ class CompanionAgent extends ChangeNotifier {
     notifyListeners();
     try {
       if (useSession) {
-        await _visit!.sendInSession(run);
+        final visit = _visit!;
+        final id = run.source['id']! as String;
+        try {
+          await visit.sendInSession(run);
+        } on Object catch (error) {
+          final retry = visit.hostAttempt;
+          final phone = CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
+          final failure = _turnFailure(error);
+          final eligible = failure is CompanionHostError && {
+            CompanionHostFailure.disconnected, CompanionHostFailure.unavailable, CompanionHostFailure.modelUnavailable,
+          }.contains(failure.hostFailure);
+          if (run.phoneOnly || !_current(run) || retry?.sourceId == id || !eligible || !phone.agentConfigured) rethrow;
+          run.phoneOnly = true;
+          visit.phoneAttempt = (sourceId: id, page: run.assistantPage);
+          if (visit.runOrigin case final CompanionFallbackUi ui) ui.continuedOnPhone(id);
+          await _loop(run);
+        }
       } else {
         await _loop(run);
       }
     } on Object catch (error) {
       if (_current(run)) {
-        run.error = error is CompanionLightError ? error : CompanionLightError(CompanionLightFailure.server, '$error');
+        run.error = _turnFailure(error);
       }
     } finally {
       run.running = false;
@@ -242,6 +258,17 @@ class CompanionAgent extends ChangeNotifier {
       run.settled.complete();
     }
   }
+
+  CompanionLightError _turnFailure(Object error) => switch (error) {
+    CompanionLightError() => error,
+    DshRemoteException(code: 'companion/agent-retry-closed') => const CompanionHostError(CompanionHostFailure.retryClosed),
+    DshRemoteException(code: 'companion/selection-changed') => const CompanionHostError(CompanionHostFailure.selectionChanged),
+    DshRemoteException(code: 'companion/model-unavailable' || 'session/model-unavailable' || 'companion/model-restore-unavailable') =>
+        const CompanionHostError(CompanionHostFailure.modelUnavailable),
+    DshTransportException() || DshClosedException() || DshCarrierLostException() =>
+        const CompanionHostError(CompanionHostFailure.disconnected),
+    _ => CompanionLightError(CompanionLightFailure.server, '$error'),
+  };
 
   // A reply keeps the permission generation in which it first received
   // notice content, including when that content came from a memory tool.
@@ -312,7 +339,7 @@ class CompanionAgent extends ChangeNotifier {
     try {
       // Resolve the current full Session each round. A phone tool may retire
       // its previous binding without cancelling this same logical turn.
-      final selected = await ref.read(companionSessionsProvider.notifier).ensure();
+      final selected = await ref.read(companionSessionsProvider.notifier).ensureForCharacter(_visit?.characterSourceKey);
       if (!current()) throw const DshClosedException('Companion Host route changed');
       final capability = await client.readCompanionAuxiliaryCapability(selected.sessionId);
       if (capability == null || !capability.supported) {
@@ -333,6 +360,7 @@ class CompanionAgent extends ChangeNotifier {
 
   // Only the explicitly allowed additive/read paths remain after web data.
   // These names are the current memory adapter's mutators, not task commands.
+  static const _sessionOnlyTools = {'recent_notices', 'notify_user'};
   static const _afterWebMemoryChanges = {
     'forget',
     'revise',
@@ -352,7 +380,8 @@ class CompanionAgent extends ChangeNotifier {
 
   List<CompanionAgentTool> _definitions(_CompanionAgentRun run) => [
     for (final tool in run.tools)
-      if ((!run.externalNoticeContent || CompanionAgentMemoryTools.allowedAfterNotice(tool.definition.name)) &&
+      if ((!run.phoneOnly || !_sessionOnlyTools.contains(tool.definition.name)) &&
+          (!run.externalNoticeContent || CompanionAgentMemoryTools.allowedAfterNotice(tool.definition.name)) &&
           (!run.externalWebContent || !_afterWebMemoryChanges.contains(tool.definition.name)))
         if (run.externalNoticeContent && tool.definition.name == 'forget')
           CompanionAgentMemoryTools.noticeForget
@@ -374,6 +403,7 @@ class CompanionAgent extends ChangeNotifier {
 
   List<CompanionAgentToolBinding> _bindings(_CompanionAgentRun run) => [
     for (final binding in run.tools)
+      if (!run.phoneOnly || !_sessionOnlyTools.contains(binding.definition.name))
       (
         definition: binding.definition,
         execute: (call) async {
@@ -467,7 +497,9 @@ class CompanionAgent extends ChangeNotifier {
     List<Map<String, Object?>> Function(int skip) messagesFrom,
     int historyCount,
   ) async {
-    final selected = await _modelTransport(isCurrent: () => _turnCurrent(run));
+    final selected = run.phoneOnly
+        ? CompanionLightMemoryTransport(apiKey: _apiKey, client: _client)
+        : await _modelTransport(isCurrent: () => _turnCurrent(run));
     if (!_current(run)) return null;
     if (selected is! CompanionAgentModelTransport) {
       throw const CompanionHostError(CompanionHostFailure.unavailable);
@@ -477,7 +509,7 @@ class CompanionAgent extends ChangeNotifier {
       throw const CompanionHostError(CompanionHostFailure.unavailable);
     }
     // A phone fallback still belongs to this captured Host selection and turn.
-    run.modelCurrent = () => selected.current;
+    if (!run.phoneOnly) run.modelCurrent = () => selected.current;
     if (!_current(run)) return null;
     final system = '${run.system}${run.memory.relationshipContext(run.source['character_id'] as String?)}';
     final definitions = _definitions(run);
@@ -738,6 +770,7 @@ class _CompanionAgentRun {
   bool cancelled = false;
   bool discard = false;
   bool toolDispatchStarted = false;
+  bool phoneOnly = false;
   // This capability narrowing belongs only to this original user run.
   bool externalWebContent = false;
   // Monotonic for this logical user turn, including later HTTP continuations.

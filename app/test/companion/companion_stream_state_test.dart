@@ -260,6 +260,15 @@ class _HostSessions extends CompanionSessions {
   var opened = 0;
 
   @override
+  CompanionBinding? ofCharacter(HostRef host, String? sourceKey) => of(host);
+  @override
+  Future<CompanionBinding> ensureForCharacter(String? sourceKey, {
+    String? memoryArchiveId, int? memoryControlRevision, String? replaceSessionId, String? requireSessionId,
+  }) => ensure(memoryArchiveId: memoryArchiveId, memoryControlRevision: memoryControlRevision);
+  @override
+  Future<void> forgetCharacter(String? sourceKey) => forget();
+
+  @override
   Future<CompanionBinding> ensure({String? memoryArchiveId, int? memoryControlRevision}) async {
     final existing = of(HostRef.local);
     if (existing != null &&

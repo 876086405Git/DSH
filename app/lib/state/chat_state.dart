@@ -1322,6 +1322,7 @@ class ChatController extends Notifier<ChatState> {
     List<DraftAttachment> attachments = const [],
     SendMode mode = SendMode.now,
     bool verbatim = false,
+    String? originalRequestId,
     Future<bool> Function(String requestId)? beforeDeliver,
     bool Function()? deliveryAllowed,
   }) async {
@@ -1335,8 +1336,8 @@ class ChatController extends Notifier<ChatState> {
     if (!ref.mounted || !identical(client, _client) || !_canControl) return false;
     final operation = _ChatOperation(ref, client, _syncScope);
     final content = _contentKey(body, attachments);
-    final retrying = _unsettled?.content == content;
-    final requestId = retrying ? _unsettled!.requestId : _requestId();
+    final retrying = originalRequestId != null || _unsettled?.content == content;
+    final requestId = originalRequestId ?? (retrying ? _unsettled!.requestId : _requestId());
     _unsettled = null;
     // Retired on the same Host: the text comes back. A send that may have landed (or a retry of
     // one) keeps its request id for the next try, so the Host takes it once.

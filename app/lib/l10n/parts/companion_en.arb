@@ -1,4 +1,14 @@
 {
+  "companionHostSelectionChanged": "The host session selection changed. Check the current session before sending again.",
+  "@companionHostSelectionChanged": {"description": "Companion session status displayed in the room."},
+  "companionLocalDisconnected": "The on-device engine is disconnected. Check that it is running.",
+  "@companionLocalDisconnected": {"description": "Companion session status displayed in the room."},
+  "companionLocalUnavailable": "The on-device engine cannot open the companion session. Check the engine and its companion preset.",
+  "@companionLocalUnavailable": {"description": "Companion session status displayed in the room."},
+  "companionLocalModelUnavailable": "The on-device engine cannot use this companion’s previously selected model. Check its model settings.",
+  "@companionLocalModelUnavailable": {"description": "Companion session status displayed in the room."},
+  "companionContinuedOnPhone": "The host has not received this message. This turn will use light mode.",
+  "@companionContinuedOnPhone": {"description": "One-turn phone fallback after confirming the host prompt was never dispatched."},
   "companionLogOnDevice": "On-device history",
   "@companionLogOnDevice": {
     "description": "Open this companion's local SQLite and earlier phone conversations."

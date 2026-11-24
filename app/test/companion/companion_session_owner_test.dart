@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dsh_app/companion/companion_state.dart';
+import 'package:dsh_app/companion/companion_pack.dart' show companionBundledCharacterKey;
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
@@ -155,6 +156,58 @@ void _savedA() => SharedPreferences.setMockInitialValues({
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('legacy whale and two different pack sources never lend a conversation to one another', () async {
+    _savedA();
+    final room = _Room();
+    await room.loaded();
+    final whale = await room.sessions.ensureForCharacter(companionBundledCharacterKey);
+    expect(whale.sessionId, 'a-existing');
+    expect(room.sessions.ofCharacter(HostRef.local, null), isNull);
+    const imported = 'import:鲸鱼娘';
+    const workshop = 'workshop:鲸鱼娘';
+    final creation = Completer<RpcResult>();
+    room.a.held['session/create'] = (_) => creation.future;
+    final first = room.sessions.ensureForCharacter(imported);
+    final second = room.sessions.ensureForCharacter(imported);
+    await _flush();
+    expect(room.a.argsOf('session/create'), hasLength(1));
+    creation.complete(const RpcOk({'sessionId': 'imported'}));
+    expect((await first).sessionId, 'imported');
+    expect((await second).sessionId, 'imported');
+    expect(room.a.argsOf('session/create'), hasLength(1));
+    expect((await room.sessions.ensureForCharacter(workshop)).sessionId, 'a-created');
+    expect(room.a.argsOf('workspace/archiveSession'), isEmpty);
+    final hidden = room.container.read(companionSessionFilterProvider);
+    for (final id in ['a-existing', 'imported', 'a-created']) {
+      expect(hidden(HostRef.local, id), isTrue);
+      expect(hidden(_Room.bHost, id), isFalse);
+    }
+    await room.sessions.forgetCharacter(imported);
+    expect(room.sessions.ofCharacter(HostRef.local, imported), isNull);
+    expect(room.sessions.ofCharacter(HostRef.local, workshop)?.sessionId, 'a-created');
+    expect(room.sessions.of(HostRef.local), same(whale));
+  });
+
+  test('a missing preset recovers in place; a denied projection does not fabricate deletion', () async {
+    final room = _Room();
+    await room.loaded();
+    room.a.hasPreset = false;
+    final pending = await room.sessions.ensure();
+    expect(pending.inlinePersona, isTrue);
+    room.a.hasPreset = true;
+    final selected = await room.sessions.ensure();
+    expect(selected.sessionId, pending.sessionId);
+    expect(selected.inlinePersona, isFalse);
+    room.a.held['session/projections'] = (_) async => const RpcError(DshRemoteException('session/forbidden', 'private'));
+    expect(await _outcome(room.sessions.ensure()), isA<DshRemoteException>());
+    expect(room.a.argsOf('session/create'), hasLength(1));
+    expect(room.a.argsOf('workspace/archiveSession'), isEmpty);
+    room.a.held['session/projections'] = (_) async => const RpcOk(null);
+    await room.sessions.ensure();
+    expect(room.a.argsOf('session/create'), hasLength(2));
+    expect(room.a.argsOf('workspace/archiveSession'), isEmpty);
+  });
+
   test('a legacy untagged session is replaced before phone memory enters its context', () async {
     _savedA();
     final room = _Room();
@@ -164,7 +217,7 @@ void main() {
     expect(binding.memoryArchiveId, 'phone-archive');
     expect(binding.memoryControlRevision, 0);
     expect(room.a.argsOf('session/create'), hasLength(1));
-    expect(room.a.argsOf('session/projections'), isEmpty);
+    expect(room.a.argsOf('session/projections'), hasLength(1));
     final prefs = await SharedPreferences.getInstance();
     final saved = jsonDecode(prefs.getString('companion_sessions')!) as Map;
     expect((saved['local:local'] as Map)['memoryArchiveId'], 'phone-archive');
@@ -199,6 +252,7 @@ void main() {
       'stopActivity': false,
     });
     expect(room.a.calls.map((call) => call.$1), [
+      'session/projections',
       'session/projections',
       'workspace/archiveSession',
       'session/create',

@@ -442,6 +442,7 @@ class CompanionAlwaysOnOwner {
 class _ResidentUi
     implements
         CompanionAgentRoomUi,
+        CompanionFallbackUi,
         CompanionInitiativeRoom,
         CompanionAgentAmbientUi,
         CompanionAgentNotificationUi,
@@ -485,6 +486,10 @@ class _ResidentUi
   CompanionAgentTaskUi tasks({required bool Function() isCurrent}) => _ResidentTaskUi(isCurrent);
   @override
   void committed(String raw) {}
+  @override
+  void continuedOnPhone(String sourceId) {
+    unawaited(presentLine(id: 'route:$sourceId', text: appL10n.companionContinuedOnPhone, emotion: 'neutral', speak: false));
+  }
   @override
   void failed(Object error, {String? retry}) => owner._failure();
   @override

@@ -561,6 +561,30 @@ extension CompanionApi on DshClient {
     return _promptCapability(path, response, sessionId);
   }
 
+  /// Restore a replaced companion session without changing the Host default.
+  /// An old bridge or relay can already have the desired default. If it does
+  /// not, keep the requested model for a later retry on an upgraded host.
+  Future<void> restoreCompanionSessionModel(String sessionId, ModelSelection model) async {
+    bool same(ModelSelection? selected) => selected?.provider == model.provider &&
+        selected?.model == model.model && selected?.reasoningEffort == model.reasoningEffort;
+    if (canReachDshGo) {
+      const path = '$dshGoCompanionPath/restore-model';
+      final response = await _bridge.postJson(path, {'sessionId': sessionId, 'model': model.toJson()});
+      if (response.statusCode == 200) {
+        final body = asMap(tryDecodeJson(response.text));
+        if (body?['sessionId'] == sessionId && same(ModelSelection.fromJson(body?['model']))) return;
+        throw const DshProtocolException('Unconfirmed companion model restoration');
+      }
+      if (response.statusCode != 404 || (_codeOf(response) != null && _codeOf(response) != 'companion/not-found')) {
+        throw companionHttpError(path, response);
+      }
+    }
+    final projection = await projections(sessionId);
+    if (projection == null) throw const DshRemoteException('session/not-found', 'Missing companion session');
+    if (same(projection.nextModel ?? (await listModels()).defaultSelection)) return;
+    throw const DshRemoteException('companion/model-restore-unavailable', 'Select the previous model on this host');
+  }
+
   /// Send the pure App plan's update, then prompt with the SAME requestId.
   /// Retry an uncertain HTTP outcome with identical bytes/id; never a new id.
   /// The acknowledgement prepares context; it is not a human user/message

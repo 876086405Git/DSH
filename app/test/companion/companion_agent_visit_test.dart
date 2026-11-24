@@ -11,6 +11,7 @@ import 'package:dsh_app/companion/companion_host_tasks.dart';
 import 'package:dsh_app/companion/companion_initiative.dart';
 import 'package:dsh_app/companion/companion_initiative_owner.dart';
 import 'package:dsh_app/companion/companion_local.dart';
+import 'package:dsh_app/companion/companion_light.dart';
 import 'package:dsh_app/companion/companion_maps.dart';
 import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_memory_worker.dart';
@@ -127,6 +128,17 @@ Map _context(Map<String, Object?> request) {
   ];
   final text = texts.singleWhere((text) => text.startsWith('<companion_context>'));
   return jsonDecode(text.substring('<companion_context>'.length, text.length - '</companion_context>'.length)) as Map;
+}
+
+class _UnrestoredModel extends CompanionSessions {
+  _UnrestoredModel(this.code);
+  final String code;
+  @override
+  Map<String, CompanionBinding> build() => const {};
+  @override
+  Future<CompanionBinding> ensureForCharacter(String? sourceKey, {
+    String? memoryArchiveId, int? memoryControlRevision, String? replaceSessionId, String? requireSessionId,
+  }) async => throw DshRemoteException(code, 'Original model could not be restored');
 }
 
 class _Host extends ActiveHostController {
@@ -292,7 +304,10 @@ class _TaskUi implements CompanionAgentTaskUi {
       throw StateError('Unexpected foreground task');
 }
 
-class _RoomUi implements CompanionAgentRoomUi, CompanionInitiativeRoom {
+class _RoomUi implements CompanionAgentRoomUi, CompanionInitiativeRoom, CompanionFallbackUi {
+  final fallbacks = <String>[];
+  @override
+  void continuedOnPhone(String sourceId) => fallbacks.add(sourceId);
   final failures = <({Object error, String? retry})>[];
   final commits = <String>[];
   final acceptedTasks = <MemoryRow>[];
@@ -465,6 +480,8 @@ class _Visit {
     CompanionInitiativeClock Function()? clock,
     CompanionMemoryTransport Function()? memoryTransport,
     HostConnection? connection,
+    String apiKey = 'controlled-test-key',
+    CompanionSessions? sessions,
     ModelCatalog? catalog,
   }) async {
     int now() => clock?.call().wallMs ?? _now;
@@ -506,7 +523,7 @@ class _Visit {
         ref: ref,
         memoryTransport: memoryTransport ?? (() => background),
         host: () => null,
-        apiKey: () => 'controlled-test-key',
+        apiKey: () => apiKey,
         client: () => MockClient((request) async {
           if (auxiliary?.call(request) case final response?) return response;
           visit.requests.add(Map<String, Object?>.from(jsonDecode(request.body) as Map));
@@ -524,6 +541,7 @@ class _Visit {
           operatingSystemProvider.overrideWithValue('android'),
           companionNoticesProvider.overrideWithValue(notices),
         ],
+        if (sessions != null) companionSessionsProvider.overrideWith(() => sessions),
         activeHostProvider.overrideWith(_Host.new),
         activeConnectionProvider.overrideWithValue(AsyncData<HostConnection?>(connection)),
         if (catalog != null) currentModelCatalogProvider.overrideWithValue(catalog),
@@ -655,6 +673,70 @@ void main() {
   setUp(
     () => SharedPreferences.setMockInitialValues({'companion_mode': 'light', 'companion_initiative_enabled': false}),
   );
+
+  test('explicit full mode with no connection uses the same source and real phone receipts, once', () async {
+    final visit = await _Visit.open([http.Response('temporary failure', 503), _message(words: '收到了。')]);
+    await visit.container.read(companionModeProvider.notifier).choose(CompanionMode.full);
+    await visit.attachment.submit(_raw);
+    final source = visit.userSource;
+    final turn = visit.turn;
+    expect(visit.ui.fallbacks, [source['id']]);
+    expect(visit.requests, hasLength(1));
+    expect(visit.ui.failures.single.retry, _raw);
+    await visit.attachment.submit(_raw);
+    expect(visit.attachment.error, isNull);
+    expect(visit.attachment.text, '收到了。');
+    expect(visit.userSource['id'], source['id']);
+    expect(visit.turn['id'], turn['id']);
+    expect(visit.calls('clock'), 1);
+    expect(visit.ui.fallbacks, [source['id']]);
+    expect(visit.requests, hasLength(2));
+    expect(visit.memory.store.messages().where((row) => row['role'] == 'assistant'), hasLength(1));
+  });
+
+  for (final (code, key, expectedPhoneCalls) in [
+    ('companion/model-unavailable', 'fixture-key', 1),
+    ('companion/model-restore-unavailable', 'fixture-key', 1),
+    ('companion/model-restore-unavailable', '', 0),
+    ('companion/selection-changed', 'fixture-key', 0),
+    ('companion/forbidden', 'fixture-key', 0),
+  ]) {
+    test('original model resolution $code with phone key ${key.isNotEmpty}', () async {
+      final peer = await _TerminalSignals.open();
+      final visit = await _Visit.open([_message(words: '这次在手机上回答。')],
+          apiKey: key, connection: peer.connection, sessions: _UnrestoredModel(code));
+      await visit.container.read(companionModeProvider.notifier).choose(CompanionMode.full);
+      await visit.attachment.submit(_raw);
+      final source = visit.userSource;
+      final receipts = visit.database.select("SELECT * FROM memory_requests WHERE category = 'chat'");
+      expect(visit.requests, hasLength(expectedPhoneCalls));
+      expect(receipts, hasLength(expectedPhoneCalls));
+      if (expectedPhoneCalls == 1) {
+        expect(visit.ui.fallbacks, [source['id']]);
+        expect(receipts.single['provider'], 'deepseek');
+        expect(receipts.single['sent_at_ms'], isNotNull);
+        expect(visit.attachment.text, '这次在手机上回答。');
+      } else {
+        expect(visit.ui.fallbacks, isEmpty);
+        expect(visit.ui.failures, hasLength(1));
+        if (key.isEmpty) {
+          expect(visit.ui.failures.single.error, isA<CompanionHostError>()
+              .having((error) => error.hostFailure, 'host failure', CompanionHostFailure.modelUnavailable));
+        }
+      }
+    });
+  }
+
+  test('offline full mode without a phone key reports the host failure before any phone model request', () async {
+    final visit = await _Visit.open([], apiKey: '');
+    await visit.container.read(companionModeProvider.notifier).choose(CompanionMode.full);
+    await visit.attachment.submit(_raw);
+    expect(visit.ui.failures.single.error, isA<CompanionHostError>()
+        .having((error) => error.hostFailure, 'host failure', CompanionHostFailure.disconnected));
+    expect(visit.ui.fallbacks, isEmpty);
+    expect(visit.requests, isEmpty);
+    expect(visit.userSource['text'], _raw);
+  });
 
   test('notice visit keeps an unrelated user task ordinary after an actually shown offer', () async {
     final visit = await _shownOffer([_message(words: '可以。')]);

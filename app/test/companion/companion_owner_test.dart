@@ -116,6 +116,15 @@ class _Sessions extends CompanionSessions {
   @override
   CompanionBinding? of(HostRef host) => bindings[host];
   @override
+  CompanionBinding? ofCharacter(HostRef host, String? sourceKey) => of(host);
+  @override
+  Future<CompanionBinding> ensureForCharacter(String? sourceKey, {
+    String? memoryArchiveId, int? memoryControlRevision, String? replaceSessionId, String? requireSessionId,
+  }) => ensure(memoryArchiveId: memoryArchiveId, memoryControlRevision: memoryControlRevision);
+  @override
+  Future<void> forgetCharacter(String? sourceKey) => forget();
+
+  @override
   Future<CompanionBinding> ensure({String? memoryArchiveId, int? memoryControlRevision}) async {
     final host = ref.read(activeHostProvider);
     if (!ensureStarted.isCompleted) ensureStarted.complete();
@@ -150,6 +159,7 @@ class _Chat extends ChatController {
     List<DraftAttachment> attachments = const [],
     SendMode mode = SendMode.now,
     bool verbatim = false,
+    String? originalRequestId,
     Future<bool> Function(String requestId)? beforeDeliver,
     bool Function()? deliveryAllowed,
   }) async {

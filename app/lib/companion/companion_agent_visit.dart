@@ -8,6 +8,10 @@ const _agentRetryClosed = DshRemoteException(
 
 /// Window facts and immediate presentation effects. No BuildContext or
 /// WidgetRef crosses this port; the Page still owns its actual routes.
+abstract interface class CompanionFallbackUi {
+  void continuedOnPhone(String sourceId);
+}
+
 abstract interface class CompanionAgentRoomUi {
   bool get mounted;
   bool get stageReady;
@@ -323,6 +327,11 @@ class _CompanionAgentVisit {
   CompanionMemoryOwner? memory;
   Future<CompanionMemoryOwner>? opening;
   MemoryRow? retrySource;
+  // An uncertain Host request may be repeated only on that same session under
+  // the same request id. A phone fallback stays on its original phone route.
+  ({String sourceId, HostRef host, String sessionId, String requestId,
+    (String?, String?, String?)? model})? hostAttempt;
+  ({String sourceId, String? page})? phoneAttempt;
   CompanionAgentMemoryTools? retryTools;
   _CompanionFullSession? fullSession;
   CompanionAgentPhoneTools? activePhoneTools;
@@ -475,10 +484,12 @@ class _CompanionAgentVisit {
     epoch++;
     fullSession?.close();
     fullSession = null;
+    ref.read(companionSessionsProvider.notifier).retirePending();
     characterSourceKey = sourceKey;
     bindCharacter();
     notices?.invalidate();
     retrySource = null;
+    phoneAttempt = null;
     run = null;
     events = const [];
     lastSpokenAt = null;
@@ -717,6 +728,8 @@ class _CompanionAgentVisit {
         return;
       }
       if (!reuse) {
+        hostAttempt = null;
+        phoneAttempt = null;
         inheritedRetry?.close();
         inheritedRetry = null;
       }
@@ -825,12 +838,13 @@ class _CompanionAgentVisit {
           key: companionHostKey(hostRef),
           client: client,
           isCurrent: hostCurrent,
-          sessionId: client == null ? null : ref.read(companionSessionsProvider.notifier).of(hostRef)?.sessionId,
+          sessionId: client == null ? null : ref.read(companionSessionsProvider.notifier).ofCharacter(hostRef, characterSourceKey)?.sessionId,
           ensureSession: () async {
             if (client == null || !hostCurrent()) throw const DshClosedException('Companion Host changed');
             final binding = await ref
                 .read(companionSessionsProvider.notifier)
-                .ensure(
+                .ensureForCharacter(
+                  characterSourceKey,
                   memoryArchiveId: owner.store.archive['id']! as String,
                   memoryControlRevision: owner.store.archive['control_revision']! as int,
                 );
@@ -887,7 +901,7 @@ class _CompanionAgentVisit {
         source: source,
         system: system,
         context: turnContext,
-        assistantPage: assistantPage,
+        assistantPage: phoneAttempt?.sourceId == source['id'] ? phoneAttempt?.page : assistantPage,
         tools: noticeReply == null
             ? [
                 ...memoryTools.bindings,
@@ -919,7 +933,7 @@ class _CompanionAgentVisit {
       changed();
       await work;
       if (!current() || !identical(run, submittedRun)) return;
-      if (!useSession && submittedRun!.text.trim().isNotEmpty) {
+      if ((!useSession || submittedRun!.phoneOnly) && submittedRun!.text.trim().isNotEmpty) {
         events = companionConsumeEvents(events, turnContext.eventIds);
         if (turnContext.hasClock) lastClockAt = turnContext.sampledAt;
       }
@@ -940,6 +954,7 @@ class _CompanionAgentVisit {
         }
       } else if (useSession || submittedRun.text.trim().isNotEmpty || !submittedRun.toolDispatchStarted) {
         retrySource = null;
+        phoneAttempt = null;
       }
       queueExtraction();
     } on Object catch (error) {
@@ -995,8 +1010,12 @@ class _CompanionAgentVisit {
     if (!current()) return;
     fullSession?.close();
     fullSession = null;
+    final key = characterSourceKey;
+    await ref.read(companionSessionsProvider.notifier).forgetCharacter(key);
+    if (!current() || key != characterSourceKey) return;
     owner.store.startLightConversation();
     retrySource = null;
+    phoneAttempt = null;
     lastSpokenAt = null;
     lastClockAt = null;
     run = null;

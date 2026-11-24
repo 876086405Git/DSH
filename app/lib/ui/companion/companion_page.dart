@@ -166,7 +166,7 @@ class CompanionPage extends ConsumerStatefulWidget {
 }
 
 class _CompanionPageState extends ConsumerState<CompanionPage>
-    implements CompanionInitiativeRoom, CompanionAgentRoomUi {
+    implements CompanionInitiativeRoom, CompanionAgentRoomUi, CompanionFallbackUi {
   void _update(VoidCallback change) => setState(change);
 
   late final _stage = widget.stageController ?? CompanionStageController();
@@ -215,7 +215,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   late final CompanionAgentAttachment _attachment;
   int _bindingEpoch = 0;
   late bool _boundLight;
-  String? get _sessionId => ref.read(companionSessionsProvider.notifier).of(ref.read(activeHostProvider))?.sessionId;
+  String? get _sessionId => ref.read(companionSessionsProvider.notifier).ofCharacter(ref.read(activeHostProvider), _characterSourceKey)?.sessionId;
   bool _sending = false;
   bool _running = false;
   bool _needsAttention = false;
@@ -684,6 +684,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (_input.text == raw) _input.clear();
     _retireGreeting();
   }
+
+  @override
+  void continuedOnPhone(String sourceId) => _notice(context.l10n.companionContinuedOnPhone);
 
   @override
   void failed(Object error, {String? retry}) {
@@ -2436,7 +2439,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   String _failureText(Object error) {
     final l10n = context.l10n;
+    final local = ref.read(activeHostProvider).isLocal;
     return switch (error) {
+      CompanionHostError(hostFailure: CompanionHostFailure.retryClosed) => l10n.companionAgentRetryClosed,
+      CompanionHostError(hostFailure: CompanionHostFailure.selectionChanged) => l10n.companionHostSelectionChanged,
+      CompanionHostError(hostFailure: CompanionHostFailure.disconnected) when local => l10n.companionLocalDisconnected,
+      CompanionHostError(hostFailure: CompanionHostFailure.unavailable) when local => l10n.companionLocalUnavailable,
+      CompanionHostError(hostFailure: CompanionHostFailure.modelUnavailable) when local => l10n.companionLocalModelUnavailable,
       CompanionHostError(hostFailure: CompanionHostFailure.disconnected) => l10n.companionNotConnectedTryLight,
       CompanionHostError(hostFailure: CompanionHostFailure.modelUnavailable) => l10n.companionHostModelUnavailable,
       CompanionHostError(hostFailure: CompanionHostFailure.unavailable) => l10n.companionHostUnavailable,
@@ -3555,7 +3564,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (showStage && _stageReady) _queueReplyPresentation();
     final name = _name(l10n);
     // Her conversation on the host, when there is one: a key to it on the bar.
-    final chatId = ref.watch(companionChatIdProvider);
+    final chatId = ref.watch(companionCharacterChatIdProvider(_characterSourceKey));
     // Shown only while it still belongs here and nothing else has the floor,
     // in this very frame (the owner hears about it right after).
     final invite = _invite;

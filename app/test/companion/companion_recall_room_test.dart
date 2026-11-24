@@ -402,6 +402,20 @@ class _Sessions extends CompanionSessions {
   }
 
   @override
+  Future<CompanionBinding> ensureForCharacter(String? sourceKey, {
+    String? memoryArchiveId, int? memoryControlRevision, String? replaceSessionId, String? requireSessionId,
+  }) async {
+    if (replaceSessionId != null) state = {};
+    if (requireSessionId != null && of(HostRef.local)?.sessionId != requireSessionId) {
+      throw const DshRemoteException('companion/agent-retry-closed', 'Missing original session');
+    }
+    return ensure(memoryArchiveId: memoryArchiveId, memoryControlRevision: memoryControlRevision);
+  }
+
+  @override
+  Future<void> forgetCharacter(String? sourceKey) => forget();
+
+  @override
   Future<void> forget() async {
     forgotten++;
     state = {};
