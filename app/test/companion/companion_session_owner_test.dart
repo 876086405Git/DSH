@@ -5,9 +5,11 @@ import 'dart:convert';
 
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/companion/companion_pack.dart' show companionBundledCharacterKey;
+import 'package:dsh_app/phone/phone_channel.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/phone_state.dart' show phoneChannelProvider;
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/state/workspaces_state.dart';
 import 'package:dsh_client/dsh_client.dart';
@@ -88,6 +90,16 @@ class _Runtime extends LocalRuntimeController {
   LocalRuntimeState build() => const LocalRuntimeState(loaded: true);
 }
 
+/// Native phone control's copy of her sessions, as last pushed.
+class _Phone extends PhoneChannel {
+  final pushed = <Set<String>>[];
+  @override
+  Future<bool> setCompanionSessions(Set<String> ids) async {
+    pushed.add(ids);
+    return true;
+  }
+}
+
 class _Room {
   _Room() {
     add(HostRef.local, a);
@@ -100,6 +112,7 @@ class _Room {
         workspacesProvider.overrideWith(_Workspaces.new),
         workspacePrefsProvider.overrideWith(() => selection),
         localRuntimeProvider.overrideWith(_Runtime.new),
+        phoneChannelProvider.overrideWithValue(phone),
       ],
     );
     container.read(activeConnectionProvider);
@@ -115,6 +128,7 @@ class _Room {
   final b = _RpcHost('b');
   final host = _ActiveHost();
   final selection = _Selection();
+  final phone = _Phone();
   final connections = <HostRef, HostConnection>{};
   final clients = <DshClient>[];
   late final ProviderContainer container;
@@ -627,5 +641,41 @@ void main() {
     expect(binding.sessionId, 'a-created');
     expect(binding.full, true);
     expect(room.a.argsOf('commands/execute'), isEmpty);
+  });
+
+  test('only her full sessions on this phone reach native phone control, and leave with the host', () async {
+    SharedPreferences.setMockInitialValues({
+      'companion_sessions': jsonEncode({
+        'local:local': {'id': 'a-whale', 'full': true},
+        'character:"local:local":"import:x"': {'id': 'a-pack', 'full': true},
+        'character:"local:local":"import:y"': {'id': 'a-inline', 'full': true, 'inline': true},
+        'character:"local:local":"import:z"': {'id': 'a-old'},
+        'ssh:b': {'id': 'b-whale', 'full': true},
+      }),
+    });
+    final room = _Room();
+    room.container.listen(companionPhoneSessionsBridgeProvider, (_, _) {});
+    await room.loaded();
+    final pushed = room.phone.pushed;
+    expect(pushed.last, {'a-whale', 'a-pack'});
+    final settled = pushed.length;
+    await room.sessions.rememberModel(HostRef.local, companionBundledCharacterKey, 'a-whale',
+        const ModelSelection(provider: 'p', model: 'm'));
+    await _flush();
+    expect(pushed, hasLength(settled), reason: 'the same ids are not pushed again');
+
+    room.host.change(_Room.bHost);
+    await _flush();
+    expect(pushed.last, isEmpty, reason: "a computer's sessions never get the exemption");
+    room.host.change(HostRef.local);
+    await _flush();
+    expect(pushed.last, {'a-whale', 'a-pack'});
+
+    await room.sessions.forget();
+    await _flush();
+    expect(pushed.last, {'a-pack'});
+    await room.container.read(companionModeProvider.notifier).choose(CompanionMode.light);
+    await _flush();
+    expect(pushed.last, isEmpty, reason: 'light mode runs her on the phone bridge, not this session');
   });
 }

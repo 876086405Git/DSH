@@ -14,7 +14,8 @@ class CompanionSessionTools {
 
   static const _root = '/dsh-go/v1/companion/session-tools';
   // These operations run through the phone's own feature-specific adapters.
-  // General device control stays with the enabled native MCP and its policy.
+  // General device control stays with the native MCP and its SafetyGate; her
+  // registered session there needs no 手机操控 switch (companion_state.dart).
   static const _supported = {
     'remember',
     'forget',
