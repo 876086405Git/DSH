@@ -32,6 +32,7 @@ import io.github.ccch1mneyyy.dsh_app.phone.PhoneTasks
  */
 class PhoneA11yService : AccessibilityService() {
     internal val clock = EventClock()
+    internal val eventTexts = EventTexts()
     internal val focusInputObservation = FocusInputObservation()
     private var focusInputMethod: FocusInputMethod33? = null
     private var focusInputRetired = false
@@ -121,7 +122,9 @@ class PhoneA11yService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        clock.tick(event?.packageName)
+        if (event != null) eventTexts.record(event)
+        clock.tick(event?.packageName, event?.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+            event?.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED)
         if (event != null && event.eventType in setOf(AccessibilityEvent.TYPE_VIEW_CLICKED,
                 AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED, AccessibilityEvent.TYPE_VIEW_SCROLLED,
                 AccessibilityEvent.TYPE_TOUCH_INTERACTION_START)) companionActivityAt = android.os.SystemClock.uptimeMillis()

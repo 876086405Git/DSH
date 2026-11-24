@@ -36,7 +36,6 @@ class ReadBackMismatchTest {
             "已输入，但回读不一致：框里现在是「小明 123456」。没有重试，也没有提交；请看新屏幕决定下一步。",
             MainScreenDriver.readBackMismatch("小明 123456", nickname),
         )
-        assertTrue(MainScreenDriver.readBackMismatch("", nickname).contains("框里现在是空"))
         assertTrue(MainScreenDriver.readBackMismatch("4111 1111 1111 1111", nickname).contains("«银行卡 ****1111»"))
     }
 
@@ -50,11 +49,30 @@ class ReadBackMismatchTest {
         assertTrue(message, message.contains("无法确认") || message.contains("未能确认"))
     }
 
-    @Test fun aKnownEmptyReadBackStillReportsEmptyContent() {
-        val message = MainScreenDriver.readBackMismatch("", field(hint = "昵称"))
-        assertTrue(message, message.contains("已输入"))
-        assertTrue(message, message.contains("框里现在是空"))
-        assertTrue(message, message.contains("没有重试，也没有提交"))
+    /** vivo's calculator display reads "" while it shows what was typed: empty is "cannot see". */
+    @Test fun anEmptyReadBackIsUnconfirmedNotAMismatch() {
+        for (target in listOf(field(hint = "昵称"), field(hint = "验证码"))) {
+            val message = MainScreenDriver.readBackMismatch("", target)
+            assertTrue(message, message.contains("已输入"))
+            assertFalse(message, message.contains("回读不一致"))
+            assertFalse(message, message.contains("框里现在是"))
+            assertTrue(message, message.contains("无法确认"))
+            assertTrue(message, message.contains("没有重试，也没有提交"))
+            assertTrue(message, message.contains("不要重复输入"))
+        }
+    }
+
+    @Test fun readBackMatchToleratesFormattingOnly() {
+        assertEquals(ReadBackMatch.SAME, readBackMatch("12+30", "12+30"))
+        assertEquals(ReadBackMatch.UNKNOWN, readBackMatch(null, "12+30"))
+        assertEquals(ReadBackMatch.EMPTY, readBackMatch("", "12+30"))
+        assertEquals(ReadBackMatch.SAME, readBackMatch("", ""))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("138 0013 8000", "13800138000"))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("12×3−4÷2", "12*3-4/2"))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("１２＋３０", "12+30"))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("\u200E12 + 30\u200E", "12+30"))
+        assertEquals(ReadBackMatch.DIFFERENT, readBackMatch("12+3", "12+30"))
+        assertEquals(ReadBackMatch.DIFFERENT, readBackMatch("小明", "小红"))
     }
 
     @Test fun anUnknownSecretReadBackDoesNotInventAnEmptyValue() {

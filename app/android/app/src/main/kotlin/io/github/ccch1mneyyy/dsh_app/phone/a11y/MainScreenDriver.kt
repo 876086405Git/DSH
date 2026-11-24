@@ -993,12 +993,14 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             val got = readBack(r.node, a.text, gen)
             // l10n:keep agent screen result
             val name = short(r.el.label.ifEmpty { "输入框" })
-            if (!sameText(got, a.text)) {
+            val match = readBackMatch(got, a.text)
+            if (match == ReadBackMatch.EMPTY || match == ReadBackMatch.DIFFERENT || match == ReadBackMatch.UNKNOWN) {
+                // The system took the text; an empty read-back is no evidence it was lost.
                 return after(before, r.snap, gen, readBackMismatch(got, info(r.snap.id, r.el),
-                    currentSecret = got != null && isSecretField(r.node)), ok = false)
+                    currentSecret = got != null && isSecretField(r.node)), ok = match == ReadBackMatch.EMPTY)
             }
             // l10n:keep agent screen result
-            var message = "已在「$name」输入，回读一致。"
+            var message = if (match == ReadBackMatch.SAME) "已在「$name」输入，回读一致。" else "已在「$name」输入，回读一致（应用调整了空格或符号写法）。"
             if (a.submit) {
                 // The read-back can take 1.5 s: a pause in it keeps the text but sends nothing.
                 if (!allowed()) return ActionResult(false, "$message 但本任务已暂停或停止，没有提交。") // l10n:keep agent result
@@ -1216,8 +1218,10 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             val comparable = old != null && observation.comparableTo(old)
             val changed = old != null && observation.changedFrom(old)
             val keyboard = old?.let { observation.keyboardChange(it) }
+            // A same-looking tree is not "nothing happened" when the app itself reported updates.
+            val appReported = clock.contentChangedSince(observation.packageName, before)
             // Missing content still needs an explicit warning, even when app/window/IME changed.
-            val note = if (ok) ScreenVerdict.note(comparable = comparable, changed = changed, keyboard = keyboard, scrolled = scrolled)
+            val note = if (ok) ScreenVerdict.note(comparable = comparable, changed = changed, keyboard = keyboard, scrolled = scrolled, appReported = appReported)
                 else unconfirmedActionNote(comparable, changed, keyboard)
             val canReuse = comparable && observation.sameContext(old) && observation.keyboardShown == old.keyboardShown
             val text = if (snap.focus != null) snap.screen.text else ScreenDigest.text(previous?.id, previous?.screen, snap.id, snap.screen, canReuse = canReuse, observationChanged = changed)
@@ -1288,7 +1292,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                 io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillNavigationWitness(it.uid, it.version, it.updated, it.signers)
             } else null
             return ActionResult(ok, message + note + visualNote, toSnapshot(snap, text + ocrText).copy(secure = snap.hidden || screenshotSecure),
-                navigationWitness = witness, screenChanged = changed.takeIf { comparable })
+                navigationWitness = witness, screenChanged = ScreenVerdict.screenChanged(comparable, changed, appReported))
         } finally { cap.recycle() }
     }
 
@@ -1338,15 +1342,15 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         while (true) {
             if (!node.refresh()) return null
             got = if (node.isShowingHintTextCompat()) "" else node.text?.toString().orEmpty()
-            if (sameText(got, expected) || SystemClock.uptimeMillis() > deadline || cancelled(gen)) return got
+                .ifEmpty { service.eventTexts.text(node).orEmpty() } // fields that show their text only in events
+            val match = readBackMatch(got, expected)
+            if (match == ReadBackMatch.SAME || match == ReadBackMatch.FORMATTED ||
+                SystemClock.uptimeMillis() > deadline || cancelled(gen)) return got
             clock.pause(100) { cancelled(gen) }
         }
     }
 
     private fun AccessibilityNodeInfo.isShowingHintTextCompat() = android.os.Build.VERSION.SDK_INT >= 26 && isShowingHintText
-
-    /** Only the exact requested text counts as a matching read-back. */
-    private fun sameText(got: String?, expected: String): Boolean = got == expected
 
     private fun awaitInputIdle(): Boolean {
         val deadline = SystemClock.uptimeMillis() + 8_000
@@ -1562,6 +1566,11 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         internal fun readBackMismatch(got: String?, target: TargetInfo, currentSecret: Boolean = false): String {
             // l10n:keep agent screen result
             if (got == null) return "已输入，但未能确认当前输入框内容。没有重试，也没有提交；请看新屏幕决定下一步。"
+            // Some apps never hand a field's text to accessibility (vivo's calculator display reads ""
+            // while showing 12+30): empty is "cannot see", not "nothing there".
+            // l10n:keep agent screen result
+            if (got.isEmpty()) return "已输入，但读回来是空的：可能没输进去，也可能这个应用不把框里的字交给读屏（比如计算器的显示屏），无法确认。" +
+                "没有重试，也没有提交；能截图就截图核对，不要重复输入。"
             // l10n:keep agent screen result
             val now = if (currentSecret || SafetyRules.isSecretTarget(target)) "这是密码 / 验证码框，框里的内容不回传"
             // l10n:keep agent screen result
@@ -1586,6 +1595,31 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
 /** Null belongs to a published image; OCR-only evidence must retain exactly its original ON epoch. */
 internal fun mainOcrEpochCurrent(observationEpoch: Long?, enabledEpoch: Long?): Boolean =
     observationEpoch == null || observationEpoch == enabledEpoch
+
+internal enum class ReadBackMatch { SAME, FORMATTED, EMPTY, DIFFERENT, UNKNOWN }
+
+/** How a `type` read-back compares with the requested text; null means the node could not be refreshed. */
+internal fun readBackMatch(got: String?, expected: String): ReadBackMatch = when {
+    got == null -> ReadBackMatch.UNKNOWN
+    got == expected -> ReadBackMatch.SAME
+    got.isEmpty() -> ReadBackMatch.EMPTY
+    typedForm(got) == typedForm(expected) -> ReadBackMatch.FORMATTED
+    else -> ReadBackMatch.DIFFERENT
+}
+
+/** Fields reformat what they get (138 0013 8000, 12×3, full-width digits); compare without that. */
+private fun typedForm(s: String): String = buildString {
+    for (c in s) {
+        if (c.isWhitespace() || Character.getType(c) == Character.FORMAT.toInt()) continue
+        append(when (c) {
+            in '\uFF01'..'\uFF5E' -> c - 0xFEE0
+            '\u2212', '\u2010', '\u2011' -> '-'
+            '\u00D7' -> '*'
+            '\u00F7' -> '/'
+            else -> c
+        })
+    }
+}
 
 /** No completed-request receipt: unchanged content is not evidence that scrolling reached its end. */
 internal fun unconfirmedActionNote(comparable: Boolean, changed: Boolean, keyboard: String?): String =

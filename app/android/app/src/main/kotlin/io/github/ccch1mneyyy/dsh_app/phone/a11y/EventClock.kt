@@ -21,14 +21,28 @@ internal class EventClock {
     @Volatile var lastPackage: String? = null
         private set
 
-    fun tick(packageName: CharSequence?) {
+    /** Package → [count] at its latest content/text-change event. */
+    private val contentAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    fun tick(packageName: CharSequence?, content: Boolean = false) {
         synchronized(lock) {
             count++
             lastAt = SystemClock.uptimeMillis()
-            if (packageName != null) lastPackage = packageName.toString()
+            if (packageName != null) {
+                val pkg = packageName.toString()
+                lastPackage = pkg
+                if (content) contentAt[pkg] = count
+            }
             lock.notifyAll()
         }
     }
+
+    /**
+     * The app reported a content or text change after [since]. Some apps draw what matters
+     * (a calculator's display) in views whose text never reaches the tree, but still send these.
+     */
+    fun contentChangedSince(packageName: String?, since: Long): Boolean =
+        packageName != null && (contentAt[packageName] ?: Long.MIN_VALUE) > since
 
     /**
      * Waits for the first event after [since] (up to [firstMs]), then until [quietMs] pass
