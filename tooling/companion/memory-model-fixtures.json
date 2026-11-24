@@ -108,7 +108,7 @@
     },
     {
       "path": "app/test/support/test_fonts.dart",
-      "sha256": "1589e0444197a54a30cd933da0d868cabb8071187c1fb48d9e1161a555c5e25f"
+      "sha256": "48b8cb6c3a43109b96d140021cc15fe6ae89481ceca534cf7d082a211239732c"
     },
     {
       "path": "app/tool/companion_memory_replay_test.dart",
