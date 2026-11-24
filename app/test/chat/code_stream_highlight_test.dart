@@ -55,6 +55,37 @@ void main() {
     expect(label, findsOneWidget);
   });
 
+  testWidgets('code growth keeps the wrap control and tapping it changes the layout', (tester) async {
+    final code = ValueNotifier('a');
+    addTearDown(code.dispose);
+    await tester.pumpWidget(
+      testApp(
+        Scaffold(
+          body: ValueListenableBuilder<String>(
+            valueListenable: code,
+            builder: (_, text, _) => CodeBlock(code: text, language: 'text', replyActions: true),
+          ),
+        ),
+      ),
+    );
+    final wrap = find.byTooltip(appL10n.chatWrapLines);
+    final first = tester.widget(wrap);
+    code.value += 'b';
+    await tester.pump();
+    expect(find.text('ab', findRichText: true), findsOneWidget);
+    expect(tester.widget(wrap), same(first));
+    final horizontal = find.byWidgetPredicate(
+      (w) => w is SingleChildScrollView && w.scrollDirection == Axis.horizontal,
+    );
+    expect(horizontal, findsOneWidget);
+
+    await tester.tap(wrap);
+    await tester.pump();
+    expect(find.byTooltip(appL10n.chatUnwrapLines), findsOneWidget);
+    expect(horizontal, findsNothing);
+    await tester.pump(const Duration(milliseconds: 300));
+  });
+
   testWidgets('diff rows stay put when a syntax highlight would have cooled down', (tester) async {
     final code = ValueNotifier(('-old', false));
     addTearDown(code.dispose);

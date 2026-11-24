@@ -411,6 +411,19 @@ class _CodeBlockState extends State<CodeBlock> {
 
   /// 长行折回显示,而不是横向滚动。
   bool _wrap = false;
+  _HeaderButton? _wrapButton;
+
+  _HeaderButton _wrapControl(L10n l10n) {
+    final hint = _wrap ? l10n.chatUnwrapLines : l10n.chatWrapLines;
+    final button = _wrapButton;
+    if (button != null && button.selected == _wrap && button.tooltip == hint) return button;
+    return _wrapButton = _HeaderButton(
+      icon: AppIcons.wrapLines,
+      tooltip: hint,
+      selected: _wrap,
+      onTap: () => setState(() => _wrap = !_wrap),
+    );
+  }
 
   /// While code streams in, it is highlighted again at most this often (the
   /// last chunk of up to 8000 characters, every delta, was the cost); what
@@ -651,12 +664,7 @@ class _CodeBlockState extends State<CodeBlock> {
                           onTap: () => Navigator.of(context).push(MermaidPreviewPage.route(source: code)),
                         )
                       else if (widget.replyActions)
-                        _HeaderButton(
-                          icon: AppIcons.wrapLines,
-                          tooltip: _wrap ? l10n.chatUnwrapLines : l10n.chatWrapLines,
-                          selected: _wrap,
-                          onTap: () => setState(() => _wrap = !_wrap),
-                        ),
+                        _wrapControl(l10n),
                       _copyButton,
                       const SizedBox(width: 8),
                     ],
