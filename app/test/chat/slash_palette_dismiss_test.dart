@@ -69,6 +69,12 @@ void main() {
       counts.add(builds);
     }
     expect(counts, [0, 0], reason: 'closed palette builds for 20 keystrokes and 20 caret moves');
+
+    // A slash draft still reaches the palette.
+    builds = 0;
+    await enter(tester, '/');
+    expect(builds, greaterThan(0));
+    expect(find.byType(SlashPalette), findsOneWidget);
   });
 
   testWidgets('picking an input command closes its hint and preserves explicit sending', (tester) async {
