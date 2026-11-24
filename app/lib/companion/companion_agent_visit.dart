@@ -668,7 +668,7 @@ class _CompanionAgentVisit {
       inheritedRetry = retryTools;
       retryTools = null;
     }
-    final useSession = !light && noticeReply == null && assistantPage == null;
+    final useSession = !light && noticeReply == null;
     stop(cancelSession: !useSession);
     run = null;
     final number = ++submission;
@@ -878,8 +878,6 @@ class _CompanionAgentVisit {
       }
       preparing = false;
       // Notification replies carry a displayed draft and native confirmation.
-      // A selected screen is external material from the Android assistant.
-      // Preserve the restricted tool sets for these two explicit actions.
       final notificationWindow = residentUi;
       final work = agent.say(
         useSession: useSession,

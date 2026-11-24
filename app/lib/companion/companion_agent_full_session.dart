@@ -55,6 +55,9 @@ class _CompanionFullSession {
     }
     final cap = await client.companionPromptCapability(id);
     if (!current()) return;
+    if (run.assistantPage != null && cap?.selectedPage != true) {
+      throw const CompanionHostError(CompanionHostFailure.unavailable);
+    }
     if (instance != cap?.instanceId || profileRevision != cap?.profileRevision) {
       profileFingerprint = null;
       if (instance != cap?.instanceId) {
@@ -110,6 +113,10 @@ class _CompanionFullSession {
       if (trace == null) return;
       if (trace.spans.any((s) => s.kind == TraceKind.tool)) run.toolDispatchStarted = true;
       if (trace.endSeq != null) {
+        if (prepared?.requestId == req) {
+          prepared = null;
+          selectedCards = null;
+        }
         final failure = trace.endReason?.error;
         if (failure != null) run.error = CompanionHostError(companionHostFailure(failure.code), failure.message);
         finish();
@@ -240,11 +247,15 @@ class _CompanionFullSession {
           'localTime': ctx['localTime'],
           if (ctx.containsKey('zoneId')) 'zoneId': ctx['zoneId'],
           if (ctx.containsKey('originalMessage')) 'originalMessage': ctx['originalMessage'],
+          if (run.assistantPage case final page?) 'selectedPage': page,
         } : null,
       );
       selectedCards = cards;
     }
     final update = prepared!.update;
+    // A composer retry no longer has the Android attachment chip. The first
+    // request still owns both the selected page and its memory tool rules.
+    if (update?['deviceContext'] case {'selectedPage': String()}) run.externalWebContent = true;
     if (update != null) {
       final ack = await client.prepareCompanionPromptContext(update);
       if (!current()) return;

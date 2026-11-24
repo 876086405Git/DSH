@@ -387,6 +387,7 @@ class CompanionPromptCapability {
     this.memoryEpoch,
     this.phoneMemory = false,
     int? phoneMemoryVersion,
+    this.selectedPage = false,
     this.chatUsage = false,
   }) : phoneMemoryVersion = phoneMemoryVersion ?? (phoneMemory ? 2 : 0);
   final String instanceId;
@@ -409,6 +410,9 @@ class CompanionPromptCapability {
 
   /// v3 preserves the phone's selected layers and source labels, and supports deviceContext.
   final int phoneMemoryVersion;
+
+  /// This bridge accepts a shared page in the matching request-only sidecar.
+  final bool selectedPage;
 
   /// Owner-only observations for marked ordinary chat calls. This is not
   /// complete billing coverage for background, compaction, or other agents.
@@ -450,6 +454,7 @@ class CompanionPromptCapability {
       memoryEpoch: memoryEpoch,
       phoneMemory: map['phoneMemory'] == true,
       phoneMemoryVersion: map['phoneMemoryVersion'] as int?,
+      selectedPage: map['selectedPage'] == true,
       chatUsage: map['chatUsage'] == true,
     );
   }

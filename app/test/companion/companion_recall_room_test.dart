@@ -8,6 +8,7 @@ import 'package:dsh_app/companion/companion_memory.dart';
 import 'package:dsh_app/companion/companion_pack.dart';
 import 'package:dsh_app/companion/companion_state.dart';
 import 'package:dsh_app/l10n/gen/app_localizations.dart';
+import 'package:dsh_app/links/launcher_entries.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
@@ -58,6 +59,7 @@ class _Bridge extends DshConnection {
     'profileAccepted': true,
     'phoneMemory': phoneMemory,
     if (phoneMemory) 'phoneMemoryVersion': 3,
+    if (phoneMemory) 'selectedPage': true,
     'chatUsage': chatUsage,
     'memoryMode': phoneSessions.contains(session) ? 'phone' : 'query',
   };
@@ -410,7 +412,7 @@ class _Room {
     );
   });
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(WidgetTester tester, {String? page}) async {
     // A valid old Host has the text route but no agent turn.
     bridge.host = (await tester.runAsync(NotesPeer.open))!;
     bridge.host!.hostModel
@@ -438,6 +440,7 @@ class _Room {
           supportedLocales: L10n.supportedLocales,
           locale: const Locale('zh'),
           home: CompanionPage(
+            assistantEntry: page == null ? null : CompanionAssistantEntry(page: page),
             storeOverride: CompanionPackStore(root),
             stageController: CompanionStageController(sink: (_, _) {}),
             stageBuilder: (_, next) {
@@ -508,6 +511,25 @@ void main() {
       expect(jsonDecode(memory['block']! as String), containsPair('version', 3));
       expect(room.memory.store.messages().where((row) => row['role'] == 'user').single['text'], raw);
       expect(room.asked, isEmpty, reason: 'the phone never starts a second foreground tool loop');
+    } finally {
+      await room.close(tester);
+    }
+  });
+
+  testWidgets('Android assistant shares the page with exactly one full room request', (tester) async {
+    final room = _Room(root);
+    const page = '列车将在九点到站。';
+    await room.open(tester, page: page);
+    try {
+      await room.say(tester, '几点到站？');
+      expect(room.client.prompts.single.text, '几点到站？');
+      final first = room.bridge.prepared.single;
+      expect(first['requestId'], room.client.prompts.single.requestId);
+      expect(first['deviceContext'], containsPair('selectedPage', page));
+      await room.say(tester, '谢谢');
+      expect(room.client.prompts.last.session, room.client.prompts.first.session);
+      expect(room.bridge.prepared.last['deviceContext'] as Map, isNot(contains('selectedPage')));
+      expect(room.asked, isEmpty);
     } finally {
       await room.close(tester);
     }

@@ -62,10 +62,11 @@ const localClock = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}
 const clockFields = v => localClock(v.localTime) && (v.zoneId === undefined || nonempty(v.zoneId));
 
 function deviceContextOf(value) {
-  if (!fields(value, ['window', 'localTime'], ['zoneId', 'originalMessage', 'noticeReply']) ||
+  if (!fields(value, ['window', 'localTime'], ['zoneId', 'originalMessage', 'noticeReply', 'selectedPage']) ||
     !['room', 'floating', 'notification', 'voice'].includes(value.window) || !clockFields(value)) throw invalid();
   if (value.originalMessage !== undefined && (!fields(value.originalMessage, ['localTime'], ['zoneId']) ||
     !clockFields(value.originalMessage))) throw invalid();
+  if (value.selectedPage !== undefined && typeof value.selectedPage !== 'string') throw invalid();
   const notice = value.noticeReply;
   if (notice !== undefined && (!fields(notice, ['source', 'phase', 'app', 'package', 'observed_at_ms', 'summary'], ['shown_draft']) ||
     notice.source !== 'notice' || !nonempty(notice.app) || !nonempty(notice.package) || !nonempty(notice.summary) ||
@@ -218,7 +219,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
     profileRevision: value.revision, persistence: 'connection', requestBinding: 'rpcId',
     maxEvents: 8,
     memoryMode: value.phone ? 'phone' : value.memoryDisabled ? 'automatic' : 'query', memoryEpoch: value.memoryEpoch,
-    ...(phoneSupported(value.agent) ? { phoneMemory: true, phoneMemoryVersion: 3 } : {}),
+    ...(phoneSupported(value.agent) ? { phoneMemory: true, phoneMemoryVersion: 3, selectedPage: true } : {}),
     ...(usageSupported(value.agent) ? { chatUsage: true } : {}) });
   function capture(agent) {
     const value = open(agent);
