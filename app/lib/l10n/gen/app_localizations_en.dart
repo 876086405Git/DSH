@@ -7681,7 +7681,7 @@ class L10nEn extends L10n {
 
   @override
   String get companionScreenHint =>
-      'She glances at the screen now and then and only speaks up when something is worth saying; nothing she sees is kept';
+      'She watches the screen with you and speaks up when something catches her eye; nothing she sees is kept';
 
   @override
   String get companionScreenNeedsAccess =>
@@ -7738,6 +7738,18 @@ class L10nEn extends L10n {
 
   @override
   String get companionScreenChattyHint => 'Talks with you more often';
+
+  @override
+  String get companionScreenLive => 'Live';
+
+  @override
+  String get companionScreenLiveHint => 'Keeps watching and can speak up several times a minute';
+
+  @override
+  String get companionScreenPerHour => 'Most lines an hour';
+
+  @override
+  String get companionScreenPerHourNone => 'No limit';
 
   @override
   String get companionScreenUsageAccess => 'Let her know which app you\'re using';

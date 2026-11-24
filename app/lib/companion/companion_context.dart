@@ -58,8 +58,10 @@ class CompanionContextEvent {
 /// on one line within the event's 160 characters.
 String companionScreenNote(String line, {String? app, String? scene}) {
   final where = [?app, ?scene].join('，');
-  final note = '你看着对方的屏幕${where.isEmpty ? '' : '（$where）'}主动说了：「${line.trim()}」'
-      .replaceAll(RegExp(r'[\x00-\x1f\x7f\s]+'), ' ');
+  final note = '你看着对方的屏幕${where.isEmpty ? '' : '（$where）'}主动说了：「${line.trim()}」'.replaceAll(
+    RegExp(r'[\x00-\x1f\x7f\s]+'),
+    ' ',
+  );
   return note.runes.length <= 160 ? note : '${String.fromCharCodes(note.runes.take(158))}…」';
 }
 

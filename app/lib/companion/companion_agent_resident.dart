@@ -3,6 +3,8 @@ part of 'companion_agent.dart';
 /// A real presentation endpoint. Notification delivery is not a visible frame.
 abstract interface class CompanionAgentAmbientUi {
   bool get presentationAvailable;
+
+  /// A spoken line takes over from an earlier one of these still being read.
   Future<bool> presentLine({required String id, required String text, required String emotion, required bool speak});
   void stopSpeech();
 }
