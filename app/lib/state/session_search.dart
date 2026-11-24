@@ -749,12 +749,14 @@ Future<({List<ContentHit> items, bool hasMore})?> _searchHostUserCorpus(Ref ref,
 
   final corpus = <String, SessionSearchCorpusEntry>{};
   final missingProjections = <SessionSummary>[];
+  final listedFiles = <String>{};
 
   for (final s in all) {
     if (s.blank || s.isSubagent) continue;
     var entry = extractProjectionSearchCorpus(s.projections);
     if (guestFs != null) {
       final file = guestFs.file('${GuestFs.dshHome}/storages/session_projcache/sessions/${s.sessionId}.json');
+      listedFiles.add(file.path);
       try {
         final stat = await file.stat();
         if (stat.type == FileSystemEntityType.file) {
@@ -765,10 +767,12 @@ Future<({List<ContentHit> items, bool hasMore})?> _searchHostUserCorpus(Ref ref,
             diskEntry = cached.entry;
           } else {
             diskEntry = extractCheckpointJsonSearchCorpus(await file.readAsString());
-            if (_localCheckpointCache.length >= 512) {
-              _localCheckpointCache.remove(_localCheckpointCache.keys.first);
+            // Full: keep what is cached. Every query walks the files in the
+            // same order, so evicting the oldest entry would push out the
+            // next file to read and past 512 sessions every query re-read all.
+            if (cached != null || _localCheckpointCache.length < 512) {
+              _localCheckpointCache[key] = _CachedCheckpointFile(stat.modified, stat.size, diskEntry);
             }
-            _localCheckpointCache[key] = _CachedCheckpointFile(stat.modified, stat.size, diskEntry);
           }
           entry = entry.merge(diskEntry);
         }
@@ -780,6 +784,8 @@ Future<({List<ContentHit> items, bool hasMore})?> _searchHostUserCorpus(Ref ref,
       missingProjections.add(s);
     }
   }
+  // Deleted sessions give their slots back.
+  if (guestFs != null) _localCheckpointCache.removeWhere((key, _) => !listedFiles.contains(key));
 
   // On remote hosts (or for a brand-new session not yet checkpointed to disk),
   // read projections for the newest sessions without activating an Agent.
