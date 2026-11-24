@@ -9,11 +9,13 @@ package io.github.ccch1mneyyy.dsh_app.phone
 internal class CompanionEngineSessions {
     @Volatile private var ids: Set<String> = emptySet()
 
-    /** Replaces the whole set. Anything but a short list of ids changes nothing. */
+    /**
+     * Replaces the whole set. Past [MAX], only the last ones count (the app lists the newest
+     * last): an old set never outlives a long list. Anything but a list of ids changes nothing.
+     */
     fun replace(raw: Any?): Boolean {
         val list = raw as? List<*> ?: return false
-        if (list.size > MAX) return false
-        ids = list.map { PhoneCaller.identifier(it) ?: return false }.toSet()
+        ids = list.takeLast(MAX).map { PhoneCaller.identifier(it) ?: return false }.toSet()
         return true
     }
 
