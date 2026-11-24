@@ -73,6 +73,19 @@ class OverlayMachineTest {
         assertEquals(t0 + collapse, d.wakeAt)
     }
 
+    @Test fun heldAskStopsSchedulingAnExpiredCollapse() {
+        val m = ready()
+        m.onTouch(t0)
+        m.holding = true
+        assertEquals(t0 + collapse, m.decide(t0 + collapse - 1).wakeAt)
+        val held = m.decide(t0 + collapse)
+        assertEquals(Visibility.SHOWN, held.visibility)
+        assertFalse(held.dimmed)
+        assertNull(held.wakeAt)
+        m.holding = false
+        assertEquals(Visibility.HIDDEN, m.decide(t0 + collapse + 1).visibility)
+    }
+
     @Test fun alwaysShowNeverCollapses() {
         val m = ready().apply { alwaysShow = true }
         val d = m.decide(t0 + 10 * collapse)

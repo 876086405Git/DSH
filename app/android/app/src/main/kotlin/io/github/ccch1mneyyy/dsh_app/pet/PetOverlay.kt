@@ -342,8 +342,8 @@ internal object PetOverlay {
 
     /** A real window acknowledgement, never an enqueue-as-shown receipt. */
     fun companionLine(id: String?, text: String?, emotion: String?, speaking: Boolean): Boolean {
-        if (!companionResident || !interactive() || machine.appForeground || capture.inFlight ||
-            petView?.isAttachedToWindow != true || !systemShown || machine.bubbles.current(now())?.ask != null ||
+        if (!companionResident || machine.appForeground || capture.inFlight || petView?.isAttachedToWindow != true ||
+            !systemShown || !interactive() || machine.bubbles.current(now())?.ask != null ||
             answerState.bubbleId != null) return false
         val words = PetPush.clean(text, 600) ?: return false
         // One bubble per reply: a streaming reply's later words go into the bubble already out.
@@ -516,8 +516,11 @@ internal object PetOverlay {
                 petView?.cancelInteraction()
                 stopLoop()
                 stopCompanion()
+                // What held her out is gone with the screen: decide again, so the service can go.
+                val held = menuView != null || askView != null
                 dismissMenu()
                 removeAsk()
+                if (held) main.post(evaluateRunnable)
             }
             Visibility.SHOWN -> {
                 val before = lastAdd
