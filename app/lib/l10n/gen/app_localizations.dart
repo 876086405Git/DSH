@@ -13431,7 +13431,7 @@ abstract class L10n {
   /// No description provided for @companionScreenHint.
   ///
   /// In zh, this message translates to:
-  /// **'隔一会儿看一眼屏幕，有值得说的才开口；看到的不会记下来'**
+  /// **'陪你一起看屏幕，看到有意思的就说出来；屏幕内容不会存下来，她只记得自己刚说过的几句'**
   String get companionScreenHint;
 
   /// No description provided for @companionScreenNeedsAccess.
@@ -13535,6 +13535,30 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'多陪你聊几句'**
   String get companionScreenChattyHint;
+
+  /// No description provided for @companionScreenLive.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时'**
+  String get companionScreenLive;
+
+  /// No description provided for @companionScreenLiveHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'一直跟着看，一分钟里能说上好几句'**
+  String get companionScreenLiveHint;
+
+  /// No description provided for @companionScreenPerHour.
+  ///
+  /// In zh, this message translates to:
+  /// **'每小时最多搭话'**
+  String get companionScreenPerHour;
+
+  /// No description provided for @companionScreenPerHourNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'不限'**
+  String get companionScreenPerHourNone;
 
   /// No description provided for @companionScreenUsageAccess.
   ///

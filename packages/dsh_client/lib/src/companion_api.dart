@@ -389,6 +389,7 @@ class CompanionPromptCapability {
     int? phoneMemoryVersion,
     this.selectedPage = false,
     this.chatUsage = false,
+    this.screenEvents = false,
   }) : phoneMemoryVersion = phoneMemoryVersion ?? (phoneMemory ? 2 : 0);
   final String instanceId;
   final String sessionId;
@@ -417,6 +418,9 @@ class CompanionPromptCapability {
   /// Owner-only observations for marked ordinary chat calls. This is not
   /// complete billing coverage for background, compaction, or other agents.
   final bool chatUsage;
+
+  /// This bridge accepts her own lines about the screen as 'screen' events.
+  final bool screenEvents;
 
   static CompanionPromptCapability? fromJson(Object? value) {
     final map = asMap(value);
@@ -456,6 +460,7 @@ class CompanionPromptCapability {
       phoneMemoryVersion: map['phoneMemoryVersion'] as int?,
       selectedPage: map['selectedPage'] == true,
       chatUsage: map['chatUsage'] == true,
+      screenEvents: map['screenEvents'] == true,
     );
   }
 }

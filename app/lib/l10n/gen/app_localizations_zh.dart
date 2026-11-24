@@ -7227,7 +7227,7 @@ class L10nZh extends L10n {
   String get companionScreen => '陪你看屏幕';
 
   @override
-  String get companionScreenHint => '隔一会儿看一眼屏幕，有值得说的才开口；看到的不会记下来';
+  String get companionScreenHint => '陪你一起看屏幕，看到有意思的就说出来；屏幕内容不会存下来，她只记得自己刚说过的几句';
 
   @override
   String get companionScreenNeedsAccess => '要先打开手机操控的无障碍，或者允许她录屏';
@@ -7279,6 +7279,18 @@ class L10nZh extends L10n {
 
   @override
   String get companionScreenChattyHint => '多陪你聊几句';
+
+  @override
+  String get companionScreenLive => '实时';
+
+  @override
+  String get companionScreenLiveHint => '一直跟着看，一分钟里能说上好几句';
+
+  @override
+  String get companionScreenPerHour => '每小时最多搭话';
+
+  @override
+  String get companionScreenPerHourNone => '不限';
 
   @override
   String get companionScreenUsageAccess => '让她知道你在用哪个 App';

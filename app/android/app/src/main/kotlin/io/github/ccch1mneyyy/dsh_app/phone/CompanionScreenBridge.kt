@@ -199,11 +199,12 @@ private class ScreenSettings(private val app: Context) {
         private set
     private var residentOwner: Any? = null
     private var frequency = prefs.getString("frequency", "normal")!!
-    private var seriousPerHour = prefs.getInt("serious_per_hour", 6)
+    // The person's limit on lines an hour; 0, the default, is none. Every configure saved
+    // the old defaults 6 and 12 before anyone could choose, so those copies read as none too.
+    private var seriousPerHour = prefs.getInt("serious_per_hour", 0).takeUnless { it == 6 || it == 12 } ?: 0
     private var mutedUntil = prefs.getLong("muted_until_ms", 0)
     private var day = prefs.getString("activity_day", "")!!
     private var activities = prefs.getStringSet("activities", emptySet())!!.toSet()
-    private var cheap = readTimes("cheap")
     private var serious = readTimes("serious")
     private var costDay = prefs.getString("cost_day", "")!!
     private var costs = runCatching { JSONObject(prefs.getString("costs", "{}")!!) }.getOrElse { JSONObject() }
@@ -262,7 +263,7 @@ private class ScreenSettings(private val app: Context) {
             val apps = args["excluded_packages"] ?: excluded.toList()
             val limit = args["serious_per_hour"] ?: seriousPerHour
             if (on !is Boolean || pictures !is Boolean || host != null && (host !is String || !validChoice(host, 512)) ||
-                mode !in setOf("quiet", "normal", "chatty") || apps !is List<*> ||
+                mode !in setOf("quiet", "normal", "chatty", "live") || apps !is List<*> ||
                 apps.any { it !is String || it.isBlank() } || limit !is Int || limit !in 0..60) return false
             val packages = apps.map { it as String }.toSet()
             val selectedHost = host as String?
@@ -296,15 +297,16 @@ private class ScreenSettings(private val app: Context) {
         signal()
     }
 
-    /** Persist the physical-attempt slot before allowing the caller to send. */
+    /** Glances are never limited. A line ("serious") takes a persisted slot only
+     * under an hourly limit the person chose. */
     fun reserve(tier: String): Boolean = synchronized(lock) {
+        if (tier == "cheap" || seriousPerHour == 0) return true
         val now = System.currentTimeMillis()
-        val entries = (if (tier == "cheap") cheap else serious).filter { it > now - 3600000 }.toMutableList()
-        val limit = if (tier == "cheap") 30 else seriousPerHour
-        if (entries.size >= limit) return false
+        val entries = serious.filter { it > now - 3600000 }.toMutableList()
+        if (entries.size >= seriousPerHour) return false
         entries.add(now)
-        if (!prefs.edit().putString(tier, entries.joinToString(",")).commit()) return false
-        if (tier == "cheap") cheap = entries else serious = entries
+        if (!prefs.edit().putString("serious", entries.joinToString(",")).commit()) return false
+        serious = entries
         true
     }
 

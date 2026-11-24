@@ -347,7 +347,6 @@ class CompanionScreenObserver {
         ),
       );
       if (reading == null || !await _valid(token, generation)) return;
-      _pace.observed(reading);
       // This is only a local same-day activity label; no screenshot or source text.
       await _channel.invokeMethod<Object?>('companionScreenState', {'op': 'note', 'scene': reading.scene});
       if (!_enabled || generation != _generation) return;
@@ -366,7 +365,7 @@ class CompanionScreenObserver {
             'salience': reading.salience,
             'emotion': reading.emotion,
           },
-          isCurrentObservation: () => _valid(token, generation, requireIdle: reading.salience < .95),
+          isCurrentObservation: () => _valid(token, generation, requireIdle: _pace.waitsForIdle(reading)),
         );
         if (shown) _pace.shown(spokeAt, reading, quip: false);
       }
@@ -374,11 +373,15 @@ class CompanionScreenObserver {
           _enabled &&
           generation == _generation &&
           _pace.quipIsNew(reading.quip) &&
+          // Every line she says, a quip too, counts toward an hourly limit the person set.
+          await _permit('serious', token) &&
           await _valid(token, generation)) {
         shown = await agent.presentScreenQuip(
           text: reading.quip,
           emotion: reading.emotion,
           observedAtMs: sample['observed_at_ms']! as int,
+          app: sample['package_name']! as String,
+          scene: reading.scene,
         );
         if (shown) _pace.shown(DateTime.now().millisecondsSinceEpoch, reading, quip: true);
       }

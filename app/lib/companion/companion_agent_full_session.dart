@@ -385,7 +385,10 @@ class _CompanionFullSession {
         profileRevision: cap.profileRevision,
         acknowledgedProfile: profileFingerprint,
         now: run.context!.sampledAt,
-        events: visit.events.where((e) => run.context!.eventIds.contains(e.id)),
+        // An older bridge refuses the whole request for a kind it doesn't know.
+        events: visit.events.where(
+          (e) => run.context!.eventIds.contains(e.id) && (cap.screenEvents || e.kind != 'screen'),
+        ),
         // Migrated phone authority must never re-enable old JSON memories.
         recall: false,
         memoryMode: cards == null ? 'query' : 'phone',

@@ -26,4 +26,17 @@ void main() {
     final kept = companionRecentEvents(events, now: now);
     expect(kept.map((e) => e.id), ['e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8', 'e9']);
   });
+
+  test('her line about the screen is a valid event, on one line and within bounds', () {
+    final now = DateTime.utc(2026, 11, 8, 12);
+    final note = companionScreenNote('又在刷\n短视频\t呀', app: 'tv.danmaku.bili', scene: 'video');
+    expect(note, '你看着对方的屏幕（tv.danmaku.bili，video）主动说了：「又在刷 短视频 呀」');
+    expect(companionScreenNote('早点睡'), '你看着对方的屏幕主动说了：「早点睡」');
+    final long = companionScreenNote('话' * 400, app: 'example.app');
+    expect(long.runes, hasLength(160));
+    expect(long, endsWith('…」'));
+    for (final detail in [note, long]) {
+      expect(CompanionContextEvent(id: 's', kind: 'screen', at: now, detail: detail).toJson()['detail'], detail);
+    }
+  });
 }

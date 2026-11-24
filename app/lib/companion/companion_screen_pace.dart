@@ -1,16 +1,33 @@
+/// What each frequency the person picks means, in one place. [glance]: how
+/// often she looks (ms); [aside]: how often she may speak up properly (ms);
+/// [salience]: the least that is worth that aside; [mindsBusy]: she waits
+/// while the person types; [backsOff]: unanswered lines slow her down.
+typedef CompanionScreenTempo = ({int glance, int aside, double salience, bool mindsBusy, bool backsOff});
+
+const companionScreenTempos = <String, CompanionScreenTempo>{
+  'quiet': (glance: 60000, aside: 180000, salience: .8, mindsBusy: true, backsOff: true),
+  'normal': (glance: 20000, aside: 60000, salience: .7, mindsBusy: true, backsOff: false),
+  'chatty': (glance: 10000, aside: 30000, salience: .6, mindsBusy: false, backsOff: false),
+  'live': (glance: 5000, aside: 12000, salience: .5, mindsBusy: false, backsOff: false),
+};
+
 /// Local timing policy for optional screen companionship. It never sends a
-/// request, displays a line, or writes a memory. Hourly physical-attempt caps
-/// are reserved by the native observer before a model call.
+/// request, displays a line, or writes a memory. The person's hourly limit,
+/// if they set one, is reserved by the native observer before each line.
 class CompanionScreenPace {
   String frequency = 'normal';
   int? _cheapAt;
   int? _seriousAt;
   int? _userAt;
   int _unanswered = 0;
-  String _scene = 'other';
   final List<String> _recentQuips = [];
 
+  /// Salience at which she speaks up even while the person is busy.
+  static const busySalience = .85;
+
   int get unanswered => _unanswered;
+
+  CompanionScreenTempo get _tempo => companionScreenTempos[frequency] ?? companionScreenTempos['normal']!;
 
   void userSpoke(int? at) {
     if (at == null || (_userAt != null && at <= _userAt!)) return;
@@ -19,32 +36,28 @@ class CompanionScreenPace {
   }
 
   double _factor(int now) {
-    final backoff = _unanswered < 2
-        ? 1.0
-        : _unanswered == 2
-        ? 1.5
-        : (2.0 + (_unanswered - 3) * .5).clamp(2.0, 3.0).toDouble();
-    final chosen = switch (frequency) {
-      'quiet' => 2.0,
-      'chatty' => .8,
-      _ => 1.0,
-    };
+    // Quiet only: lines nobody answered slow her a quarter each, to twice at most.
+    final backoff = _tempo.backsOff ? (1 + (_unanswered - 1) * .25).clamp(1.0, 2.0).toDouble() : 1.0;
     final replied = _userAt != null && now >= _userAt! && now - _userAt! <= 120000 ? .8 : 1.0;
-    return backoff * chosen * replied * (_scene == 'idle' ? 2 : 1);
+    return backoff * replied;
   }
 
-  bool cheapDue(int now) => _cheapAt == null || now >= _cheapAt! && now - _cheapAt! >= (30000 * _factor(now)).ceil();
+  bool cheapDue(int now) =>
+      _cheapAt == null || now >= _cheapAt! && now - _cheapAt! >= (_tempo.glance * _factor(now)).ceil();
 
   void cheapStarted(int now) {
     _cheapAt = now;
   }
 
   bool seriousDue(int now, CompanionScreenReading reading, {required bool userBusy}) {
-    if (reading.salience <= .85) return false;
-    if (_userAt != null && (now < _userAt! || now - _userAt! < 10000)) return false;
-    if ((userBusy || reading.busy) && reading.salience < .95) return false;
-    return _seriousAt == null || now >= _seriousAt! && now - _seriousAt! >= (180000 * _factor(now)).ceil();
+    if (reading.salience < _tempo.salience) return false;
+    if (_userAt != null && (now < _userAt! || now - _userAt! < 3000)) return false;
+    if (waitsForIdle(reading) && (userBusy || reading.busy)) return false;
+    return _seriousAt == null || now >= _seriousAt! && now - _seriousAt! >= (_tempo.aside * _factor(now)).ceil();
   }
+
+  /// Whether the aside must find the person idle: only where busy matters.
+  bool waitsForIdle(CompanionScreenReading reading) => _tempo.mindsBusy && reading.salience < busySalience;
 
   void seriousStarted(int now) {
     _seriousAt = now;
@@ -59,15 +72,10 @@ class CompanionScreenPace {
   /// Only an actual visible presentation creates an unanswered opportunity.
   void shown(int now, CompanionScreenReading reading, {required bool quip}) {
     _unanswered++;
-    _scene = reading.scene;
     if (quip) {
       _recentQuips.add(_normalize(reading.quip));
       if (_recentQuips.length > 12) _recentQuips.removeAt(0);
     }
-  }
-
-  void observed(CompanionScreenReading reading) {
-    _scene = reading.scene;
   }
 
   static String _normalize(String text) =>
@@ -117,12 +125,7 @@ class CompanionScreenReading {
     final quip = (value['quip']! as String).trim();
     final mood = (value['mood']! as String).trim();
     final emotion = (value['emotion']! as String).trim();
-    if (!salience.isFinite ||
-        salience < 0 ||
-        salience > 1 ||
-        quip.runes.length > 20 ||
-        mood.runes.length > 40 ||
-        emotion.runes.length > 24) {
+    if (!salience.isFinite || salience < 0 || salience > 1 || mood.runes.length > 40 || emotion.runes.length > 24) {
       return null;
     }
     const scenes = {'gaming', 'coding', 'video', 'reading', 'chatting', 'idle', 'other'};
@@ -131,7 +134,8 @@ class CompanionScreenReading {
       mood: mood,
       salience: salience,
       busy: value['busy']! as bool,
-      quip: quip,
+      // Too long for her bubble: only the quip is dropped, the reading stays.
+      quip: quip.runes.length > 30 ? '' : quip,
       emotion: emotion.isEmpty ? 'neutral' : emotion,
     );
   }

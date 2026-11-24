@@ -92,7 +92,7 @@ class CompanionAlwaysOnOwner {
   StreamSubscription<void>? _phoneStops;
   bool _fromFloat = false;
   final _spokenReplies = <String>{};
-  final _voices = <String, ({String bubble, int chars, int utterance})>{};
+  final _voices = <String, ({String bubble, int chars, int utterance, bool ambient})>{};
   int _voiceGeneration = 0;
   int _voiceSerial = 0;
   int _textAfterControl = 0;
@@ -442,6 +442,7 @@ class CompanionAlwaysOnOwner {
     required String emotion,
     required bool speak,
     int? noticeEpoch,
+    bool ambient = false,
   }) async {
     final generation = _voiceGeneration;
     final shown = await overlay.presentCompanion(
@@ -454,26 +455,32 @@ class CompanionAlwaysOnOwner {
     // Notice-derived words stay on the already-authorized text surface. A
     // voice model warm-up cannot retain authority across a later lock.
     if (!shown || noticeEpoch != null || !speak || !ref.read(petOverlayProvider).showing) return shown;
-    await _speak(id, text, generation);
+    await _speak(id, text, generation, ambient: ambient);
     return shown;
   }
 
   /// Reads [words] aloud in her voice when it is on; her mouth moves along in
   /// [bubble] while that shows. [keepUp]: on the phone, a line that would wait
   /// behind two others replaces them, so she never falls behind what she does.
-  Future<void> _speak(String bubble, String words, int generation, {bool keepUp = false}) async {
+  /// [ambient]: a line of her own (the screen) takes over from an earlier one
+  /// still being read instead of queueing behind it; her replies are not cut.
+  Future<void> _speak(String bubble, String words, int generation, {bool keepUp = false, bool ambient = false}) async {
     final settings = ref.read(companionEffectiveVoiceProvider);
     if (settings?.on != true) return;
     final ready = await _speaker.ready(settings!);
     if (!ready || !active || generation != _voiceGeneration) return;
+    // A screen line never waits behind her reply; it only replaces another screen line.
+    if (ambient && _voices.values.any((line) => !line.ambient)) return;
     // Counted in sentences: a long one split into parts is still one.
-    if (keepUp && _voices.values.map((line) => line.utterance).toSet().length > 1) _hush();
+    if (keepUp && _voices.values.map((line) => line.utterance).toSet().length > 1 || ambient && _voices.isNotEmpty) {
+      _hush();
+    }
     // The phone's own synthesizer takes only so much at once, as in her room.
     final parts = settings.source == CompanionVoiceSource.system ? companionSystemSpeechParts(words) : [words];
     final utterance = _voiceSerial + 1;
     for (final part in parts) {
       final voiceId = 'float:${_status.epoch}:${++_voiceSerial}';
-      _voices[voiceId] = (bubble: bubble, chars: part.length, utterance: utterance);
+      _voices[voiceId] = (bubble: bubble, chars: part.length, utterance: utterance, ambient: ambient);
       _speaker.speak(voiceId, part);
     }
   }
@@ -524,7 +531,7 @@ class _ResidentUi
   bool get presentationAvailable => owner.active && owner.ref.read(petOverlayProvider).showing;
   @override
   Future<bool> presentLine({required String id, required String text, required String emotion, required bool speak}) =>
-      owner._presentLine(id: id, text: text, emotion: emotion, speak: speak);
+      owner._presentLine(id: id, text: text, emotion: emotion, speak: speak, ambient: true);
   @override
   void stopSpeech() => owner._hush();
   @override

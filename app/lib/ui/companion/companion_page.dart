@@ -3046,6 +3046,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
             final visionEnabled = state['vision_enabled'] == true;
             final visionSelection = ModelSelection.fromJson(state['vision_selection']);
             final frequency = state['frequency'] as String? ?? 'normal';
+            final perHour = state['serious_per_hour'] as int? ?? 0;
             final cost = (state['today_estimated_cny'] as num?)?.toDouble() ?? 0;
             final caption = Theme.of(sheet).textTheme.bodySmall;
             // A channel failure leaves the mirrored state as it was.
@@ -3132,6 +3133,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                           ('quiet', l10n.companionScreenQuiet, l10n.companionScreenQuietHint),
                           ('normal', l10n.companionScreenNormal, l10n.companionScreenNormalHint),
                           ('chatty', l10n.companionScreenChatty, l10n.companionScreenChattyHint),
+                          ('live', l10n.companionScreenLive, l10n.companionScreenLiveHint),
                         ])
                           SettingsTile(
                             tinted: false,
@@ -3140,6 +3142,24 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                             chevron: false,
                             trailing: value == frequency ? const Icon(AppIcons.selected, size: 20) : null,
                             onTap: value == frequency ? null : () => send(screen.configure(frequency: value)),
+                          ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(SheetTitleBar.inset + 8, 0, SheetTitleBar.inset + 8, 8),
+                      child: Text(l10n.companionScreenPerHour, style: caption),
+                    ),
+                    SheetGroup(
+                      margin: const EdgeInsets.fromLTRB(SheetTitleBar.inset, 0, SheetTitleBar.inset, 12),
+                      children: [
+                        // 0 is no limit, the default.
+                        for (final value in const [0, 10, 30, 60])
+                          SettingsTile(
+                            tinted: false,
+                            title: value == 0 ? l10n.companionScreenPerHourNone : '$value',
+                            chevron: false,
+                            trailing: value == perHour ? const Icon(AppIcons.selected, size: 20) : null,
+                            onTap: value == perHour ? null : () => send(screen.configure(seriousPerHour: value)),
                           ),
                       ],
                     ),

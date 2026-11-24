@@ -60,7 +60,10 @@ void main() {
     expect(value.phoneMemory, isFalse);
     expect(value.phoneMemoryVersion, 0);
     expect(value.chatUsage, isFalse);
+    expect(value.screenEvents, isFalse);
     expect(requests, ['GET']);
+    handler = (req) => reply(req, 200, {...capability(), 'screenEvents': true});
+    expect((await client.companionPromptCapability(session))!.screenEvents, isTrue);
   });
   test('phone selection and chat usage are explicit typed capabilities', () async {
     handler = (req) =>
