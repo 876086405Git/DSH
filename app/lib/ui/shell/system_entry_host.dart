@@ -10,6 +10,8 @@
 //                      conversation → that conversation, on its host
 //   Quick Settings     新对话
 //   pet screenshot     新对话 with the image attached, focused and unsent
+//   companion phone    back to her room when the task was asked for there;
+//   task               otherwise the app as it was
 //   a file opened with the app that no feature claims → 新对话 with it attached
 //
 // and keeps the launcher's recent conversations current. Bridges:
@@ -182,6 +184,9 @@ class _SystemEntryHostState extends ConsumerState<SystemEntryHost> {
         }
       case CompanionAssistantEntry():
         if (mounted) await openCompanionAssistant(context, ref, entry);
+      case OpenCompanionEntry(:final room):
+        // Never _showChat: closing the room would end her turn, and she is no chat.
+        if (room && mounted) await showCompanionRoom(context, ref);
     }
   }
 

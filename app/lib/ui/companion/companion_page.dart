@@ -112,6 +112,17 @@ Future<void> openCompanionAssistant(BuildContext context, WidgetRef ref, Compani
   ).push(MaterialPageRoute<void>(builder: (_) => CompanionPage(assistantEntry: entry)));
 }
 
+/// Back after a phone task asked for in her room: the room still open stays
+/// as the person left it, her reply in it. Only when none is open (closed
+/// meanwhile) does a new one come up.
+Future<void> showCompanionRoom(BuildContext context, WidgetRef ref) async {
+  if (ref.read(_assistantRooms).isNotEmpty) return;
+  await Navigator.of(
+    context,
+    rootNavigator: true,
+  ).push(MaterialPageRoute<void>(builder: (_) => const CompanionPage(sections: true)));
+}
+
 class CompanionPage extends ConsumerStatefulWidget {
   const CompanionPage({
     super.key,

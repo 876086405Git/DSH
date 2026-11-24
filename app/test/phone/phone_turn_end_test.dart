@@ -243,6 +243,28 @@ void main() {
       expect(container.read(chatRevealProvider), isNull);
     });
 
+    test('a companion task goes back to her room, or leaves the person where it was asked from', () async {
+      await make(running: {'s1'});
+      Map<String, Object?> companionEnd(int id, String session) => {
+        ...phoneStatus(), 'taskProtocol': 1, 'parallelLimit': 1, 'selectedTaskId': id,
+        'tasks': [
+          {'id': id, 'sessionId': session, 'runId': 'r$id', 'active': false, 'generation': 3,
+            'endedRunId': 'r$id', 'endedGeneration': 3, 'completion': 'completed'},
+        ],
+      };
+      native.push(companionEnd(1, 'companion:room:t1:r1'));
+      await settle();
+      expect(finishArgs()['sessionId'], 'companion:room:t1:r1');
+      expect(finishArgs()['reopen'], isTrue);
+      // She is no conversation: nothing in the chat moves.
+      expect(container.read(chatRevealProvider), isNull);
+
+      native.calls.clear();
+      native.push(companionEnd(2, 'companion:floating:t2:r2'));
+      await settle();
+      expect(finishArgs()['reopen'], isFalse);
+    });
+
     test('the phone turn ending closes the overlay and brings the app back to that conversation', () async {
       final phone = await make(running: {'s2'}, viewed: 's2');
       expect(phone.link.candidates, {'s2'});

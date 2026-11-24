@@ -359,6 +359,9 @@ class _WebEntryHostState extends ConsumerState<WebEntryHost> {
         }
       case CompanionAssistantEntry():
         if (mounted) await openCompanionAssistant(context, ref, entry);
+      case OpenCompanionEntry(:final room):
+        // As on the native home: her room, never the page's conversation.
+        if (room && mounted) await showCompanionRoom(context, ref);
     }
   }
 

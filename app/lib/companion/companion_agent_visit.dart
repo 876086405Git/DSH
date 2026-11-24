@@ -850,6 +850,7 @@ class _CompanionAgentVisit {
         source: source,
         turnId: memoryTools.turnId,
         returnToApp: returnToApp,
+        window: inputWindow,
         isCurrent: () => current() && memoryTools?.isCurrent == true,
         onStep: (text) {
           if (residentUi case final CompanionAgentAmbientUi target when current() && target.presentationAvailable) {
