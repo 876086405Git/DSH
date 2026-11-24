@@ -5164,7 +5164,7 @@ class L10nZh extends L10n {
   String get companionMenuHistory => '查看聊天记录';
 
   @override
-  String get companionMenuRestart => '重新认识';
+  String get companionMenuRestart => '清空对话';
 
   @override
   String get companionMenuRestartHint => '开始一段新对话';

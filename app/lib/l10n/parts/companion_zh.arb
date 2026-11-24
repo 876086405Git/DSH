@@ -54,7 +54,7 @@
   "companionLogOpenChat": "在主对话里看",
   "companionLogOlder": "加载更早的记录",
   "companionMenuHistory": "查看聊天记录",
-  "companionMenuRestart": "重新认识",
+  "companionMenuRestart": "清空对话",
   "companionMenuRestartHint": "开始一段新对话",
   "companionMenuRestartConfirm": "她会忘记这段对话。旧的记录还留在主机上，不会被删除。",
   "companionMenuRemovePack": "移除素材",

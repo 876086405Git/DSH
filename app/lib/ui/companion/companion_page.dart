@@ -3392,7 +3392,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
             title: l10n.companionMemorySearchTitle,
             onTap: () => run(() => unawaited(_openMemorySearch())),
           ),
-          if (hasLightEntries)
+          if (hasLightEntries || (!light && _sessionId != null))
             SettingsTile(
               icon: AppIcons.newChat,
               tinted: false,

@@ -7840,11 +7840,11 @@ void main() {
         await tester.tap(find.byIcon(AppIcons.more));
         await settleIo(tester);
         // The menu scrolls on a short screen.
-        await tester.ensureVisible(find.text('重新认识'));
+        await tester.ensureVisible(find.text('清空对话'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('重新认识'));
+        await tester.tap(find.text('清空对话'));
         await settleIo(tester);
-        await tester.tap(find.widgetWithText(FilledButton, '重新认识'));
+        await tester.tap(find.widgetWithText(FilledButton, '清空对话'));
         await settleIo(tester);
 
         final composer = tester.widget<CompanionComposer>(find.byType(CompanionComposer));

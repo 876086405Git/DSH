@@ -1028,8 +1028,29 @@ class _CompanionAgentVisit {
     fullSession?.close();
     fullSession = null;
     final key = characterSourceKey;
-    await ref.read(companionSessionsProvider.notifier).forgetCharacter(key);
-    if (!current() || key != characterSourceKey) return;
+    final sessions = ref.read(companionSessionsProvider.notifier);
+    final host = ref.read(activeHostProvider);
+    bool still() => current() && key == characterSourceKey && ref.read(activeHostProvider) == host;
+    final old = sessions.ofCharacter(host, key)?.sessionId;
+    // Full mode binds her clean session at once, so the room and its main
+    // session entry already point at it; the old one stays on the host, archived.
+    var fresh = false;
+    if (!light && old != null) {
+      try {
+        await sessions.startNewForCharacter(
+          key,
+          memoryArchiveId: owner.store.archive['id']! as String,
+          memoryControlRevision: owner.store.archive['control_revision']! as int,
+        );
+        fresh = true;
+      } on DshException {
+        // A new session may already be bound; only an untouched old binding is let go.
+        fresh = sessions.ofCharacter(host, key)?.sessionId != old;
+      }
+      if (!still()) return;
+    }
+    if (!fresh) await sessions.forgetCharacter(key);
+    if (!still()) return;
     owner.store.startLightConversation();
     retrySource = null;
     phoneAttempt = null;

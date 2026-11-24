@@ -9545,7 +9545,7 @@ abstract class L10n {
   /// No description provided for @companionMenuRestart.
   ///
   /// In zh, this message translates to:
-  /// **'重新认识'**
+  /// **'清空对话'**
   String get companionMenuRestart;
 
   /// No description provided for @companionMenuRestartHint.
