@@ -65,6 +65,14 @@ void main() {
       lines.read('好，点 7。', steps: 1, running: true);
       expect(lines.read('好，', steps: 1, running: true).say, '');
     });
+
+    test("the Host's saved reply rewriting what she said is said and shown again from the change", () {
+      final lines = CompanionPhoneLines();
+      expect(lines.read('东。', steps: 1, running: true), (line: '东。', say: '东。'));
+      expect(lines.read('西。', steps: 1, running: true), (line: '西。', say: '西。'));
+      // Past the rewrite, her line since the step goes on as before.
+      expect(lines.read('西。好', steps: 1, running: true), (line: '好', say: ''));
+    });
   });
 
   group('companionPhoneUserStops', () {

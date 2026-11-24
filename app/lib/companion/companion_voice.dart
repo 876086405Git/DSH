@@ -584,14 +584,23 @@ class CompanionPhoneLines {
   int _steps = 0;
   int _said = 0;
   int _lineFrom = 0;
+  String _words = '';
 
   ({String line, String say}) read(String words, {required int steps, required bool running}) {
     final stepped = steps > _steps;
     _steps = steps;
-    // A retry can take words back; what was said stays said.
-    final (say, said) = companionSpeakable(words, min(_said, words.length), final_: !running || stepped);
+    // What was read holds up to the first change. A retry can take words
+    // back, and what was said stays said; the Host's saved reply can rewrite
+    // them ("东。" saved as "西。"), and that is read again from the change.
+    final read = min(max(_said, _lineFrom), min(words.length, _words.length));
+    var same = 0;
+    while (same < read && words.codeUnitAt(same) == _words.codeUnitAt(same)) {
+      same++;
+    }
+    _words = words;
+    final (say, said) = companionSpeakable(words, min(_said, same), final_: !running || stepped);
     _said = said;
-    final line = words.substring(min(_lineFrom, words.length)).trim();
+    final line = words.substring(min(_lineFrom, same)).trim();
     if (stepped) _lineFrom = words.length;
     return (line: line, say: say);
   }

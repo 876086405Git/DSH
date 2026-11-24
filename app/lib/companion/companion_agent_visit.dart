@@ -48,7 +48,7 @@ class CompanionAgentAttachment {
   final _CompanionAgentWindow _window;
 
   bool get isAttached => _window.current(_visit);
-  bool get preparing => _visit.preparing;
+  bool get preparing => _visit.preparing || _visit.clearing;
   bool get running => _visit.run?.running ?? false;
   // Retained API: local task speech has no model preparation.
   String? get preparingSignalId => null;
@@ -331,6 +331,10 @@ class _CompanionAgentVisit {
   late bool boundLight;
   bool closed = false;
   bool preparing = false;
+
+  /// 清空对话 in progress: nothing new is taken until it is done, or its run
+  /// would be dropped along with the old conversation's.
+  bool clearing = false;
   bool entered = false;
   CompanionInitiativeRoom? enteredRoom;
   int epoch = 0;
@@ -676,7 +680,7 @@ class _CompanionAgentVisit {
     bool returnToApp = false,
     void Function(MemoryRow)? onCommitted,
   }) async {
-    if (!active || !originCurrent() || raw.trim().isEmpty || (preparing && !replacePreparing)) return;
+    if (!active || clearing || !originCurrent() || raw.trim().isEmpty || (preparing && !replacePreparing)) return;
     final noticeReply = notices?.replyContext(raw, retrySource: retrySource?['id'] as String?);
     notices?.invalidate(keepReply: true);
     lastUserInteractionAt = DateTime.now();
@@ -1022,6 +1026,16 @@ class _CompanionAgentVisit {
 
   Future<void> restart() async {
     if (!active) return;
+    clearing = true;
+    try {
+      await _clear();
+    } finally {
+      clearing = false;
+      changed();
+    }
+  }
+
+  Future<void> _clear() async {
     stop(discard: true);
     final current = captureCurrent();
     final owner = await openMemory();

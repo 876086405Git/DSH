@@ -69,17 +69,29 @@ void main() {
 
     test("her full-mode session's way back is her room too; other chats stay chats", () {
       bool hers(HostRef host, String id) => host == HostRef.local && id == 's-hers';
-      final back = LauncherEntry.parse({'kind': 'chat', 'sessionId': 's-hers'})!.forCompanion(hers);
+      const local = HostRef.local;
+      final back = LauncherEntry.parse({'kind': 'chat', 'sessionId': 's-hers'})!.forCompanion(hers, active: local);
       expect(back, isA<OpenCompanionEntry>().having((e) => e.room, 'room', isTrue));
-      final other = LauncherEntry.parse({'kind': 'chat', 'sessionId': 's-other'})!.forCompanion(hers);
+      final other = LauncherEntry.parse({'kind': 'chat', 'sessionId': 's-other'})!.forCompanion(hers, active: local);
       expect(other, isA<OpenChatEntry>().having((e) => e.sessionId, 'sessionId', 's-other'));
       final elsewhere = LauncherEntry.parse({
         'kind': 'chat',
         'sessionId': 's-hers',
         'host': const HostRef.ssh('box').encode(),
-      })!.forCompanion(hers);
+      })!.forCompanion(hers, active: local);
       expect(elsewhere, isA<OpenChatEntry>());
-      expect(LauncherEntry.parse({'kind': 'new'})!.forCompanion(hers), isA<NewChatEntry>());
+      expect(LauncherEntry.parse({'kind': 'new'})!.forCompanion(hers, active: local), isA<NewChatEntry>());
+    });
+
+    test("her session on a host that isn't the active one opens as its chat there, not this host's room", () {
+      bool hers(HostRef host, String id) => id == 's-hers';
+      const box = HostRef.ssh('box');
+      final entry = LauncherEntry.parse({'kind': 'chat', 'sessionId': 's-hers', 'host': box.encode()})!;
+      expect(
+        entry.forCompanion(hers, active: HostRef.local),
+        isA<OpenChatEntry>().having((e) => e.host, 'host', box),
+      );
+      expect(entry.forCompanion(hers, active: box), isA<OpenCompanionEntry>());
     });
 
     test('a pet screenshot carries only its private cache path', () {
