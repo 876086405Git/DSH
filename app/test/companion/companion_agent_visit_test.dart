@@ -2919,10 +2919,13 @@ void main() {
       final history = visit.memory.store.messages();
       final controlsBeforeRestart = background.controlChanges.length;
       final clearing = reopened.restart();
+      // A second 清空 meanwhile waits for the first instead of clearing again.
+      final again = reopened.restart();
       // While it clears, nothing new is taken: the room's composer keeps its words.
       expect(reopened.preparing, isTrue);
       await resident.submit('清空时说的话。');
       await clearing;
+      await again;
       expect(reopened.preparing, isFalse);
       expect(visit.memory.store.lightSessionId, isNot(previousSession));
       expect(resident.recentMessages, isEmpty);
