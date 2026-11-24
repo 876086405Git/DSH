@@ -3313,9 +3313,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
               subtitle: l10n.workshopEntrySubtitle,
               onTap: () => run(
                 () => unawaited(
-                  Navigator.of(context)
-                      .push(MaterialPageRoute<void>(builder: (_) => const WorkshopScreen()))
-                      .then((_) => _afterWorkshop()),
+                  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WorkshopScreen())).then((_) {
+                    // She may have been updated there, her cover with her.
+                    if (_rosterWanted) unawaited(_loadRoster());
+                    return _afterWorkshop();
+                  }),
                 ),
               ),
             ),
