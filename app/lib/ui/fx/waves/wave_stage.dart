@@ -190,6 +190,8 @@ class RenderWaveStage extends RenderBox with SlottedContainerRenderObjectMixin<W
   RenderBox? _lastLive;
 
   void _onProgress() {
+    // A resting route no longer needs the last snapshots bound to the lens shaders.
+    if (_value <= 0 || _value >= 1) _disposeShaders();
     markNeedsPaint();
     final live = _live;
     if (!identical(live, _lastLive)) {
@@ -304,7 +306,7 @@ class RenderWaveStage extends RenderBox with SlottedContainerRenderObjectMixin<W
   void attach(PipelineOwner owner) {
     super.attach(owner);
     _progress.addListener(_onProgress);
-    _lastLive = _live;
+    _onProgress();
   }
 
   @override

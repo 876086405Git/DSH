@@ -88,7 +88,9 @@ typedef UiAssetReader = Future<String> Function(String key);
 /// Reads a bundled skill (manifest first): [uiSkillName] unless [name] says
 /// otherwise.
 Future<UiSkillBundle> loadUiSkillBundle([UiAssetReader? read, String name = uiSkillName, String? os]) async {
-  final reader = read ?? rootBundle.loadString;
+  // Read once per engine start: kept in the bundle's cache, the skills'
+  // text (about 1 MiB) would stay in memory for the whole run.
+  final reader = read ?? (String key) => rootBundle.loadString(key, cache: false);
   final assetDir = 'assets/skills/$name/';
   final manifest = jsonDecode(await reader('${assetDir}manifest.json'));
   final files = (manifest as Map)['files'] as Map;
