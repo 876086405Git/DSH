@@ -53,6 +53,8 @@ class _Video extends MediaVideoChannel {
   int closes = 0;
   int opens = 0;
   int position = 0;
+  int duration = 5000;
+  int seeks = 0;
   bool playing = false;
   bool failOpen = false;
   String failCode = 'failed';
@@ -90,12 +92,13 @@ class _Video extends MediaVideoChannel {
 
   @override
   Future<void> seek(int texture, int positionMs) async {
+    seeks++;
     position = positionMs;
   }
 
   @override
   Future<MediaVideoState> state(int texture) async =>
-      MediaVideoState(positionMs: position, durationMs: 5000, playing: playing);
+      MediaVideoState(positionMs: position, durationMs: duration, playing: playing);
 }
 
 Future<void> _pumpViewer(WidgetTester tester, _Files files, MediaVideoChannel video) async {
@@ -327,6 +330,67 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
     expect(video.closes, 1);
+  });
+
+  testWidgets('playback ticks and slider drags update the controls without rebuilding the viewer', (tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final video = _Video();
+    await _pumpViewer(tester, _Files(), video);
+    final slider = find.byType(Slider);
+    double position() => tester.widget<Slider>(slider).value;
+    var pages = 0;
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, builtOnce) {
+      previous?.call(element, builtOnce);
+      if (element.widget is MediaVideoViewerPage) pages++;
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = previous);
+
+    for (var tick = 1; tick <= 19; tick++) {
+      video.position = tick * 100;
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+      expect(position(), video.position.toDouble());
+    }
+    final playbackBuilds = pages;
+    final center = tester.getCenter(slider);
+    final drag = await tester.startGesture(center);
+    await drag.moveBy(const Offset(32, 0));
+    await tester.pump();
+    pages = 0;
+    for (var i = 0; i < 20; i++) {
+      final old = position();
+      await drag.moveBy(const Offset(3, 0));
+      await tester.pump();
+      expect(position(), greaterThan(old));
+    }
+    final dragBuilds = pages;
+    final thumb = position();
+    video
+      ..position = 800
+      ..duration = 7000
+      ..playing = false;
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(position(), thumb);
+    expect(tester.widget<Slider>(slider).max, 7000);
+    expect(find.byIcon(AppIcons.mediaPlay), findsOneWidget);
+    expect(video.seeks, 0);
+    await drag.up();
+    await tester.pump();
+    await tester.pump();
+    expect(video.seeks, 1);
+    expect(position(), video.position.toDouble());
+    video.position = video.duration;
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await tester.tap(find.byIcon(AppIcons.mediaPlay));
+    await tester.pump();
+    expect(video.seeks, 2);
+    expect(video.position, 0);
+    expect(video.playing, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect([playbackBuilds, dragBuilds], [0, 0]);
   });
 
   testWidgets('background transition pauses and disposal releases playback', (tester) async {
