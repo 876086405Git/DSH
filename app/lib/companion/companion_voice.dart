@@ -190,7 +190,8 @@ class CompanionSpeaker {
   bool _phoneReady = false;
   Future<void> _phoneLines = Future.value();
   int _generation = 0;
-  int _previews = 0;
+  // The room and shared voice settings use the same native player and cache.
+  static int _previews = 0;
   bool _pumping = false;
   final _queue = Queue<_Line>();
   final _ends = <String, Completer<void>>{};
@@ -295,7 +296,9 @@ class CompanionSpeaker {
       return error.reason;
     } finally {
       client.close();
-      if (generation != _generation) _finish(id);
+      // Android has opened the descriptor and iOS has loaded the clip before
+      // play answers. A refusal or a later stop may send no terminal event.
+      _finish(id);
     }
   }
 
@@ -387,7 +390,6 @@ class CompanionSpeaker {
       case CompanionVoiceEventType.done || CompanionVoiceEventType.stopped || CompanionVoiceEventType.error:
         final end = _ends.remove(event.id);
         if (end != null && !end.isCompleted) end.complete();
-        if (event.id.startsWith('preview-')) _finish(event.id);
       case CompanionVoiceEventType.range || CompanionVoiceEventType.fallback:
         break;
     }

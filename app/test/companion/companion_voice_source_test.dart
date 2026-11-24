@@ -485,6 +485,41 @@ void main() {
       },
     );
 
+    test('each fetched preview keeps its own file until native admission answers', () async {
+      const external = CompanionVoiceSettings(on: true, source: CompanionVoiceSource.openai);
+      final nativeVoice = CompanionVoice();
+      final wav = _wav(quiet: 0, loud: 40);
+      http.Client client() => MockClient((_) async => http.Response.bytes(wav, 200));
+      final room = CompanionSpeaker(nativeVoice, client, () async => folder);
+      final shared = CompanionSpeaker(nativeVoice, client, () async => folder);
+      addTearDown(room.dispose);
+      addTearDown(shared.dispose);
+      final firstAnswer = Completer<bool>();
+      final files = <File>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'play') return null;
+        final args = call.arguments as Map;
+        final file = File(args['path'] as String);
+        files.add(file);
+        if (files.length == 1) return firstAnswer.future;
+        return false;
+      });
+      final first = room.preview(external, '小屋试听。');
+      try {
+        await until(() => files.isNotEmpty);
+        expect(files[0].readAsBytesSync(), wav);
+        expect(await shared.preview(external, '通用试听。'), 'cannot play wav');
+        expect(files, hasLength(2));
+        expect(files[1].path, isNot(files[0].path));
+        await until(() => !files[1].existsSync());
+        expect(files[0].readAsBytesSync(), wav);
+      } finally {
+        firstAnswer.complete(true);
+      }
+      expect(await first, isNull);
+      await until(() => !files[0].existsSync());
+    });
+
     test('stop: nothing queued plays after it', () async {
       final gate = Completer<void>();
       final client = MockClient((request) async {
