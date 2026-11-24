@@ -554,8 +554,9 @@ class CompanionAgent extends ChangeNotifier {
           isCurrent: () => route is CompanionHostMemoryTransport ? _turnCurrent(run) : _current(run),
           onText: (delta) {
             if (request.text.isEmpty && run.text.isNotEmpty && delta.isNotEmpty) run.text += '\n';
+            final sharedText = identical(request.text, run.text);
             request.text += delta;
-            run.text += delta;
+            run.text = sharedText ? request.text : run.text + delta;
             notifyListeners();
           },
           onDispatchUncertain: () {

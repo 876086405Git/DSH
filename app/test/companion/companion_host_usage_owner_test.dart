@@ -282,14 +282,11 @@ void main() {
     expect(fixture.store.atClose.single['output_tokens'], 3);
   });
 
-  test('one opportunity is bounded and the next can visit a remaining delivery', () async {
+  test('one opportunity visits every pending delivery', () async {
     final fixture = _Fixture();
     final rows = {for (var i = 0; i < 5; i++) 'request-$i': fixture.delivery('request-$i')};
     fixture.answer = (query) async => _snapshot(rows[query['requestId']]!);
     await fixture.open();
-    await fixture.pull();
-    expect(fixture.queries, hasLength(4));
-    expect(fixture.store.pendingHostChatDeliveries(_host), hasLength(1));
     await fixture.pull();
     expect(fixture.queries, hasLength(5));
     expect(fixture.store.requests(), hasLength(5));

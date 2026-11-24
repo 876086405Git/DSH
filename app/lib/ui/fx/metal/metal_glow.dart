@@ -337,7 +337,7 @@ class MetalGlowState {
       extra = deform(extra);
     }
 
-    final samp = sampler(blob);
+    late final samp = sampler(blob);
     final lightTheme = !dark;
     final tween = _tintTween;
     if (tween == null) {

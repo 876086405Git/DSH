@@ -72,7 +72,7 @@ class PerchRegistry extends ChangeNotifier {
   List<PerchSpot> spots(RenderBox stage) => [
     for (final p in _perches)
       if (p.widget.active)
-        if (p.rectIn(stage) case final rect? when rect.height >= 1 && rect.width >= 1) PerchSpot(p, rect),
+        if (p.rectIn(stage) case final rect?) PerchSpot(p, rect),
   ];
 
   /// Areas the pet steps aside from (the jump-to-bottom key).
@@ -105,9 +105,11 @@ class PetPerchScope extends InheritedWidget {
   bool updateShouldNotify(PetPerchScope old) => old.registry != registry;
 }
 
-Rect? _rectOf(BuildContext context, RenderBox stage) {
+Rect? _rectOf(BuildContext context, RenderBox stage, {double minSide = 0}) {
   final box = context.findRenderObject();
   if (box is! RenderBox || !box.attached || !box.hasSize || !stage.attached) return null;
+  // Checked before the walk to the stage: a collapsed banner is no perch.
+  if (box.size.shortestSide < minSide) return null;
   try {
     final topLeft = box.localToGlobal(Offset.zero, ancestor: stage);
     return topLeft & box.size;
@@ -133,7 +135,8 @@ class PetPerchState extends State<PetPerch> {
   final link = LayerLink();
   PerchRegistry? _registry;
 
-  Rect? rectIn(RenderBox stage) => _rectOf(context, stage);
+  /// At least 1dp each way to stand on.
+  Rect? rectIn(RenderBox stage) => _rectOf(context, stage, minSide: 1);
 
   @override
   void didChangeDependencies() {
