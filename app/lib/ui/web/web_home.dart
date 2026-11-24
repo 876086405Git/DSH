@@ -25,6 +25,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../companion/companion_state.dart' show companionSessionFilterProvider, companionSessionsProvider;
 import '../../l10n/l10n.dart';
 import '../../links/app_links.dart';
 import '../../links/launcher_entries.dart';
@@ -322,6 +323,12 @@ class _WebEntryHostState extends ConsumerState<WebEntryHost> {
   }
 
   Future<void> _onEntry(LauncherEntry entry) async {
+    if (entry is OpenChatEntry) {
+      // A cold start may still be reading her saved sessions.
+      await ref.read(companionSessionsProvider.notifier).ready;
+      if (!mounted) return;
+      entry = entry.forCompanion(ref.read(companionSessionFilterProvider));
+    }
     switch (entry) {
       case NewChatEntry(:final text):
         // Dictation is the native composer's; Siri's supplied text still

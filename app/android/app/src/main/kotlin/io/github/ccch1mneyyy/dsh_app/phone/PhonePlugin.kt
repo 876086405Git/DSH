@@ -199,6 +199,7 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
             "companionScreenState" -> result.success(companionScreen.state(call.arguments as? Map<*, *>))
             "companionScreenSample" -> async(result) { companionScreen.sample(call.arguments as? Map<*, *>) }
             "status" -> control.status { complete(result, it) }
+            "setCompanionSessions" -> result.success(control.setCompanionSessions((call.arguments as? Map<*, *>)?.get("ids")))
             "androidShellStatus" -> async(result, shortControl = true) { control.shell.status() }
             "configureAndroidShell" -> {
                 val args = call.arguments as? Map<*, *>

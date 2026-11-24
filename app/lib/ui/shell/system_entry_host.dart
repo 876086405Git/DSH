@@ -29,6 +29,7 @@ import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../companion/companion_state.dart' show companionSessionFilterProvider, companionSessionsProvider;
 import '../../l10n/l10n.dart';
 import '../../links/app_links.dart';
 import '../../links/launcher_entries.dart';
@@ -143,6 +144,12 @@ class _SystemEntryHostState extends ConsumerState<SystemEntryHost> {
   }
 
   Future<void> _onEntry(LauncherEntry entry) async {
+    if (entry is OpenChatEntry) {
+      // A cold start may still be reading her saved sessions.
+      await ref.read(companionSessionsProvider.notifier).ready;
+      if (!mounted) return;
+      entry = entry.forCompanion(ref.read(companionSessionFilterProvider));
+    }
     switch (entry) {
       case NewChatEntry(:final voice, :final text):
         // The microphone opens only for an app on screen; the shortcut's

@@ -67,6 +67,21 @@ void main() {
       expect(floating, isA<OpenCompanionEntry>().having((e) => e.room, 'room', isFalse));
     });
 
+    test("her full-mode session's way back is her room too; other chats stay chats", () {
+      bool hers(HostRef host, String id) => host == HostRef.local && id == 's-hers';
+      final back = LauncherEntry.parse({'kind': 'chat', 'sessionId': 's-hers'})!.forCompanion(hers);
+      expect(back, isA<OpenCompanionEntry>().having((e) => e.room, 'room', isTrue));
+      final other = LauncherEntry.parse({'kind': 'chat', 'sessionId': 's-other'})!.forCompanion(hers);
+      expect(other, isA<OpenChatEntry>().having((e) => e.sessionId, 'sessionId', 's-other'));
+      final elsewhere = LauncherEntry.parse({
+        'kind': 'chat',
+        'sessionId': 's-hers',
+        'host': const HostRef.ssh('box').encode(),
+      })!.forCompanion(hers);
+      expect(elsewhere, isA<OpenChatEntry>());
+      expect(LauncherEntry.parse({'kind': 'new'})!.forCompanion(hers), isA<NewChatEntry>());
+    });
+
     test('a pet screenshot carries only its private cache path', () {
       final entry = LauncherEntry.parse({'kind': 'screenshot', 'path': '/cache/pet-screenshots/slot/screen.png'});
       expect(entry, isA<ScreenshotEntry>());

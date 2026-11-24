@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../state/connection_state.dart';
 import '../state/hosts_state.dart';
+import '../state/phone_state.dart' show phoneChannelProvider;
 import '../state/sessions_state.dart';
 import 'companion_pack.dart' show companionBundledCharacterKey;
 
@@ -115,6 +116,9 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     if (!owner.mounted || (current != null && !current())) throw const DshClosedException('host changed');
     await prefs.setString(_sessionsKey, jsonEncode({for (final e in state.entries) e.key: e.value.toJson()}));
   }
+
+  /// Completes once the saved bindings have been read.
+  Future<void> get ready => _loaded ?? Future<void>.value();
 
   CompanionBinding? of(HostRef host) => state[_hostKey(host)];
 
@@ -345,6 +349,31 @@ final companionSessionFilterProvider = Provider<bool Function(HostRef host, Stri
     (entry) => entry.value.sessionId == sessionId &&
         (entry.key == _hostKey(host) || entry.key.startsWith(_characterPrefix(host))),
   );
+});
+
+/// Her full-mode sessions on this phone's own engine, while it is the active
+/// host. Native lets exactly these operate the phone with the switch off: the
+/// person asking her is the go-ahead. A computer's sessions never get it.
+final companionLocalSessionIdsProvider = Provider<Set<String>>((ref) {
+  if (ref.watch(activeHostProvider) != HostRef.local ||
+      ref.watch(companionModeProvider) == CompanionMode.light) {
+    return const {};
+  }
+  final prefix = _characterPrefix(HostRef.local);
+  return {
+    for (final MapEntry(:key, :value) in ref.watch(companionSessionsProvider).entries)
+      if ((key == _hostKey(HostRef.local) || key.startsWith(prefix)) && value.full && !value.inlinePersona)
+        value.sessionId,
+  };
+});
+
+/// Watched by the app: keeps native's copy of [companionLocalSessionIdsProvider].
+final companionPhoneSessionsBridgeProvider = Provider<void>((ref) {
+  ref.listen(companionLocalSessionIdsProvider, (previous, next) {
+    if (previous == null || !setEquals(previous, next)) {
+      unawaited(ref.read(phoneChannelProvider).setCompanionSessions(next));
+    }
+  }, fireImmediately: true);
 });
 
 /// How she talks (docs/design/companion.md §7).
