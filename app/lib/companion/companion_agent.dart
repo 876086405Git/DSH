@@ -337,10 +337,12 @@ class CompanionAgent extends ChangeNotifier {
     }
 
     try {
-      // Resolve the current full Session each round. A phone tool may retire
-      // its previous binding without cancelling this same logical turn.
-      final selected = await ref.read(companionSessionsProvider.notifier).ensureForCharacter(_visit?.characterSourceKey);
+      // A stateless round may borrow an existing selection. Only an explicit
+      // Session operation may create, archive or renegotiate a binding.
+      final bindings = ref.read(companionSessionsProvider.notifier);
+      final selected = await bindings.existingForCharacter(host, _visit?.characterSourceKey);
       if (!current()) throw const DshClosedException('Companion Host route changed');
+      if (selected == null) return forMemory ? _memoryTransport?.call() ?? phone : phone;
       final capability = await client.readCompanionAuxiliaryCapability(selected.sessionId);
       if (capability == null || !capability.supported) {
         return phoneOrFail(const CompanionHostError(CompanionHostFailure.unavailable));

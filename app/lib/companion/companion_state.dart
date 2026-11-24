@@ -74,7 +74,7 @@ String _bindingKey(HostRef host, String? sourceKey) =>
         : '${_characterPrefix(host)}${jsonEncode(sourceKey)}';
 
 class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
-  final _loaded = Completer<void>();
+  Future<void>? _loaded;
   int _ownershipEpoch = 0;
   int _bindingsEpoch = 0;
   // Serialize only competing operations on this role and connection lifetime.
@@ -88,7 +88,7 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     ref.listen(activeConnectionProvider.select((value) => value.value?.client), (previous, next) {
       if (!identical(previous, next)) _ownershipEpoch++;
     });
-    unawaited(_load());
+    _loaded = _load();
     return const {};
   }
 
@@ -107,7 +107,6 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     } on Object {
       // Unreadable: she starts a new conversation.
     }
-    if (!_loaded.isCompleted) _loaded.complete();
   }
 
   Future<void> _save([bool Function()? current]) async {
@@ -123,6 +122,13 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
       sourceKey == companionBundledCharacterKey
           ? of(host)
           : state[_bindingKey(host, sourceKey)];
+
+  /// Read the saved selection after local preferences load, without contacting the Host.
+  Future<CompanionBinding?> existingForCharacter(HostRef host, String? sourceKey) async {
+    final owner = ref;
+    await _loaded;
+    return owner.mounted ? ofCharacter(host, sourceKey) : null;
+  }
 
   Future<CompanionBinding> ensure({String? memoryArchiveId, int? memoryControlRevision}) =>
       _ensure(companionBundledCharacterKey, memoryArchiveId, memoryControlRevision);
@@ -155,7 +161,7 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     if (conn == null) throw const DshClosedException('not connected');
     final key = _bindingKey(host, sourceKey);
     final slot = (key, epoch);
-    final previous = _pending[slot] ?? _loaded.future;
+    final previous = _pending[slot] ?? _loaded;
     final release = Completer<void>();
     _pending[slot] = release.future;
     bool current() =>
@@ -302,7 +308,7 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
   Future<void> _forget(String? sourceKey) async {
     final key = _bindingKey(ref.read(activeHostProvider), sourceKey);
     _ownershipEpoch++;
-    await _loaded.future;
+    await _loaded;
     if (!ref.mounted) return;
     state = {...state}..remove(key);
     await _save();
