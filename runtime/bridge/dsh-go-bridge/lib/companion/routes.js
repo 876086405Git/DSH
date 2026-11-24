@@ -115,7 +115,7 @@ export function createCompanionRoutes({ send, store = createCompanionStore(), si
       if (String(req.headers['content-type']).split(';', 1)[0].trim().toLowerCase() !== 'application/json') {
         throw new CompanionError(415, 'content-type', 'Content-Type must be application/json');
       }
-      body = validatePromptContext(await readJson(req, 32768));
+      body = validatePromptContext(await readJson(req, 1024 * 1024));
     }
     const sessionId = body?.sessionId ?? new URL(req.url, 'http://dsh-go.invalid').searchParams.get('sessionId');
     if (!contextId(sessionId)) throw invalid();

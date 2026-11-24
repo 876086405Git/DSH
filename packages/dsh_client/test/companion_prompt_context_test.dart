@@ -58,6 +58,7 @@ void main() {
     expect(value.memoryMode, 'query');
     expect(value.memoryEpoch, isNull);
     expect(value.phoneMemory, isFalse);
+    expect(value.phoneMemoryVersion, 0);
     expect(value.chatUsage, isFalse);
     expect(requests, ['GET']);
   });
@@ -66,13 +67,18 @@ void main() {
         reply(req, 200, {...capability(), 'memoryMode': 'phone', 'phoneMemory': true, 'chatUsage': true});
     final value = (await client.companionPromptCapability(session))!;
     expect(value.phoneMemory, isTrue);
+    expect(value.phoneMemoryVersion, 2);
     expect(value.chatUsage, isTrue);
     expect(value.memoryMode, 'phone');
+    handler = (req) => reply(req, 200, {...capability(), 'phoneMemory': true, 'phoneMemoryVersion': 3});
+    expect((await client.companionPromptCapability(session))!.phoneMemoryVersion, 3);
     for (final changes in [
       {'memoryMode': 'phone'},
       {'memoryMode': 'phone', 'phoneMemory': false},
       {'phoneMemory': 'true'},
       {'phoneMemory': null},
+      {'phoneMemoryVersion': 3},
+      {'phoneMemory': true, 'phoneMemoryVersion': '3'},
       {'chatUsage': 'true'},
       {'chatUsage': null},
     ]) {

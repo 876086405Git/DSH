@@ -386,8 +386,9 @@ class CompanionPromptCapability {
     this.memoryMode = 'query',
     this.memoryEpoch,
     this.phoneMemory = false,
+    int? phoneMemoryVersion,
     this.chatUsage = false,
-  });
+  }) : phoneMemoryVersion = phoneMemoryVersion ?? (phoneMemory ? 2 : 0);
   final String instanceId;
   final String sessionId;
   final int profileRevision;
@@ -405,6 +406,9 @@ class CompanionPromptCapability {
   /// The runtime can attach the phone's already selected block to this
   /// request without writing it into the Session or system projections.
   final bool phoneMemory;
+
+  /// v3 preserves the phone's selected layers and source labels, and supports deviceContext.
+  final int phoneMemoryVersion;
 
   /// Owner-only observations for marked ordinary chat calls. This is not
   /// complete billing coverage for background, compaction, or other agents.
@@ -428,6 +432,8 @@ class CompanionPromptCapability {
         revision > 9007199254740991 ||
         (memoryMode != 'query' && memoryMode != 'automatic' && memoryMode != 'phone') ||
         (map.containsKey('phoneMemory') && map['phoneMemory'] is! bool) ||
+        (map.containsKey('phoneMemoryVersion') &&
+            (map['phoneMemory'] != true || map['phoneMemoryVersion'] is! int || (map['phoneMemoryVersion'] as int) < 2)) ||
         (map.containsKey('chatUsage') && map['chatUsage'] is! bool) ||
         (memoryMode == 'phone' && map['phoneMemory'] != true) ||
         (map.containsKey('memoryEpoch') &&
@@ -443,6 +449,7 @@ class CompanionPromptCapability {
       memoryMode: memoryMode!,
       memoryEpoch: memoryEpoch,
       phoneMemory: map['phoneMemory'] == true,
+      phoneMemoryVersion: map['phoneMemoryVersion'] as int?,
       chatUsage: map['chatUsage'] == true,
     );
   }

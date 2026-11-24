@@ -21,25 +21,57 @@ const memoryKinds = new Set(['fact', 'preference', 'episode']);
 const phoneConfigEvents = new Set(['agent-preset/selected', 'model/selection',
   'subagent/model-selection-policy', 'permission/preset', 'approval/policy', 'sandbox/mode', 'plan/mode']);
 
+const phoneCollections = new Set(['about_you', 'our_story', 'person', 'recent', 'impression', 'diary']);
+const nonempty = v => typeof v === 'string' && v.trim() !== '' && !v.includes('\0') && v.isWellFormed();
+
+function layeredItem(item) {
+  if (!fields(item, ['id', 'kind', 'text', 'layer', 'collection'], ['source', 'local_day']) ||
+    !phoneCollections.has(item.collection) || !nonempty(item.text)) return false;
+  const layer = ['impression', 'diary'].includes(item.collection) ? item.collection : 'card';
+  if (item.layer !== layer || (layer === 'diary' ? typeof item.local_day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(item.local_day) :
+    Object.hasOwn(item, 'local_day'))) return false;
+  if (item.collection !== 'recent') return !Object.hasOwn(item, 'source');
+  const source = item.source;
+  return fields(source, ['kind', 'package', 'app', 'observed_at_ms', 'user_confirmed']) &&
+    source.kind === 'notice' && source.user_confirmed === false && nonempty(source.package) &&
+    nonempty(source.app) && time(source.observed_at_ms);
+}
+
 function phoneMemoryOf(value) {
   if (!fields(value, ['archiveId', 'controlRevision', 'historyAfterSeq', 'block']) ||
     !contextId(value.archiveId) || !sequence(value.controlRevision) || !sequence(value.historyAfterSeq) ||
-    !text(value.block, 1200) || !value.block.isWellFormed()) throw invalid();
+    typeof value.block !== 'string' || !value.block.isWellFormed()) throw invalid();
   let block;
   try { block = JSON.parse(value.block); } catch { throw invalid(); }
   if (!fields(block, ['type', 'version', 'scope', 'items']) || block.type !== 'companion_memory' ||
-    block.version !== 2 || block.scope !== 'real' || !Array.isArray(block.items) || block.items.length > 12) throw invalid();
+    ![2, 3].includes(block.version) || block.scope !== 'real' || !Array.isArray(block.items)) throw invalid();
+  if (block.version === 2 && (!text(value.block, 1200) || block.items.length > 12)) throw invalid();
   const ids = new Set();
   for (const item of block.items) {
-    if (!fields(item, ['id', 'kind', 'text']) || !contextId(item.id) || !item.id.isWellFormed() ||
-      ids.has(item.id) || !memoryKinds.has(item.kind) || !text(item.text, 1200) ||
-      !item.text.trim() || !item.text.isWellFormed()) throw invalid();
+    const valid = block.version === 3 ? layeredItem(item) :
+      fields(item, ['id', 'kind', 'text']) && text(item.text, 1200) && nonempty(item.text);
+    if (!valid || !contextId(item.id) || !item.id.isWellFormed() || ids.has(item.id) || !memoryKinds.has(item.kind)) throw invalid();
     ids.add(item.id);
   }
-  // Keep the phone's exact serialization and order, including an empty items
-  // receipt. Only the final request boundary omits an empty selection.
+  // Keep the phone's exact serialization, including source labels and card order.
   return Object.freeze({ archiveId: value.archiveId, controlRevision: value.controlRevision,
     historyAfterSeq: value.historyAfterSeq, block: value.block });
+}
+
+const localClock = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}[+-]\d{2}:\d{2}$/u.test(v);
+const clockFields = v => localClock(v.localTime) && (v.zoneId === undefined || nonempty(v.zoneId));
+
+function deviceContextOf(value) {
+  if (!fields(value, ['window', 'localTime'], ['zoneId', 'originalMessage', 'noticeReply']) ||
+    !['room', 'floating', 'notification', 'voice'].includes(value.window) || !clockFields(value)) throw invalid();
+  if (value.originalMessage !== undefined && (!fields(value.originalMessage, ['localTime'], ['zoneId']) ||
+    !clockFields(value.originalMessage))) throw invalid();
+  const notice = value.noticeReply;
+  if (notice !== undefined && (!fields(notice, ['source', 'phase', 'app', 'package', 'observed_at_ms', 'summary'], ['shown_draft']) ||
+    notice.source !== 'notice' || !nonempty(notice.app) || !nonempty(notice.package) || !nonempty(notice.summary) ||
+    !time(notice.observed_at_ms) || !(notice.phase === 'draft' && notice.shown_draft === undefined ||
+      notice.phase === 'confirmed' && nonempty(notice.shown_draft)))) throw invalid();
+  return value;
 }
 
 function cleanPhoneSession(session) {
@@ -65,7 +97,7 @@ function profileOf(value) {
 
 export function validatePromptContext(value) {
   if (!fields(value, ['v', 'sessionId', 'requestId', 'instanceId', 'events'],
-    ['profile', 'expectedProfileRevision', 'query', 'phoneMemory']) || value.v !== 1 ||
+    ['profile', 'expectedProfileRevision', 'query', 'phoneMemory', 'deviceContext']) || value.v !== 1 ||
     !contextId(value.sessionId) || !contextId(value.requestId) || !contextId(value.instanceId) ||
     !Array.isArray(value.events) || value.events.length > 8 ||
     (value.query !== undefined && !text(value.query, 256)) ||
@@ -86,6 +118,7 @@ export function validatePromptContext(value) {
   });
   if (value.query !== undefined) out.query = value.query;
   if (Object.hasOwn(value, 'phoneMemory')) out.phoneMemory = phoneMemoryOf(value.phoneMemory);
+  if (Object.hasOwn(value, 'deviceContext')) out.deviceContext = deviceContextOf(value.deviceContext);
   return out;
 }
 
@@ -152,7 +185,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
         pending: new Map(), parked: new Map(), receipts: new Map(), seen: new Set(),
         turn: undefined, events: [], memories: [], memoryEpoch: 0, memoryDisabled: false,
         currentMemoryEpoch: 0, lastHumanAt: undefined, idleMinutes: undefined,
-        phone: undefined, phoneStale: false, phoneAbort: undefined, activePhone: undefined,
+        phone: undefined, phoneStale: false, phoneAbort: undefined, activeInput: undefined,
         usageRequests: new Set() };
       for (let seq = (agent.session.seq ?? 0) - 1; seq >= 0; seq--) {
         const event = agent.session.eventAt(seq);
@@ -185,7 +218,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
     profileRevision: value.revision, persistence: 'connection', requestBinding: 'rpcId',
     maxEvents: 8,
     memoryMode: value.phone ? 'phone' : value.memoryDisabled ? 'automatic' : 'query', memoryEpoch: value.memoryEpoch,
-    ...(phoneSupported(value.agent) ? { phoneMemory: true } : {}),
+    ...(phoneSupported(value.agent) ? { phoneMemory: true, phoneMemoryVersion: 3 } : {}),
     ...(usageSupported(value.agent) ? { chatUsage: true } : {}) });
   function capture(agent) {
     const value = open(agent);
@@ -211,7 +244,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
       phoneArchives.set(phone.archiveId, { controlRevision: phone.controlRevision, historyAfterSeq: phone.historyAfterSeq });
       for (const value of sessions.values()) {
         if (value.phone?.archiveId !== phone.archiveId) continue;
-        value.phoneStale = true; value.activePhone = undefined;
+        value.phoneStale = true; value.activeInput = undefined;
         value.phoneAbort.abort(stalePhone());
         for (const lease of [...value.pending.values(), ...value.parked.values()]) lease.phoneMemory = undefined;
       }
@@ -279,12 +312,16 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
       if (current.phone && value.query !== undefined) {
         throw new CompanionError(409, 'memory-mode-conflict', 'Phone memory sessions do not read host query memory');
       }
+      if (value.deviceContext && !phoneSupported(agent)) {
+        throw new CompanionError(409, 'device-context-unsupported', 'The engine cannot attach device context to this request');
+      }
       if (value.phoneMemory) preparePhone(current, value.phoneMemory);
       if (!lease && !receipt?.committed) {
         lease = { at: receipt?.at ?? highWater, events: value.events,
           memories: !current.memoryDisabled && !current.phone && ticket.epoch === current.memoryEpoch
             ? structuredClone(memories) : [], memoryEpoch: current.memoryEpoch,
-          phoneMemory: value.phoneMemory };
+          phoneMemory: value.phoneMemory, deviceContext: value.deviceContext &&
+            `<companion_device_context>${contextJson(value.deviceContext)}</companion_device_context>` };
         current.pending.set(value.requestId, lease);
       }
       // A retry reuses its original lease/expiry and never reapplies a profile
@@ -313,7 +350,15 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
     },
     claim(agent, message, turn) {
       if (!owner(message)) {
-        if (message?.source?.kind === 'user') lookup(agent)?.usageRequests.clear();
+        if (message?.source?.kind === 'user') {
+          const current = lookup(agent);
+          current?.usageRequests.clear();
+          // A guest input cannot carry forward the owner's external notification.
+          if (current?.activeInput?.deviceContext) {
+            const active = current.activeInput;
+            current.activeInput = active.phoneMemory ? { ...active, deviceContext: undefined } : undefined;
+          }
+        }
         return;
       }
       const current = lookup(agent);
@@ -334,7 +379,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
       const gap = current.lastHumanAt === undefined ? undefined : clock - current.lastHumanAt;
       current.idleMinutes = gap !== undefined && gap >= RECENT_MS ? Math.floor(gap / 60000) : undefined;
       current.memories = [];
-      current.activePhone = undefined;
+      current.activeInput = undefined;
       current.currentMemoryEpoch = current.memoryEpoch;
       // A human claim can originate outside the RPC transport. It still
       // refreshes temporal/current-query state, but cannot claim a lease.
@@ -348,8 +393,9 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
       }
       current.events = current.events.slice(-8);
       if (!current.memoryDisabled && pending.memoryEpoch === current.memoryEpoch) current.memories = pending.memories;
-      if (!current.phoneStale && pending.phoneMemory) {
-        current.activePhone = { requestId: message.source.rpcId, at: pending.at, phoneMemory: pending.phoneMemory };
+      if (!current.phoneStale && (pending.phoneMemory || pending.deviceContext)) {
+        current.activeInput = { requestId: message.source.rpcId, at: pending.at,
+          phoneMemory: pending.phoneMemory, deviceContext: pending.deviceContext };
       }
     },
     commit(session, message, committedAt) {
@@ -382,7 +428,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
       if (current?.session === session) {
         usage.end(session, current.turn);
         current.turn = undefined; current.events = []; current.memories = []; current.idleMinutes = undefined;
-        current.activePhone = undefined;
+        current.activeInput = undefined;
         current.usageRequests.clear();
       }
     },
@@ -402,24 +448,30 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
     forRequest(agent, options) {
       if (retiredPhoneAgents.has(agent)) throw stalePhone();
       const current = lookup(agent);
-      if (!current?.phone) return options;
+      if (!current || !current.phone && !current.activeInput) return options;
       at();
       if (options.sessionId !== agent.id || current.phoneStale) throw stalePhone();
-      const signal = options.signal ? AbortSignal.any([options.signal, current.phoneAbort.signal]) : current.phoneAbort.signal;
-      signal.throwIfAborted();
-      if (current.activePhone && expired(current.activePhone)) current.activePhone = undefined;
-      const active = current.activePhone;
+      const signal = current.phoneAbort && options.signal ? AbortSignal.any([options.signal, current.phoneAbort.signal])
+        : current.phoneAbort?.signal ?? options.signal;
+      signal?.throwIfAborted();
+      if (current.activeInput && expired(current.activeInput)) current.activeInput = undefined;
+      const active = current.activeInput;
       let result = { ...options, signal };
       // A tool step may have other user-role runtime records after this human.
       // A different owner human (even without a usable RPC id) replaces it.
       const index = options.messages.findLastIndex(message => message.role === 'user' && owner(message));
       const message = options.messages[index];
-      if (active && !expired(active) && JSON.parse(active.phoneMemory.block).items.length !== 0 &&
-        message?.source.rpcId === active.requestId) {
-        const content = Object.freeze([...message.content, Object.freeze({ type: 'text', text: active.phoneMemory.block })]);
-        const messages = options.messages.slice();
-        messages[index] = Object.freeze({ ...message, content });
-        result.messages = Object.freeze(messages);
+      if (active && message?.source.rpcId === active.requestId) {
+        const extra = [];
+        if (active.deviceContext) extra.push(Object.freeze({ type: 'text', text: active.deviceContext }));
+        if (active.phoneMemory && JSON.parse(active.phoneMemory.block).items.length) {
+          extra.push(Object.freeze({ type: 'text', text: active.phoneMemory.block }));
+        }
+        if (extra.length) {
+          const messages = options.messages.slice();
+          messages[index] = Object.freeze({ ...message, content: Object.freeze([...message.content, ...extra]) });
+          result.messages = Object.freeze(messages);
+        }
       }
       result = Object.freeze(result);
       phoneRequests.set(result, { current, active, usageRequestIds: [...current.usageRequests],
@@ -448,7 +500,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
       if (!request) return;
       at();
       const current = lookup(agent);
-      if (current !== request.current || current.phoneStale || current.activePhone !== request.active ||
+      if (current !== request.current || current.phoneStale || current.activeInput !== request.active ||
         request.active && expired(request.active)) throw stalePhone();
       options.signal?.throwIfAborted();
     },
