@@ -276,7 +276,9 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
     final old = state[key];
     if (old == null || old.sessionId != id || old.inlinePersona ||
         old.model?.provider == model.provider && old.model?.model == model.model &&
-            old.model?.reasoningEffort == model.reasoningEffort) return;
+            old.model?.reasoningEffort == model.reasoningEffort) {
+      return;
+    }
     state = {...state, key: CompanionBinding(id, model: model,
       memoryArchiveId: old.memoryArchiveId, memoryControlRevision: old.memoryControlRevision)};
     try {

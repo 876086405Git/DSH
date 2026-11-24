@@ -53,8 +53,13 @@ extension on _CompanionAgentVisit {
         }
         return;
       } on DshRemoteException catch (error) {
-        if (error.code != 'companion/memory-context-stale' || retry != null ||
-            hostAttempt?.sourceId == sourceId || replaceId != null || !current()) rethrow;
+        if (error.code != 'companion/memory-context-stale' ||
+            retry != null ||
+            hostAttempt?.sourceId == sourceId ||
+            replaceId != null ||
+            !current()) {
+          rethrow;
+        }
         // A restarted bridge lost its verified phone-memory generation. The
         // failed preparation ran before prompt(), so this source is still new.
         replaceId = binding.sessionId;
@@ -86,8 +91,11 @@ class _CompanionFullSession {
     if (_model != null) modelGeneration++;
     _model = key;
     if (model != null) {
-      unawaited(visit.ref.read(companionSessionsProvider.notifier).rememberModel(
-        visit.boundHost, visit.characterSourceKey, id, model));
+      unawaited(
+        visit.ref
+            .read(companionSessionsProvider.notifier)
+            .rememberModel(visit.boundHost, visit.characterSourceKey, id, model),
+      );
     }
   }
 
@@ -159,9 +167,13 @@ class _CompanionFullSession {
         return;
       }
       if (echoSeq == null) {
-        final echo = controller.events.whereType<UserMessageEvent>().where(
-          (event) => event.isHumanPrompt && !event.message.source.raw.containsKey('principal') && event.requestId == req,
-        ).firstOrNull;
+        final echo = controller.events
+            .whereType<UserMessageEvent>()
+            .where(
+              (event) =>
+                  event.isHumanPrompt && !event.message.source.raw.containsKey('principal') && event.requestId == req,
+            )
+            .firstOrNull;
         if (echo != null) {
           echoSeq = echo.seq;
           final plan = prepared;
@@ -172,9 +184,9 @@ class _CompanionFullSession {
         }
       }
       if (echoSeq == null) return;
-      final trace = state.turns.reversed.where(
-        (t) => t.startSeq <= echoSeq! && (t.endSeq == null || echoSeq! <= t.endSeq!),
-      ).firstOrNull;
+      final trace = state.turns.reversed
+          .where((t) => t.startSeq <= echoSeq! && (t.endSeq == null || echoSeq! <= t.endSeq!))
+          .firstOrNull;
       if (trace == null) return;
       run.hasSessionReply = true;
       // Interrupt may steer a still-running turn. A step already in flight
@@ -225,7 +237,8 @@ class _CompanionFullSession {
         final failure = trace.endReason?.error;
         if (failure != null) run.error = CompanionHostError(companionHostFailure(failure.code), failure.message);
         finish();
-        if (text.trim().isNotEmpty && !run.externalNoticeContent &&
+        if (text.trim().isNotEmpty &&
+            !run.externalNoticeContent &&
             run.controlRevision == run.memory.store.archive['control_revision']) {
           final source = 'reply:${run.source['id']}:$req';
           visit.agent._save(run, source, text);
@@ -242,7 +255,10 @@ class _CompanionFullSession {
     var handedOff = false;
     void Function()? clearStop;
     run.stopSession = (cancelHost) {
-      if (cancelHost && handedOff && requestId != null && visit.ref.mounted &&
+      if (cancelHost &&
+          handedOff &&
+          requestId != null &&
+          visit.ref.mounted &&
           identical(visit.ref.read(activeConnectionProvider).value?.client, client)) {
         clearStop = controller.stopPrompt(requestId!);
       }
@@ -260,8 +276,11 @@ class _CompanionFullSession {
           if (!current()) return false;
           // _deliver invokes this synchronously immediately before client.prompt.
           visit.hostAttempt = (
-            sourceId: run.source['id']! as String, host: visit.boundHost,
-            sessionId: id, requestId: requestId!, model: _model,
+            sourceId: run.source['id']! as String,
+            host: visit.boundHost,
+            sessionId: id,
+            requestId: requestId!,
+            model: _model,
           );
           handedOff = true;
           return true;
@@ -343,9 +362,10 @@ class _CompanionFullSession {
           // A saved notification is usable in the private phone workflow. Its
           // third-party summary is not part of the durable DSH conversation.
           final block = jsonDecode(cards.block) as Map<String, Object?>;
-          final items = (block['items']! as List).cast<Map<String, Object?>>().where(
-            (row) => (row['source'] as Map?)?['kind'] != 'notice',
-          ).toList();
+          final items = (block['items']! as List)
+              .cast<Map<String, Object?>>()
+              .where((row) => (row['source'] as Map?)?['kind'] != 'notice')
+              .toList();
           cards = MemorySelection(
             block: jsonEncode({...block, 'items': items}),
             ids: [for (final item in items) item['id']! as String],
@@ -369,13 +389,15 @@ class _CompanionFullSession {
         recall: false,
         memoryMode: cards == null ? 'query' : 'phone',
         phoneMemory: cards == null ? null : run.memory.phoneContext(cards),
-        deviceContext: cap.phoneMemoryVersion >= 3 ? {
-          'window': ctx['window'],
-          'localTime': ctx['localTime'],
-          if (ctx.containsKey('zoneId')) 'zoneId': ctx['zoneId'],
-          if (ctx.containsKey('originalMessage')) 'originalMessage': ctx['originalMessage'],
-          if (run.assistantPage case final page?) 'selectedPage': page,
-        } : null,
+        deviceContext: cap.phoneMemoryVersion >= 3
+            ? {
+                'window': ctx['window'],
+                'localTime': ctx['localTime'],
+                if (ctx.containsKey('zoneId')) 'zoneId': ctx['zoneId'],
+                if (ctx.containsKey('originalMessage')) 'originalMessage': ctx['originalMessage'],
+                'selectedPage': ?run.assistantPage,
+              }
+            : null,
       );
       selectedCards = cards;
     }

@@ -16,10 +16,31 @@ class CompanionSessionTools {
   // These operations run through the phone's own feature-specific adapters.
   // General device control stays with the enabled native MCP and its policy.
   static const _supported = {
-    'remember', 'forget', 'revise', 'related', 'merge', 'person', 'diary', 'relationship',
-    'impression', 'quiet', 'cancel', 'postpone', 'ask_later', 'recall', 'task_status',
-    'reminder', 'map_open', 'photos_recent', 'photo_view', 'recent_notices', 'notify_user',
-    'notes_to_todo', 'find_draft', 'compare_drafts', 'receipts_to_sheet',
+    'remember',
+    'forget',
+    'revise',
+    'related',
+    'merge',
+    'person',
+    'diary',
+    'relationship',
+    'impression',
+    'quiet',
+    'cancel',
+    'postpone',
+    'ask_later',
+    'recall',
+    'task_status',
+    'reminder',
+    'map_open',
+    'photos_recent',
+    'photo_view',
+    'recent_notices',
+    'notify_user',
+    'notes_to_todo',
+    'find_draft',
+    'compare_drafts',
+    'receipts_to_sheet',
   };
   final DshConnection _connection;
   final String _session, _request;
@@ -44,16 +65,25 @@ class CompanionSessionTools {
   }) async {
     final carrier = client.carrier;
     if (carrier is! DshHttpCarrier || tools.isEmpty) return null;
-    final bindings = {for (final binding in tools) if (_supported.contains(binding.definition.name)) binding.definition.name: binding};
+    final bindings = {
+      for (final binding in tools)
+        if (_supported.contains(binding.definition.name)) binding.definition.name: binding,
+    };
     if (bindings.isEmpty) return null;
     final owner = CompanionSessionTools._(carrier.connection, sessionId, requestId, bindings, isCurrent);
     try {
       if (!isCurrent()) throw const DshClosedException('Companion turn was replaced');
-      final response = await carrier.connection.postJsonStream('$_root/open', {
-        'sessionId': sessionId,
-        'requestId': requestId,
-        'tools': [for (final binding in bindings.values) binding.definition.toJson()],
-      }, abort: owner._abort, headerTimeout: const Duration(seconds: 8), idleTimeout: null);
+      final response = await carrier.connection.postJsonStream(
+        '$_root/open',
+        {
+          'sessionId': sessionId,
+          'requestId': requestId,
+          'tools': [for (final binding in bindings.values) binding.definition.toJson()],
+        },
+        abort: owner._abort,
+        headerTimeout: const Duration(seconds: 8),
+        idleTimeout: null,
+      );
       if (response.statusCode == 404) {
         owner.close();
         return null;
@@ -168,7 +198,8 @@ CompanionAgentToolBinding companionRecentNoticesTool({
 }) => (
   definition: const CompanionAgentTool(
     name: 'recent_notices',
-    description: 'Count the eligible notification summaries from the apps the user allowed. '
+    description:
+        'Count the eligible notification summaries from the apps the user allowed. '
         'Notification content is shown by the existing private phone flow.',
     inputSchema: {'type': 'object', 'properties': <String, Object?>{}, 'additionalProperties': false},
   ),
@@ -182,13 +213,13 @@ CompanionAgentToolBinding companionRecentNoticesTool({
     for (final row in readSummaries()) {
       final source = row['source']! as Map;
       if (status.level(source['package']! as String) != CompanionNoticeLevel.remember ||
-          !isMemoryContextEligible(row, nowMs: at)) continue;
+          !isMemoryContextEligible(row, nowMs: at)) {
+        continue;
+      }
       visible++;
     }
     return CompanionAgentToolResult(
-      content: jsonEncode({'retainedSummaryCount': visible,
-        'message': '这是当前可用的通知摘要数量。通知正文和草稿由手机现有通知流程展示。'}),
-
+      content: jsonEncode({'retainedSummaryCount': visible, 'message': '这是当前可用的通知摘要数量。通知正文和草稿由手机现有通知流程展示。'}),
     );
   },
 );
@@ -199,7 +230,9 @@ CompanionAgentToolBinding companionNotifyTool({required Future<bool> Function(St
     description: 'Show a local companion notification to this phone owner.',
     inputSchema: {
       'type': 'object',
-      'properties': {'text': {'type': 'string'}},
+      'properties': {
+        'text': {'type': 'string'},
+      },
       'required': ['text'],
       'additionalProperties': false,
     },
