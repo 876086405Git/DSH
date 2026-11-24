@@ -142,6 +142,10 @@ class CompanionAgent extends ChangeNotifier {
   String get text => _run?.text ?? '';
   CompanionLightError? get error => _run?.error;
 
+  /// Phone steps in this reply so far. Each new one is notified as it starts,
+  /// so a presenter can say her line before the step while it happens.
+  int get phoneSteps => _run?.phoneSteps ?? 0;
+
   /// The original SQLite user source, not the tools' separate journal turn ID.
   String? get sourceId => _run?.source['id'] as String?;
 
@@ -387,7 +391,10 @@ class CompanionAgent extends ChangeNotifier {
               }
               if (call.name == 'public_lookup') run.externalWebContent = true;
               if (call.name.startsWith(companionPhoneToolPrefix)) {
-                run.phoneUsed = true;
+                run.phoneSteps++;
+                // She acts now: what she said before this step is a whole
+                // line, and her presenters read it out as the step happens.
+                if (!_disposed) notifyListeners();
               } else {
                 run.otherToolUsed = true;
               }
@@ -783,8 +790,9 @@ class _CompanionAgentRun {
   bool cancelled = false;
   bool discard = false;
   bool toolDispatchStarted = false;
-  // She acted on the phone: a failed model round is hers to retry.
-  bool phoneUsed = false;
+  // Phone steps she started; once she acted, a failed model round is hers to retry.
+  int phoneSteps = 0;
+  bool get phoneUsed => phoneSteps > 0;
   // A reminder, task or memory tool ran too: resending could commit it twice.
   bool otherToolUsed = false;
   // Only phone steps ran. They never become tasks, and saying it again is a new go-ahead.
