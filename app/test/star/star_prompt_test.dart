@@ -77,7 +77,12 @@ class MemoryStarStore implements StarPromptStore {
 class TestClock {
   Duration now = const Duration(hours: 1);
 
-  Duration call() => now;
+  var reads = 0;
+
+  Duration call() {
+    reads++;
+    return now;
+  }
 }
 
 /// A value the test sets by hand.
@@ -523,7 +528,11 @@ void main() {
         expect(find.text('本鱼已经在 DSH Go 里陪你 20 个小时啦⁠~'), findsNothing);
         expect(bench.store.record!.shows, StarPromptRules.maxShows);
         expect(bench.store.record!.finished, isFalse);
+        final reads = bench.clock.reads;
+        await bench.away();
+        await bench.back();
         expect(await comesBack(bench, const Duration(hours: 24)), isFalse);
+        expect(bench.clock.reads, reads);
         expect(bench.store.record!.used, const Duration(hours: 20), reason: 'counting stopped');
       },
     );
