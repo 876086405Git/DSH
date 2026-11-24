@@ -389,7 +389,9 @@ async function adminRoute(request: Request, env: Env, ctx: Ctx, url: URL): Promi
     // with a corrected id/version and/or a supplied preview, then publish it.
     // Ownership stays with the author; release bytes stay the same ZIP.
     method(request, 'POST');
-    const body = await jsonBody(request), explanation = reason(body);
+    // The optional base64 preview (≤2 MiB PNG) makes this body up to ~2.8 MB;
+    // every other admin body stays within the 16 KiB default.
+    const body = await jsonBody(request, 3_000_000), explanation = reason(body);
     const previous = await loadState(env), source = find(previous.state, sid);
     need(source.submittedAt, 'submission_state', 409);
     enabled(env, source.metadata.kind);

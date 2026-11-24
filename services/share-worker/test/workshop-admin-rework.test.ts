@@ -108,6 +108,10 @@ it('registers an explicitly supplied PNG preview and rejects malformed ones', as
   expect(served.status).toBe(200); expect(Buffer.from(await served.arrayBuffer())).toEqual(image);
   const bad = await f.rework(item.sid, { version: '1.0.2', preview: 'not-base64!', reason: '坏预览' });
   expect(bad.status).toBe(400); expect(await bad.json()).toEqual({ error: 'workshop_bad_preview' });
+  // A 20 KB body exceeds the 16 KiB default JSON cap; the bytes reach the PNG
+  // check instead of being rejected as an oversized body.
+  const oversize = await f.rework(item.sid, { version: '1.0.3', preview: 'A'.repeat(20_000), reason: '大预览' });
+  expect(oversize.status).toBe(400); expect(await oversize.json()).toEqual({ error: 'workshop_png_header' });
 });
 it('only repairs uploaded records and validates the replacement metadata', async () => {
   const f = setup();
