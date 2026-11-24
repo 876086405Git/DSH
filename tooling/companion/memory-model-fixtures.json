@@ -56,11 +56,11 @@
     },
     {
       "path": "app/test/companion/companion_page_test.dart",
-      "sha256": "c7019f0c45ebdc4cc0e2fe402ce77ffc3466aad3c0d0f6f7b040529cc73a11c4"
+      "sha256": "3d687b7ede4b45abecfaf68e0315d6573933140b15b546979af7ed7b1a3919dd"
     },
     {
       "path": "app/test/companion/companion_recall_room_test.dart",
-      "sha256": "9cca44110aba5e724ea99d859b5766d9b6bdd8af5eb2009bc1ccdcf256b932b5"
+      "sha256": "d9f32ccd484f3f1648c55ae3f6518f72c8e743824f9ad304b15aeb9f035f4d64"
     },
     {
       "path": "app/test/companion/companion_signal_initiative_test.dart",
@@ -72,7 +72,7 @@
     },
     {
       "path": "app/test/companion/companion_stream_state_test.dart",
-      "sha256": "0508767304291b43753c8fb34b59c2dfd4f86760d80ae5e3d77bd787f0dab8ce"
+      "sha256": "b41d1d8fc21be2509d8bb13a15c93cfa315f37b515b651299569d1eafb625f15"
     },
     {
       "path": "app/test/companion/companion_test_settle.dart",
@@ -164,7 +164,7 @@
     },
     {
       "path": "packages/dsh_client/test/companion_prompt_context_test.dart",
-      "sha256": "fd1f0796ef0d6cc5faaa193be7c831f9bbe7f7bbd5368318e28a5faa579e77b7"
+      "sha256": "e9e22428d586f6404041a185ceef1b3ee40f72e1b72a1e67cd9d9fbbefefccd4"
     },
     {
       "path": "packages/dsh_client/test/support/fake_dsh.dart",
@@ -184,7 +184,7 @@
     },
     {
       "path": "runtime/tests/companion-phone-memory-integration.test.mjs",
-      "sha256": "a41d8b8876b26aee83885e52e8f91778d7648fe7b1306d8579fcdd1ab75291fb"
+      "sha256": "f553bf4e40884a5eab2cda981e1cf7b266b8943726f4fa1c02636aa9ea54dc7c"
     },
     {
       "path": "runtime/tests/companion-phone-memory-replay.test.mjs",

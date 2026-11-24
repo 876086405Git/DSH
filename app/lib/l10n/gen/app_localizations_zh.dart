@@ -5037,6 +5037,29 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get companionHostSelectionChanged => '主机会话的模型选择已改变。请检查当前会话后再发送。';
+
+  @override
+  String get companionLocalDisconnected => '未连上本机引擎。请检查引擎是否正在运行。';
+
+  @override
+  String get companionLocalUnavailable => '本机引擎暂时不能打开伙伴会话。请检查引擎及其伙伴预设。';
+
+  @override
+  String get companionLocalModelUnavailable => '本机引擎无法使用这个伙伴原先选择的模型。请检查模型设置。';
+
+  @override
+  String get companionContinuedOnPhone => '主机尚未收到这句话，这一轮已转为轻量模式。';
+
+  @override
+  String get companionLogOnDevice => '手机上的记录';
+
+  @override
+  String companionSessionUsingTool(String tool) {
+    return '正在用 $tool';
+  }
+
+  @override
   String get companionTitle => '伙伴小屋';
 
   @override

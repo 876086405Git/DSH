@@ -9296,6 +9296,48 @@ abstract class L10n {
   /// **'{month}月{day}日'**
   String commonMonthDay(String month, int day);
 
+  /// No description provided for @companionHostSelectionChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'主机会话的模型选择已改变。请检查当前会话后再发送。'**
+  String get companionHostSelectionChanged;
+
+  /// No description provided for @companionLocalDisconnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未连上本机引擎。请检查引擎是否正在运行。'**
+  String get companionLocalDisconnected;
+
+  /// No description provided for @companionLocalUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机引擎暂时不能打开伙伴会话。请检查引擎及其伙伴预设。'**
+  String get companionLocalUnavailable;
+
+  /// No description provided for @companionLocalModelUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机引擎无法使用这个伙伴原先选择的模型。请检查模型设置。'**
+  String get companionLocalModelUnavailable;
+
+  /// No description provided for @companionContinuedOnPhone.
+  ///
+  /// In zh, this message translates to:
+  /// **'主机尚未收到这句话，这一轮已转为轻量模式。'**
+  String get companionContinuedOnPhone;
+
+  /// No description provided for @companionLogOnDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机上的记录'**
+  String get companionLogOnDevice;
+
+  /// No description provided for @companionSessionUsingTool.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在用 {tool}'**
+  String companionSessionUsingTool(String tool);
+
   /// No description provided for @companionTitle.
   ///
   /// In zh, this message translates to:

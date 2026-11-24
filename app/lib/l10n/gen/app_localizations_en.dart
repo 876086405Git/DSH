@@ -5369,6 +5369,32 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get companionHostSelectionChanged =>
+      'The host session selection changed. Check the current session before sending again.';
+
+  @override
+  String get companionLocalDisconnected => 'The on-device engine is disconnected. Check that it is running.';
+
+  @override
+  String get companionLocalUnavailable =>
+      'The on-device engine cannot open the companion session. Check the engine and its companion preset.';
+
+  @override
+  String get companionLocalModelUnavailable =>
+      'The on-device engine cannot use this companion’s previously selected model. Check its model settings.';
+
+  @override
+  String get companionContinuedOnPhone => 'The host has not received this message. This turn will use light mode.';
+
+  @override
+  String get companionLogOnDevice => 'On-device history';
+
+  @override
+  String companionSessionUsingTool(String tool) {
+    return 'Using $tool';
+  }
+
+  @override
   String get companionTitle => 'Companion room';
 
   @override

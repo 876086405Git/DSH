@@ -327,7 +327,7 @@ class _CompanionFullSession {
             : '',
         name: name ?? '',
         callMe: persona.callMe,
-        moves: visit.moves.rules(),
+        moves: visit.moves.rules() ?? '',
       );
       MemorySelection? cards;
       if (cap.phoneMemory && cap.phoneMemoryVersion >= 3 && cap.memoryMode != 'automatic') {

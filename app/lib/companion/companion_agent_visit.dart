@@ -911,12 +911,14 @@ class _CompanionAgentVisit {
                     readSummaries: owner.store.noticeMemories,
                     isCurrent: current,
                   ),
-                if (useSession && notificationWindow is CompanionAgentNotificationUi && notificationWindow.mounted)
-                  companionNotifyTool(
-                    deliver: (id, text) => identical(residentUi, notificationWindow) && notificationWindow.mounted
-                        ? notificationWindow.deliverFollowup(id: id, text: text)
-                        : Future.value(false),
-                  ),
+                // The room UI type doesn't declare the notification surface; match it as a pattern.
+                if (useSession && notificationWindow != null && notificationWindow.mounted)
+                  if (notificationWindow case final CompanionAgentNotificationUi window)
+                    companionNotifyTool(
+                      deliver: (id, text) => identical(residentUi, notificationWindow) && notificationWindow.mounted
+                          ? window.deliverFollowup(id: id, text: text)
+                          : Future.value(false),
+                    ),
                 ...taskTools.bindings,
                 ...phoneTools.bindings,
                 if (ref.read(androidSystemFeaturesProvider)) ...photoTools.bindings,
@@ -937,7 +939,7 @@ class _CompanionAgentVisit {
         events = companionConsumeEvents(events, turnContext.eventIds);
         if (turnContext.hasClock) lastClockAt = turnContext.sampledAt;
       }
-      if (submittedRun!.error case final error?) {
+      if (submittedRun.error case final error?) {
         // say has returned after its physical request's first cancel drain.
         // No tool callback has entered, so the original clock and budget can
         // survive until a later explicit click in this same live visit.
