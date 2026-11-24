@@ -173,6 +173,7 @@ rrule-weekly-first-period.diff
 rrule-mixed-byday.diff
 input-trigger-source-recovery.diff
 jsonl-frozen-live-event.diff
+jsonl-identical-cold-read.diff
 web-preset-save-freshness.diff
 web-search-key-write-result.diff
 deepseek-attachment-error.diff
