@@ -1,10 +1,9 @@
 part of 'companion_agent.dart';
 
 extension on _CompanionAgentVisit {
-  Future<void> sendInSession(_CompanionAgentRun run) async {
+  Future<void> sendInSession(_CompanionAgentRun run, Object scope) async {
     final connection = ref.read(activeConnectionProvider).value;
     final host = ref.read(activeHostProvider);
-    final scope = ref.read(modelSelectionScopeProvider);
     final role = characterSourceKey;
     final sourceId = run.source['id']! as String;
     final prior = hostAttempt;
@@ -48,9 +47,6 @@ extension on _CompanionAgentVisit {
       }
       try {
         await session.send(run, current, retryId: retry?.requestId);
-        if (agent._turnCurrent(run) && !current()) {
-          run.error = const CompanionHostError(CompanionHostFailure.selectionChanged);
-        }
         return;
       } on DshRemoteException catch (error) {
         if (error.code != 'companion/memory-context-stale' ||

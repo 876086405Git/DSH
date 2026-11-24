@@ -16,6 +16,7 @@ import 'package:dsh_app/l10n/gen/app_localizations.dart';
 import 'package:dsh_app/state/companion_agent_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/models_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
 import 'package:dsh_app/ui/companion/companion_chrome.dart';
@@ -283,6 +284,7 @@ class _Room {
     void Function(CompanionMemoryOwner)? seed,
     bool dropHostOnSend = false,
     bool bindRole = false,
+    bool bindWithMemory = false,
   }) async {
     this.tester = tester;
     addTearDown(() => close(tester));
@@ -293,12 +295,15 @@ class _Room {
     final store = CompanionPackStore(root);
     final prefs = await SharedPreferences.getInstance();
     client.dropHostOnProjection = dropHostOnSend;
-    if (bindRole || dropHostOnSend) {
+    if (bindRole || bindWithMemory || dropHostOnSend) {
       final role = (await tester.runAsync(store.characterIdentity))!.key;
       expect(role, startsWith('local:'));
       final hostKey = '${HostRef.local.kind.name}:${HostRef.local.id}';
       final saved = jsonDecode(prefs.getString('companion_sessions')!) as Map<String, Object?>;
-      saved['character:${jsonEncode(hostKey)}:${jsonEncode(role)}'] = {'id': 'existing-role-session', 'full': true};
+      saved['character:${jsonEncode(hostKey)}:${jsonEncode(role)}'] = {
+        if (bindWithMemory) ...(saved[hostKey]! as Map<String, Object?>),
+        'id': 'existing-role-session', 'full': true,
+      };
       await prefs.setString('companion_sessions', jsonEncode(saved));
     }
     await tester.pumpWidget(
@@ -469,6 +474,55 @@ void main() {
       await room.close(tester);
     }
   });
+
+  for (final dropped in [false, true]) {
+    testWidgets('same-client reconnect while binding returns a retryable draft (read failed: $dropped)', (tester) async {
+      final room = _Room(temporary);
+      await room.open(tester, bindWithMemory: true);
+      try {
+        final read = room.client.projectionRead = Completer<SessionProjections?>();
+        final owner = room.container;
+        final agent = owner.read(companionAgentProvider);
+        final scope = owner.read(modelSelectionScopeProvider);
+        const words = '连接重建时保留这一句。';
+        await tester.enterText(find.byType(TextField), words);
+        tester.widget<CompanionComposer>(find.byType(CompanionComposer)).onSend();
+        await settleMixed(tester, room.client.projectionStarted.future);
+        expect(agent.running, isTrue);
+        expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
+        final ended = Completer<void>();
+        void changed() {
+          if (!agent.running && !ended.isCompleted) ended.complete();
+        }
+        agent.addListener(changed);
+        try {
+          room.client.mux.connection.add(DshConnectionState.reconnecting);
+          await flush(tester);
+          expect(owner.read(activeConnectionProvider).value!.client, same(room.client));
+          expect(owner.read(modelSelectionScopeProvider), isNot(same(scope)));
+          if (dropped) {
+            read.completeError(const DshClosedException('connection was lost during the read'));
+          } else {
+            read.complete(SessionProjections.empty);
+          }
+          await settleMixed(tester, ended.future);
+          await flush(tester);
+          expect(agent.error, isA<CompanionHostError>().having(
+            (failure) => failure.hostFailure, 'reason', CompanionHostFailure.disconnected,
+          ));
+          expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, words);
+          expect(room.speech(tester), room.l10n(tester).companionLocalDisconnected);
+          expect(room.memory.store.messages().where((row) => row['text'] == words), hasLength(1));
+          expect(room.asked, isEmpty);
+          expect(room.bridge.postPaths, isNot(contains('/api/session/prompt')));
+        } finally {
+          agent.removeListener(changed);
+        }
+      } finally {
+        await room.close(tester);
+      }
+    });
+  }
 
   testWidgets('a touch supersedes a pending greeting without dropping visit state', (tester) async {
     final room = _Room(temporary);

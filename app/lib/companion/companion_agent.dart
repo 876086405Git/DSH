@@ -230,8 +230,9 @@ class CompanionAgent extends ChangeNotifier {
       if (useSession) {
         final visit = _visit!;
         final id = run.source['id']! as String;
+        final scope = visit.ref.read(modelSelectionScopeProvider);
         try {
-          await visit.sendInSession(run);
+          await visit.sendInSession(run, scope);
         } on Object catch (error) {
           final retry = visit.hostAttempt;
           final phone = CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
@@ -244,6 +245,14 @@ class CompanionAgent extends ChangeNotifier {
           visit.phoneAttempt = (sourceId: id, page: run.assistantPage);
           if (visit.runOrigin case final CompanionFallbackUi ui) ui.continuedOnPhone(id);
           await _loop(run);
+        } finally {
+          // The source can still own this room after its Host connection or model retired.
+          if (!run.phoneRoute && _turnCurrent(run) && run.modelCurrent?.call() == false) {
+            final sameConnection = identical(visit.ref.read(modelSelectionScopeProvider), scope);
+            run.error = CompanionHostError(sameConnection
+                ? CompanionHostFailure.selectionChanged
+                : CompanionHostFailure.disconnected);
+          }
         }
       } else {
         await _loop(run);
