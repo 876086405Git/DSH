@@ -363,6 +363,7 @@ class _Host {
       cookies.add(request.headers.value(HttpHeaders.cookieHeader));
       hosts.add(request.headers.value(HttpHeaders.hostHeader));
       final text = await utf8.decoder.bind(request).join();
+      texts.add(text);
       bodies.add(text.isEmpty ? null : jsonDecode(text) as Map<String, Object?>);
       await answer(request);
     });
@@ -375,11 +376,20 @@ class _Host {
   final cookies = <String?>[];
   final hosts = <String?>[];
   final bodies = <Map<String, Object?>?>[];
+  final texts = <String>[];
   Map<String, Object?> capability = _capability();
   late Future<void> Function(HttpRequest request) answer = (request) => _json(request, capability);
   Uri get baseUri => Uri.parse('http://127.0.0.1:${server.port}');
   Future<void> close() async {
     await server.close(force: true);
+  }
+}
+
+class _Counted {
+  var calls = 0;
+  Object toJson() {
+    calls++;
+    return 'counted';
   }
 }
 
@@ -452,6 +462,63 @@ void main() {
     await client.close();
     http.delegate.close(force: true);
     await host.close();
+  });
+
+  test('Agent input is encoded once and posts the old snapshot bytes', () async {
+    host.capability['agent'] = {'v': 1, 'tools': 'return-only', 'streaming': true};
+    final counted = _Counted();
+    final cap = (await client.readCompanionAuxiliaryCapability(_session))!;
+    const system = '看🌏 "hi"\n\\';
+    final messages = [
+      <String, Object?>{'role': 'user', 'content': '茶🍵'},
+    ];
+    final tools = [
+      {
+        'name': 'lookup',
+        'input_schema': {
+          'enum': [-0.0, 1.5e-9, 1.0, true, null, counted],
+        },
+      },
+    ];
+    final estimate = jsonEncode({'system': system, 'messages': messages, 'tools': tools});
+    final old = jsonEncode(
+      jsonDecode(
+        jsonEncode({
+          'v': 1,
+          'instanceId': cap.instanceId,
+          'requestId': _request,
+          'sessionId': cap.sessionId,
+          'provider': cap.provider,
+          'model': cap.model,
+          'kind': 'agent',
+          'system': system,
+          'messages': messages,
+          'tools': tools,
+          'maxTokens': 800,
+        }),
+      ),
+    );
+    counted.calls = 0;
+    final input = CompanionAgentInput(system: system, messages: messages, tools: tools);
+    expect(input.json, estimate);
+    expect(input.requestBytes(cap, requestId: _request, maxTokens: 800), utf8.encode(old).length);
+    host.answer = (request) => _json(request, _wire('busy')['body'], status: 409);
+    final probe = _Probe();
+    final posted = client.callCompanionAgent(
+      cap,
+      requestId: _request,
+      input: input,
+      maxTokens: 800,
+      abort: DshHttpAbort(),
+      onDispatchUncertain: probe.uncertain,
+      onSent: probe.sent,
+      onText: (_) {},
+      onUsage: probe.received,
+    );
+    messages.single['content'] = 'changed';
+    await expectLater(posted, throwsA(isA<CompanionAuxiliaryFailure>()));
+    expect(host.texts.last, old);
+    expect(counted.calls, 1);
   });
 
   test('actual HTTP uses one frozen selection, cookie and exact no-tools DTO', () async {

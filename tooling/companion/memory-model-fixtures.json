@@ -116,7 +116,7 @@
     },
     {
       "path": "packages/dsh_client/test/companion_auxiliary_api_test.dart",
-      "sha256": "20b95fc8e110d879f74d890f735f8b5734d56fca1871bf33f00b6e77845bb85b"
+      "sha256": "e8a0602c074dd1532442a527f9976323d722a4d09f8041445fee9beab64071b9"
     },
     {
       "path": "packages/dsh_client/test/companion_followup_store_test.dart",
