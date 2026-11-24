@@ -692,11 +692,12 @@ void main() {
     expect(selections.every((selection) => selection.ids.contains(memoryId)), isTrue);
     expect(postBytes.skip(6).every((size) => size <= companionAgentRequestMaxBytes), isTrue);
     for (final post in bounded) {
-      expect(companionAgentRequestBytes(
-        capability, requestId: post['requestId']! as String, system: post['system']! as String,
+      expect(CompanionAgentInput(
+        system: post['system']! as String,
         messages: (post['messages']! as List).cast<Map<String, Object?>>(),
-        tools: (post['tools']! as List).cast<Map<String, Object?>>(), maxTokens: post['maxTokens']! as int,
-      ), postBytes[posts.indexOf(post)]);
+        tools: (post['tools']! as List).cast<Map<String, Object?>>(),
+      ).requestBytes(capability, requestId: post['requestId']! as String, maxTokens: post['maxTokens']! as int),
+          postBytes[posts.indexOf(post)]);
       expect(post['system'], contains('protected-system-context'));
       final submitted = jsonEncode(post['messages']);
       expect(submitted, isNot(contains('oldest-only')));

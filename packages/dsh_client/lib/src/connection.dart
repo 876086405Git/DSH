@@ -13,6 +13,12 @@ import 'errors.dart';
 import 'json.dart';
 import 'models.dart' show SessionSummary;
 
+/// A JSON body the caller already encoded, sent as these exact bytes.
+final class DshEncodedJson {
+  const DshEncodedJson(this.bytes);
+  final Uint8List bytes;
+}
+
 /// Signed browser-session cookie minted by `GET /?token=<launch token>`.
 ///
 /// It is bound to the exact `host:port` authority the login used and stays
@@ -383,7 +389,7 @@ class DshConnection {
     return _DshHttpStream(
       this,
       resolve(path),
-      utf8.encode(jsonEncode(body)),
+      body is DshEncodedJson ? body.bytes : utf8.encode(jsonEncode(body)),
       abort,
       headerTimeout ?? requestTimeout,
       idleTimeout,

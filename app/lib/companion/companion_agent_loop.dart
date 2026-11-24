@@ -157,6 +157,9 @@ class CompanionAgentModelRequest {
   CompanionAgentModelRequest(this.id);
 
   final String id;
+
+  /// The Host input already encoded and measured for this request, if any.
+  CompanionAgentInput? hostInput;
   final settled = Completer<void>();
   http.Client? client;
   StreamIterator<String>? stream;
@@ -224,9 +227,9 @@ class CompanionAgentModelRequest {
     final future = client.callCompanionAgent(
       capability,
       requestId: id,
-      system: system,
-      messages: messages,
-      tools: [for (final tool in tools) tool.toJson()],
+      input:
+          hostInput ??
+          CompanionAgentInput(system: system, messages: messages, tools: [for (final tool in tools) tool.toJson()]),
       maxTokens: maxTokens,
       abort: abort,
       onDispatchUncertain: onDispatchUncertain,

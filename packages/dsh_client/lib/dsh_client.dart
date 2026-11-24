@@ -26,7 +26,7 @@ export 'src/companion_memory_rules.dart';
 export 'src/companion_recall_api.dart';
 export 'src/companion_signals.dart';
 export 'src/companion_signals_api.dart';
-export 'src/connection.dart';
+export 'src/connection.dart' hide DshEncodedJson;
 export 'src/cordis_api.dart';
 export 'src/cot_translation_api.dart';
 export 'src/deliverables.dart';
