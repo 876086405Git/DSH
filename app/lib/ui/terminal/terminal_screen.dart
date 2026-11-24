@@ -113,11 +113,11 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   ({Offset origin, Timer deadline})? _keyboardTap;
   double? _pinchSpan;
   double _pinchFont = TerminalFontSize.fallback;
-  String? _composing;
+  final _composing = ValueNotifier<String?>(null);
   Object? _pasteRequest;
 
   /// Kept while the size stays: a new one makes xterm measure its cell again and
-  /// drop every laid-out character (each pinyin keystroke rebuilds this page).
+  /// drop every laid-out character.
   TerminalStyle? _style;
 
   TerminalTab get _tab => widget.tab;
@@ -141,10 +141,11 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
       _pasteRequest = null;
       cancelPaste();
     }
+    // The keyboard also ends composition when this tab loses input.
+    if (!_canType || oldWidget.tab.id != widget.tab.id) _composing.value = null;
     if (oldWidget.tab.id != widget.tab.id) {
       // Each tab gets its own view (and scroll position); the old controller
       // goes once the old view has let go of it.
-      _composing = null;
       _view = GlobalKey<TerminalViewState>();
       final old = _scroll;
       _scroll = ScrollController();
@@ -155,6 +156,7 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   @override
   void dispose() {
     _cancelKeyboardTap();
+    _composing.dispose();
     _selection.dispose();
     _scroll.dispose();
     super.dispose();
@@ -473,7 +475,7 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
       onBackspace: _onBackspace,
       onEnter: _onEnter,
       onComposing: (text) {
-        if (text != _composing && mounted) setState(() => _composing = text);
+        if (mounted) _composing.value = text;
       },
       child: screen,
     );
@@ -500,8 +502,16 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
                     );
                   },
                 ),
-              if (_composing case final text? when text.isNotEmpty && blocked == null)
-                Positioned(left: 12, bottom: 8, child: _ComposingPill(text: text)),
+              if (blocked == null)
+                Positioned(
+                  left: 12,
+                  bottom: 8,
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: _composing,
+                    builder: (context, text, _) =>
+                        text == null || text.isEmpty ? const SizedBox.shrink() : _ComposingPill(text: text),
+                  ),
+                ),
             ],
           ),
         ),

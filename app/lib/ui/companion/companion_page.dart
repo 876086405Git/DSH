@@ -244,7 +244,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   CompanionSnapshot? _vitals;
 
   // What's on screen.
-  String? _bubble;
+  final _bubbleWords = ValueNotifier<String?>(null);
+  String? get _bubble => _bubbleWords.value;
+  set _bubble(String? text) => _bubbleWords.value = text;
   String? _bubbleReplyId;
   var _bubbleTextKey = GlobalKey();
   List<({String taskId, String placeName})> _lookupResults = const [];
@@ -601,6 +603,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _voice.dispose();
     _focus.dispose();
     _input.dispose();
+    _bubbleWords.dispose();
     super.dispose();
   }
 
@@ -2224,6 +2227,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       );
     }
     final reply = stream.reader.read(text, streaming: running);
+    // Behind her panel only the subtitle changes while this same request
+    // extends already visible words. Its pending words keep both history
+    // actions available. Tool rounds with a prefix take the normal path.
+    final subtitleOnly = _tab == _CompanionTab.her &&
+        running && _running && attention == _needsAttention && _bubble != null && _bubbleReplyId == user &&
+        identical(text, _attachment.pendingText) && text.length > (_lastReply?.text.length ?? 0) &&
+        reply.words.isNotEmpty && reply.words != _bubble;
     _lastReply = (text: text, streaming: running, reply: reply);
     for (final mark in reply.marks.skip(_marksHandled)) {
       _retireGreeting();
@@ -2260,7 +2270,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       // than fall behind what she is doing, she goes on with the newest.
       if (sentences.isNotEmpty) _speakAloud(sentences, flush: steps > 0 && _ttsPending.length > 1);
     }
-    _showReplyWords(reply.words, fresh);
+    if (subtitleOnly) {
+      _bubble = _replyWords = reply.words;
+    } else {
+      _showReplyWords(reply.words, fresh);
+    }
 
     if (running) {
       _retireGreeting();
@@ -2284,10 +2298,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       }
     }
 
-    setState(() {
-      _running = running;
-      _needsAttention = attention;
-    });
+    if (!subtitleOnly) {
+      setState(() {
+        _running = running;
+        _needsAttention = attention;
+      });
+    }
   }
 
   /// Capture the reply rendered by this frame. Returning to this room can
@@ -3797,13 +3813,16 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                   ),
                 if (!_light && chatId != null) CompanionAsk(key: ValueKey(chatId), sessionId: chatId),
                 CompanionMyLine(text: _myLine),
-                CompanionSpeech(
-                  text: _bubble,
-                  textKey: _bubbleTextKey,
-                  onFrame: _queueReplyPresentation,
-                  error: _bubbleIsError,
-                  thinking: _sending || (_running && _bubble == null),
-                  onPullBack: _openLog,
+                ValueListenableBuilder<String?>(
+                  valueListenable: _bubbleWords,
+                  builder: (_, words, _) => CompanionSpeech(
+                    text: words,
+                    textKey: _bubbleTextKey,
+                    onFrame: _queueReplyPresentation,
+                    error: _bubbleIsError,
+                    thinking: _sending || (_running && words == null),
+                    onPullBack: _openLog,
+                  ),
                 ),
                 if (_bubble != null)
                   for (final result in _lookupResults)

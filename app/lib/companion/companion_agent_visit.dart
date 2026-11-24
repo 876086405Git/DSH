@@ -1235,7 +1235,7 @@ class _CompanionAgentVisit {
             ref.read(companionSessionFilterProvider)(ref.read(activeHostProvider), session),
         offer: offerResidentSignal,
       );
-      residentSignals!.refresh();
+      residentSignals!.observeRecipient();
     }
   }
 
