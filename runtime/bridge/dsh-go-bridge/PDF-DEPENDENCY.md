@@ -35,7 +35,7 @@ APK 使用已准备的 `runtime/out/<ABI>/assets`：Gradle 的两个 ABI sourceS
 `tooling/build-apk.sh` 的 release 入口先核该归档与 manifest，打 APK 本身不会代替上述 runtime/npm 准备；
 需要从当前源码先生成所选 ABI 的 runtime，再构建 APK。归档内的 bridge 保留所选 PDF 文件及以下许可证。
 
-保留的子集是原始 package/README/许可证、`legacy/build/pdf.mjs`、`pdf.worker.mjs`、`cmaps/` 和
+保留的子集是原始 package/README/许可证、`legacy/build/pdf.min.mjs`、`pdf.worker.min.mjs`、`cmaps/` 和
 `standard_fonts/`。不装 optional canvas，不装载 native addon，也不把 viewer、Wasm、源码映射和声明文件放进
 这两个手机运行时的 bridge payload。标准 npm 安装目录和临时运行时产物不属于提交内容。
 
