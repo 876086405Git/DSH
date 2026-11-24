@@ -79,14 +79,14 @@ export function createSessionToolRoutes({ ctx, readJson, send }) {
     let agent;
     try {
       const found = await ctx.get('sessionController')?.resolveAgent(sessionId);
-      if (resolving.get(sessionId) !== attempt) throw unavailable('更新的手机连接正在使用这个会话');
+      if (resolving.get(sessionId) !== attempt) throw new CompanionError(409, 'device-connection-replaced', '更新的手机连接正在使用这个会话');
       agent = found?.agent;
     } finally {
       if (resolving.get(sessionId) === attempt) resolving.delete(sessionId);
     }
     if (!agent || ctx.get('agents')?.get(sessionId) !== agent ||
         ctx.get('agentPresets')?.presetForSession(agent.session) !== FULL_PRESET) {
-      throw unavailable('当前会话没有伙伴预设');
+      throw new CompanionError(409, 'device-session-unavailable', '当前伙伴会话已不可用或预设已改变');
     }
     if (res.destroyed) return;
     const previous = channels.get(sessionId);

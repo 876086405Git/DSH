@@ -95,6 +95,35 @@ void main() {
     await stream.close();
   });
 
+  test('a device conflict keeps its host reason, while a repeated request can reconcile the original turn', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final client = DshClient(DshConnection(Uri.parse('http://127.0.0.1:${server.port}')));
+    var attempts = 0;
+    const reason = 'companion/device-session-unavailable';
+    server.listen((req) async {
+      await req.drain<void>();
+      final code = attempts++ == 0 ? reason : 'companion/device-request-in-use';
+      req.response
+        ..statusCode = HttpStatus.conflict
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({'error': {'code': code, 'message': 'fixture text'}}));
+      await req.response.close();
+    });
+    addTearDown(() async {
+      await client.close();
+      await server.close(force: true);
+    });
+    Future<CompanionSessionTools?> open() => CompanionSessionTools.open(
+      client, sessionId: 'cabin', requestId: 'turn', isCurrent: () => true,
+      tools: [companionNotifyTool(deliver: (_, _) => throw StateError('the phone received no call'))],
+    );
+    await expectLater(open(), throwsA(isA<CompanionHostError>()
+        .having((e) => e.hostFailure, 'failure', CompanionHostFailure.deviceConflict)
+        .having((e) => e.detail, 'reason', reason)));
+    expect(await open(), isNull);
+    expect(attempts, 2);
+  });
+
   test('recent notifications report eligible count without exposing private summaries or consuming the queue', () async {
     final notices = _Notices();
     MemoryRow row(String pkg, String text, int expires, [String mode = 'normal']) => {

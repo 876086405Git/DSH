@@ -90,10 +90,19 @@ class CompanionSessionTools {
       }
       if (response.statusCode == 409) {
         final bytes = await response.body.expand((chunk) => chunk).toList();
-        final data = jsonDecode(utf8.decode(bytes)) as Map;
-        if ((data['error'] as Map?)?['code'] == 'companion/device-request-in-use') {
+        final data = jsonDecode(utf8.decode(bytes));
+        if (data case {'error': {'code': 'companion/device-request-in-use'}}) {
           owner.close();
           return null; // chat.send can reconcile the original requestId.
+        }
+        if (data case {'error': {'code': final String code}}) {
+          if (const {
+            'companion/device-connection-replaced',
+            'companion/device-session-unavailable',
+            'companion/device-unavailable', // Older bridge.
+          }.contains(code)) {
+            throw CompanionHostError(CompanionHostFailure.deviceConflict, code);
+          }
         }
       }
       if (response.statusCode != 200 || response.contentType != 'application/x-ndjson') {

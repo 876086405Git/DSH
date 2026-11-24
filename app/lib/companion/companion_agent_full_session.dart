@@ -312,7 +312,10 @@ class _CompanionFullSession {
             local: visit.boundHost == HostRef.local,
             stopPhone: run.onStop,
             isCurrent: current,
-          );
+          ).onError<CompanionHostError>((error, stack) {
+            prepareError = error;
+            Error.throwWithStackTrace(error, stack); // Let ChatController reconcile an already delivered retry.
+          });
           return current();
         },
       );

@@ -1,4 +1,10 @@
 {
+  "companionPhoneConnectionReplaced": "A newer phone connection took over this session. Return to the current companion session and try again.",
+  "@companionPhoneConnectionReplaced": {"description": "A newer callback owner replaced this pending phone connection."},
+  "companionPhoneSessionUnavailable": "The host cannot find this companion session, or its preset has changed. Reopen the companion room.",
+  "@companionPhoneSessionUnavailable": {"description": "The current session no longer resolves to the selected companion."},
+  "companionPhoneToolsConflict": "The host could not connect the phone tools for this turn. Reopen the current companion session and try again.",
+  "@companionPhoneToolsConflict": {"description": "An older host rejected the companion phone connection without a specific reason code."},
   "companionHostSelectionChanged": "The host session selection changed. Check the current session before sending again.",
   "@companionHostSelectionChanged": {"description": "Companion session status displayed in the room."},
   "companionLocalDisconnected": "The on-device engine is disconnected. Check that it is running.",

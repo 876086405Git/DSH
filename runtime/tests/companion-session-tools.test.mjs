@@ -70,7 +70,9 @@ async function fixture(t) {
 test('authenticated phone is ready before the prompt; only a claimed owner turn can call it', async t => {
   const f = await fixture(t);
   assert.equal((await f.post('open', {}, 'guest')).status, 403);
-  assert.equal((await f.post('open', { sessionId: 'wrong', requestId: 'u', tools: offered })).status, 409);
+  const missing = await f.post('open', { sessionId: 'wrong', requestId: 'u', tools: offered });
+  assert.equal(missing.status, 409);
+  assert.equal((await missing.json()).error.code, 'companion/device-session-unavailable');
   assert.equal((await f.post('open', { sessionId: 'cabin', requestId: 'u', tools: [definition('bash')] })).status, 400);
   const phone = await f.open();
   assert.throws(() => f.call('reminder'), /没有对应/);
@@ -165,7 +167,10 @@ test('a slow old resolver cannot replace a newer ready phone stream', async t =>
   const stale = f.post('open', { sessionId: 'cabin', requestId: 'old', tools: offered });
   await entered.promise;
   const current = await f.open('new');
-  resume.resolve(); assert.equal((await stale).status, 409);
+  resume.resolve();
+  const superseded = await stale;
+  assert.equal(superseded.status, 409);
+  assert.equal((await superseded.json()).error.code, 'companion/device-connection-replaced');
   await f.claim('new');
   const pending = f.call('reminder', 'r1');
   assert.equal((await current.next()).callId, 'r1');

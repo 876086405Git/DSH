@@ -2452,6 +2452,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     final l10n = context.l10n;
     final local = ref.read(activeHostProvider).isLocal;
     return switch (error) {
+      CompanionHostError(hostFailure: CompanionHostFailure.deviceConflict, detail: 'companion/device-connection-replaced') =>
+        l10n.companionPhoneConnectionReplaced,
+      CompanionHostError(hostFailure: CompanionHostFailure.deviceConflict, detail: 'companion/device-session-unavailable') =>
+        l10n.companionPhoneSessionUnavailable,
+      CompanionHostError(hostFailure: CompanionHostFailure.deviceConflict) => l10n.companionPhoneToolsConflict,
       CompanionHostError(hostFailure: CompanionHostFailure.retryClosed) => l10n.companionAgentRetryClosed,
       CompanionHostError(hostFailure: CompanionHostFailure.selectionChanged) => l10n.companionHostSelectionChanged,
       CompanionHostError(hostFailure: CompanionHostFailure.disconnected) when local => l10n.companionLocalDisconnected,

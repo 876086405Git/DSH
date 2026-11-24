@@ -39,6 +39,7 @@ class _Bridge extends DshConnection {
   String instance = 'first-instance';
   final phoneSessions = <String>{};
   String? rejectPrepare;
+  String? deviceConflict;
   bool failRevoke = false;
   bool chatUsage = false;
   bool phoneMemory = true;
@@ -129,7 +130,11 @@ class _Bridge extends DshConnection {
     Duration? headerTimeout,
     Duration? idleTimeout = const Duration(seconds: 20),
   }) => path.endsWith('/session-tools/open')
-      ? Future.value(DshHttpStreamResponse(404, 'text/plain', const Stream.empty(), () async {}))
+      ? Future.value(deviceConflict == null
+          ? DshHttpStreamResponse(404, 'text/plain', const Stream.empty(), () async {})
+          : DshHttpStreamResponse(409, 'application/json', Stream.value(json({
+              'error': {'code': deviceConflict, 'message': 'fixture text'},
+            }).body), () async {}))
       : host!.connection.postJsonStream(
     path,
     body,
@@ -278,11 +283,16 @@ class _Client extends DshClient {
     final id = requestId!;
 
     prompts.add((session: sessionId, text: text, requestId: id));
-    final log = records.putIfAbsent(sessionId, () => []);
     if (dropNext) {
       dropNext = false;
       throw const DshTransportException('Prompt result unknown');
     }
+    return completeOriginal(sessionId, text, id);
+  }
+
+  // The Host journal may arrive even after the prompt transport returned an error.
+  Future<String> completeOriginal(String sessionId, String text, String id) async {
+    final log = records.putIfAbsent(sessionId, () => []);
     final hold = releaseEcho;
     if (hold != null) await hold.future;
     final turn = ++serial;
@@ -629,6 +639,27 @@ void main() {
       expect(room.client.prompts, [first, first]);
       expect(room.bridge.prepared, [snapshot, snapshot]);
       expect(room.memory.store.messages().where((row) => row['role'] == 'user').single['id'], source['id']);
+    } finally {
+      await room.close(tester);
+    }
+  });
+
+  testWidgets('a device conflict on retry uses the already delivered Host turn', (tester) async {
+    final room = _Room(root);
+    await room.open(tester);
+    try {
+      const raw = '核对这次请求';
+      room.client.dropNext = true;
+      await room.say(tester, raw);
+      final first = room.client.prompts.single;
+      await room.client.completeOriginal(first.session, first.text, first.requestId);
+      await room.settle(tester);
+      room.bridge.deviceConflict = 'companion/device-connection-replaced';
+      await room.say(tester, raw);
+      expect(room.client.prompts, [first]); // The retry consumed the existing receipt.
+      expect(room.asked, isEmpty);
+      expect(room.memory.store.messages().where((r) => r['role'] == 'assistant').single['text'], '会话回复');
+      expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, '会话回复');
     } finally {
       await room.close(tester);
     }
