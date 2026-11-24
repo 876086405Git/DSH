@@ -874,7 +874,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         if (_ownWhale) l10n.companionTapTail3,
       ]),
       ('legs', _) => _linesFor('tapLegs', [l10n.companionTapLegs1, l10n.companionTapLegs2]),
-      _ => _linesFor('tapBody', [l10n.companionTapBody1, l10n.companionTapBody2, if (_ownWhale) l10n.companionTapBody3]),
+      _ => _linesFor('tapBody', [
+        l10n.companionTapBody1,
+        l10n.companionTapBody2,
+        if (_ownWhale) l10n.companionTapBody3,
+      ]),
     };
     // A hug is affection the way a pat is: the same event for her state.
     if (kind == 'pat' || kind == 'hug') _event('pet');
@@ -1796,25 +1800,41 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     return _ownLines?[moment] ?? fallback;
   }
 
-  /// Finds (or, with the person's key, writes once) her own lines for the
-  /// current character and persona. A pack that brings lines needs none.
+  /// Her own lines kept for the current character and persona, if written.
+  /// A pack that brings lines needs none.
   Future<void> _refreshLines() async {
     if (_character.lines != null) return;
-    final persona = ref.read(companionPersonaProvider);
-    final name = ref.read(companionNameProvider) ?? _character.name;
-    final character = _characterSourceKey ?? name ?? '';
-    final locale = context.l10n.localeName;
-    final fingerprint = '${persona.fingerprint}:${name ?? ''}:$locale';
-    final key = '$character|$fingerprint';
+    final (:character, :fingerprint, :key) = _linesKey();
     if (_ownLinesFor == key) return;
     _ownLinesFor = key;
     _ownLines = null;
     final cached = await companionLinesCached(character, fingerprint);
-    if (!mounted || _ownLinesFor != key) return;
+    if (mounted && _ownLinesFor == key) _ownLines = cached;
+  }
+
+  ({String character, String fingerprint, String key}) _linesKey() {
+    final persona = ref.read(companionPersonaProvider);
+    final name = ref.read(companionNameProvider) ?? _character.name;
+    final character = _characterSourceKey ?? name ?? '';
+    final fingerprint = '${persona.fingerprint}:${name ?? ''}:${context.l10n.localeName}';
+    return (character: character, fingerprint: fingerprint, key: '$character|$fingerprint');
+  }
+
+  /// Once she is someone new (another character moved in, her persona or name
+  /// changed): her own set, written with the person's key unless one is kept.
+  Future<void> _writeLines() async {
+    if (!mounted || _character.lines != null || _ownWhale) return;
+    final (:character, :fingerprint, :key) = _linesKey();
+    final cached = await companionLinesCached(character, fingerprint);
+    if (!mounted) return;
     if (cached != null) {
+      _ownLinesFor = key;
       _ownLines = cached;
       return;
     }
+    final persona = ref.read(companionPersonaProvider);
+    final name = ref.read(companionNameProvider) ?? _character.name;
+    final locale = context.l10n.localeName;
     final apiKey = ref.read(settingsProvider).apiKey.trim();
     if (apiKey.isEmpty) return;
     final client = ref.read(companionLightClientProvider)();
@@ -1832,10 +1852,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         ),
         language: locale.startsWith('zh') ? 'zh' : 'en',
       );
-      if (mounted && _ownLinesFor == key) _ownLines = written;
+      if (mounted && written != null && _linesKey().key == key) {
+        _ownLinesFor = key;
+        _ownLines = written;
+      }
     } on Object {
-      // The neutral defaults stand in; the next visit tries again.
-      if (_ownLinesFor == key) _ownLinesFor = null;
+      // The app's lines stand in; the next change tries again.
     } finally {
       client.close();
     }
@@ -1845,7 +1867,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     // Another character moved in: her name and persona come with her, the
     // last one's are kept for when she's back.
     if (_characterSourceKey case final from? when sourceKey != null && sourceKey != from) {
-      unawaited(companionSwapIdentity(ref, from: from, to: sourceKey));
+      unawaited(companionSwapIdentity(ref, from: from, to: sourceKey).then((_) => _writeLines()));
     }
     if (_characterSourceKey != sourceKey) {
       _affinityCharacter = null;
@@ -2308,21 +2330,18 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _focus.unfocus();
     if (_voice.active || _voice.cancelling) await _voice.cancel();
     if (!mounted) return;
-    final call = _call = CompanionCallConversation(
-      (text) async {
-        if (!mounted || _attachment.preparing || !_attachment.isAttached) return false;
-        _callBaseline = _baselineUser;
-        _retireGreeting();
-        setState(() {
-          _bubble = null;
-          _myLine = text.trim();
-        });
-        _stage.command('mood', {'mood': 'thinking'});
-        await _attachment.submit(text);
-        return true;
-      },
-      _stop,
-    );
+    final call = _call = CompanionCallConversation((text) async {
+      if (!mounted || _attachment.preparing || !_attachment.isAttached) return false;
+      _callBaseline = _baselineUser;
+      _retireGreeting();
+      setState(() {
+        _bubble = null;
+        _myLine = text.trim();
+      });
+      _stage.command('mood', {'mood': 'thinking'});
+      await _attachment.submit(text);
+      return true;
+    }, _stop);
     await openVoiceCall(context, title: _name(context.l10n), conversation: call, backdrop: CallBackdrop.companion);
     if (identical(_call, call)) _call = null;
   }
@@ -3082,7 +3101,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
               onTap: () => run(
                 () => unawaited(
                   Navigator.of(context)
-                      .push(MaterialPageRoute<void>(builder: (_) => CompanionPersonaPage(packName: _character.name, whale: companionIsWhale(_characterSourceKey)))),
+                      .push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => CompanionPersonaPage(
+                            packName: _character.name,
+                            whale: companionIsWhale(_characterSourceKey),
+                          ),
+                        ),
+                      )
+                      .then((_) => _writeLines()),
                 ),
               ),
             ),
@@ -3192,7 +3219,15 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
               onTap: () => run(
                 () => unawaited(
                   Navigator.of(context)
-                      .push(MaterialPageRoute<void>(builder: (_) => CompanionPersonaPage(packName: _character.name, whale: companionIsWhale(_characterSourceKey)))),
+                      .push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => CompanionPersonaPage(
+                            packName: _character.name,
+                            whale: companionIsWhale(_characterSourceKey),
+                          ),
+                        ),
+                      )
+                      .then((_) => _writeLines()),
                 ),
               ),
             ),

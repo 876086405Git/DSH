@@ -87,8 +87,8 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
   Future<void> _load() async {
     // Reconnecting does not invalidate the saved bindings of every host.
     final epoch = _bindingsEpoch;
-    final prefs = await SharedPreferences.getInstance();
     try {
+      final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_sessionsKey);
       if (raw != null && ref.mounted && epoch == _bindingsEpoch) {
         state = {
@@ -268,7 +268,6 @@ final companionModeProvider = NotifierProvider<CompanionModeSetting, CompanionMo
 
 const _nameKey = 'companion_name';
 
-
 /// The name the person gave her; null for the pack's own.
 class CompanionNameSetting extends Notifier<String?> {
   @override
@@ -381,7 +380,6 @@ class CompanionPersonaSettings {
   /// Changes whenever what she is told changes: full mode tells her again.
   String get fingerprint => '${custom.trim().hashCode}:${callMe.trim().hashCode}';
 }
-
 
 const _personaKey = 'companion_persona_v1';
 const _personaSentKey = 'companion_persona_sent';
