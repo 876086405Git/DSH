@@ -7,7 +7,9 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { zstdCompressSync } from 'node:zlib';
 
-test('concurrent cold opens keep their own bytes and only decode identical input once', async t => {
+test('concurrent cold opens keep their own bytes and only decode identical input once', {
+  skip: !process.env.DSH_PREFIX && 'requires a prepared DSH_PREFIX',
+}, async t => {
   const packages = resolve(process.env.DSH_PREFIX, 'node_modules/@deepseek-ai');
   const load = name => import(pathToFileURL(join(packages, name, 'lib/index.js')));
   const [{ Context }, { Session }, { sessionFormatCatalog }, jsonl] = await Promise.all(
