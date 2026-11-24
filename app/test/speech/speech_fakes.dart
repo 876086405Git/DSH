@@ -123,7 +123,26 @@ class FakeOut implements SpeechOut {
   void duck(bool on) => ducks.add(on);
   final _events = StreamController<SpeechOutEvent>.broadcast(sync: true);
 
-  void emit(SpeechOutEvent event) => _events.add(event);
+  // The real outputs' streams are asynchronous: an event raised while a
+  // listener handles another (stop() inside a callback) comes after it.
+  bool _firing = false;
+  final _later = <SpeechOutEvent>[];
+
+  void emit(SpeechOutEvent event) {
+    if (_firing) {
+      _later.add(event);
+      return;
+    }
+    _firing = true;
+    try {
+      _events.add(event);
+      while (_later.isNotEmpty) {
+        _events.add(_later.removeAt(0));
+      }
+    } finally {
+      _firing = false;
+    }
+  }
 
   @override
   void add(String text) => added.add(text);
