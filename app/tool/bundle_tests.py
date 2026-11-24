@@ -76,6 +76,9 @@ def own_config(path):
 def work(path):
     """How long the file takes, near enough to spread files evenly: on CI the time
     follows the number of widget tests (about 0.4 s each), and goldens count double."""
+    # The companion page takes about 400 s on CI, far more than its count of tests says.
+    if path.as_posix() == 'test/companion/companion_page_test.dart':
+        return 1000
     return 1 + text(path).count('testWidgets(') + 2 * text(path).count('matchesGoldenFile')
 
 
