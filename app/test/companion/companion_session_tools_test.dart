@@ -36,7 +36,8 @@ class _ConflictBody extends DshConnection {
   }
 }
 
-// Bundled with widget tests, the binding's global HttpOverrides answers every
+// Any testWidgets in the same isolate (this file's own, or a bundled file's)
+// installs TestWidgetsFlutterBinding's global HttpOverrides, which answers every
 // request with 400; these two talk to a real loopback server.
 class _RealHttp extends HttpOverrides {}
 
