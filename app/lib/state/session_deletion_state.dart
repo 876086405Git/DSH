@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'artifact_files.dart' show imageSnapshotHost;
+import 'chat_state.dart' show chatProvider;
 import 'composer_quote.dart';
 import 'connection_state.dart';
 import 'draft_store.dart';
@@ -174,6 +175,9 @@ class SessionDeletionController extends Notifier<bool> {
           ref.read(composerQuoteProvider.notifier).clear(id);
           if (!owned()) break;
           sessions.confirmDeleted(id);
+          // "本对话都允许" keeps its controller (and the whole transcript)
+          // alive for good; a deleted session has nothing left to approve.
+          if (ref.exists(chatProvider(id))) ref.read(chatProvider(id).notifier).setAutoApprove(false);
           if (!owned()) break;
           if (ref.read(currentSessionProvider) == id) ref.read(currentSessionProvider.notifier).select(null);
           if (!owned()) break;

@@ -33,6 +33,7 @@ jobs:
       pull-requests: read
     outputs:
       app: ${{ github.event_name != 'pull_request' || steps.filter.outputs.app == 'true' }}
+      startup_policy: ${{ github.event_name != 'pull_request' || steps.filter.outputs.startup_policy == 'true' }}
       packages: ${{ github.event_name != 'pull_request' || steps.filter.outputs.packages == 'true' }}
       runtime: ${{ github.event_name != 'pull_request' || steps.filter.outputs.runtime == 'true' || steps.filter.outputs.memory == 'true' }}
       memory: ${{ github.event_name != 'pull_request' || steps.filter.outputs.memory == 'true' }}
@@ -46,6 +47,7 @@ jobs:
           filters: |
             ci: &ci .github/workflows/ci.yml
             app: [*ci, 'app/**', 'tooling/companion/**', 'packages/**', 'sdk/plugin-kit/**', 'runtime/tests/direct/**', 'site/share/**', 'docs/guide/**', 'THIRD_PARTY_NOTICES.md', 'tooling/fixtures/diagnostic-redaction.json']
+            startup_policy: [*ci, 'app/android/**', 'runtime/tests/direct/**', '**/.gitattributes']
             packages: [*ci, 'packages/**']
             runtime: [*ci, 'runtime/**', 'app/assets/islands/island.js', 'app/test/plugins/islands/support/island_page_harness.mjs', 'app/assets/engine/auth/**', 'packages/dsh_client/test/fixtures/companion_signal_results.json', 'app/ohos/entry/src/main/ets/runtime/**', 'app/ohos/entry/src/main/ets/entryability/EntryAbility.ets', 'app/ohos/entry/src/main/ets/phone/PhoneBridge.ets', 'tooling/ohos/**', 'examples/**', 'sdk/plugin-kit/**', 'app/tool/engine_auth/**', 'app/test/plugin_config/fixtures/**', 'app/test/media/fixtures/**', 'app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/runtime/SafeMode.kt', 'app/android/app/src/main/kotlin/io/github/ccch1mneyyy/dsh_app/phone/PhoneGuest.kt']
             memory: [*ci, 'tooling/companion/**', 'tooling/test_companion_memory_replay.py', 'packages/dsh_client/lib/**', 'packages/dsh_client/pubspec.*', 'packages/dsh_client/test/companion*.dart', 'packages/dsh_client/test/support/**', 'packages/dsh_client/tool/companion_memory_replay_test.dart', 'app/lib/companion/**', 'app/lib/ui/companion/**', 'app/lib/l10n/parts/companion_*.arb', 'app/pubspec.*', 'app/test/companion/**', 'app/test/support/**', 'app/test/flutter_test_config.dart', 'app/tool/companion_memory_replay_test.dart', 'runtime/bridge/dsh-go-bridge/lib/companion/**', 'runtime/tests/companion*.test.mjs', 'runtime/tests/fixtures/companion*.mjs', 'runtime/patches/companion*.diff', 'runtime/locks/**', 'runtime/lib/rtbuild.py']
@@ -486,7 +488,7 @@ jobs:
   startup-policy:
     name: Android startup policy
     needs: changes
-    if: needs.changes.outputs.app == 'true'
+    if: needs.changes.outputs.startup_policy == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

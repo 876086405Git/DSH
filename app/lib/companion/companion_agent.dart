@@ -519,11 +519,12 @@ class CompanionAgent extends ChangeNotifier {
     while (true) {
       if (!_current(run)) return null;
       var messages = messagesFrom(0);
+      var input = CompanionAgentInput(system: system, messages: messages, tools: toolJson);
       final requestId = run.memory.store.reserveRequest(
         category: 'chat',
         provider: route.provider,
         model: route.model,
-        inputTokens: estimateTokens(jsonEncode({'system': system, 'messages': messages, 'tools': toolJson})).ceil(),
+        inputTokens: estimateTokens(input.json).ceil(),
         outputTokens: 800,
       )!;
       final request = _CompanionAgentRequest(requestId);
@@ -535,20 +536,15 @@ class CompanionAgent extends ChangeNotifier {
       try {
         if (route is CompanionHostMemoryTransport) {
           var skipped = 0;
-          while (companionAgentRequestBytes(
-                    route.capability,
-                    requestId: requestId,
-                    system: system,
-                    messages: messages,
-                    tools: toolJson,
-                    maxTokens: 800,
-                  ) >
+          while (input.requestBytes(route.capability, requestId: requestId, maxTokens: 800) >
                   companionAgentRequestMaxBytes &&
               skipped < historyCount) {
             // Rebuild from raw old lines: adjacent users may have been merged
             // with the current input. Current data and exchanges stay intact.
             messages = messagesFrom(++skipped);
+            input = input.withMessages(messages);
           }
+          request.hostInput = input;
         }
         final message = await route.readAgent(
           request: request,

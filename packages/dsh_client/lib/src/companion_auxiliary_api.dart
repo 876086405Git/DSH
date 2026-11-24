@@ -22,35 +22,49 @@ const _maxLineBytes = 192 * 1024;
 const _maxStreamBytes = 8 * 1024 * 1024;
 const _maxSafe = 9007199254740991;
 
-/// Exact size of the same captured envelope used by callCompanionAgent.
-/// This does not reserve a request, dispatch HTTP, or report usage.
-int companionAgentRequestBytes(
-  CompanionAuxiliaryCapability host, {
-  required String requestId,
-  required String system,
-  required List<Map<String, Object?>> messages,
-  required List<Map<String, Object?>> tools,
-  required int maxTokens,
-}) => utf8.encode(jsonEncode(_companionAgentRequestBody(
-  host,
-  requestId: requestId,
-  system: system,
-  messages: messages,
-  tools: tools,
-  maxTokens: maxTokens,
-))).length;
+/// The system, messages and tools of one Agent request, JSON-encoded once.
+/// [json] feeds the token estimate; callCompanionAgent splices the same text
+/// into the body it measures and sends, so later changes to the caller's maps
+/// never reach the request.
+final class CompanionAgentInput {
+  factory CompanionAgentInput({
+    required String system,
+    required List<Map<String, Object?>> messages,
+    required List<Map<String, Object?>> tools,
+  }) => CompanionAgentInput._(_agentJson(system), _agentJson(tools), _text(system) && _agentTools(tools), messages);
 
-Map<String, Object?> _companionAgentRequestBody(
-  CompanionAuxiliaryCapability host, {
-  required String requestId,
-  required String system,
-  required List<Map<String, Object?>> messages,
-  required List<Map<String, Object?>> tools,
-  required int maxTokens,
-}) {
-  // Caller-owned nested maps must not change during the HTTP await.
-  try {
-    return _map(jsonDecode(jsonEncode({
+  CompanionAgentInput._(this._system, this._tools, this._fixedValid, List<Map<String, Object?>> messages)
+    : _valid = _fixedValid && _agentMessages(messages),
+      json = '{"system":$_system,"messages":${_agentJson(messages)},"tools":$_tools}';
+
+  final String _system, _tools;
+  final bool _fixedValid, _valid;
+
+  /// Exactly `jsonEncode({'system': system, 'messages': messages, 'tools': tools})`.
+  final String json;
+  late final Uint8List _fields = utf8.encode(json.substring(1, json.length - 1));
+
+  /// The same system and tools with other messages; only the messages are encoded.
+  CompanionAgentInput withMessages(List<Map<String, Object?>> messages) =>
+      CompanionAgentInput._(_system, _tools, _fixedValid, messages);
+
+  /// UTF-8 size of the body callCompanionAgent sends for this input.
+  int requestBytes(CompanionAuxiliaryCapability host, {required String requestId, required int maxTokens}) {
+    final (head, tail) = _ends(host, requestId, maxTokens);
+    return head.length + _fields.length + tail.length;
+  }
+
+  Uint8List _body(CompanionAuxiliaryCapability host, String requestId, int maxTokens) {
+    final (head, tail) = _ends(host, requestId, maxTokens);
+    return (BytesBuilder(copy: false)
+          ..add(head)
+          ..add(_fields)
+          ..add(tail))
+        .takeBytes();
+  }
+
+  (Uint8List, Uint8List) _ends(CompanionAuxiliaryCapability host, String requestId, int maxTokens) {
+    final head = jsonEncode({
       'v': 1,
       'instanceId': host.instanceId,
       'requestId': requestId,
@@ -58,11 +72,14 @@ Map<String, Object?> _companionAgentRequestBody(
       'provider': host.provider,
       'model': host.model,
       'kind': 'agent',
-      'system': system,
-      'messages': messages,
-      'tools': tools,
-      'maxTokens': maxTokens,
-    })))!;
+    });
+    return (utf8.encode('${head.substring(0, head.length - 1)},'), utf8.encode(',"maxTokens":$maxTokens}'));
+  }
+}
+
+String _agentJson(Object? value) {
+  try {
+    return jsonEncode(value);
   } on JsonUnsupportedObjectError {
     throw const CompanionAuxiliaryFailure(code: 'invalid-request', terminal: 'preflight_error', notSent: true);
   }
@@ -424,7 +441,7 @@ extension CompanionAuxiliaryApi on DshClient {
     };
     return _postAuxiliary(
       transport,
-      body: body,
+      body: utf8.encode(jsonEncode(body)),
       instanceId: host.instanceId,
       provider: host.provider,
       model: host.model,
@@ -446,9 +463,7 @@ extension CompanionAuxiliaryApi on DshClient {
   Future<DshCompanionAgentResult> callCompanionAgent(
     CompanionAuxiliaryCapability host, {
     required String requestId,
-    required String system,
-    required List<Map<String, Object?>> messages,
-    required List<Map<String, Object?>> tools,
+    required CompanionAgentInput input,
     required int maxTokens,
     required DshHttpAbort abort,
     required void Function() onDispatchUncertain,
@@ -463,23 +478,14 @@ extension CompanionAuxiliaryApi on DshClient {
       throw const CompanionAuxiliaryFailure(code: 'route-unavailable', terminal: 'preflight_error', notSent: true);
     }
     if (!_id(requestId) ||
-        !_text(system) ||
-        !_agentMessages(messages) ||
-        !_agentTools(tools) ||
+        !input._valid ||
         maxTokens < 1 ||
         maxTokens > 4000 ||
         headerTimeout <= Duration.zero ||
         idleTimeout <= Duration.zero) {
       throw const CompanionAuxiliaryFailure(code: 'invalid-request', terminal: 'preflight_error', notSent: true);
     }
-    final body = _companionAgentRequestBody(
-      host,
-      requestId: requestId,
-      system: system,
-      messages: messages,
-      tools: tools,
-      maxTokens: maxTokens,
-    );
+    final body = input._body(host, requestId, maxTokens);
     final receipt = _AgentReceipt(host.instanceId, host.provider, host.model, requestId, onSent, abort, onText);
     final result = await _postAuxiliary(
       transport,
@@ -547,7 +553,7 @@ extension CompanionAuxiliaryApi on DshClient {
     };
     return _postAuxiliary(
       transport,
-      body: body,
+      body: utf8.encode(jsonEncode(body)),
       instanceId: host.instanceId,
       provider: host.selection.provider,
       model: host.selection.model,
@@ -566,7 +572,7 @@ extension CompanionAuxiliaryApi on DshClient {
 
 Future<CompanionAuxiliaryResult> _postAuxiliary(
   DshHttpCarrier transport, {
-  required Map<String, Object?> body,
+  required Uint8List body,
   required String instanceId,
   required String provider,
   required String model,
@@ -581,7 +587,7 @@ Future<CompanionAuxiliaryResult> _postAuxiliary(
   required String path,
   _Receipt? observation,
 }) async {
-  if (utf8.encode(jsonEncode(body)).length > maxRequestBytes) {
+  if (body.length > maxRequestBytes) {
     throw const CompanionAuxiliaryFailure(code: 'request-limit', terminal: 'preflight_error', notSent: true);
   }
   if (abort.isAborted) {
@@ -596,7 +602,7 @@ Future<CompanionAuxiliaryResult> _postAuxiliary(
   try {
     response = await transport.connection.postJsonStream(
       path,
-      body,
+      DshEncodedJson(body),
       abort: abort,
       headerTimeout: headerTimeout,
       idleTimeout: idleTimeout,

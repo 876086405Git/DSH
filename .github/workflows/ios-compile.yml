@@ -87,7 +87,7 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/$archive" \
             "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$archive"
           echo "$FLUTTER_SHA256  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
-          unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP"
+          unzip -q "$RUNNER_TEMP/$archive" -x 'flutter/bin/cache/artifacts/engine/android-*/*' -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
 
       - name: Resolve dependencies
@@ -128,6 +128,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The engine checks use the app assets and their own fixtures.
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/app/test/**/goldens/*.png
 
       # The phone runner's Rust library takes six minutes to build for its three targets, and
       # what it is built from rarely changes: kept under the hash of those inputs. With the
@@ -388,7 +393,7 @@ jobs:
           archive="flutter_macos_arm64_${FLUTTER_VERSION}-stable.zip"
           curl -fsSL -o "$RUNNER_TEMP/$archive"             "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$archive"
           echo "$FLUTTER_SHA256  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
-          unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP"
+          unzip -q "$RUNNER_TEMP/$archive" -x 'flutter/bin/cache/artifacts/engine/android-*/*' -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
 
       - name: Resolve dependencies

@@ -1,0 +1,22 @@
+--- a/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
+@@ -2866,1 +2866,8 @@
+-	async decodeStoredLog(path, expectedId, buffer, revision, signal) {
++	async decodeStoredLog(path, expectedId, buffer, revision, signal) {
++		const cached = this.coldLogMemo.get(expectedId);
++		if (cached?.revision === revision && cached.encodedSource?.path === path && cached.encodedSource.bytes.deref()?.equals(buffer)) {
++			await this.assertStoredIdentity(path, SESSION_FORMAT_VERSION, cached.meta, expectedId, signal);
++			signal?.throwIfAborted();
++			this.memoizeStoredLog(expectedId, cached);
++			return cached;
++		}
+@@ -2900,4 +2907,5 @@
+-			...freezeStoredEvents(events),
+-			revision
+-		};
+-		this.memoizeStoredLog(expectedId, stored);
++			...freezeStoredEvents(events),
++			revision,
++			encodedSource: parsed.tornTruncateTo === void 0 && path === location.path ? { path, bytes: new WeakRef(buffer) } : void 0
++		};
++		this.memoizeStoredLog(expectedId, stored);

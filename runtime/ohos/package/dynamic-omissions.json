@@ -61,7 +61,7 @@
     "importer": "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js",
     "specifier": "koffi",
     "occurrences": 1,
-    "importerSha256": "7718483b03c2b036c14318a6123fd43e5e07a521dbd2bdf0a7b9a078bb50353a",
+    "importerSha256": "e41aefd237a3dea1a2a0a3c530d6ebdb192d8612e0ab85169b99b514bcd766ea",
     "reason": "The fixed session implementation selects Win32 semaphore/MoveFileEx only for win32; OHOS uses the linked publication owner and main-thread lock path."
   },
   {

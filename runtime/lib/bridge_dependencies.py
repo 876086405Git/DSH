@@ -12,7 +12,7 @@ import shutil
 
 BRIDGE = Path(__file__).resolve().parents[1] / 'bridge/dsh-go-bridge'
 PDF_FILES = {'package.json', 'README.md', 'LICENSE',
-             'legacy/build/pdf.mjs', 'legacy/build/pdf.worker.mjs'}
+             'legacy/build/pdf.min.mjs', 'legacy/build/pdf.worker.min.mjs'}
 
 
 def pdf_files(prefix):

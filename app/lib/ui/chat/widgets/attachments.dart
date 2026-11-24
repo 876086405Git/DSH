@@ -319,7 +319,7 @@ class _SessionImage extends ConsumerWidget {
         size: box,
         aspect: aspect,
         heroTag: tag,
-        image: MemoryImage(value),
+        image: sessionThumbnail(value, ((box?.width ?? _singleMax) * MediaQuery.devicePixelRatioOf(context)).round()),
         onTap: open,
         onLongPress: () =>
             showImageActions(context, image: MemoryImage(value), load: () async => value, name: attachment.name),

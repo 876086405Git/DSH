@@ -173,6 +173,7 @@ rrule-weekly-first-period.diff
 rrule-mixed-byday.diff
 input-trigger-source-recovery.diff
 jsonl-frozen-live-event.diff
+jsonl-identical-cold-read.diff
 web-preset-save-freshness.diff
 web-search-key-write-result.diff
 deepseek-attachment-error.diff
@@ -226,6 +227,7 @@ input-recovery.diff
 ohos-client-hmr-idle.diff
 ohos-skill-root-events.diff
 ohos-piai-empty-models.diff
+projection-current-state.diff
 # HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
