@@ -321,6 +321,17 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   final _showJump = ValueNotifier<bool>(false);
   final _hasNew = ValueNotifier<bool>(false);
 
+  _JumpToBottom? _jump;
+
+  /// Streaming changes the rows but not the floating button's pending count.
+  _JumpToBottom _jumpButton(ChatState state) {
+    final waiting =
+        state.questions.length + state.approvals.where((a) => !state.autoAnswered.contains(a.eventId)).length;
+    final button = _jump;
+    if (button != null && button.waiting == waiting) return button;
+    return _jump = _JumpToBottom(visible: _showJump, hasNew: _hasNew, waiting: waiting, onTap: jumpToBottom);
+  }
+
   /// before 段最后一行的主键;null = before 段为空。首次加载完成时确定。
   String? _splitKey;
   bool _splitChosen = false;
@@ -1073,17 +1084,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
               Positioned(
                 right: math.max(0.0, (constraints.maxWidth - AppSpace.readingWidth) / 2) + AppSpace.floatInset,
                 bottom: widget.bottomInset + 12,
-                // The pet keeps out of the key's way while it shows.
-                child: ValueListenableBuilder<bool>(
-                  valueListenable: _showJump,
-                  builder: (context, visible, child) => PetAvoid(active: visible, child: child!),
-                  child: _JumpToBottom(
-                    visible: _showJump,
-                    hasNew: _hasNew,
-                    waiting: s.questions.length + s.approvals.where((a) => !s.autoAnswered.contains(a.eventId)).length,
-                    onTap: jumpToBottom,
-                  ),
-                ),
+                child: _jumpButton(s),
               ),
             ],
           );
@@ -1717,25 +1718,28 @@ class _JumpToBottom extends StatelessWidget {
 
     return ValueListenableBuilder<bool>(
       valueListenable: visible,
-      builder: (context, show, _) => IgnorePointer(
-        ignoring: !show,
-        child: AnimatedScale(
-          scale: show ? 1 : (fluid ? 0.6 : 0.8),
-          duration: fluid && show ? AppMotion.popCurve.duration : quick,
-          curve: fluid && show ? AppMotion.popCurve : AppMotion.enter,
-          child: AnimatedOpacity(
-            opacity: show ? 1 : 0,
-            duration: quick,
-            child: Semantics(
-              button: true,
-              label: waiting > 0 ? l10n.chatWaitingBackToBottom(waiting) : l10n.chatBackToBottom,
-              excludeSemantics: true,
-              onTap: onTap,
-              child: AnimatedSwitcher(
-                duration: quick,
-                layoutBuilder: (current, previous) =>
-                    Stack(alignment: Alignment.centerRight, children: [...previous, ?current]),
-                child: waiting > 0 ? pill : circle,
+      builder: (context, show, _) => PetAvoid(
+        active: show,
+        child: IgnorePointer(
+          ignoring: !show,
+          child: AnimatedScale(
+            scale: show ? 1 : (fluid ? 0.6 : 0.8),
+            duration: fluid && show ? AppMotion.popCurve.duration : quick,
+            curve: fluid && show ? AppMotion.popCurve : AppMotion.enter,
+            child: AnimatedOpacity(
+              opacity: show ? 1 : 0,
+              duration: quick,
+              child: Semantics(
+                button: true,
+                label: waiting > 0 ? l10n.chatWaitingBackToBottom(waiting) : l10n.chatBackToBottom,
+                excludeSemantics: true,
+                onTap: onTap,
+                child: AnimatedSwitcher(
+                  duration: quick,
+                  layoutBuilder: (current, previous) =>
+                      Stack(alignment: Alignment.centerRight, children: [...previous, ?current]),
+                  child: waiting > 0 ? pill : circle,
+                ),
               ),
             ),
           ),
