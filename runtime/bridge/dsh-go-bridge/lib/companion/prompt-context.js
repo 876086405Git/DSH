@@ -7,7 +7,8 @@ import { createCompanionUsage } from './usage.js';
 
 export const FULL_PRESET = 'dsh-go-companion-full';
 const MAX_SESSIONS = 128, MAX_PENDING = 32, RECENT_MS = 30 * 60 * 1000;
-const kinds = new Set(['pet', 'feed', 'task-finished', 'renamed']);
+// 'screen': her own line while watching the screen, advertised as screenEvents.
+const kinds = new Set(['pet', 'feed', 'task-finished', 'renamed', 'screen']);
 const controls = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 const record = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const fields = (v, required, optional = []) => record(v)
@@ -217,7 +218,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
   }
   const describe = value => ({ v: 1, supported: true, instanceId, sessionId: value.agent.id,
     profileRevision: value.revision, persistence: 'connection', requestBinding: 'rpcId',
-    maxEvents: 8,
+    maxEvents: 8, screenEvents: true,
     memoryMode: value.phone ? 'phone' : value.memoryDisabled ? 'automatic' : 'query', memoryEpoch: value.memoryEpoch,
     ...(phoneSupported(value.agent) ? { phoneMemory: true, phoneMemoryVersion: 3, selectedPage: true } : {}),
     ...(usageSupported(value.agent) ? { chatUsage: true } : {}) });

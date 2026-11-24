@@ -172,7 +172,7 @@
     },
     {
       "path": "packages/dsh_client/test/companion_prompt_context_test.dart",
-      "sha256": "e9e22428d586f6404041a185ceef1b3ee40f72e1b72a1e67cd9d9fbbefefccd4"
+      "sha256": "703123e82775430ce295b115723dba195165d57d9bc0dda9af985c6279a3cbb5"
     },
     {
       "path": "packages/dsh_client/test/support/fake_dsh.dart",

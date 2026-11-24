@@ -1090,6 +1090,17 @@ class _CompanionAgentVisit {
     ], now: now);
   }
 
+  /// What she just said about the screen, for the next real turn in either
+  /// mode. Only her newest three lines: they never crowd out the person's own.
+  void rememberScreenLine(String line, {String? app, String? scene}) {
+    final earlier = [for (final event in events) if (event.kind == 'screen') event];
+    if (earlier.length > 2) {
+      final dropped = earlier.sublist(0, earlier.length - 2).toSet();
+      events = [for (final event in events) if (!dropped.contains(event)) event];
+    }
+    remember('screen', companionScreenNote(companionWithoutMarks(line), app: app, scene: scene));
+  }
+
   Future<CompanionSnapshot?> refreshKeeper() async {
     final current = captureCurrent();
     final owner = await openMemory();

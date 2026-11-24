@@ -372,6 +372,8 @@ class CompanionScreenObserver {
           text: reading.quip,
           emotion: reading.emotion,
           observedAtMs: sample['observed_at_ms']! as int,
+          app: sample['package_name']! as String,
+          scene: reading.scene,
         );
         if (shown) _pace.shown(DateTime.now().millisecondsSinceEpoch, reading, quip: true);
       }

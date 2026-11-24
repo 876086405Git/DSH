@@ -12,7 +12,15 @@ abstract interface class CompanionAgentNotificationUi {
 }
 
 extension CompanionAgentAmbient on CompanionAgent {
-  Future<bool> presentScreenQuip({required String text, required String emotion, required int observedAtMs}) async {
+  /// Said aloud when her voice is on. What she said is a recent event, so the
+  /// person's next turn with her picks it up.
+  Future<bool> presentScreenQuip({
+    required String text,
+    required String emotion,
+    required int observedAtMs,
+    String? app,
+    String? scene,
+  }) async {
     final visit = _visit;
     final ui = switch (visit?.residentUi) {
       final CompanionAgentAmbientUi ambient => ambient,
@@ -21,7 +29,9 @@ extension CompanionAgentAmbient on CompanionAgent {
     if (visit == null || !visit.active || running || ui == null || !ui.presentationAvailable || text.trim().isEmpty) {
       return false;
     }
-    return ui.presentLine(id: 'screen-quip:$observedAtMs', text: text, emotion: emotion, speak: true);
+    final shown = await ui.presentLine(id: 'screen-quip:$observedAtMs', text: text, emotion: emotion, speak: true);
+    if (shown) visit.rememberScreenLine(text, app: app, scene: scene);
+    return shown;
   }
 
   /// An ephemeral observation is not a user message or a memory proof source.
@@ -176,12 +186,20 @@ extension CompanionAgentAmbient on CompanionAgent {
       );
       if (!current() || message == null || message.calls.isNotEmpty || request.text.trim().isEmpty) return false;
       if (!await isCurrentObservation() || !current()) return false;
-      return await ui.presentLine(
+      final shown = await ui.presentLine(
         id: 'screen-aside:$id',
         text: request.text,
         emotion: context['emotion'] as String? ?? 'neutral',
         speak: true,
       );
+      if (shown) {
+        visit.rememberScreenLine(
+          request.text,
+          app: context['package_name'] as String?,
+          scene: context['scene'] as String?,
+        );
+      }
+      return shown;
     } on Object {
       return false;
     } finally {

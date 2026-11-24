@@ -3539,9 +3539,22 @@ void main() {
         const privateUser = '这是只留在伙伴聊天里的私密标记松灯七。';
         const privateAssistant = '我记得这句聊天中的回声海桥九。';
         visit.replies.add(_message(words: privateAssistant));
+        // Her screen lines carry the phone's wall clock, as a real turn does.
+        visit.clockAt = DateTime.now().millisecondsSinceEpoch;
         await visit.attachment.submit(privateUser);
         expect(visit.attachment.error, isNull);
         expect(visit.requests, hasLength(4));
+        // What she said about the screen reaches the person's next turn.
+        expect(
+          [
+            for (final event in (_context(visit.requests.last)['events']! as List).cast<Map>())
+              if (event['kind'] == 'screen') event['detail'],
+          ],
+          [
+            '你看着对方的屏幕（example.reader）主动说了：「第二句观察。」',
+            '你看着对方的屏幕（example.reader）主动说了：「书里的想法可以慢慢看。」',
+          ],
+        );
         final history = store.modelMessages(
           sessionId: store.lightSessionId,
           characterId: resident.characterId,
