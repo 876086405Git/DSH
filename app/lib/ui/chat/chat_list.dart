@@ -360,7 +360,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   /// ([_deriveRows]), the motion duration and the language ([build]), the
   /// fork / regenerate marks ([_clearBuiltRows]) and which callbacks are given
   /// ([didUpdateWidget]).
-  final Map<String, ({ChatRow row, double gap, bool divided, Widget widget})> _built = {};
+  final Map<String, ({ChatRow row, double gap, bool divided, int? slot, Widget widget})> _built = {};
   SliverList? _historySliver;
   Duration? _builtMotion;
   Locale? _builtLocale;
@@ -1077,8 +1077,8 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
                         ),
                         SliverList(
                           key: _centerKey,
-                          delegate: SliverChildBuilderDelegate(
-                            (context, i) => _buildRow(split + i),
+                          delegate: _ForwardRowDelegate(
+                            (context, i) => _buildRow(split + i, forward: (context: context, slot: i)),
                             childCount: rows.length - split,
                             findChildIndexCallback: (key) {
                               final i = key is ValueKey<String> ? _index[key.value] : null;
@@ -1106,7 +1106,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildRow(int index) {
+  Widget _buildRow(int index, {({BuildContext context, int slot})? forward}) {
     final row = _rows[index];
     final previous = index > 0 ? _rows[index - 1] : null;
     final gap = _gapBefore(row, previous, _builtShapes);
@@ -1114,17 +1114,30 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     final fresh = _fresh.remove(row.key);
     // A row's first appearance (fade in, settle) plays once: that build is
     // not kept, or scrolling back to the row would play it again.
-    if (fresh != null || _settling.contains(row.key)) {
-      if (index < _split) _historySliver = null;
-      _built.remove(row.key);
-      return _rowFrame(row, gap, fresh, divided);
-    }
+    final reusable = fresh == null && !_settling.contains(row.key);
     final built = _built[row.key];
-    if (built != null && identical(built.row, row) && built.gap == gap && built.divided == divided) {
+    if (reusable &&
+        built != null &&
+        identical(built.row, row) &&
+        built.gap == gap &&
+        built.divided == divided &&
+        built.slot == forward?.slot) {
       return built.widget;
     }
-    final frame = _rowFrame(row, gap, null, divided);
-    _built[row.key] = (row: row, gap: gap, divided: divided, widget: frame);
+    if (!reusable) {
+      if (index < _split) _historySliver = null;
+      _built.remove(row.key);
+    }
+    Widget? body;
+    Widget makeRow() => body = _rowFrame(row, gap, fresh, divided);
+    // Forward rows cache the SDK's complete child. Its semantics index belongs
+    // to this slot; a moved row needs a new wrapper even when its body is stable.
+    final frame = forward == null
+        ? makeRow()
+        : SliverChildBuilderDelegate((_, _) => makeRow()).build(forward.context, forward.slot)!;
+    if (reusable && body != null) {
+      _built[row.key] = (row: row, gap: gap, divided: divided, slot: forward?.slot, widget: frame);
+    }
     return frame;
   }
 
@@ -1616,6 +1629,15 @@ class _RenderInlineEditorReveal extends RenderProxyBox {
     if (descendant != null && onShow(descendant, rect, duration, curve)) return;
     super.showOnScreen(descendant: descendant, rect: rect, duration: duration, curve: curve);
   }
+}
+
+// _buildRow returns the forward child's complete framework wrapper, including
+// its salted key. The inherited findIndexByKey translates it on reorder.
+class _ForwardRowDelegate extends SliverChildBuilderDelegate {
+  const _ForwardRowDelegate(super.builder, {required int super.childCount, required super.findChildIndexCallback});
+
+  @override
+  Widget? build(BuildContext context, int index) => index < 0 || index >= childCount! ? null : builder(context, index);
 }
 
 /// 列表顶端:加载更早历史时的小环;没有更多时什么也不画。

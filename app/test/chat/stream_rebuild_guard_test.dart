@@ -490,6 +490,49 @@ void main() {
     await g.unmount(tester);
   });
 
+  testWidgets('publishing text keeps the completed tool’s forward sliver child', (tester) async {
+    final g = _Guard();
+    addTearDown(g.dispose);
+    await g.mount(tester);
+    g.snapshot();
+    await g.settle(tester);
+    g.startStream();
+    g.chunk(const TextDeltaChunk(0, '开始'));
+    await g.settle(tester);
+
+    final forward = tester.element(find.byType(SliverList).last);
+    Element forwardChild(Finder finder) {
+      var child = tester.element(finder);
+      var found = false;
+      child.visitAncestorElements((parent) {
+        if (parent == forward) {
+          found = true;
+          return false;
+        }
+        child = parent;
+        return true;
+      });
+      expect(found, isTrue);
+      return child;
+    }
+
+    final tool = find.byWidgetPredicate((w) => w is ToolRow && w.item.callId == 'c4');
+    final completed = forwardChild(tool);
+    final active = forwardChild(find.byWidgetPredicate((w) => w is AssistantMessage && w.item.streaming));
+    final fixed = completed.widget;
+    var previous = active.widget;
+    for (var i = 0; i < _deltas; i++) {
+      g.chunk(const TextDeltaChunk(0, '字'));
+      await tester.pump(const Duration(milliseconds: 32));
+      expect(forwardChild(tool), same(completed));
+      expect(completed.widget, same(fixed));
+      expect(active.widget, isNot(same(previous)));
+      previous = active.widget;
+    }
+    expect(g.state.items.whereType<AssistantChatItem>().last.text, '开始${'字' * _deltas}');
+    await g.unmount(tester);
+  });
+
   testWidgets('streaming tool arguments rebuild only the tool being written', (tester) async {
     final g = _Guard();
     addTearDown(g.dispose);
