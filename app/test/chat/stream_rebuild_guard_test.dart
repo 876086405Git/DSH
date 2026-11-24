@@ -19,6 +19,7 @@ import 'package:dsh_app/ui/chat/media/media_paths.dart';
 import 'package:dsh_app/ui/chat/turn_summary.dart' show debugToolSummaryCaches;
 import 'package:dsh_app/ui/chat/widgets/assistant_message.dart';
 import 'package:dsh_app/ui/chat/widgets/notice_row.dart';
+import 'package:dsh_app/ui/chat/widgets/stream_row.dart';
 import 'package:dsh_app/ui/chat/widgets/thinking_pill.dart';
 import 'package:dsh_app/ui/chat/widgets/tool_row.dart';
 import 'package:dsh_app/ui/chat/widgets/turn_process.dart';
@@ -517,6 +518,45 @@ void main() {
     expect(counts.live, greaterThan(0), reason: 'the tool call being written rebuilds');
     expect(counts.done, 0, reason: 'finished rows must not rebuild while tool arguments stream');
     expect(counts.derivations, 0, reason: 'an argument delta must not derive the rows again');
+    await g.unmount(tester);
+  });
+
+  testWidgets('writing file content keeps the tool header until its displayed path changes', (tester) async {
+    final g = _Guard();
+    addTearDown(g.dispose);
+    await g.mount(tester);
+    g.snapshot();
+    await g.settle(tester);
+    g.startStream();
+    g.chunk(const ReasoningDeltaChunk(0, '准备写文件'));
+    g.chunk(const BlockStartChunk(1, 'tool-call'));
+    g.chunk(const ToolCallDeltaChunk(1, id: 'c5', name: 'write', argumentsDelta: '{"path":"a.dart","content":"'));
+    await g.settle(tester);
+
+    final row = find.byWidgetPredicate((w) => w is ToolRow && w.item.callId == 'c5');
+    final frame = find.descendant(of: row, matching: find.byType(StreamRowFrame));
+    final element = tester.element(frame);
+    expect(find.descendant(of: frame, matching: find.text('a.dart')), findsOneWidget);
+    var builds = 0;
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (e, builtOnce) {
+      previous?.call(e, builtOnce);
+      if (e == element) builds++;
+    };
+    try {
+      for (var i = 0; i < _deltas; i++) {
+        g.chunk(ToolCallDeltaChunk(1, id: 'c5', argumentsDelta: 'final x$i = $i;'));
+        await tester.pump(const Duration(milliseconds: 32));
+      }
+    } finally {
+      debugOnRebuildDirtyWidget = previous;
+    }
+    expect((g.state.items.last as ToolChatItem).arguments, endsWith('final x19 = 19;'));
+    expect(tester.element(frame), same(element));
+    expect(builds, 0);
+    g.chunk(const ToolCallDeltaChunk(1, id: 'c5', argumentsDelta: '","file_path":"b.dart"}'));
+    await tester.pump(const Duration(milliseconds: 32));
+    expect(find.descendant(of: frame, matching: find.text('b.dart')), findsOneWidget);
     await g.unmount(tester);
   });
 

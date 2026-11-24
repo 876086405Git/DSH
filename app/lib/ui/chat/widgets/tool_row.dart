@@ -95,6 +95,8 @@ class ToolRow extends StatefulWidget {
 
 class _ToolRowState extends State<ToolRow> {
   ToolView? _view;
+  _ToolHeader? _header;
+  VoidCallback? _onHeaderTap;
 
   /// 用户点过之后的展开状态;没点过时按内容定:带原生卡片的默认展开
   /// (结果到了、卡片出现时也随之展开),其余默认收起。
@@ -104,6 +106,8 @@ class _ToolRowState extends State<ToolRow> {
 
   bool _expandedFor(ToolView v) =>
       _toggled ?? (widget.card == ToolCardPlacement.inline && (v.pluginView is DshUiParsed || v.media != null));
+
+  void _tapHeader() => _onHeaderTap?.call();
 
   @override
   Widget build(BuildContext context) {
@@ -131,22 +135,42 @@ class _ToolRowState extends State<ToolRow> {
     final pending = auto ? null : request;
     final opener = widget.onOpenSubagent;
     final child = opener == null ? null : subagentIdOf(widget.item, v);
+    _onHeaderTap = () {
+      if (child != null && opener!(child)) return;
+      setState(() => _toggled = !expanded);
+    };
+    final l10n = context.l10n;
+    final blocked = v.sandboxBlocked;
+    final title = expanded && widget.card == ToolCardPlacement.inline && v.pluginView is DshUiParsed
+        ? null
+        : v.pluginTitle;
+    final kind = _trailKind(v, auto);
+    final phone = v.phoneResult;
+    final heading = (
+      name: v.name,
+      verb: v.verb,
+      summary: blocked ? l10n.chatToolNeedsApproval : title ?? v.summary,
+      code: v.summaryIsCode && !blocked && title == null,
+      blocked: blocked,
+      expanded: expanded,
+      opens: child != null,
+      trail: (
+        kind: kind,
+        status: v.item.status,
+        orb: kind == 'spinner' && !AppMotion.fluid(context) ? _orbFor(toolKindOf(v.item)) : null,
+        phone: phone == null ? null : (word: phone.word, fault: phone.isFault),
+        counts: kind == ToolStatus.succeeded.name ? v.diffCounts : null,
+      ),
+    );
+    // A file's content grows for many deltas while its path and everything else
+    // the header shows stay the same: keep the header; a tap reaches this build's
+    // callback through [_tapHeader].
+    if (_header?.heading != heading) _header = _ToolHeader(heading: heading, onTap: _tapHeader);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _ToolHeader(
-          view: v,
-          autoAllowing: auto,
-          expanded: expanded,
-          opens: child != null,
-          // 卡片正摊开在下面(标题就在卡片上):行里照旧写参数摘要。
-          titled: !(expanded && widget.card == ToolCardPlacement.inline && v.pluginView is DshUiParsed),
-          onTap: () {
-            if (child != null && opener!(child)) return;
-            setState(() => _toggled = !expanded);
-          },
-        ),
+        _header!,
         ExpandReveal(
           open: expanded,
           child: Padding(
@@ -184,53 +208,51 @@ class _ToolRowState extends State<ToolRow> {
   }
 }
 
+typedef _TrailData = ({
+  String kind,
+  ToolStatus status,
+  OrbState? orb,
+  ({String word, bool fault})? phone,
+  ({int added, int removed})? counts,
+});
+
+typedef _Heading = ({
+  String name,
+  String verb,
+  String summary,
+  bool code,
+  bool blocked,
+  bool expanded,
+  bool opens,
+  _TrailData trail,
+});
+
 class _ToolHeader extends StatelessWidget {
-  const _ToolHeader({
-    required this.view,
-    this.autoAllowing = false,
-    required this.expanded,
-    this.opens = false,
-    this.titled = true,
-    required this.onTap,
-  });
-
-  final ToolView view;
-  final bool autoAllowing;
-  final bool expanded;
-
-  /// A tap opens another conversation: a chevron at the row's end.
-  final bool opens;
-
-  /// 摘要用原生卡片的标题(有的话)。
-  final bool titled;
+  const _ToolHeader({required this.heading, required this.onTap});
+  final _Heading heading;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
     final dsh = DshColors.of(context);
-    final status = view.item.status;
-    final blocked = view.sandboxBlocked;
-    final failed = status == ToolStatus.failed && !blocked && (view.phoneResult?.isFault ?? true);
-
-    final title = titled ? view.pluginTitle : null;
-    final summary = blocked ? l10n.chatToolNeedsApproval : title ?? view.summary;
+    final (:name, :verb, :summary, :code, :blocked, :expanded, :opens, :trail) = heading;
+    final failed = trail.status == ToolStatus.failed && !blocked && (trail.phone?.fault ?? true);
     final summaryColor = failed ? dsh.danger : dsh.textTertiary;
-    final summaryStyle = view.summaryIsCode && !blocked && title == null
+    final summaryStyle = code
         ? AppType.mono(size: 12.5, color: summaryColor, height: 1.3)
         : StreamRow.detail(context)?.copyWith(color: summaryColor);
 
     return Semantics(
       button: true,
       expanded: opens ? null : expanded,
-      label: '${view.verb} $summary',
+      label: '$verb $summary',
       child: StreamRowFrame(
         onTap: onTap,
         child: Row(
           children: [
-            if (blocked) const _LockGlyph() else ToolGlyph(name: view.name, size: StreamRow.lead),
+            if (blocked) const _LockGlyph() else ToolGlyph(name: name, size: StreamRow.lead),
             const SizedBox(width: StreamRow.gap),
-            Text(view.verb, style: StreamRow.label(context)),
+            Text(verb, style: StreamRow.label(context)),
             if (summary.isNotEmpty) ...[
               const StreamDot(),
               Expanded(
@@ -249,16 +271,12 @@ class _ToolHeader extends StatelessWidget {
               duration: AppMotion.of(context, AppMotion.quick),
               alignment: Alignment.centerRight,
               child: AppMotion.fluid(context)
-                  ? _FluidTrail(view: view, autoAllowing: autoAllowing)
+                  ? _FluidTrail(trail: trail)
                   : AnimatedSwitcher(
                       duration: AppMotion.of(context, AppMotion.quick),
                       layoutBuilder: (current, previous) =>
                           Stack(alignment: Alignment.centerRight, children: [...previous, ?current]),
-                      child: _StatusTrail(
-                        key: ValueKey(_trailKind(view, autoAllowing)),
-                        view: view,
-                        autoAllowing: autoAllowing,
-                      ),
+                      child: _StatusTrail(key: ValueKey(trail.kind), trail: trail),
                     ),
             ),
             if (opens) ...[const SizedBox(width: 4), Icon(AppIcons.disclosure, size: 16, color: dsh.textTertiary)],
@@ -291,10 +309,9 @@ class _LockGlyph extends StatelessWidget {
 /// tool that just succeeded draws a check for a moment and then goes quiet, as a
 /// finished row is. Only one seen finishing: a row built finished stays empty.
 class _FluidTrail extends StatefulWidget {
-  const _FluidTrail({required this.view, required this.autoAllowing});
+  const _FluidTrail({required this.trail});
 
-  final ToolView view;
-  final bool autoAllowing;
+  final _TrailData trail;
 
   @override
   State<_FluidTrail> createState() => _FluidTrailState();
@@ -309,9 +326,9 @@ class _FluidTrailState extends State<_FluidTrail> {
   @override
   void didUpdateWidget(_FluidTrail old) {
     super.didUpdateWidget(old);
-    final before = _trailKind(old.view, old.autoAllowing);
-    final now = _trailKind(widget.view, widget.autoAllowing);
-    if (before == 'spinner' && now == 'empty' && widget.view.item.status == ToolStatus.succeeded) {
+    final before = old.trail.kind;
+    final now = widget.trail.kind;
+    if (before == 'spinner' && now == 'empty' && widget.trail.status == ToolStatus.succeeded) {
       _justDone = true;
       _hold?.cancel();
       _hold = Timer(_checkFor, () {
@@ -332,11 +349,11 @@ class _FluidTrailState extends State<_FluidTrail> {
   @override
   Widget build(BuildContext context) {
     final dsh = DshColors.of(context);
-    final kind = _trailKind(widget.view, widget.autoAllowing);
+    final kind = widget.trail.kind;
     final Widget child = switch (kind) {
       'spinner' => QuietArc(key: const ValueKey('spinner'), color: dsh.textTertiary),
       'empty' when _justDone => DrawnCheck(key: const ValueKey('done'), size: 14, color: dsh.textTertiary),
-      _ => _StatusTrail(key: ValueKey(kind), view: widget.view, autoAllowing: widget.autoAllowing),
+      _ => _StatusTrail(key: ValueKey(kind), trail: widget.trail),
     };
     return AnimatedSwitcher(
       duration: AppMotion.of(context, AppMotion.standard),
@@ -372,12 +389,8 @@ OrbState _orbFor(ToolKind kind) => switch (kind) {
 
 /// 行尾状态:运行中小光球 / 失败 ✕ / 已拒绝 / 已取消 / diff 统计。成功默认安静。
 class _StatusTrail extends StatelessWidget {
-  const _StatusTrail({super.key, required this.view, this.autoAllowing = false});
-
-  final ToolView view;
-
-  /// 等待确认但已被"本对话都允许"自动放行:看起来就是在运行。
-  final bool autoAllowing;
+  const _StatusTrail({super.key, required this.trail});
+  final _TrailData trail;
 
   @override
   Widget build(BuildContext context) {
@@ -386,25 +399,25 @@ class _StatusTrail extends StatelessWidget {
     final dsh = DshColors.of(context);
     final label = theme.textTheme.labelSmall?.copyWith(fontSize: 12);
 
-    if (view.phoneResult case final phone?) {
-      return Text(phone.word, style: label?.copyWith(color: phone.isFault ? dsh.danger : dsh.textTertiary));
+    if (trail.phone case final phone?) {
+      return Text(phone.word, style: label?.copyWith(color: phone.fault ? dsh.danger : dsh.textTertiary));
     }
-    switch (view.item.status) {
+    switch (trail.status) {
       case ToolStatus.streaming || ToolStatus.running:
-      case ToolStatus.awaitingApproval when autoAllowing:
+      case ToolStatus.awaitingApproval when trail.kind == 'spinner':
         // 点阵小光球(Libraries.dev 思考光球),按工具在做的事选一段。
-        return ThinkingOrb(state: _orbFor(toolKindOf(view.item)), size: OrbSize.px20, displaySize: 18);
+        return ThinkingOrb(state: trail.orb!, size: OrbSize.px20, displaySize: 18);
       case ToolStatus.awaitingApproval:
         return Text(l10n.commonWaitingApproval, style: label?.copyWith(color: dsh.warning));
       case ToolStatus.failed:
-        if (view.sandboxBlocked) return const SizedBox.shrink();
+        if (trail.kind == 'empty') return const SizedBox.shrink();
         return Icon(AppIcons.failed, size: 16, color: dsh.danger);
       case ToolStatus.denied:
         return Text(l10n.commonDeclined, style: label?.copyWith(color: dsh.warning));
       case ToolStatus.cancelled:
         return Text(l10n.commonCancelled, style: label?.copyWith(color: dsh.textTertiary));
       case ToolStatus.succeeded:
-        final counts = view.diffCounts;
+        final counts = trail.counts;
         if (counts == null) return const SizedBox.shrink();
         return DiffCounts(added: counts.added, removed: counts.removed);
     }
