@@ -318,7 +318,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   CompanionVoiceSource? _ttsSource;
   bool _ttsRanges = false;
   int _ttsSerial = 0;
-  int _spokenTo = 0;
+  String _spokenPrefix = '';
   final Map<String, int> _ttsPending = {};
   bool _replyClearedWidget = false;
 
@@ -2167,7 +2167,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       final old = parseCompanionReply(text, emotions: _moves.emotionLabels, actions: _moves.actionLabels);
       _marksHandled = old.marks.length;
       _wordsSpoken = old.words.length;
-      _spokenTo = old.words.length;
+      _spokenPrefix = old.words;
       _replyWords = old.words;
       if (!running) {
         setState(() => _needsAttention = attention);
@@ -2180,7 +2180,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _baselineUser = user;
       _marksHandled = 0;
       _wordsSpoken = 0;
-      _spokenTo = 0;
+      _spokenPrefix = '';
     }
 
     var stream = _replyStream;
@@ -2215,11 +2215,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     }
     _wordsSpoken = reply.words.length;
     if (aloud) {
-      // Whole sentences as they complete, the rest once the reply is in. A
-      // retry can take words back; what was said stays said.
-      if (_spokenTo > reply.words.length) _spokenTo = reply.words.length;
-      final (sentences, to) = companionSpeakable(reply.words, _spokenTo, final_: !running);
-      _spokenTo = to;
+      // A durable Session message can correct a sentence already queued for
+      // speech. Retire that voice and its callbacks before reading the correction.
+      if (!reply.words.startsWith(_spokenPrefix)) {
+        _hush();
+        _spokenPrefix = '';
+      }
+      final (sentences, to) = companionSpeakable(reply.words, _spokenPrefix.length, final_: !running);
+      if (to != _spokenPrefix.length) _spokenPrefix = reply.words.substring(0, to);
       if (sentences.isNotEmpty) _speakAloud(sentences);
     }
     _showReplyWords(reply.words, fresh);

@@ -1392,6 +1392,71 @@ void main() {
     }
   });
 
+  for (final sample in [
+    (draft: '车站在东边。', finalText: '车站在西边。', moreSpeech: '车站在西边。', stop: true),
+    (draft: '车站在东边。还没', finalText: '车站在东边。再说。', moreSpeech: '再说。', stop: false),
+    (draft: '车站在东边。', finalText: '', moreSpeech: '', stop: true),
+  ]) {
+    testWidgets('durable full reply corrects room speech: ${sample.finalText}', (tester) async {
+      await tester.runAsync(() async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('companion_voice_enabled', true);
+        await prefs.setString('companion_voice_v1', '{"source":"system"}');
+      });
+      const voice = MethodChannel('dsh/companion_voice');
+      final calls = <MethodCall>[];
+      final ready = Completer<void>();
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(voice, (call) async {
+        calls.add(call);
+        if (call.method == 'ready' && !ready.isCompleted) ready.complete();
+        return switch (call.method) { 'ready' || 'speak' => true, _ => null };
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(voice, null));
+      final bridge = _CorrectionBridge();
+      final client = _CorrectionClient(bridge);
+      final room = _Room(temporary, client: client);
+      await room.open(tester);
+      try {
+        await settleMixed(tester, ready.future);
+        await tester.enterText(find.byType(TextField), '车站在哪边？');
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('send')));
+        await settleMixed(tester, client.first.future);
+        final wire = client.wire;
+        wire.text(sample.draft);
+        await room.drain();
+        final first = calls.singleWhere((c) => c.method == 'speak' && (c.arguments as Map)['text'] == '车站在东边。');
+        final oldId = (first.arguments as Map)['id'];
+        final start = calls.length;
+        wire.finish('stop');
+        wire.settle('assistant/message', text: sample.finalText);
+        wire.endTurn();
+        await room.drain();
+        final later = calls.skip(start);
+        expect(later.where((c) => c.method == 'stop'), hasLength(sample.stop ? 1 : 0));
+        expect(later.where((c) => c.method == 'speak').map((c) => (c.arguments as Map)['text']),
+            [if (sample.moreSpeech.isNotEmpty) sample.moreSpeech]);
+        expect(room.speech(tester) ?? '', sample.finalText);
+        expect(room.running, isFalse);
+        if (sample.stop) {
+          final before = room.commands.where((command) => command.$1 == 'say').length;
+          await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+            voice.name,
+            const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': 'start', 'id': oldId})),
+            (_) {},
+          );
+          await flush(tester);
+          expect(room.commands.where((command) => command.$1 == 'say').length, before);
+        }
+      } finally {
+        for (final stream in bridge.calls.values) {
+          if (!stream.isClosed) unawaited(stream.close());
+        }
+        await room.close(tester);
+      }
+    });
+  }
+
   // A1: approvals are answered on the tasks page now; that route covering
   // the room is what holds a captured followup back.
   testWidgets('fixture 10 a captured followup waits while the tasks page covers the room', (tester) async {
