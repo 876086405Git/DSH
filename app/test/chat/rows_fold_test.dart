@@ -411,4 +411,15 @@ void main() {
       expect((rows.last as AssistantRow).footnote, same(t.turns.single));
     });
   });
+
+  test('her conversation folds every call away, however the turn ended', () {
+    final items = <ChatItem>[user(1, '帮我看看'), _tool(2, 'look'), assistant(3, '看完啦。')];
+    final stopped = _trace(0, 4, reason: 'interrupted');
+    final plain = deriveRows(items: items, turns: [stopped], foldTurns: true);
+    expect(plain.whereType<ToolCallRow>(), hasLength(1), reason: 'an ordinary chat keeps a stopped turn open');
+    final hers = deriveRows(items: items, turns: [stopped], foldTurns: true, compactTools: true);
+    expect(hers.whereType<ToolCallRow>(), isEmpty);
+    expect(hers.whereType<TurnProcessRow>().single.toolCalls, 1);
+    _expectSane(hers);
+  });
 }

@@ -61,6 +61,8 @@ Future<CompanionPackStore> tavernLive2dStore(
   // Any ID as a folder name, nothing that climbs out.
   Directory('${(await root()).path}/${base64Url.encode(utf8.encode(characterId)).replaceAll('=', '')}'),
   expectedRuntime: expectedRuntime,
+  // One model per card: a new one replaces the old.
+  shelve: false,
 );
 
 /// The character's installed pack; null for none (or no storage to look in).

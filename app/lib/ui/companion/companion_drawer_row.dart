@@ -34,7 +34,8 @@ final companionNextReminderProvider = FutureProvider.autoDispose<int?>((ref) asy
   for (final task in memory.store.tasks(limit: 100)) {
     final due = task['epoch_ms'];
     if (task['kind'] != 'phone.reminder' || due is! int || due <= now) continue;
-    if (!const {'queued', 'waiting'}.contains(task['state']) || task['cancel_requested'] == 1) continue;
+    // Set on the phone ('done') counts as much as still on its way there.
+    if (!const {'queued', 'waiting', 'done'}.contains(task['state']) || task['cancel_requested'] == 1) continue;
     if (next == null || due < next) next = due;
   }
   // Due passes by itself: look again then.

@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../state/connection_state.dart';
 import '../state/hosts_state.dart';
 import '../state/sessions_state.dart';
+import 'companion_pack.dart' show companionBundledCharacterKey;
 
 /// Full mode's preset, declared in runtime/bridge/dsh-go-bridge/cordis.patch.yml.
 const companionPresetId = 'dsh-go-companion-full';
@@ -86,8 +87,8 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
   Future<void> _load() async {
     // Reconnecting does not invalidate the saved bindings of every host.
     final epoch = _bindingsEpoch;
-    final prefs = await SharedPreferences.getInstance();
     try {
+      final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_sessionsKey);
       if (raw != null && ref.mounted && epoch == _bindingsEpoch) {
         state = {
@@ -219,6 +220,11 @@ final companionSessionsProvider = NotifierProvider<CompanionSessions, Map<String
   CompanionSessions.new,
 );
 
+/// Her conversation on the active host, once she has one.
+final companionChatIdProvider = Provider<String?>(
+  (ref) => ref.watch(companionSessionsProvider)[_hostKey(ref.watch(activeHostProvider))]?.sessionId,
+);
+
 /// Whether a conversation is the companion's: it lives in her room, not the
 /// chat drawer, and her replies aren't "task finished" alerts.
 final companionSessionFilterProvider = Provider<bool Function(HostRef host, String sessionId)>((ref) {
@@ -262,9 +268,6 @@ final companionModeProvider = NotifierProvider<CompanionModeSetting, CompanionMo
 
 const _nameKey = 'companion_name';
 
-/// The longest name the person can give her.
-const companionNameMax = 12;
-
 /// The name the person gave her; null for the pack's own.
 class CompanionNameSetting extends Notifier<String?> {
   @override
@@ -289,7 +292,7 @@ class CompanionNameSetting extends Notifier<String?> {
   /// [name] from now on; null or blank goes back to the pack's own.
   Future<void> set(String? name) async {
     final trimmed = name?.trim();
-    final next = trimmed == null || trimmed.isEmpty ? null : String.fromCharCodes(trimmed.runes.take(companionNameMax));
+    final next = trimmed == null || trimmed.isEmpty ? null : trimmed;
     state = next;
     final prefs = await SharedPreferences.getInstance();
     if (next == null) {
@@ -306,21 +309,37 @@ final companionNameProvider = NotifierProvider<CompanionNameSetting, String?>(Co
 String companionPersonaNamed(String? name) => companionPersona(name: name);
 
 /// The person's part of her persona: their own text, or the default under the
-/// name she goes by; then how she calls them.
-String companionPersonaPart({String? custom, String? name, String? callMe}) {
+/// name she goes by; then how she calls them. [whale]: she is the app's own
+/// whale girl; anyone else gets the same default without the whale's looks.
+String companionPersonaPart({String? custom, String? name, String? callMe, bool whale = true}) {
   final own = custom?.trim() ?? '';
   final given = name?.trim() ?? '';
   final call = callMe?.trim() ?? '';
   final base = own.isNotEmpty
       ? [if (given.isNotEmpty) '你的名字是「$given」。', own].join('\n')
+      : !whale
+      ? companionPersonaDefault.replaceFirst(_whaleIntro, '你是${given.isEmpty ? '住在这台手机小屋里的伙伴' : given}，住在这台手机小屋里。')
       : (given.isEmpty ? companionPersonaDefault : companionPersonaDefault.replaceFirst('你是鲸鱼娘，', '你是$given，'));
   return [base, if (call.isNotEmpty) '称呼对方为「$call」。'].join('\n');
 }
 
+const _whaleIntro = '你是鲸鱼娘，一只住在这台手机小屋里的鲸鱼女孩，有鲸鱼的耳朵和尾巴，穿女仆裙。';
+
+/// Whether the character under [sourceKey] is the app's own whale girl (no
+/// pack yet counts as her).
+bool companionIsWhale(String? sourceKey) => sourceKey == null || sourceKey == companionBundledCharacterKey;
+
 /// Her whole persona: the person's part, then the app's rules they can't
 /// remove, then whether this request carries her tools.
-String companionPersona({String? custom, String? name, String? callMe, bool tools = false, String? moves}) {
-  final part = companionPersonaPart(custom: custom, name: name, callMe: callMe);
+String companionPersona({
+  String? custom,
+  String? name,
+  String? callMe,
+  bool tools = false,
+  String? moves,
+  bool whale = true,
+}) {
+  final part = companionPersonaPart(custom: custom, name: name, callMe: callMe, whale: whale);
   if (moves != null && moves.trim().isNotEmpty) {
     // The rules explain marks first; her model's own are "the same", after them.
     return [part, '', companionPersonaRules, '', moves.trim(), tools ? _toolsLine : _noToolsLine].join('\n');
@@ -361,9 +380,6 @@ class CompanionPersonaSettings {
   /// Changes whenever what she is told changes: full mode tells her again.
   String get fingerprint => '${custom.trim().hashCode}:${callMe.trim().hashCode}';
 }
-
-/// The longest persona the person can write: it goes with every light reply.
-const companionPersonaMax = 4000;
 
 const _personaKey = 'companion_persona_v1';
 const _personaSentKey = 'companion_persona_sent';
