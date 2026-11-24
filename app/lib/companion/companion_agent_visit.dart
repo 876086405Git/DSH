@@ -336,7 +336,6 @@ class _CompanionAgentVisit {
   _CompanionAgentRun? run;
   Timer? quietTimer;
   Timer? idleTimer;
-  Timer? usageTimer;
   bool _reducedPower = false;
   CompanionKeeper? phone;
   CompanionKeeper? keeper;
@@ -388,7 +387,6 @@ class _CompanionAgentVisit {
 
   void _schedulePeriodicWork() {
     idleTimer?.cancel();
-    usageTimer?.cancel();
     final factor = _reducedPower ? 2 : 1;
     idleTimer = Timer.periodic(Duration(minutes: factor), (_) {
       if (active) {
@@ -397,7 +395,6 @@ class _CompanionAgentVisit {
         unawaited(consolidate());
       }
     });
-    usageTimer = Timer.periodic(Duration(seconds: 15 * factor), (_) => refreshHostUsage());
   }
 
   CompanionAgentAttachment attachWindow(CompanionAgentRoomUi next, CompanionMapHandoff handoff) {
@@ -1538,6 +1535,8 @@ class _CompanionAgentVisit {
     }
   }
 
+  /// Nothing records new deliveries any more; this only drains rows an older
+  /// build left behind, once per opening or connection change (no timer).
   void refreshHostUsage() {
     final owner = memory;
     final client = ref.read(activeConnectionProvider).value?.client;
@@ -1646,7 +1645,6 @@ class _CompanionAgentVisit {
     closed = true;
     stop(discard: true);
     idleTimer?.cancel();
-    usageTimer?.cancel();
     quietTimer?.cancel();
     residentSignals?.close();
     residentSignals = null;
