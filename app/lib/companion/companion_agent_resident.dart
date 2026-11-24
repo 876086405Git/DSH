@@ -21,7 +21,7 @@ extension CompanionAgentAmbient on CompanionAgent {
     if (visit == null || !visit.active || running || ui == null || !ui.presentationAvailable || text.trim().isEmpty) {
       return false;
     }
-    return ui.presentLine(id: 'screen-quip:$observedAtMs', text: text, emotion: emotion, speak: false);
+    return ui.presentLine(id: 'screen-quip:$observedAtMs', text: text, emotion: emotion, speak: true);
   }
 
   /// An ephemeral observation is not a user message or a memory proof source.
