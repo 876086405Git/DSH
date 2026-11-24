@@ -60,7 +60,7 @@
     },
     {
       "path": "app/test/companion/companion_recall_room_test.dart",
-      "sha256": "d9f32ccd484f3f1648c55ae3f6518f72c8e743824f9ad304b15aeb9f035f4d64"
+      "sha256": "5ac7dd39e6b4488b20b03dba5e7a15d29375ceddde037d1589d7c487562143b3"
     },
     {
       "path": "app/test/companion/companion_signal_initiative_test.dart",
@@ -160,7 +160,7 @@
     },
     {
       "path": "packages/dsh_client/test/companion_prompt_commit_test.dart",
-      "sha256": "1cac1ae1cbb4a4c8c17137585688d9988a410bd0925b8bd0c05d9929d80c83f0"
+      "sha256": "9fa4cd92fad518777466d39f6021c242d29107a3c14bc64af23dbda9f1aae350"
     },
     {
       "path": "packages/dsh_client/test/companion_prompt_context_test.dart",

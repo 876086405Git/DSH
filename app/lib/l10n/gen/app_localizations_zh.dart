@@ -5037,6 +5037,15 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get companionPhoneConnectionReplaced => '另一条手机连接已接手这个会话。请回到当前伙伴会话后再试。';
+
+  @override
+  String get companionPhoneSessionUnavailable => '主机找不到当前的伙伴会话，或这个会话已换了预设。请重新打开伙伴小屋。';
+
+  @override
+  String get companionPhoneToolsConflict => '主机没有接入这次手机工具连接。请重新打开当前伙伴会话后再试。';
+
+  @override
   String get companionHostSelectionChanged => '主机会话的模型选择已改变。请检查当前会话后再发送。';
 
   @override

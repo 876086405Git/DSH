@@ -5369,6 +5369,18 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get companionPhoneConnectionReplaced =>
+      'A newer phone connection took over this session. Return to the current companion session and try again.';
+
+  @override
+  String get companionPhoneSessionUnavailable =>
+      'The host cannot find this companion session, or its preset has changed. Reopen the companion room.';
+
+  @override
+  String get companionPhoneToolsConflict =>
+      'The host could not connect the phone tools for this turn. Reopen the current companion session and try again.';
+
+  @override
   String get companionHostSelectionChanged =>
       'The host session selection changed. Check the current session before sending again.';
 

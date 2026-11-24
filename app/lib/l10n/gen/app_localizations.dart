@@ -9296,6 +9296,24 @@ abstract class L10n {
   /// **'{month}月{day}日'**
   String commonMonthDay(String month, int day);
 
+  /// No description provided for @companionPhoneConnectionReplaced.
+  ///
+  /// In zh, this message translates to:
+  /// **'另一条手机连接已接手这个会话。请回到当前伙伴会话后再试。'**
+  String get companionPhoneConnectionReplaced;
+
+  /// No description provided for @companionPhoneSessionUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'主机找不到当前的伙伴会话，或这个会话已换了预设。请重新打开伙伴小屋。'**
+  String get companionPhoneSessionUnavailable;
+
+  /// No description provided for @companionPhoneToolsConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'主机没有接入这次手机工具连接。请重新打开当前伙伴会话后再试。'**
+  String get companionPhoneToolsConflict;
+
   /// No description provided for @companionHostSelectionChanged.
   ///
   /// In zh, this message translates to:
