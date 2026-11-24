@@ -2381,7 +2381,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
         _myLine = text.trim();
       });
       _stage.command('mood', {'mood': 'thinking'});
-      await _attachment.submit(text);
+      await _attachment.submit(text, voiceCall: true);
       return true;
     }, _stop);
     await openVoiceCall(context, title: _name(context.l10n), conversation: call, backdrop: CallBackdrop.companion);

@@ -88,11 +88,11 @@ class CompanionAgentAttachment {
 
   Future<CompanionMemoryOwner> openMemory() =>
       isAttached ? _visit.openMemory() : Future.error(const DshClosedException('Companion window closed'));
-  Future<void> submit(String raw, {String? assistantPage, bool returnToApp = false}) async {
+  Future<void> submit(String raw, {String? assistantPage, bool returnToApp = false, bool voiceCall = false}) async {
     if (isAttached) {
       await _visit.submit(
         raw,
-        inputWindow: 'room',
+        inputWindow: voiceCall ? 'voice' : 'room',
         origin: _window.ui,
         handoff: _window.mapHandoff,
         originCurrent: () => isAttached,
@@ -322,6 +322,7 @@ class _CompanionAgentVisit {
   Future<CompanionMemoryOwner>? opening;
   MemoryRow? retrySource;
   CompanionAgentMemoryTools? retryTools;
+  _CompanionFullSession? fullSession;
   CompanionAgentPhoneTools? activePhoneTools;
   CompanionResidentSignals? residentSignals;
   _VisitNotices? notices;
@@ -470,6 +471,8 @@ class _CompanionAgentVisit {
     stop(discard: true);
     memory?.cancelWork();
     epoch++;
+    fullSession?.close();
+    fullSession = null;
     characterSourceKey = sourceKey;
     bindCharacter();
     notices?.invalidate();
@@ -665,7 +668,8 @@ class _CompanionAgentVisit {
       inheritedRetry = retryTools;
       retryTools = null;
     }
-    stop();
+    final useSession = !light && noticeReply == null && assistantPage == null;
+    stop(cancelSession: !useSession);
     run = null;
     final number = ++submission;
     final visitCurrent = captureCurrent();
@@ -851,7 +855,7 @@ class _CompanionAgentVisit {
         source: source,
         turnId: memoryTools.turnId,
         returnToApp: returnToApp,
-        window: inputWindow,
+        window: inputWindow == 'voice' ? 'room' : inputWindow,
         isCurrent: () => current() && memoryTools?.isCurrent == true,
         onStep: (text) {
           if (residentUi case final CompanionAgentAmbientUi target when current() && target.presentationAvailable) {
@@ -873,7 +877,12 @@ class _CompanionAgentVisit {
         }
       }
       preparing = false;
+      // Notification replies carry a displayed draft and native confirmation.
+      // A selected screen is external material from the Android assistant.
+      // Preserve the restricted tool sets for these two explicit actions.
+      final notificationWindow = residentUi;
       final work = agent.say(
+        useSession: useSession,
         memory: owner,
         source: source,
         system: system,
@@ -882,6 +891,18 @@ class _CompanionAgentVisit {
         tools: noticeReply == null
             ? [
                 ...memoryTools.bindings,
+                if (useSession && ref.read(androidSystemFeaturesProvider))
+                  companionRecentNoticesTool(
+                    notices: ref.read(companionNoticesProvider),
+                    readSummaries: owner.store.noticeMemories,
+                    isCurrent: current,
+                  ),
+                if (useSession && notificationWindow is CompanionAgentNotificationUi && notificationWindow.mounted)
+                  companionNotifyTool(
+                    deliver: (id, text) => identical(residentUi, notificationWindow) && notificationWindow.mounted
+                        ? notificationWindow.deliverFollowup(id: id, text: text)
+                        : Future.value(false),
+                  ),
                 ...taskTools.bindings,
                 ...phoneTools.bindings,
                 if (ref.read(androidSystemFeaturesProvider)) ...photoTools.bindings,
@@ -898,11 +919,11 @@ class _CompanionAgentVisit {
       changed();
       await work;
       if (!current() || !identical(run, submittedRun)) return;
-      if (submittedRun!.text.trim().isNotEmpty) {
+      if (!useSession && submittedRun!.text.trim().isNotEmpty) {
         events = companionConsumeEvents(events, turnContext.eventIds);
         if (turnContext.hasClock) lastClockAt = turnContext.sampledAt;
       }
-      if (submittedRun.error case final error?) {
+      if (submittedRun!.error case final error?) {
         // say has returned after its physical request's first cancel drain.
         // No tool callback has entered, so the original clock and budget can
         // survive until a later explicit click in this same live visit.
@@ -917,7 +938,7 @@ class _CompanionAgentVisit {
           retrySource = null;
           failed(error, retry: raw);
         }
-      } else if (submittedRun.text.trim().isNotEmpty || !submittedRun.toolDispatchStarted) {
+      } else if (useSession || submittedRun.text.trim().isNotEmpty || !submittedRun.toolDispatchStarted) {
         retrySource = null;
       }
       queueExtraction();
@@ -952,7 +973,7 @@ class _CompanionAgentVisit {
     }
   }
 
-  void stop({bool discard = false}) {
+  void stop({bool discard = false, bool cancelSession = true}) {
     activePhoneTools?.stop();
     agent.cancelScreenObservation();
     final pendingRetry = retryTools;
@@ -962,7 +983,7 @@ class _CompanionAgentVisit {
     preparing = false;
     runMapHandoff?.close();
     runMapHandoff = null;
-    if (run != null && identical(run, agent._run)) agent.stop(discard: discard);
+    if (run != null && identical(run, agent._run)) agent.stop(discard: discard, cancelSession: cancelSession);
     changed();
   }
 
@@ -972,6 +993,8 @@ class _CompanionAgentVisit {
     final current = captureCurrent();
     final owner = await openMemory();
     if (!current()) return;
+    fullSession?.close();
+    fullSession = null;
     owner.store.startLightConversation();
     retrySource = null;
     lastSpokenAt = null;
@@ -1490,6 +1513,8 @@ class _CompanionAgentVisit {
     keeper = null;
     snapshot = null;
     vitalsQueue = Future.value();
+    fullSession?.close();
+    fullSession = null;
     ui.connectionChanged();
     unawaited(migrateHostMemory());
     // She arrives at the new keeper as on opening: its state, her greeting,
@@ -1633,6 +1658,8 @@ class _CompanionAgentVisit {
     notices = null;
     closed = true;
     stop(discard: true);
+    fullSession?.close();
+    fullSession = null;
     idleTimer?.cancel();
     usageTimer?.cancel();
     quietTimer?.cancel();

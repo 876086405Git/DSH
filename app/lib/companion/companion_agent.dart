@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../notify/chat_alerts.dart' show companionHostKey;
+import '../state/chat_state.dart';
 import '../state/connection_state.dart';
 import '../state/android_features.dart';
 import '../state/hosts_state.dart';
@@ -28,6 +29,7 @@ import 'companion_agent_task_tools.dart';
 import 'companion_agent_task_ui.dart';
 import 'companion_agent_tools.dart';
 import 'companion_context.dart';
+import 'companion_session_tools.dart';
 import 'companion_host_memory_transport.dart';
 import 'companion_light.dart';
 import 'companion_memory.dart';
@@ -49,6 +51,7 @@ import 'companion_state.dart';
 import 'companion_widget.dart';
 
 part 'companion_agent_visit.dart';
+part 'companion_agent_full_session.dart';
 part 'companion_agent_resident.dart';
 part 'companion_agent_notices.dart';
 part 'companion_agent_screen_classifier.dart';
@@ -198,6 +201,7 @@ class CompanionAgent extends ChangeNotifier {
     required bool Function() isCurrent,
     void Function(MemorySelection)? onSelected,
     void Function()? onStop,
+    bool useSession = false,
   }) async {
     if (_disposed) throw const DshClosedException('Companion agent closed');
     stop();
@@ -220,7 +224,11 @@ class CompanionAgent extends ChangeNotifier {
     memory.retainReceipt(run.settled.future);
     notifyListeners();
     try {
-      await _loop(run);
+      if (useSession) {
+        await _visit!.sendInSession(run);
+      } else {
+        await _loop(run);
+      }
     } on Object catch (error) {
       if (_current(run)) {
         run.error = error is CompanionLightError ? error : CompanionLightError(CompanionLightFailure.server, '$error');
@@ -361,38 +369,40 @@ class CompanionAgent extends ChangeNotifier {
           tool.definition,
   ];
 
+  List<CompanionAgentToolBinding> _bindings(_CompanionAgentRun run) => [
+    for (final binding in run.tools)
+      (
+        definition: binding.definition,
+        execute: (call) async {
+          // The execution gate is checked for every call, including a
+          // later call in the same already-decoded model response.
+          if (run.externalNoticeContent &&
+              (!CompanionAgentMemoryTools.allowedAfterNotice(call.name) ||
+                  (call.name == 'forget' && !CompanionAgentMemoryTools.pureDeletion(call.input)) ||
+                  (call.name == 'remember' && call.input['card'] != null))) {
+            return const CompanionAgentToolResult(
+              content: '{"applied":false,"code":"memory_change_after_notice","message":"This turn includes a recent event from an external notification. New memories are fine; existing ones cannot be rewritten until the next message."}',
+              isError: true,
+            );
+          }
+          if (!_toolAvailable(run, call)) {
+            return const CompanionAgentToolResult(
+              content: '{"applied":false,"code":"memory_change_after_web","message":"This memory change is unavailable for the rest of this turn after public web content. It was not applied."}',
+              isError: true,
+            );
+          }
+          if (call.name == 'public_lookup') run.externalWebContent = true;
+          final result = await binding.execute(call);
+          if (result.externalWebContent) run.externalWebContent = true;
+          if (result.externalNoticeContent) _markNoticeContent(run);
+          return result;
+        },
+      ),
+  ];
+
   Future<void> _loop(_CompanionAgentRun run) async {
     await runCompanionAgentLoop(
-      tools: [
-        for (final binding in run.tools)
-          (
-            definition: binding.definition,
-            execute: (call) async {
-              // The execution gate is checked for every call, including a
-              // later call in the same already-decoded model response.
-              if (run.externalNoticeContent &&
-                  (!CompanionAgentMemoryTools.allowedAfterNotice(call.name) ||
-                      (call.name == 'forget' && !CompanionAgentMemoryTools.pureDeletion(call.input)) ||
-                      (call.name == 'remember' && call.input['card'] != null))) {
-                return const CompanionAgentToolResult(
-                  content: '{"applied":false,"code":"memory_change_after_notice","message":"This turn includes a recent event from an external notification. New memories are fine; existing ones cannot be rewritten until the next message."}',
-                  isError: true,
-                );
-              }
-              if (!_toolAvailable(run, call)) {
-                return const CompanionAgentToolResult(
-                  content: '{"applied":false,"code":"memory_change_after_web","message":"This memory change is unavailable for the rest of this turn after public web content. It was not applied."}',
-                  isError: true,
-                );
-              }
-              if (call.name == 'public_lookup') run.externalWebContent = true;
-              final result = await binding.execute(call);
-              if (result.externalWebContent) run.externalWebContent = true;
-              if (result.externalNoticeContent) _markNoticeContent(run);
-              return result;
-            },
-          ),
-      ],
+      tools: _bindings(run),
       retainToolOutcomes: true,
       exchanges: run.exchanges,
       isCurrent: () => _current(run),
@@ -644,11 +654,12 @@ class CompanionAgent extends ChangeNotifier {
     _visit?.connectionChanged(generationChanged: true);
   }
 
-  void stop({bool discard = false}) {
+  void stop({bool discard = false, bool cancelSession = true}) {
     cancelScreenObservation();
     if (_visit?.residentUi case final CompanionAgentAmbientUi background) background.stopSpeech();
     final run = _run;
     if (run == null || !run.running) return;
+    run.stopSession?.call(cancelSession);
     run.onStop?.call();
     run.cancelled = true;
     run.running = false;
@@ -700,6 +711,7 @@ class _CompanionAgentRun {
 
   final String replyId;
   final void Function()? onStop;
+  void Function(bool cancelHost)? stopSession;
   final CompanionMemoryOwner memory;
   final MemoryRow source;
   final String system;
