@@ -179,6 +179,13 @@ internal class CompanionReminderLedger(private val database: SQLiteDatabase) : C
                            event: String, outcome: String?, reason: String? = null) = transaction {
         receipt(key, "notification", claim, event, executorId, now, key.notificationTag, outcome,
             reason?.let { org.json.JSONObject().put("reason", it).toString() })
+        // It rang, so a set reminder's "notifications are off" no longer holds.
+        if (outcome == "succeeded") {
+            database.update("companion_task_revisions", ContentValues().apply {
+                putNull("wait_reason")
+                put("updated_at_ms", now)
+            }, "task_id=? AND task_rev=? AND state='done'", args(key))
+        }
     }
 
     fun activeObserved(key: ReminderKey, executorId: String, now: Long) = transaction {

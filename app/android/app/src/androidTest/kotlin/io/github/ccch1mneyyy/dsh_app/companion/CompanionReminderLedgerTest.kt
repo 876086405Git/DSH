@@ -238,14 +238,14 @@ class CompanionReminderLedgerTest : AndroidTestCase() {
         assertEquals("done", f.ledger.current("t")!!.state)
         assertEquals("notifications_disabled", f.ledger.current("t")!!.waitReason)
 
-        // Turned on before it is due: a later run drops the reason, and it rings.
+        // Turned on before it is due, with no run in between: it rings, and
+        // the delivery itself drops the stale reason.
         f.effects.notifications = true
-        assertTrue(f.runner().resume("t"))
-        assertEquals("done", f.ledger.current("t")!!.state)
-        assertNull(f.ledger.current("t")!!.waitReason)
         f.now = DUE
         f.runner().alarm(ReminderKey("t", 1))
         assertEquals(listOf(ReminderKey("t", 1)), f.effects.notified)
+        assertEquals("done", f.ledger.current("t")!!.state)
+        assertNull(f.ledger.current("t")!!.waitReason)
     }
 
     fun testLookupUpgradeKeepsReminderRecoveryAndDoesNotExecuteTheLookupTask() {
