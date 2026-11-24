@@ -218,18 +218,19 @@ class ArtifactImageReader implements WorkspaceImageReader {
 
   @override
   Future<LoadedImage> read(String sessionId, String path) async {
-    final connection = files.connection;
-    if (connection == null) throw const ArtifactError('offline');
+    if (files.connection == null) throw const ArtifactError('offline');
     if (!files.canFetch) throw const ArtifactError('unsupported');
-    if (!connection.isLocal && turn == null) {
-      final stat = await connection.client.statFile(sessionId, path);
-      if ((stat.bytes ?? 0) > maxMarkdownImageBytes) throw const ImageTooLarge();
-    }
-    final file = await files.materialize(
-      sessionId,
-      Artifact(path: path, origin: ArtifactOrigin.linked, turn: turn ?? 0, snapshotImage: turn != null),
-      maxBytes: maxMarkdownImageBytes,
-    );
+    // materialize checks the size against the Host's current version itself.
+    final file = await files
+        .materialize(
+          sessionId,
+          Artifact(path: path, origin: ArtifactOrigin.linked, turn: turn ?? 0, snapshotImage: turn != null),
+          maxBytes: maxMarkdownImageBytes,
+        )
+        .onError<ArtifactError>(
+          (_, _) => throw const ImageTooLarge(),
+          test: (error) => error.code == 'workspace-file/too-large',
+        );
     if (isSvgUrl(path)) return SvgImageBytes(await file.readAsBytes());
     return RasterImage(FileImage(file));
   }
