@@ -117,12 +117,7 @@ class CompanionScreenReading {
     final quip = (value['quip']! as String).trim();
     final mood = (value['mood']! as String).trim();
     final emotion = (value['emotion']! as String).trim();
-    if (!salience.isFinite ||
-        salience < 0 ||
-        salience > 1 ||
-        quip.runes.length > 20 ||
-        mood.runes.length > 40 ||
-        emotion.runes.length > 24) {
+    if (!salience.isFinite || salience < 0 || salience > 1 || mood.runes.length > 40 || emotion.runes.length > 24) {
       return null;
     }
     const scenes = {'gaming', 'coding', 'video', 'reading', 'chatting', 'idle', 'other'};
@@ -131,7 +126,8 @@ class CompanionScreenReading {
       mood: mood,
       salience: salience,
       busy: value['busy']! as bool,
-      quip: quip,
+      // Too long for her bubble: only the quip is dropped, the reading stays.
+      quip: quip.runes.length > 30 ? '' : quip,
       emotion: emotion.isEmpty ? 'neutral' : emotion,
     );
   }

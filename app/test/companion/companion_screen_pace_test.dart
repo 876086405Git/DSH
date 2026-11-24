@@ -85,8 +85,10 @@ void main() {
     expect(decoded.scene, 'coding');
     expect(CompanionScreenReading.parse({...value, 'salience': double.nan}), isNull);
     expect(CompanionScreenReading.parse({...value, 'busy': 'false'}), isNull);
-    expect(CompanionScreenReading.parse({...value, 'quip': List.filled(21, '字').join()}), isNull);
-    expect(CompanionScreenReading.parse({...value, 'quip': List.filled(20, '字').join()}), isNotNull);
+    final long = CompanionScreenReading.parse({...value, 'quip': List.filled(31, '字').join()})!;
+    expect(long.quip, isEmpty, reason: 'only the quip too long for her bubble is dropped');
+    expect(long.scene, 'coding');
+    expect(CompanionScreenReading.parse({...value, 'quip': List.filled(30, '字').join()})!.quip.runes, hasLength(30));
     final pace = CompanionScreenPace();
     expect(pace.quipIsNew(decoded.quip), isTrue);
     pace.shown(1000, decoded, quip: true);
