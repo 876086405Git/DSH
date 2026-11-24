@@ -1576,9 +1576,25 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     if (flush) _ttsPending.clear();
     // Native completion can follow the old window's stop after a new window
     // speaks. Reuse the room identity so its receipt cannot consume our ID.
-    final id = 'v$_page-${++_ttsSerial}';
-    _ttsPending[id] = text.length;
-    _speaker.speak(id, text, flush: flush);
+    // Android 9 rejects even exactly getMaxSpeechInputLength() (4000 UTF-16 units).
+    // A final Host message can arrive in one piece even when it has many sentences.
+    const systemLimit = 3999;
+    for (var start = 0; start < text.length;) {
+      var end = text.length;
+      if (_ttsSource == CompanionVoiceSource.system && end - start > systemLimit) {
+        end = start + systemLimit;
+        final boundary = _sentenceEnd.allMatches(text.substring(start, end)).lastOrNull;
+        if (boundary != null) {
+          end = start + boundary.end;
+        } else if ((text.codeUnitAt(end - 1) & 0xfc00) == 0xd800) {
+          end--; // Keep a surrogate pair in the same utterance.
+        }
+      }
+      final id = 'v$_page-${++_ttsSerial}';
+      _ttsPending[id] = end - start;
+      _speaker.speak(id, text.substring(start, end), flush: flush && start == 0);
+      start = end;
+    }
     return true;
   }
 

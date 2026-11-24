@@ -1457,6 +1457,87 @@ void main() {
     });
   }
 
+  testWidgets('a long full reply sends bounded system utterances in order and retires their IDs', (tester) async {
+    await tester.runAsync(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('companion_voice_enabled', true);
+      await prefs.setString('companion_voice_v1', '{"source":"system"}');
+    });
+    const voice = MethodChannel('dsh/companion_voice');
+    final calls = <MethodCall>[];
+    final ready = Completer<void>();
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(voice, (call) async {
+      calls.add(call);
+      if (call.method == 'ready') {
+        if (!ready.isCompleted) ready.complete();
+        return true;
+      }
+      if (call.method == 'speak') return ((call.arguments as Map)['text'] as String).length < 4000;
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(voice, null));
+    Future<void> report(String type, String id) async {
+      await messenger.handlePlatformMessage(
+        voice.name,
+        const StandardMethodCodec().encodeMethodCall(MethodCall('event', {'type': type, 'id': id})),
+        (_) {},
+      );
+      await flush(tester);
+    }
+    final bridge = _CorrectionBridge();
+    final client = _CorrectionClient(bridge);
+    final room = _Room(temporary, client: client);
+    await room.open(tester);
+    try {
+      await settleMixed(tester, ready.future);
+      await tester.enterText(find.byType(TextField), '请把整段读出来。');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('send')));
+      await settleMixed(tester, client.first.future);
+      calls.clear();
+      final expected = ['短句。', '${'甲' * 3996}。', '${'丙' * 3998}。', '乙' * 3998, '😀。'];
+      final words = expected.join();
+      final wire = client.wire;
+      List<Map> spoken() => [for (final call in calls) if (call.method == 'speak') call.arguments as Map];
+      final atLimit = expected.take(2).join();
+      expect(atLimit.length, 4000);
+      wire.text(atLimit);
+      await room.drain();
+      expect(spoken().map((args) => args['text']), expected.take(2));
+      wire.text(expected.skip(2).join());
+      await room.drain();
+      expect(spoken().map((args) => args['text']), expected);
+      expect(spoken().every((args) => args['flush'] == false), isTrue);
+      final ids = spoken().map((args) => args['id'] as String).toList();
+      expect(ids.toSet(), hasLength(expected.length));
+      wire.finish('stop');
+      wire.settle('assistant/message', text: words);
+      wire.endTurn();
+      await room.drain();
+      expect(room.speech(tester), words);
+      expect(spoken().map((args) => args['text']), expected);
+      final before = room.commands.where((c) => c.$1 == 'say').length;
+      await report('start', ids[0]);
+      await report('done', ids[0]);
+      await report('start', ids[0]);
+      await report('start', ids[1]);
+      await tester.enterText(find.byType(TextField), '我说一句。');
+      await tester.pump();
+      expect(calls.where((c) => c.method == 'stop'), hasLength(1));
+      await report('start', ids[2]);
+      await report('done', ids[3]);
+      await report('start', ids[4]);
+      final mouth = room.commands.where((c) => c.$1 == 'say').skip(before);
+      expect(mouth.map((c) => c.$2['chars']), [expected[0].length, expected[1].length]);
+    } finally {
+      for (final stream in bridge.calls.values) {
+        if (!stream.isClosed) unawaited(stream.close());
+      }
+      await room.close(tester);
+    }
+  });
+
   // A1: approvals are answered on the tasks page now; that route covering
   // the room is what holds a captured followup back.
   testWidgets('fixture 10 a captured followup waits while the tasks page covers the room', (tester) async {
