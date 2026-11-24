@@ -375,7 +375,7 @@ class _Room {
     await tester.pump(const Duration(seconds: 15));
     for (final client in clients) {
       if (client is CompanionSessionPeer) {
-        await client.closeAll();
+        await settleMixed(tester, client.closeAll());
       } else {
         await client.close();
       }
@@ -520,8 +520,7 @@ void main() {
     expect(hostB.prompts, isEmpty);
     expect(room.lightAsked, isEmpty);
     await room.close(tester);
-    // Hangs to the 10-minute limit since A06d (Windows and CI); back with Pro's fix.
-  }, skip: true);
+  });
 
   testWidgets('queued events become inert after the page is disposed', (tester) async {
     final room = _Room(temporary);
