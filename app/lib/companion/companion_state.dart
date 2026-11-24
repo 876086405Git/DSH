@@ -147,10 +147,21 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
         replaceSessionId: replaceSessionId, requireSessionId: requireSessionId);
   }
 
+  /// Start a clean full-mode conversation for this host and character now.
+  /// The queued operation archives the binding it actually replaces. Existing
+  /// messages remain in the host archive and the new binding uses the current
+  /// phone memory generation so the next message can reuse it.
+  Future<CompanionBinding> startNewForCharacter(
+    String? sourceKey, {
+    required String memoryArchiveId,
+    required int memoryControlRevision,
+  }) => _ensure(sourceKey, memoryArchiveId, memoryControlRevision, startNew: true);
+
   Future<CompanionBinding> _ensure(
     String? sourceKey,
     String? memoryArchiveId,
     int? memoryControlRevision, {
+    bool startNew = false,
     String? replaceSessionId,
     String? requireSessionId,
   }) async {
@@ -204,7 +215,7 @@ class CompanionSessions extends Notifier<Map<String, CompanionBinding>> {
         checkCurrent();
         final sameArchive = memoryArchiveId == null ||
             (existing.memoryArchiveId == memoryArchiveId && existing.memoryControlRevision == memoryControlRevision);
-        if (!gone && existing.full && sameArchive && replaceSessionId != existing.sessionId) {
+        if (!startNew && !gone && existing.full && sameArchive && replaceSessionId != existing.sessionId) {
           // Full bindings normally need only this one existence read. A preset
           // changed on the host must be negotiated again before sending.
           if (!existing.inlinePersona && (projections?.agentPreset == null || projections?.agentPreset == companionPresetId)) {

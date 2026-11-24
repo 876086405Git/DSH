@@ -188,6 +188,94 @@ void main() {
     expect(room.sessions.of(HostRef.local), same(whale));
   });
 
+  test('a new conversation archives only the current role after its in-flight creation', () async {
+    _savedA();
+    final room = _Room();
+    await room.loaded();
+    const role = 'import:one';
+    const other = 'workshop:two';
+    const archive = 'phone-archive';
+    final loading = Completer<RpcResult>();
+    final started = Completer<void>();
+    room.a.held['session/create'] = (_) {
+      started.complete();
+      return loading.future;
+    };
+    final first = room.sessions.ensureForCharacter(role, memoryArchiveId: archive, memoryControlRevision: 4);
+    await started.future.timeout(const Duration(seconds: 5));
+    final fresh = room.sessions.startNewForCharacter(role, memoryArchiveId: archive, memoryControlRevision: 4);
+    room.a.held['session/create'] = (_) async => const RpcOk({'sessionId': 'other-still-live'});
+    expect((await room.sessions.ensureForCharacter(other)).sessionId, 'other-still-live');
+    expect(room.a.argsOf('workspace/archiveSession'), isEmpty);
+    room.a.held['session/create'] = (_) async => const RpcOk({'sessionId': 'fresh-role'});
+    loading.complete(const RpcOk({'sessionId': 'previous-role'}));
+    expect((await first).sessionId, 'previous-role');
+    expect((await fresh).sessionId, 'fresh-role');
+    expect(room.a.argsOf('workspace/archiveSession').single['request'], {
+      'sessionId': 'previous-role', 'stopActivity': false,
+    });
+    expect(room.sessions.of(HostRef.local)?.sessionId, 'a-existing');
+    expect(room.sessions.ofCharacter(HostRef.local, other)?.sessionId, 'other-still-live');
+    expect(room.sessions.ofCharacter(HostRef.local, role)?.sessionId, 'fresh-role');
+    expect(room.sessions.ofCharacter(_Room.bHost, role), isNull);
+    expect(room.a.calls.where((call) => call.$1.toLowerCase().contains('delete')), isEmpty);
+    final reuse = await room.sessions.ensureForCharacter(role, memoryArchiveId: archive, memoryControlRevision: 4);
+    expect(reuse.sessionId, 'fresh-role');
+    expect(room.a.argsOf('session/create'), hasLength(3));
+    final prefs = await SharedPreferences.getInstance();
+    final saved = jsonDecode(prefs.getString('companion_sessions')!) as Map;
+    expect((saved['character:"local:local":"import:one"'] as Map)['id'], 'fresh-role');
+  });
+
+  test('a queued new conversation never continues on a replacement host', () async {
+    _savedA();
+    final room = _Room();
+    await room.loaded();
+    final entered = Completer<void>();
+    final archive = Completer<RpcResult>();
+    room.a.held['workspace/archiveSession'] = (_) {
+      entered.complete();
+      return archive.future;
+    };
+    final result = _outcome(room.sessions.startNewForCharacter(
+      companionBundledCharacterKey, memoryArchiveId: 'phone', memoryControlRevision: 0,
+    ));
+    await entered.future.timeout(const Duration(seconds: 5));
+    room.host.change(_Room.bHost);
+    room.container.read(activeConnectionProvider);
+    archive.complete(const RpcOk({'archivedSessionIds': ['a-existing']}));
+    expect(await result, isA<DshClosedException>());
+    expect(room.b.calls, isEmpty);
+    expect(room.a.argsOf('session/create'), isEmpty);
+    expect(room.sessions.of(_Room.bHost), isNull);
+  });
+
+  test('changing the character retires a fresh creation before it can publish', () async {
+    final room = _Room();
+    await room.loaded();
+    final entered = Completer<void>();
+    final created = Completer<RpcResult>();
+    room.a.held['session/create'] = (_) {
+      entered.complete();
+      return created.future;
+    };
+    final retiring = _outcome(room.sessions.startNewForCharacter(
+      'pack:first', memoryArchiveId: 'phone', memoryControlRevision: 0,
+    ));
+    await entered.future.timeout(const Duration(seconds: 5));
+    // The actual visit calls retirePending synchronously in updateCharacter.
+    room.sessions.retirePending();
+    final next = await room.sessions.startNewForCharacter(
+      'pack:next', memoryArchiveId: 'phone', memoryControlRevision: 0,
+    );
+    created.complete(const RpcOk({'sessionId': 'late-first'}));
+    expect(await retiring, isA<DshClosedException>());
+    expect(room.sessions.ofCharacter(HostRef.local, 'pack:first'), isNull);
+    expect(room.sessions.ofCharacter(HostRef.local, 'pack:next'), same(next));
+    expect(room.a.argsOf('workspace/archiveSession'), isEmpty);
+    expect(room.a.argsOf('agentPresets/select'), hasLength(1));
+  });
+
   test('a missing preset recovers in place; a denied projection does not fabricate deletion', () async {
     final room = _Room();
     await room.loaded();
