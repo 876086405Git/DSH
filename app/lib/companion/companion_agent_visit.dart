@@ -788,7 +788,7 @@ class _CompanionAgentVisit {
           callMe: persona.callMe,
           tools: true,
           moves: moves.rules(),
-          whale: companionIsWhale(characterSourceKey),
+          whale: companionIsWhale(characterSourceKey, character.name),
         ),
       );
       memoryTools = CompanionAgentMemoryTools(
@@ -1316,7 +1316,7 @@ class _CompanionAgentVisit {
                 custom: persona.custom,
                 name: ref.read(companionNameProvider) ?? character.name,
                 callMe: persona.callMe,
-                whale: companionIsWhale(characterSourceKey),
+                whale: companionIsWhale(characterSourceKey, character.name),
               ) +
               owner.relationshipContext(role, forInitiative: true),
           offsetMinutes: clock().offsetMinutes,

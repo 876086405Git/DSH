@@ -322,8 +322,11 @@ class CompanionPackStore {
   }
 
   /// The active character first, then the shelf, most recently shelved
-  /// first. A folder that can't be read is left out, not fatal.
-  Future<List<CompanionRosterEntry>> roster() => _exclusive(() async {
+  /// first. A folder that can't be read is left out, not fatal. Read without
+  /// the store's queue, and without naming anyone: it only shows who is here,
+  /// and must not hold up her stage or an install. A change under way can
+  /// leave it a step behind until the next read.
+  Future<List<CompanionRosterEntry>> roster() async {
     final active = await _rosterEntry(pack, active: true);
     final shelved = <(CompanionRosterEntry, int)>[];
     if (await _shelf.exists()) {
@@ -334,11 +337,11 @@ class CompanionPackStore {
     }
     shelved.sort((a, b) => b.$2.compareTo(a.$2));
     return [if (active != null) active.$1, for (final (entry, _) in shelved) entry];
-  });
+  }
 
   Future<(CompanionRosterEntry, int)?> _rosterEntry(Directory folder, {required bool active}) async {
     try {
-      final key = await _characterKeyOf(folder);
+      final key = await _characterKeyOf(folder, assign: false);
       if (key == null) return null;
       final cover = File('${folder.path}/character/preview.png');
       final stamp = File('${folder.path}/$_shelvedAtName');
@@ -724,7 +727,8 @@ String _workshopKey(WorkshopReceipt workshop) =>
 /// A key holds `:`, `/` and a whole origin; its hash is a folder name.
 String _shelfName(String key) => sha256.convert(utf8.encode(key)).toString().substring(0, 32);
 
-Future<String?> _characterKeyOf(Directory pack) async {
+/// [assign]: a pre-v2 pack without an identity gets one now (otherwise null).
+Future<String?> _characterKeyOf(Directory pack, {bool assign = true}) async {
   if (!await File('${pack.path}/runtime/live2dcubismcore.min.js').exists() ||
       !await File('${pack.path}/character/index.json').exists()) {
     return null;
@@ -746,6 +750,7 @@ Future<String?> _characterKeyOf(Directory pack) async {
   }
   // A pre-v2 local installation has no trustworthy role identity. Assign
   // one to this actual pack; do not infer it from its name or runtime.
+  if (!assign) return null;
   final key = _newCharacterKey();
   await _writeCharacterKey(pack, key);
   return key;

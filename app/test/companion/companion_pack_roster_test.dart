@@ -278,7 +278,10 @@ void main() {
     test('an activate cut short before anything moved changes nothing', () async {
       final p = await pair();
       note().writeAsStringSync(p.beaFolder);
-      expect(await names(restarted()), [('Ann', true), ('Bea', false)]);
+      // Recovery runs with the store's next real step; the roster only reads.
+      final next = restarted();
+      expect(await next.installed(), isTrue);
+      expect(await names(next), [('Ann', true), ('Bea', false)]);
       expect(note().existsSync(), isFalse);
     });
 
@@ -287,7 +290,9 @@ void main() {
       note().writeAsStringSync(p.beaFolder);
       store.pack.renameSync('${shelf().path}/${p.annFolder}');
       Directory('${shelf().path}/${p.beaFolder}').renameSync(store.pack.path);
-      expect(await names(restarted()), [('Bea', true), ('Ann', false)]);
+      final next = restarted();
+      expect(await next.installed(), isTrue);
+      expect(await names(next), [('Bea', true), ('Ann', false)]);
       expect(note().existsSync(), isFalse);
     });
 
@@ -316,6 +321,7 @@ void main() {
       expect(note().existsSync(), isTrue);
       expect(store.pack.existsSync(), isFalse);
       unregister();
+      expect(await next.installed(), isTrue);
       expect(await names(next), [('Bea', true), ('Ann', false)]);
     });
   });

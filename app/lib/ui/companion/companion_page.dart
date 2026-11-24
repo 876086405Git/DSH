@@ -527,7 +527,6 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _phase = installed ? _Phase.stage : _Phase.setup;
     });
     _attachment.updateCharacter(_character, _moves, sourceKey: _characterSourceKey);
-    unawaited(_loadRoster());
     unawaited(_prepareMemory());
     // The first time, the pack inside the app is unpacked while she swims over.
     // After the person removed it, it waits on the setup screen to be asked for.
@@ -1786,7 +1785,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   /// Whether she is the app's own whale girl as written, whose built-in lines
   /// (her apron, her tail, seaweed) are hers.
   bool get _ownWhale =>
-      _characterSourceKey == companionBundledCharacterKey && ref.read(companionPersonaProvider).custom.trim().isEmpty;
+      _characterSourceKey != null &&
+      companionIsWhale(_characterSourceKey, _character.name) &&
+      ref.read(companionPersonaProvider).custom.trim().isEmpty;
 
   /// What she says for [moment]: her pack's words, else her own written set,
   /// else the app's [fallback]. Asking also starts finding her own set.
@@ -1853,7 +1854,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
           custom: persona.custom,
           name: name,
           callMe: persona.callMe,
-          whale: companionIsWhale(_characterSourceKey),
+          whale: companionIsWhale(_characterSourceKey, _character.name),
         ),
         language: locale.startsWith('zh') ? 'zh' : 'en',
       );
@@ -1892,11 +1893,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     }
     _character = character;
     _characterSourceKey = sourceKey;
-    if (changed && _store != null) scheduleMicrotask(() => unawaited(_loadRoster()));
+    if (changed && _rosterWanted) scheduleMicrotask(() => unawaited(_loadRoster()));
   }
 
-  /// Everyone on this phone: her in the room first, then the others.
+  /// Everyone on this phone: her in the room first, then the others. Read
+  /// once her page or panel is open, not before: reading holds the pack store.
   List<CompanionRosterEntry> _roster = const [];
+  bool _rosterWanted = false;
 
   Future<void> _loadRoster() async {
     final store = _store;
@@ -2645,9 +2648,6 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _attachment.updateCharacter(_character, _moves, sourceKey: _characterSourceKey);
   }
 
-  /// Back from the workshop. A companion installed or uninstalled there
-  /// changed the pack under her and the stage left: show whoever is in the
-  /// pack now, or the setup screen when nobody is.
   /// No companion yet: one from 创意工坊, opened on its companions. Whoever
   /// comes back installed moves straight in.
   Future<void> _workshopFromSetup() async {
@@ -2668,6 +2668,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _attachment.updateCharacter(_character, _moves, sourceKey: _characterSourceKey);
   }
 
+  /// Back from the workshop. A companion installed or uninstalled there
+  /// changed the pack under her and the stage left: show whoever is in the
+  /// pack now, or the setup screen when nobody is.
   Future<void> _afterWorkshop() async {
     if (!mounted || _phase != _Phase.failed || _failure != companionStagePackChanged) return;
     final here = await _store?.installed() ?? false;
@@ -3087,6 +3090,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       ?_character.source,
     ].join(' · ');
     const groupMargin = EdgeInsets.fromLTRB(SheetTitleBar.inset, 0, SheetTitleBar.inset, 14);
+    if (!_rosterWanted) {
+      _rosterWanted = true;
+      scheduleMicrotask(() => unawaited(_loadRoster()));
+    }
     return [
       CompanionPanelTiles(
         tiles: [
@@ -3120,7 +3127,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                         MaterialPageRoute<void>(
                           builder: (_) => CompanionPersonaPage(
                             packName: _character.name,
-                            whale: companionIsWhale(_characterSourceKey),
+                            whale: companionIsWhale(_characterSourceKey, _character.name),
                           ),
                         ),
                       )
@@ -3238,7 +3245,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                         MaterialPageRoute<void>(
                           builder: (_) => CompanionPersonaPage(
                             packName: _character.name,
-                            whale: companionIsWhale(_characterSourceKey),
+                            whale: companionIsWhale(_characterSourceKey, _character.name),
                           ),
                         ),
                       )
