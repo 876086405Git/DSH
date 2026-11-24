@@ -128,6 +128,19 @@
     <string name="pet_wheel_hosts">切换主机</string>
     <string name="pet_wheel_snooze">今日隐藏</string>
     <string name="pet_wheel_settings">宠物设置</string>
+    <!-- 她一直在时的菜单 -->
+    <string name="pet_companion_talk">和她聊两句</string>
+    <string name="pet_companion_room">去她的小屋</string>
+    <string name="pet_companion_unwatch">先别看屏幕</string>
+    <string name="pet_companion_tuck">收到屏幕边上</string>
+    <string name="pet_companion_hide">隐藏一小时</string>
+    <string name="pet_wheel_talk">聊两句</string>
+    <string name="pet_wheel_room">去小屋</string>
+    <string name="pet_wheel_unwatch">别看屏幕</string>
+    <string name="pet_wheel_tuck">收到边上</string>
+    <string name="pet_wheel_hide">隐藏一会</string>
+    <string name="pet_companion_unwatched">她不看屏幕了，想让她再看，去小屋的设置里打开</string>
+    <string name="pet_companion_hidden">一小时后她再出来</string>
     <string name="pet_screenshot_unsupported">截图需要 Android 11 或更新版本。</string>
     <string name="pet_screenshot_accessibility">请先在 App 的手机操控设置中开启 DSH-Go 无障碍服务。</string>
     <string name="pet_screenshot_secure">当前页面禁止截图，DSH-Go 不会绕过它的保护。</string>

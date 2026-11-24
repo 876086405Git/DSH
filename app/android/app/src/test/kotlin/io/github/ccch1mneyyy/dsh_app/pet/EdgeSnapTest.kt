@@ -54,6 +54,26 @@ class EdgeSnapTest {
         assertEquals(2400 - m - w, p.x)
     }
 
+    @Test fun herFloatLeansOnTheSideOrTucksHalfPastIt() {
+        val dock = Dock(Side.RIGHT, 0.5f)
+        val y = EdgeSnap.position(dock, w, h, portrait, m).y
+        assertEquals(WindowPos(1080 - 4 - w, y), EdgeSnap.hug(dock, w, h, portrait, m, 4, tucked = false))
+        assertEquals(WindowPos(1080 - (w - w / 2), y), EdgeSnap.hug(dock, w, h, portrait, m, 4, tucked = true))
+        // On its side the cutout stays clear: she leans on the safe edge, not the glass.
+        assertEquals(96 + 4, EdgeSnap.hug(Dock(Side.LEFT, 0f), w, h, landscape, m, 4, tucked = false).x)
+        assertEquals(96 - w / 2, EdgeSnap.hug(Dock(Side.LEFT, 0f), w, h, landscape, m, 4, tucked = true).x)
+    }
+
+    @Test fun tuckedAgainForANewCropSheKeepsHalfOnScreen() {
+        // Her drawn box narrows from 207 to 61 px while tucked: shifting by the crop alone would
+        // leave nothing on screen; placed again for the new width, half of her still shows.
+        for (side in Side.values()) for (width in listOf(w, 61, 300)) {
+            val at = EdgeSnap.hug(Dock(side, 0.5f), width, h, landscape, m, 4, tucked = true)
+            val shown = minOf(at.x + width, 2400) - maxOf(at.x, 96)
+            assertEquals(width - width / 2, shown)
+        }
+    }
+
     @Test fun releasedOverTheBarsClampsIntoRange() {
         assertEquals(0f, EdgeSnap.dockFor(10, -50, w, h, portrait, m).yFraction)
         assertEquals(1f, EdgeSnap.dockFor(10, 5000, w, h, portrait, m).yFraction)

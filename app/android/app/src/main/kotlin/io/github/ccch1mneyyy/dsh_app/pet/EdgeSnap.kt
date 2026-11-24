@@ -85,6 +85,23 @@ object EdgeSnap {
     }
 
     /**
+     * Where her float's window ([w]×[h], already cropped to what she draws) docks: [inset] from
+     * the side, so she leans on it rather than standing a viewport's width away; the height as
+     * [position] gives it. [tucked]: half of her past that side, to take less of the screen.
+     */
+    fun hug(dock: Dock, w: Int, h: Int, area: SafeArea, margin: Int, inset: Int, tucked: Boolean): WindowPos {
+        val inner = area.left
+        val outer = area.screenW - area.right
+        val x = when {
+            tucked && dock.side == Side.LEFT -> inner - w / 2
+            tucked -> outer - (w - w / 2)
+            dock.side == Side.LEFT -> inner + inset
+            else -> outer - inset - w
+        }
+        return WindowPos(x, position(dock, w, h, area, margin).y)
+    }
+
+    /**
      * Where the rest frame docks for [dock] when the window may take any frame in [reach] there
      * (around the rest origin, [PetFrames.reach]): all of it inside the margins, so a grown frame
      * never has to move the pet. With reach = the rest frame, [position] as it always was.
