@@ -243,6 +243,7 @@ class _Client extends DshClient {
   bool dropNext = false;
   Completer<void>? releaseEcho;
   Completer<void>? releaseCommit;
+  final scriptedWords = <String, String>{};
   final cancelledSessions = <String>[];
   final cancelled = Completer<void>();
   @override
@@ -317,7 +318,7 @@ class _Client extends DshClient {
     });
     if (hold != null) await cancelled.future;
     final commit = releaseCommit;
-    final words = commit == null ? '会话回复' : '[动作:点头]找到文件了。';
+    final words = scriptedWords[text] ?? (commit == null ? '会话回复' : '[动作:点头]找到文件了。');
     var revision = 0;
     void stream(Map<String, Object?> frame) {
       final data = {'type': 'assistant-stream', 'frame': {'attemptId': 'try-$turn', 'revision': ++revision, ...frame}};
@@ -446,6 +447,7 @@ class _Room {
   late CompanionMemoryOwner memory;
   CompanionStageEvents? events;
   final actions = <String>[];
+  final emotions = <String>[];
 
   /// Auxiliary traffic is recorded independently from session/prompt.
   final asked = <Map<String, Object?>>[];
@@ -500,6 +502,7 @@ class _Room {
             storeOverride: CompanionPackStore(root),
             stageController: CompanionStageController(sink: (type, args) {
               if (type == 'action') actions.add(args['name'] as String);
+              if (type == 'emotion') emotions.add(args['name'] as String);
             }),
             stageBuilder: (_, next) {
               events = next;
@@ -596,6 +599,38 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       final log = tester.widget<CompanionLog>(find.byType(CompanionLog));
       expect(log.entries.map((e) => e.text), ['看看文件', '找到文件了。', '里面有三行。']);
+    } finally {
+      await room.close(tester);
+    }
+  });
+
+  testWidgets('two full room turns keep one session and present only their own marks', (tester) async {
+    final room = _Room(root);
+    const first = '今天散步看到一片落叶。';
+    const second = '你呢？';
+    const firstReply = '[表情:开心]我也喜欢落叶。';
+    const secondReply = '[动作:点头]今天的阳光很暖。';
+    room.client.scriptedWords.addAll({first: firstReply, second: secondReply});
+    await room.open(tester);
+    try {
+      // Initial greeting effects are independent of these two user prompts.
+      room.emotions.clear();
+      room.actions.clear();
+      await room.say(tester, first);
+      expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, '我也喜欢落叶。');
+      expect(room.emotions.where((name) => name == 'happy'), hasLength(1));
+      await room.say(tester, second);
+      expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, '今天的阳光很暖。');
+      expect(room.emotions.where((name) => name == 'happy'), hasLength(1));
+      expect(room.actions.where((name) => name == 'nod'), hasLength(1));
+      final prompts = room.client.prompts;
+      expect(prompts.map((p) => p.text), [first, second]);
+      expect(prompts.map((p) => p.session).toSet(), hasLength(1));
+      expect(prompts.map((p) => p.requestId).toSet(), hasLength(2));
+      expect(room.bridge.prepared.map((p) => p['requestId']), prompts.map((p) => p.requestId));
+      final saved = room.memory.store.messages().where((row) => row['role'] == 'assistant');
+      expect(saved.map((row) => row['text']), unorderedEquals([firstReply, secondReply]));
+      expect(room.asked, isEmpty);
     } finally {
       await room.close(tester);
     }

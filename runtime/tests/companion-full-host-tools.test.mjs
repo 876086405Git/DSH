@@ -2,11 +2,15 @@
 // the pinned AgentLoop. Only model decisions and the web page are local fixtures.
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { createInterface } from 'node:readline';
+import { Readable } from 'node:stream';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createCompanionRoutes } from '../bridge/dsh-go-bridge/lib/companion/routes.js';
 import test from 'node:test';
 import { createFixture, requestSystemText, sseResponse, textResponse } from './fixtures/companion-recall-engine.mjs';
 
@@ -101,4 +105,130 @@ test('companion reads a file, writes and runs code, then fetches a fixture web p
   assert.match(JSON.stringify(seen[3].content), /RESULT=54/);
   assert.match(JSON.stringify(seen[4].content), /PAGE_FIXTURE_OK/);
   assert.equal(pageReads, 1);
+});
+
+// These turns use the production registration, HTTP bridge and Inbox claim.
+// The phone answers from fixtures, without an Android device or real photos.
+async function offerPhone(f, agent, requestId, definitions, httpFetch, signal) {
+  f.ctx.provide('connection', { admit: req => req.headers.authorization === 'fixture-owner'
+    ? { peer: { principal: { kind: 'owner' } } } : { rejection: 403 } });
+  const routes = createCompanionRoutes({ ctx: f.ctx, store: f.store, send(res, status, body) {
+    res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body));
+  } });
+  const server = createServer((req, res) => routes.handle(req, res, req.url));
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const post = (part, extra) => httpFetch(
+    'http://127.0.0.1:' + server.address().port + '/dsh-go/v1/companion/session-tools/' + part,
+    { method: 'POST', headers: { authorization: 'fixture-owner', 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: agent.id, requestId, ...extra }), signal });
+  async function close() {
+    await routes.dispose();
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+  try {
+    const response = await post('open', { tools: definitions });
+    assert.equal(response.status, 200);
+    const lines = createInterface({ input: Readable.fromWeb(response.body) })[Symbol.asyncIterator]();
+    const ready = JSON.parse((await lines.next()).value);
+    assert.equal(ready.type, 'ready');
+    return { close, async serve(handle) {
+      for await (const line of lines) {
+        const call = JSON.parse(line);
+        assert.equal(call.type, 'call');
+        const receipt = handle(call);
+        assert.equal((await post('result', {
+          token: ready.token, callId: call.callId, content: JSON.stringify(receipt), isError: false,
+        })).status, 200);
+      }
+    } };
+  } catch (error) { await close(); throw error; }
+}
+
+function lastTool(request, id) {
+  const result = request.body.messages.flatMap(message => message.content).filter(b => b.type === 'tool_result').at(-1);
+  assert.equal(result?.tool_use_id, id);
+  assert.notEqual(result.is_error, true);
+  return typeof result.content === 'string' ? result.content : result.content.map(block => block.text).join('');
+}
+
+function offered(name, properties) {
+  return { name, description: 'Synthetic phone ' + name,
+    input_schema: { type: 'object', properties, required: Object.keys(properties), additionalProperties: false } };
+}
+
+const engineOnly = { skip: !process.env.DSH_PREFIX && 'DSH_PREFIX must name the patched runtime',
+  timeout: 20000, concurrency: false };
+
+for (const kind of ['reminder', 'photo']) {
+  test('full companion returns a phone ' + kind + ' result to its model and Session', engineOnly, async t => {
+    const phoneFetch = globalThis.fetch;
+    const marker = randomUUID(), requestId = 'owner-' + kind, calls = [];
+    const reminder = kind === 'reminder';
+    const text = reminder ? '2030 年 5 月 16 日上海时间上午九点提醒我带伞。' : '看一下我最近的一张照片。';
+    const time = { operation: 'create', text: '带伞', localDate: '2030-05-16', localTime: '09:00', zoneId: 'Asia/Shanghai' };
+    const f = await createFixture({ withRecall: false, transport(request, n) {
+      if (reminder) {
+        if (n === 1) return toolResponse('set', 'companion_reminder', time);
+        return textResponse('提醒已登记，编号 ' + JSON.parse(lastTool(request, 'set')).task.task_id);
+      }
+      if (n === 1) return toolResponse('list', 'companion_photos_recent', { limit: 1 });
+      if (n === 2) {
+        const photo = JSON.parse(lastTool(request, 'list')).photos[0];
+        return toolResponse('look', 'companion_photo_view', { id: photo.id });
+      }
+      return textResponse(JSON.parse(lastTool(request, 'look')).description);
+    } });
+    try {
+      const { agent } = await f.createAgent('FULL_DEVICE_' + kind);
+      const defs = reminder ? [offered('reminder', Object.fromEntries(Object.keys(time).map(k => [k, { type: 'string' }])))]
+        : [offered('photos_recent', { limit: { type: 'integer' } }), offered('photo_view', { id: { type: 'string' } })];
+      const phone = await offerPhone(f, agent, requestId, defs, phoneFetch, t.signal);
+      try {
+        const serve = phone.serve(call => {
+          calls.push([call.callId, call.name, call.input]);
+          if (call.name === 'reminder') return { accepted: true, task: { kind: 'phone.reminder', task_id: marker } };
+          if (call.name === 'photos_recent') return { photos: [{ id: marker, name: 'mock.jpg' }] };
+          assert.equal(call.name, 'photo_view');
+          assert.equal(call.input.id, marker);
+          return { id: marker, description: '合成照片里的白帆 ' + marker };
+        });
+        agent.followup(f.engine.llm.createUserMessage({ source: { kind: 'user', rpcId: requestId }, content: [{ type: 'text', text }] }));
+        await Promise.all([agent.whenIdle(), serve]);
+        assert.deepEqual(calls, reminder ? [['set', 'reminder', time]]
+          : [['list', 'photos_recent', { limit: 1 }], ['look', 'photo_view', { id: marker }]]);
+        assert.equal(f.requests.length, reminder ? 2 : 3);
+        assert(f.requests.every(r => r.sessionId === agent.id));
+        const events = agent.session.snapshotEvents();
+        assert.deepEqual(events.filter(e => e.type === 'user/message' && e.data.source?.kind === 'user')
+          .map(e => [e.data.source.rpcId, e.data.content[0].text]), [[requestId, text]]);
+        assert.deepEqual(events.filter(e => e.type === 'assistant/message').at(-1).data.message.content,
+          [{ type: 'text', text: (reminder ? '提醒已登记，编号 ' : '合成照片里的白帆 ') + marker }]);
+      } finally { await phone.close(); }
+    } finally { await f.dispose(); }
+  });
+}
+
+test('full companion taps the opted-in synthetic MCP button in the same agent turn', engineOnly, async () => {
+  const f = await createFixture({ withRecall: false, transport(request, n) {
+    return n === 1 ? toolResponse('press', 'mcp__phone__tap', { screen: 'fixture', id: 1 })
+      : textResponse(lastTool(request, 'press'));
+  } });
+  try {
+    await f.ctx.plugin((await f.engine.load('dsh-mcp-resources')).default).await();
+    await f.ctx.plugin(await f.engine.load('dsh-mcp-client'), {
+      serverName: 'phone', transport: 'stdio', command: process.execPath,
+      args: [fileURLToPath(new URL('./fixtures/phone-caller-mcp.mjs', import.meta.url)), 'supported', '--button'],
+      dshGoPhoneCaller: true, failOnStartupError: true, reconnect: { enabled: false },
+    }).await();
+    const { agent } = await f.createAgent('FULL_MCP_BUTTON');
+    await f.send(agent, '按一下测试按钮');
+    assert.equal(f.requests.length, 2);
+    assert(f.requests[0].body.tools.some(tool => tool.name === 'mcp__phone__tap'));
+    const receipt = lastTool(f.requests[1], 'press');
+    assert.match(receipt, /fixture-button-pressed-once/);
+    assert.match(receipt, /FULL_MCP_BUTTON/);
+    const reply = agent.session.snapshotEvents().filter(e => e.type === 'assistant/message').at(-1);
+    assert.deepEqual(reply.data.message.content, [{ type: 'text', text: receipt }]);
+  } finally { await f.dispose(); }
 });

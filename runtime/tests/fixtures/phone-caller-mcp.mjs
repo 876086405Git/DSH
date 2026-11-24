@@ -12,6 +12,8 @@ const claimFirstEnd = () => {
   return firstEnd.slice(0, split);
 };
 const ends = [], refused = [], dropped = [];
+const button = process.argv.includes('--button');
+let presses = 0;
 for await (const line of createInterface({ input: process.stdin })) {
   const request = JSON.parse(line);
   if (request.id === undefined) continue;
@@ -30,9 +32,18 @@ for await (const line of createInterface({ input: process.stdin })) {
       };
       break;
     case 'tools/list':
-      result = { tools: [{ name: 'screen', description: 'Synthetic caller probe', inputSchema: { type: 'object' } }] };
+      result = { tools: button ? [{ name: 'tap', description: 'Press the synthetic button', inputSchema: {
+        type: 'object', properties: { screen: { type: 'string' }, id: { type: 'integer' } }, required: ['screen', 'id'],
+      } }] : [{ name: 'screen', description: 'Synthetic caller probe', inputSchema: { type: 'object' } }] };
       break;
     case 'tools/call':
+      if (button) {
+        const { name, arguments: args, _meta } = request.params;
+        const accepted = name === 'tap' && args?.screen === 'fixture' && args?.id === 1 && ++presses === 1;
+        result = { isError: !accepted, content: [{ type: 'text', text: accepted
+          ? 'fixture-button-pressed-once ' + _meta?.['dsh-go/phone-caller']?.sessionId : 'unexpected button press' }] };
+        break;
+      }
       result = { content: [{ type: 'text', text: JSON.stringify({
         args: request.params.arguments,
         ends,
