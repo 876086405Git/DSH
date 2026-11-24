@@ -5,3 +5,5 @@
 升级这几个包时，重新核对 exports/imports 条件、编译文件的相对和动态导入、按路径读文件的地方，再决定是否保留。不要扩大到带源码导出条件的包（如 Zod）。
 
 同一开关也裁掉 `.d.mts.map`、`.d.cts.map`（对应的声明本来就裁了），普通 `.mts.map`、`.cts.map` 保留；包测试目录规则另含 gaxios 7.3.1 的 `build/{esm,cjs}/test/`，exports 只指向 `build/*/src/`。
+
+同一开关省略 Koffi 3.1.1 的 C/C++ 编译输入（`.cc`、`.h`、`.hh`）。加载器只找预编译的 `koffi.node`，没有回退到源码编译的路径，引擎构建本来就带 `--ignore-scripts`；JS 加载器、汇编和许可证保留。升级 Koffi 时复查加载器有没有加编译回退。

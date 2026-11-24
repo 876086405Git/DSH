@@ -120,12 +120,14 @@ class LayerPackaging(unittest.TestCase):
     def test_typescript_source_pruning_keeps_runtime_files_and_licenses(self):
         dropped = {'openai/src/client.ts', '@anthropic-ai/sdk/src/client.ts', '@js-temporal/polyfill/lib/instant.ts',
                    'minisearch/src/MiniSearch.ts', 'openai/index.d.mts.map',
-                   'openai/internal/auth/x509-transport-state.d.cts.map'}
+                   'openai/internal/auth/x509-transport-state.d.cts.map', 'koffi/src/koffi/src/call.cc',
+                   'koffi/lib/native/base/base.hh', 'koffi/vendor/node-addon-api/napi.h'}
         kept = {
             'openai/index.js', '@anthropic-ai/sdk/index.mjs', '@js-temporal/polyfill/dist/index.cjs',
             'openai/src/internal/auth/x509-transport-state.cts',
             'openai/src/internal/qs/LICENSE.md', 'openai/plain.mts.map', 'openai/plain.cts.map',
             'zod/src/index.ts', 'minisearch/dist/es/index.js',
+            'koffi/src/koffi/src/static.js', 'koffi/LICENSE.txt', 'other/src/call.cc',
         }
         for relative in dropped | kept:
             path = self.root / 'dsh/node_modules' / relative

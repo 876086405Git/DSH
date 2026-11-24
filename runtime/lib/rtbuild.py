@@ -912,6 +912,8 @@ def dsh_drop_reason(rel, abi, prune_dev):
             return "dev-metadata"
         if rel.startswith(TS_SOURCE_DIRS) and low.endswith(".ts"):
             return "package-typescript-source"
+        if rel.startswith("node_modules/koffi/") and low.endswith((".cc", ".h", ".hh")):
+            return "package-build-source"
         if rel == "node_modules/@mixmark-io/domino/.yarn/plugins/@yarnpkg/plugin-version.cjs":
             return "package-build-tool"
     return None
