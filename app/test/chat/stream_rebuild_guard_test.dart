@@ -28,6 +28,7 @@ import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/harness.dart';
 import 'support/pending_notice_harness.dart';
@@ -443,6 +444,48 @@ void main() {
     await g.settle(tester);
     expect(media.builds, greaterThan(0));
     expect(tester.takeException(), isNull);
+    await g.unmount(tester);
+  });
+
+  testWidgets('text deltas leave the historical sliver in place until its rows change', (tester) async {
+    final g = _Guard();
+    addTearDown(g.dispose);
+    await g.mount(tester);
+    g.snapshot();
+    await g.settle(tester);
+    g.startStream();
+    g.chunk(const TextDeltaChunk(0, '开始'));
+    await g.settle(tester);
+
+    final history = find.byType(SliverList).first;
+    final element = tester.element(history);
+    expect(find.descendant(of: history, matching: find.byType(TurnProcess)), findsWidgets);
+    var builds = 0;
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (child, builtOnce) {
+      previous?.call(child, builtOnce);
+      child.visitAncestorElements((ancestor) {
+        if (ancestor != element) return true;
+        builds++;
+        return false;
+      });
+    };
+    try {
+      for (var i = 0; i < _deltas; i++) {
+        g.chunk(const TextDeltaChunk(0, '字'));
+        await tester.pump(const Duration(milliseconds: 32));
+      }
+    } finally {
+      debugOnRebuildDirtyWidget = previous;
+    }
+    expect(g.state.items.whereType<AssistantChatItem>().last.text, '开始${'字' * _deltas}');
+    expect(builds, 0);
+
+    SharedPreferences.setMockInitialValues({});
+    await g.container.read(settingsProvider.notifier).setFoldCompletedTurns(false);
+    await g.settle(tester);
+    expect(find.descendant(of: history, matching: find.byType(TurnProcess)), findsNothing);
+    expect(find.descendant(of: history, matching: find.byType(ToolRow)), findsWidgets);
     await g.unmount(tester);
   });
 

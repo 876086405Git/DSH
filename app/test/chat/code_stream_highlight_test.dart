@@ -2,8 +2,10 @@
 // 250 ms; what came since shows plain until then, and the end result is the
 // whole block highlighted.
 
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/ui/chat/render/code_block.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/harness.dart';
@@ -18,6 +20,40 @@ Iterable<TextSpan> _leaves(InlineSpan span) sync* {
 
 void main() {
   setUpAll(loadTestFonts);
+
+  testWidgets('the copy label stays built while code grows and still gives tap feedback', (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    final code = ValueNotifier('a');
+    addTearDown(code.dispose);
+    await tester.pumpWidget(
+      testApp(
+        Scaffold(
+          body: ValueListenableBuilder<String>(
+            valueListenable: code,
+            builder: (_, text, _) => CodeBlock(code: text, language: 'text', replyActions: true),
+          ),
+        ),
+      ),
+    );
+    final label = find.text(appL10n.commonCopy);
+    final first = tester.widget<Text>(label);
+    code.value += 'b';
+    await tester.pump();
+    expect(tester.widget<Text>(label), same(first));
+
+    await tester.tap(label);
+    await tester.pumpAndSettle();
+    expect(copied, 'ab');
+    expect(find.text(appL10n.commonCopied), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pumpAndSettle();
+    expect(label, findsOneWidget);
+  });
 
   testWidgets('diff rows stay put when a syntax highlight would have cooled down', (tester) async {
     final code = ValueNotifier(('-old', false));

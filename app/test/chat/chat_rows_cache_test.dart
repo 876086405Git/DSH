@@ -177,10 +177,12 @@ void main() {
     final cache = ChatRowsCache();
     final first = check(cache, ChatState(running: true, items: items(0)));
     expect(first.whereType<ToolGroupRow>().length, 2, reason: 'one group per run of calls');
+    final group = first.indexWhere((row) => row is ToolGroupRow);
     final derived = debugDeriveRowsCount;
     for (var n = 1; n <= 5; n++) {
       check(cache, ChatState(running: true, items: items(n)));
       expect(cache.onlyDraftChanged, isTrue, reason: 'delta $n changes only the earlier draft');
+      expect(cache.unchangedPrefix, group, reason: 'delta $n: rows before the earlier group are unchanged');
     }
     // check() itself derives once per update to compare against.
     expect(debugDeriveRowsCount - derived, 5, reason: 'the cache derived no rows');
