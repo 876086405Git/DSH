@@ -1719,9 +1719,6 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   void _hideMemoryFollowup(String ticketId) {
     if (_memoryFollowupTicket != ticketId) return;
     _memoryFollowupTicket = null;
-    // A line she is still saying is finished, not cut off when its slot runs
-    // out; its bubble leaves on its own timer. Sending or the mic still stop her.
-    if (_ttsPending.isNotEmpty) return;
     _bubbleTimer?.cancel();
     _hush();
     _stage.command('quiet');
