@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../../../l10n/l10n.dart';
@@ -43,6 +44,7 @@ class DshUiBlock extends StatefulWidget {
 class _DshUiBlockState extends State<DshUiBlock> {
   /// 这个块在本次显示中流式过：生成完时才播图表生长。翻历史不播。
   bool _sawStreaming = false;
+  DshUiSkeleton? _skeleton;
   bool _resending = false;
   bool _resent = false;
 
@@ -71,7 +73,11 @@ class _DshUiBlockState extends State<DshUiBlock> {
     if (!widget.closed && widget.streaming) {
       _sawStreaming = true;
       key = 'skeleton';
-      child = DshUiSkeleton(shape: guessDshUiShape(source));
+      final shape = guessDshUiShape(source);
+      final previous = _skeleton;
+      child = previous != null && previous.shape.title == shape.title && listEquals(previous.shape.parts, shape.parts)
+          ? previous
+          : DshUiSkeleton(shape: shape);
     } else if (!widget.closed) {
       key = 'interrupted';
       child = DshUiFallback(source: source, message: l10n.viewUiIncomplete);
@@ -102,6 +108,7 @@ class _DshUiBlockState extends State<DshUiBlock> {
       }
     }
     final duration = AppMotion.of(context, AppMotion.standard);
+    _skeleton = child is DshUiSkeleton ? child : null;
     return SmoothSize(
       duration: duration,
       curve: AppMotion.std,

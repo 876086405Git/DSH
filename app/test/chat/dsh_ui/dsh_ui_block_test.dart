@@ -97,6 +97,31 @@ Widget host(
 void main() {
   setUpAll(loadTestFonts);
 
+  testWidgets('an open visual card reuses its skeleton while the inferred shape stays the same', (tester) async {
+    final source = ValueNotifier('{"type":"stack","title":"比较","children":[{"type":"metric","label":"');
+    addTearDown(source.dispose);
+    await tester.pumpWidget(
+      testApp(
+        Scaffold(
+          body: ValueListenableBuilder<String>(
+            valueListenable: source,
+            builder: (_, text, _) => DshUiBlock(source: text, streaming: true, closed: false),
+          ),
+        ),
+      ),
+    );
+    final skeleton = find.byType(DshUiSkeleton);
+    final first = tester.widget<DshUiSkeleton>(skeleton);
+    source.value += '数量","value":10';
+    await tester.pump();
+    expect(tester.widget<DshUiSkeleton>(skeleton), same(first));
+    source.value += '},{"type":"chart"';
+    await tester.pump();
+    final next = tester.widget<DshUiSkeleton>(skeleton);
+    expect(next, isNot(same(first)));
+    expect(next.shape.parts.length, 2);
+  });
+
   testWidgets('dragging away cancels option press; busy send stays unscaled', (tester) async {
     final outbox = Outbox()..gate = Completer<bool>();
     await tester.pumpWidget(host(parts, outbox: outbox));
