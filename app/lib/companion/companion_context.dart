@@ -72,18 +72,13 @@ class CompanionContextProfile {
   final String callMe;
   final String moves;
 
-  Map<String, String> toJson() {
-    final fields = {'persona': persona.trim(), 'name': name.trim(), 'callMe': callMe.trim(), 'moves': moves.trim()};
-    const limits = {'persona': 4000, 'name': 24, 'callMe': 40, 'moves': 1024};
-    for (final entry in fields.entries) {
-      if (entry.value.runes.length > limits[entry.key]! ||
-          _controls.hasMatch(entry.value) ||
-          ((entry.key == 'name' || entry.key == 'callMe') && RegExp(r'[\r\n\t]').hasMatch(entry.value))) {
-        throw FormatException('Invalid companion profile ${entry.key}');
-      }
-    }
-    return fields;
-  }
+  /// As the person wrote them, however long: how much she is told is theirs to choose.
+  Map<String, String> toJson() => {
+    'persona': persona.trim(),
+    'name': name.trim(),
+    'callMe': callMe.trim(),
+    'moves': moves.trim(),
+  };
 
   /// Stable across processes; Dart String.hashCode is not a wire identity.
   String get fingerprint => jsonEncode(toJson());

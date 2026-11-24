@@ -124,6 +124,14 @@ class CompanionReply {
 
 final _mark = RegExp(r'[\[【]\s*(表情|动作|emotion|action)\s*[:：]\s*([^\]】\n]{1,40}?)\s*[\]】]', caseSensitive: false);
 
+/// Whether [text] carries any of her marks.
+bool companionHasMarks(String text) => _mark.hasMatch(text);
+
+/// [text] without her marks (and the spaces right after them).
+String companionWithoutMarks(String text) => text.replaceAll(_markAndSpace, '').trim();
+
+final _markAndSpace = RegExp('${_mark.pattern}[ \\t]*', caseSensitive: false);
+
 /// Whether a label can be written in a mark at all.
 bool companionMarkLabelFits(String label) {
   final trimmed = label.trim();

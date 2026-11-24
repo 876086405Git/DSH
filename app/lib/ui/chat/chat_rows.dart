@@ -212,8 +212,12 @@ List<ChatRow> deriveRows({
   List<TurnTrace> turns = const [],
   bool foldTurns = false,
   List<TurnArtifacts> artifacts = const [],
+  bool compactTools = false,
 }) {
   debugDeriveRowsCount++;
+  // Her conversation (伙伴小屋): what she used is folded away, one call or many,
+  // and so is every ended turn's process, however it ended.
+  final groupAt = compactTools ? 1 : toolGroupThreshold;
   final rows = <ChatRow>[];
   final attached = <String>{};
   var tools = <ToolChatItem>[];
@@ -235,7 +239,7 @@ List<ChatRow> deriveRows({
     // 带原生卡片的调用单独成行,把前后切成几段,每段照旧(≥ 3 次成组)。
     var run = <ToolChatItem>[];
     void flushRun({bool live = false}) {
-      if (run.length >= toolGroupThreshold) {
+      if (run.length >= groupAt) {
         rows.add(ToolGroupRow(run, live: live));
       } else {
         for (final tool in run) {
@@ -372,7 +376,7 @@ List<ChatRow> deriveRows({
     final trace = turn;
     final done = trace != null && !trace.running && trace.endSeq != null ? trace : null;
     var index = lastText;
-    if (foldTurns && done != null && pieceStart != null && (done.endReason?.isCompleted ?? false)) {
+    if (foldTurns && done != null && pieceStart != null && (compactTools || (done.endReason?.isCompleted ?? false))) {
       index = fold(done, index, cut: cut);
     }
     final footnote = last ? done : null;

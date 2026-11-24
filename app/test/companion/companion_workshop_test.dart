@@ -489,8 +489,9 @@ void main() {
   test('workshop replacement and stale removal are checked inside the store queue', () async {
     await seed();
     final zip = workshopZip(temp, workshopCharacter());
-    await expectLater(store.install(zip.path, workshop: receipt()), workshopError('workshop_install_conflict'));
-    await store.install(zip.path, workshop: receipt(), replaceExisting: true);
+    // Another character comes in without asking: the one here waits on the shelf.
+    await store.install(zip.path, workshop: receipt());
+    expect([for (final entry in await store.roster()) entry.active], [true, false]);
     final next = receipt(version: '1.1.0', hash: 'b' * 64);
     await store.install(zip.path, workshop: next);
     await expectLater(store.remove(expectedWorkshop: receipt()), workshopError('workshop_install_conflict'));
