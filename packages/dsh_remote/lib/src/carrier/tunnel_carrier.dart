@@ -9,6 +9,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:dsh_client/dsh_client.dart';
@@ -603,8 +604,10 @@ class RemoteTunnelCarrier extends DshCarrier implements WorkspaceUploadCarrier {
         }
         out.add(bytes);
       }
-      final text = utf8.decode(out.takeBytes());
-      final decoded = tryDecodeJson(text);
+      final bytes = out.takeBytes();
+      final decoded = bytes.length > _decodeTransferInBackgroundBytes
+          ? await _decodeLargeTransfer(bytes, tryDecodeJson)
+          : tryDecodeJson(utf8.decode(bytes));
       if (decoded == null) throw DshProtocolException('$endpoint: remote transfer is not JSON');
       return decoded;
     } finally {
@@ -887,7 +890,12 @@ class _TunnelLink implements DshMuxLink {
         }
         out.add(decoded);
       }
-      final frame = asMap(jsonDecode(utf8.decode(out.takeBytes())));
+      final payload = out.takeBytes();
+      final frame = asMap(
+        payload.length > _decodeTransferInBackgroundBytes
+            ? await _decodeLargeTransfer(payload, jsonDecode)
+            : jsonDecode(utf8.decode(payload)),
+      );
       if (frame == null ||
           frame['streamId'] != streamId ||
           frame['hasValue'] != true ||
@@ -1021,3 +1029,8 @@ class _TunnelLink implements DshMuxLink {
     await closing;
   }
 }
+
+const _decodeTransferInBackgroundBytes = 256 * 1024;
+
+Future<T> _decodeLargeTransfer<T>(Uint8List bytes, T Function(String) decode) =>
+    Isolate.run(() => decode(utf8.decode(bytes)), debugName: 'dsh-transfer-json');

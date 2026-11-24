@@ -534,7 +534,7 @@ class SessionHero extends ConsumerWidget {
     final running = turns.where((t) => t.running).lastOrNull;
     final finished = turns.fold(Duration.zero, (sum, t) => sum + (t.duration ?? Duration.zero));
     final steps = turns.fold(0, (sum, t) => sum + t.steps);
-    final files = fileChangesOf(tools).length;
+    final files = sessionChangesOf(tools).length;
     final subtitle = turns.isEmpty
         ? l10n.hubSessionNoTurns
         : running == null
@@ -1012,7 +1012,7 @@ class _ChangesTabState extends ConsumerState<ChangesTab> {
     final inputs = (tools, turns);
     if (identical(_inputs, inputs) || _inputs == inputs) return;
     _inputs = inputs;
-    _files = fileChangesOf(tools);
+    _files = sessionChangesOf(tools);
     final turnOf = <String, int>{
       for (final trace in turns)
         for (final span in trace.spans)

@@ -66,6 +66,24 @@ void main() {
     expect(debugToolSummaryCaches, after);
   });
 
+  test('whole-session changes keep only the latest result, outside the turn cache', () {
+    ToolChatItem edit(String id) => tool(id, 'edit', {'file_path': 'f', 'old_string': id, 'new_string': '$id!'});
+    final a = edit('session-a');
+    final b = edit('session-b');
+    final before = debugToolSummaryCaches.turns;
+    final first = sessionChangesOf([a]);
+    expect(sessionChangesOf([a]), same(first));
+    final both = sessionChangesOf([a, b]);
+    expect(both.single.lastCallId, 'session-b');
+    expect(sessionChangesOf([a]), isNot(same(first)));
+    expect(debugToolSummaryCaches.turns, before);
+    final latest = sessionChangesOf([a, b]);
+    expect(sessionChangesOf([a, b]), same(latest));
+    forgetToolSummaries({b.callId});
+    expect(sessionChangesOf([a, b]), isNot(same(latest)));
+    forgetToolSummaries({a.callId, b.callId});
+  });
+
   group('captured DSH turns', () {
     test('approval turn: one command, no file changes', () {
       final t = _load('$_clientFixtures/follow_approval_with_resync.jsonl');
@@ -197,6 +215,22 @@ void main() {
   });
 
   group('edge cases', () {
+    test('整文件新增保留 CRLF、末尾空行和重复读取的行文本', () {
+      final write = tool(
+        'whole-write-eol',
+        'write',
+        {'file_path': 'f', 'content': 'a\r\n\nb\n\n'},
+        meta: {'operation': 'create'},
+      );
+      final file = fileChangesOf([write]).single;
+      expect((file.added, file.removed), (4, 0));
+      expect(file.lines.map((line) => line.text), ['+a\r', '+', '+b', '+']);
+      expect(file.lines.first.text, same(file.lines.first.text));
+      const patch = '--- /dev/null\n+++ b/f\n@@ -0,0 +1,4 @@\n+a\r\n+\n+b\n+\n';
+      expect(file.patch, patch);
+      expect(file.patch, patch);
+    });
+
     test('failed, denied and streaming edits are not changes', () {
       final tools = [
         tool('a', 'edit', {

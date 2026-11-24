@@ -445,9 +445,11 @@ class ToolView {
   }
 
   /// read 的行号窗口:优先 meta,退回解析结果文本里的 `N: text` 行。
-  late final ({String code, int firstLine, String? language})? readWindow = _read();
+  late final ({String code, int firstLine, String? language})? readWindow = readFresh();
 
-  ({String code, int firstLine, String? language})? _read() {
+  /// 同 [readWindow],但每次现拼、不留在视图上:改动摘要只借用一次,
+  /// 别让全局缓存里的视图常驻整窗正文。
+  ({String code, int firstLine, String? language})? readFresh() {
     if (name != 'read' || item.status != ToolStatus.succeeded) return null;
     final meta = item.meta;
     final p = path;

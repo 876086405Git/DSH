@@ -15,6 +15,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'carrier.dart';
@@ -183,7 +184,8 @@ extension DshFilesApi on DshClient {
         }
         expectedVersion ??= version;
       }
-      final data = _bytesOf(value['data']);
+      final raw = value['data'];
+      final data = raw is String && raw.length > 256 * 1024 ? await _decodeLargeFileWindow(raw) : _bytesOf(raw);
       offset += data.length;
       if (maxBytes != null && offset > maxBytes) {
         throw DshRemoteException('workspace-file/too-large', '"$path" exceeds $maxBytes bytes', {
@@ -235,3 +237,5 @@ Uint8List _bytesOf(Object? data) {
   if (data is List) return Uint8List.fromList([for (final b in data) asInt(b) ?? 0]);
   return Uint8List(0);
 }
+
+Future<Uint8List> _decodeLargeFileWindow(String data) => Isolate.run(() => base64Decode(data));
