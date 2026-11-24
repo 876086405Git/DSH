@@ -162,9 +162,11 @@ class _Bridge extends DshConnection {
 // The transport boundary for fixture 4. The room still owns prompt context,
 // tool selection/execution, SQLite, ChatController, speech and widget writes.
 class _CorrectionBridge extends _Bridge {
+  _CorrectionBridge({this.tool = 'revise'});
+  final String tool;
   final contexts = <Map<String, Object?>>[];
   final calls = <String, StreamController<Uint8List>>{};
-  final revised = Completer<Map<String, Object?>>();
+  final toolResult = Completer<Map<String, Object?>>();
 
   DshHttpResponse capability(String id) => this.json({
     'v': 1, 'supported': true, 'instanceId': 'correction-peer', 'sessionId': id,
@@ -190,7 +192,7 @@ class _CorrectionBridge extends _Bridge {
       return capability(context['sessionId']! as String);
     }
     if (path.endsWith('/session-tools/result')) {
-      revised.complete(Map<String, Object?>.from(body! as Map));
+      toolResult.complete(Map<String, Object?>.from(body! as Map));
       return this.json({});
     }
     return super.postJson(path, body, timeout: timeout);
@@ -206,7 +208,7 @@ class _CorrectionBridge extends _Bridge {
     }
     final open = body! as Map;
     final id = open['requestId']! as String;
-    expect((open['tools'] as List).cast<Map>().map((tool) => tool['name']), contains('revise'));
+    expect((open['tools'] as List).cast<Map>().map((item) => item['name']), contains(tool));
     final stream = calls[id] = StreamController<Uint8List>();
     stream.add(utf8.encode('${jsonEncode({'type': 'ready', 'token': id})}\n'));
     return DshHttpStreamResponse(200, 'application/x-ndjson', stream.stream, () async {
@@ -214,9 +216,9 @@ class _CorrectionBridge extends _Bridge {
     });
   }
 
-  void revise(String request, Map<String, Object?> input) {
+  void requestTool(String request, Map<String, Object?> input) {
     final frame = {
-      'type': 'call', 'name': 'revise', 'callId': 'call-revise',
+      'type': 'call', 'name': tool, 'callId': 'call-$tool',
       'input': input,
     };
     calls[request]!.add(utf8.encode('${jsonEncode(frame)}\n'));
@@ -1166,6 +1168,72 @@ void main() {
 
   // A1: the correction is the model's own revise call in the next turn; the
   // late words of the turn it replaced must not speak or write a last line.
+  for (final invited in [false, true]) {
+    testWidgets('full related callback honours the owner invitation for shared-source facts: $invited', (tester) async {
+      final bridge = _CorrectionBridge(tool: 'related');
+      final client = _CorrectionClient(bridge);
+      final room = _Room(temporary, client: client);
+      late String tea, flute;
+      await room.open(tester, seed: (memory) {
+        final store = memory.store;
+        final source = store.submitMessage(id: 'mixed-original', sessionId: store.lightSessionId,
+            text: '我每天喝白茶。竹笛课在周五。', saidAtUtc: _now, offsetMinutes: 0);
+        final turn = store.beginAgentTurn(messageId: source['id']! as String,
+            expectedSourceRev: source['source_rev']! as int, shownCardRevisions: const {})['id']! as String;
+        CompanionAgentMemoryResult prepare(String id, String name, MemoryRow input) =>
+            store.applyAgentMemoryTool(turnId: turn, callId: id, toolName: name, input: input);
+        tea = prepare('tea', 'remember', {'text': '我每天喝白茶。', 'keywords': ['白茶']}).targetId!;
+        flute = prepare('flute', 'remember', {'text': '竹笛课在周五。', 'keywords': ['竹笛']}).targetId!;
+        expect(prepare('quiet', 'quiet', {'card': flute, 'mode': 'never'}).applied, isTrue);
+        store.closeAgentTurn(turn);
+        memory.changed();
+      });
+      try {
+        final text = invited ? '我想问竹笛。' : '我想问白茶。';
+        await tester.enterText(find.byType(TextField), text);
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('send')));
+        await settleMixed(tester, client.first.future);
+        final prompt = client.prompts.single;
+        expect(prompt.text, text);
+        final prepared = bridge.contexts.single;
+        expect(prepared['requestId'], prompt.id);
+        final memory = prepared['phoneMemory']! as Map;
+        final initial = (jsonDecode(memory['block']! as String) as Map)['items'] as List;
+        expect(initial.map((row) => (row as Map)['id']), contains(invited ? flute : tea));
+        if (!invited) expect(initial.map((row) => (row as Map)['id']), isNot(contains(flute)));
+        // The scripted Host acts on a card supplied by this exact room prompt.
+        final input = {'card': invited ? flute : tea};
+        final wire = client.wire;
+        wire.finish('tool-calls');
+        wire.settle('assistant/message', text: '', extraParts: [
+          {'type': 'tool-call', 'id': 'call-related', 'name': 'related', 'arguments': jsonEncode(input)},
+        ]);
+        bridge.requestTool(prompt.id, input);
+        final receipt = await settleMixed(tester, bridge.toolResult.future);
+        expect(receipt['sessionId'], prompt.session);
+        expect(receipt['requestId'], prompt.id);
+        expect(receipt['token'], prompt.id);
+        expect(receipt['callId'], 'call-related');
+        expect(receipt['isError'], false);
+        final content = jsonDecode(receipt['content']! as String) as Map;
+        expect(content['applied'], true);
+        final cards = {for (final row in (content['cards']! as List).cast<Map>()) row['id']: row['text']};
+        expect(cards[tea], '我每天喝白茶。');
+        expect(cards.containsKey(flute), invited);
+        if (invited) expect(cards[flute], '竹笛课在周五。');
+        wire.endTurn();
+        await room.drain();
+        expect(room.chats, isEmpty, reason: 'this turn uses the foreground DSH session');
+      } finally {
+        for (final stream in bridge.calls.values) {
+          if (!stream.isClosed) unawaited(stream.close());
+        }
+        await room.close(tester);
+      }
+    });
+  }
+
   testWidgets('fixture 4 a composer correction retires a late full reply before speech and last-line writes', (
     tester,
   ) async {
@@ -1317,8 +1385,8 @@ void main() {
       final tool = {'type': 'tool-call', 'id': 'call-revise', 'name': 'revise', 'arguments': jsonEncode(input)};
       wire.finish('tool-calls');
       wire.settle('assistant/message', text: '', extraParts: [tool]);
-      bridge.revise(second.id, input);
-      final receipt = await settleMixed(tester, bridge.revised.future);
+      bridge.requestTool(second.id, input);
+      final receipt = await settleMixed(tester, bridge.toolResult.future);
       expect(receipt, containsPair('requestId', second.id));
       expect(receipt, containsPair('sessionId', second.session));
       expect(receipt, containsPair('callId', 'call-revise'));
