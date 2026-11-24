@@ -43,6 +43,8 @@ class CompanionSessionTools {
     'compare_drafts',
     'receipts_to_sheet',
   };
+  static const _handshakeTimeout = Duration(seconds: 8);
+
   final DshConnection _connection;
   final String _session, _request;
   final Map<String, CompanionAgentToolBinding> _bindings;
@@ -82,7 +84,7 @@ class CompanionSessionTools {
           'tools': [for (final binding in bindings.values) binding.definition.toJson()],
         },
         abort: owner._abort,
-        headerTimeout: const Duration(seconds: 8),
+        headerTimeout: _handshakeTimeout,
         idleTimeout: null,
       );
       if (response.statusCode == 404) {
@@ -90,7 +92,7 @@ class CompanionSessionTools {
         return null;
       }
       if (response.statusCode == 409) {
-        final bytes = await response.body.expand((chunk) => chunk).toList();
+        final bytes = await response.body.expand((chunk) => chunk).toList().timeout(_handshakeTimeout);
         final data = jsonDecode(utf8.decode(bytes));
         if (data case {'error': {'code': 'companion/device-request-in-use'}}) {
           owner.close();
@@ -111,7 +113,7 @@ class CompanionSessionTools {
       }
       final ready = Completer<void>();
       unawaited(owner._listen(response, ready));
-      await ready.future.timeout(const Duration(seconds: 8));
+      await ready.future.timeout(_handshakeTimeout);
       if (!isCurrent()) throw const DshClosedException('Companion turn was replaced');
       return owner;
     } catch (_) {
