@@ -350,6 +350,19 @@ class ReporterTests(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 replay.read_fixtures(catalog, root, [source.name])
 
+    def test_room_replay_catalog_includes_its_shared_host_fixture_bytes(self):
+        root = path.resolve().parents[2]
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / 'catalog.json'
+            subprocess.run([sys.executable, str(path.with_name('prepare-memory-fixtures.py')),
+                            '--output', str(output)], check=True, capture_output=True)
+            rows = json.loads(output.read_text(encoding='utf-8'))['sources']
+        hashes = {row['path']: row['sha256'] for row in rows}
+        for peer in ['app/test/support/companion_notes_peer.dart',
+                     'app/test/support/companion_session_peer.dart']:
+            with self.subTest(peer=peer):
+                self.assertEqual(hashes.get(peer), sha256((root / peer).read_bytes()).hexdigest())
+
     def test_catalog_failure_cannot_reuse_an_existing_green_report(self):
         report = self.report([start(1, 'offline guard'), end(1), start(2, 'observed'), end(2),
                               {'type': 'done', 'success': True}])
