@@ -270,7 +270,9 @@ class _CompanionFullSession {
       final accepted = await controller.send(
         run.source['text']! as String,
         verbatim: true,
-        mode: SendMode.interrupt,
+        // A retry of an uncertain send must not stop the turn that may be that
+        // very prompt: the Host drops the repeated id, so the work would just end.
+        mode: retryId == null ? SendMode.interrupt : SendMode.now,
         originalRequestId: retryId,
         deliveryAllowed: () {
           if (!current()) return false;
