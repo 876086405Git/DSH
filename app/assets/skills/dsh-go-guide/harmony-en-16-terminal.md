@@ -22,6 +22,8 @@ The page shows **Terminal** over the current directory, a row of tabs, the termi
 
 The key row above the keyboard sends the terminal's common control keys, such as interrupt, exit, completion and arrow keys. For a modifier combination, tap the modifier first, then the key.
 
+Tap the terminal to reopen the on-screen keyboard, or choose **More**, then **Show keyboard**. Long-press and drag on terminal text to select a range, then tap **Copy**. To paste clipboard text into the current terminal without selecting any text, choose **More**, then **Paste**.
+
 ## Notes
 
 - Commands run as the host's user and can read and write files there; the app doesn't ask you to confirm each command.

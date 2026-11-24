@@ -3326,6 +3326,9 @@ class L10nEn extends L10n {
   String get botsTerminal => 'Terminal';
 
   @override
+  String get botsTerminalShowKeyboard => 'Show keyboard';
+
+  @override
   String get botsTerminalRename => 'Rename terminal';
 
   @override

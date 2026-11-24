@@ -954,6 +954,7 @@
   "botsKeySlash": "Slash",
   "botsKeyDash": "Hyphen",
   "botsTerminal": "Terminal",
+  "botsTerminalShowKeyboard": "Show keyboard",
   "botsTerminalRename": "Rename terminal",
   "botsTerminalName": "Terminal name",
   "botsTerminalRenameFailed": "Couldn’t rename",

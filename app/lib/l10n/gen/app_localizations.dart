@@ -5816,6 +5816,12 @@ abstract class L10n {
   /// **'终端'**
   String get botsTerminal;
 
+  /// No description provided for @botsTerminalShowKeyboard.
+  ///
+  /// In zh, this message translates to:
+  /// **'唤起键盘'**
+  String get botsTerminalShowKeyboard;
+
   /// No description provided for @botsTerminalRename.
   ///
   /// In zh, this message translates to:

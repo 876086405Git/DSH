@@ -854,6 +854,7 @@
   "botsKeySlash": "斜杠",
   "botsKeyDash": "短横线",
   "botsTerminal": "终端",
+  "botsTerminalShowKeyboard": "唤起键盘",
   "botsTerminalRename": "重命名终端",
   "botsTerminalName": "终端名称",
   "botsTerminalRenameFailed": "没能重命名",

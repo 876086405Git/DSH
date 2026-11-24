@@ -4,13 +4,17 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind, kLongPressTimeout, kPrimaryButton, kTouchSlop;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
 
 import '../../l10n/l10n.dart';
+import '../../state/android_features.dart';
 import '../../state/terminal_state.dart';
+import '../common/brief_notice.dart';
 import '../common/empty_view.dart';
 import '../common/field_paste.dart';
 import '../theme/app_icons.dart';
@@ -18,7 +22,6 @@ import '../theme/theme.dart';
 import 'terminal_keyboard.dart';
 import 'terminal_keys.dart';
 import 'terminal_palette.dart';
-import '../common/brief_notice.dart';
 
 /// The card shell: the engine log card's dark surface (dark in both themes),
 /// with the dark theme inside so buttons and empty states read on it.
@@ -107,9 +110,11 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   var _view = GlobalKey<TerminalViewState>();
   final _keyboard = GlobalKey<TerminalKeyboardState>();
   final _pointers = <int, Offset>{};
+  ({Offset origin, Timer deadline})? _keyboardTap;
   double? _pinchSpan;
   double _pinchFont = TerminalFontSize.fallback;
   String? _composing;
+  Object? _pasteRequest;
 
   /// Kept while the size stays: a new one makes xterm measure its cell again and
   /// drop every laid-out character (each pinyin keystroke rebuilds this page).
@@ -118,6 +123,7 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   TerminalTab get _tab => widget.tab;
   Terminal get _terminal => widget.tab.terminal;
   bool get _canType => _tab.phase == TerminalPhase.live && _tab.writable;
+  bool get _imeComposing => _keyboard.currentState?.composing ?? false;
 
   TerminalWorkspace get _workspace => ref.read(terminalWorkspaceProvider(widget.sessionId).notifier);
 
@@ -125,9 +131,14 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   void didUpdateWidget(TerminalScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Anchors belong to the old screen buffer.
-    if (oldWidget.tab.terminal != widget.tab.terminal || oldWidget.tab.id != widget.tab.id) {
+    final changedAttachment = oldWidget.tab.terminal != _terminal || oldWidget.tab.id != _tab.id;
+    if (changedAttachment) {
       _selection.clearSelection();
-      // A paste still waiting on the system was for that terminal.
+      _cancelKeyboardTap();
+    }
+    if (changedAttachment || !_canType) {
+      // A clipboard reply cannot revive if the user switches away and back.
+      _pasteRequest = null;
       cancelPaste();
     }
     if (oldWidget.tab.id != widget.tab.id) {
@@ -143,6 +154,7 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
 
   @override
   void dispose() {
+    _cancelKeyboardTap();
     _selection.dispose();
     _scroll.dispose();
     super.dispose();
@@ -186,7 +198,23 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   /// Hardware keys: wait while the IME composes; sticky modifiers apply to
   /// the next printable key.
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
-    if (_keyboard.currentState?.composing ?? false) return KeyEventResult.skipRemainingHandlers;
+    final hardware = HardwareKeyboard.instance;
+    final apple = defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS;
+    final clipboardModifier = apple
+        ? hardware.isMetaPressed && !hardware.isControlPressed
+        : hardware.isControlPressed && !hardware.isMetaPressed;
+    if (clipboardModifier && !hardware.isAltPressed) {
+      final copy = event.logicalKey == LogicalKeyboardKey.keyC && (apple || hardware.isShiftPressed);
+      final paste = event.logicalKey == LogicalKeyboardKey.keyV;
+      if (copy || paste) {
+        // Pasting is terminal input. Let the IME finish before inserting it,
+        // just as for ordinary hardware keys; copying sends no input.
+        if (paste && _imeComposing) return KeyEventResult.skipRemainingHandlers;
+        if (event is KeyDownEvent) unawaited(copy ? _copy() : pasteClipboard());
+        return KeyEventResult.handled;
+      }
+    }
+    if (_imeComposing) return KeyEventResult.skipRemainingHandlers;
     if (event is KeyUpEvent || !widget.modifiers.any) return KeyEventResult.ignored;
     final character = event.character;
     if (character == null || character.runes.length != 1 || character.codeUnitAt(0) < 0x20) {
@@ -196,15 +224,28 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
     return KeyEventResult.handled;
   }
 
-  // ── Pinch ──
+  // ── Tap, scroll and pinch share the viewport ──
 
   double _span() {
     final points = _pointers.values.take(2).toList();
     return (points[0] - points[1]).distance;
   }
 
+  void _cancelKeyboardTap() {
+    _keyboardTap?.deadline.cancel();
+    _keyboardTap = null;
+  }
+
   void _pointerDown(PointerDownEvent event) {
     _pointers[event.pointer] = event.position;
+    // xterm 4.0.0 does not dispatch TerminalView.onTapUp for primary taps.
+    // Observe short touchscreen taps without competing with xterm's gestures.
+    // Mouse clicks and short, precise selection drags stay with xterm.
+    _cancelKeyboardTap();
+    final touchscreen = event.kind == PointerDeviceKind.touch || event.kind == PointerDeviceKind.stylus;
+    if (touchscreen && _pointers.length == 1 && event.buttons == kPrimaryButton) {
+      _keyboardTap = (origin: event.position, deadline: Timer(kLongPressTimeout, _cancelKeyboardTap));
+    }
     if (_pointers.length == 2) {
       _pinchSpan = _span();
       _pinchFont = ref.read(terminalFontSizeProvider);
@@ -214,6 +255,9 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
 
   void _pointerMove(PointerMoveEvent event) {
     if (!_pointers.containsKey(event.pointer)) return;
+    if (_keyboardTap case final tap? when (event.position - tap.origin).distance > kTouchSlop) {
+      _cancelKeyboardTap();
+    }
     _pointers[event.pointer] = event.position;
     final start = _pinchSpan;
     if (start == null || start < 16 || _pointers.length < 2) return;
@@ -221,8 +265,13 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   }
 
   void _pointerUp(PointerEvent event) {
-    _pointers.remove(event.pointer);
+    if (_pointers.remove(event.pointer) == null) return;
+    final tap = _keyboardTap;
+    _cancelKeyboardTap();
     if (_pointers.length < 2) _pinchSpan = null;
+    if (event is PointerUpEvent && tap != null && (event.position - tap.origin).distance <= kTouchSlop) {
+      showKeyboard();
+    }
   }
 
   // ── Selection ──
@@ -230,25 +279,67 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
   Future<void> _copy() async {
     final range = _selection.selection;
     if (range == null) return;
-    final text = _terminal.buffer.getText(range);
+    // xterm's word selector can stop at the second cell of a wide glyph
+    // (e.g. 中). getText omits a glyph when its cells are only partly selected.
+    final normalized = range.normalized;
+    final text = _terminal.buffer.getText(
+      normalized is BufferRangeLine && normalized.begin != normalized.end
+          ? BufferRangeLine(_wideBoundary(normalized.begin, start: true), _wideBoundary(normalized.end, start: false))
+          : normalized,
+    );
+    if (text.isEmpty) return;
     _selection.clearSelection();
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
     showBriefNotice(context, appL10n.commonCopied);
   }
 
-  Future<void> _paste() async {
-    final terminal = _terminal;
-    _selection.clearSelection();
-    final text = await readClipboard();
-    if (text == null || text.isEmpty || !mounted) return;
-    // A reconnect can replace the attachment before this widget rebuilds.
-    final current = ref.read(terminalWorkspaceProvider(widget.sessionId)).selected;
-    if (current == null || current.terminal != terminal || current.phase != TerminalPhase.live || !current.writable) {
-      return;
+  CellOffset _wideBoundary(CellOffset edge, {required bool start}) {
+    final lines = _terminal.buffer.lines;
+    if (edge.y < 0 || edge.y >= lines.length) return edge;
+    final line = lines[edge.y];
+    if (edge.x <= 0 || edge.x >= line.length || line.getWidth(edge.x - 1) != 2 || line.getCodePoint(edge.x) != 0) {
+      return edge;
     }
-    terminal.paste(text);
-    _toBottom();
+    return CellOffset(edge.x + (start ? -1 : 1), edge.y);
+  }
+
+  void showKeyboard() {
+    if (_canType && _ownsInput(_terminal)) _keyboard.currentState?.show();
+  }
+
+  /// The clipboard can return after an attachment or page has changed.
+  bool _ownsInput(Terminal terminal) {
+    if (!mounted || ModalRoute.isCurrentOf(context) == false) return false;
+    final current = ref.read(terminalWorkspaceProvider(widget.sessionId)).selected;
+    return current != null &&
+        identical(current.terminal, terminal) &&
+        current.phase == TerminalPhase.live &&
+        current.writable;
+  }
+
+  Future<void> pasteClipboard() async {
+    final terminal = _terminal;
+    if (!_canType || _imeComposing || !_ownsInput(terminal) || _pasteRequest != null) return;
+    final request = _pasteRequest = Object();
+    try {
+      final text = await readClipboard();
+      // A new composition can start while the system owns the clipboard read.
+      if (!mounted || _pasteRequest != request || _imeComposing || !_ownsInput(terminal)) return;
+      if (text == null || text.isEmpty) {
+        if (ref.read(operatingSystemProvider) != 'ohos') showBriefNotice(context, appL10n.statePasteEmpty);
+        return;
+      }
+      _selection.clearSelection();
+      terminal.paste(text);
+      _toBottom();
+    } on PlatformException {
+      if (mounted && _pasteRequest == request && _ownsInput(terminal)) {
+        showBriefNotice(context, appL10n.statePasteFailed);
+      }
+    } finally {
+      if (_pasteRequest == request) _pasteRequest = null;
+    }
   }
 
   /// Where the 复制 / 粘贴 bar goes: just above the selection, or just below
@@ -262,6 +353,7 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
     final begin = at(render.getOffset(range.begin));
     final end = at(render.getOffset(range.end));
     final cell = render.cellSize;
+    if (end.dy + cell.height <= 0 || begin.dy >= stack.size.height) return null;
     const gap = 8.0;
     final above = begin.dy - gap - _SelectionBar.height;
     final below = end.dy + cell.height + gap;
@@ -331,6 +423,7 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
     final tab = _tab;
     final canType = _canType;
     final blocked = _blocked();
+    final android = ref.watch(operatingSystemProvider) == 'android';
     final bottom = _bottom();
 
     Widget screen = TerminalView(
@@ -352,7 +445,6 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
       hardwareKeyboardOnly: true,
       readOnly: !canType,
       keyboardAppearance: Brightness.dark,
-      onTapUp: (_, _) => _keyboard.currentState?.show(),
       onKeyEvent: _onKeyEvent,
     );
     // The card is already inside the safe area; xterm would pad it again.
@@ -365,6 +457,7 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
       child: screen,
     );
     screen = Listener(
+      behavior: HitTestBehavior.opaque,
       onPointerDown: _pointerDown,
       onPointerMove: _pointerMove,
       onPointerUp: _pointerUp,
@@ -375,6 +468,7 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
       key: _keyboard,
       focusNode: widget.focusNode,
       enabled: canType,
+      deferAfterAndroidInsetLoss: android,
       onText: _onText,
       onBackspace: _onBackspace,
       onEnter: _onEnter,
@@ -394,14 +488,14 @@ class TerminalScreenState extends ConsumerState<TerminalScreen> with FieldPaste<
               Positioned.fill(child: blocked == null ? screen : Center(child: blocked)),
               if (blocked == null)
                 ListenableBuilder(
-                  listenable: _selection,
+                  listenable: Listenable.merge([_selection, _scroll]),
                   builder: (context, _) {
                     final anchor = _selectionBarAnchor();
                     if (anchor == null) return const SizedBox.shrink();
                     return Positioned.fill(
                       child: CustomSingleChildLayout(
                         delegate: _CenteredAt(anchor),
-                        child: _SelectionBar(onCopy: _copy, onPaste: canType ? _paste : null),
+                        child: _SelectionBar(onCopy: _copy, onPaste: canType ? pasteClipboard : null),
                       ),
                     );
                   },

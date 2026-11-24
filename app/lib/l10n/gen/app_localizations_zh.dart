@@ -3137,6 +3137,9 @@ class L10nZh extends L10n {
   String get botsTerminal => '终端';
 
   @override
+  String get botsTerminalShowKeyboard => '唤起键盘';
+
+  @override
   String get botsTerminalRename => '重命名终端';
 
   @override
