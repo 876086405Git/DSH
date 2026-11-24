@@ -1,5 +1,8 @@
 // Tool-group summaries and per-turn file changes.
 
+import 'dart:collection';
+import 'dart:convert';
+
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
@@ -314,15 +317,15 @@ List<FileChange> _computeChanges(List<ToolChatItem> tools) {
     if (path == null) continue;
     if (kind == ToolKind.read) {
       if (view.readFresh() case final window?) {
-        known[path] = _KnownLines(window.firstLine, window.code.split('\n'));
+        known[path] = _KnownLines(window.firstLine, () => window.code.split('\n'));
       }
       continue;
     }
     if (kind != ToolKind.edit) continue;
-    final change = _changeOf(view, known[path]);
-    final after = view.writtenContent;
+    final after = _writtenOf(view);
+    final change = _changeOf(view, known[path], after);
     if (after != null) {
-      known[path] = _KnownLines(1, _contentLines(after));
+      known[path] = _KnownLines(1, () => _contentLines(after()));
     } else if (change != null && !change.tracked) {
       known.remove(path);
     }
@@ -339,11 +342,12 @@ List<String> _contentLines(String text) {
   return body.split('\n');
 }
 
-/// 已知的一段连续文件内容(从 [start] 行起)。
+/// 已知的一段连续文件内容(从 [start] 行起)。后面有修改要对位时才拆行。
 class _KnownLines {
-  _KnownLines(this.start, this.lines);
+  _KnownLines(this.start, this._split);
   final int start;
-  final List<String> lines;
+  final List<String> Function() _split;
+  late final List<String> lines = _split();
 
   /// [needle] 在已知内容里(从 [from] 起)唯一出现的下标;否则 null。
   int? find(List<String> needle, {int from = 0}) {
@@ -394,7 +398,11 @@ List<TurnChanges> turnChanges(List<ChatItem> items, {bool running = false}) {
 
 /// 一次修改的各处改动。[tracked] = 每一处都在已知内容里对上了位置
 /// (已知内容已同步更新;否则调用方该把它作废)。
-({bool created, List<DiffHunk> hunks, bool tracked})? _changeOf(ToolView view, _KnownLines? known) {
+({bool created, List<DiffHunk> hunks, bool tracked})? _changeOf(
+  ToolView view,
+  _KnownLines? known,
+  String Function()? after,
+) {
   final name = view.name;
   final command = name == 'str_replace_editor' ? view.arg('command') : null;
   final meta = view.item.meta;
@@ -423,9 +431,8 @@ List<TurnChanges> turnChanges(List<ChatItem> items, {bool running = false}) {
       }
       // A whole-file write states the result: place each hunk's new text in
       // it (in file order), and the old side follows from the hunks above.
-      final after = view.writtenContent;
       if (!tracked && after != null) {
-        final known = _KnownLines(1, _contentLines(after));
+        final known = _KnownLines(1, () => _contentLines(after()));
         var from = 0;
         var shift = 0;
         final placed = <DiffHunk>[];
@@ -466,12 +473,58 @@ List<TurnChanges> turnChanges(List<ChatItem> items, {bool running = false}) {
       }
     }
   }
-  final content = view.writtenContent;
-  if (content != null) {
-    final lines = _allAdded(content);
+  if (after != null) {
+    final lines = _wholeWrites[view] ??= _WholeWriteLines.of(view, after());
     return (created: created, hunks: [DiffHunk(lines: lines, edit: 0, newStart: created ? 1 : null)], tracked: true);
   }
   return null;
+}
+
+/// 写入的整份内容。整文件写入算过一次以后,摘要缓存的视图里已经没有正文,改从原始参数取。
+String Function()? _writtenOf(ToolView view) {
+  if (_wholeWrites[view] case final lines?) return lines.read;
+  final text = view.writtenContent;
+  return text == null ? null : () => text;
+}
+
+final _wholeWrites = Expando<_WholeWriteLines>();
+
+/// 整文件写入的全文新增行。改动卡只用行数,所以先只数行,第一次读行时才生成。
+/// 视图在 [_views] 里常驻,解出来的正文从它的参数里拿掉,要用时再从原始 JSON 解一遍。
+class _WholeWriteLines extends ListBase<DiffLine> {
+  _WholeWriteLines(this._length, this.read);
+
+  factory _WholeWriteLines.of(ToolView view, String text) {
+    var length = text.isEmpty ? 0 : 1;
+    for (var end = text.indexOf('\n'); end >= 0 && end + 1 < text.length; end = text.indexOf('\n', end + 1)) {
+      length++;
+    }
+    final args = view.args;
+    if (args == null) return _WholeWriteLines(length, () => text);
+    final key = view.name == 'write' ? 'content' : 'file_text';
+    args.remove(key);
+    return _WholeWriteLines(length, _jsonField(view.item.arguments, key));
+  }
+
+  // 另起一个函数,闭包只抓原文和键,不连带上面已经解出来的正文。
+  static String Function() _jsonField(String raw, String key) =>
+      () => (jsonDecode(raw) as Map<String, Object?>)[key]! as String;
+
+  final int _length;
+  final String Function() read;
+  late final List<DiffLine> _lines = _allAdded(read());
+
+  @override
+  int get length => _length;
+
+  @override
+  set length(int value) => throw UnsupportedError('read-only');
+
+  @override
+  DiffLine operator [](int index) => _lines[index];
+
+  @override
+  void operator []=(int index, DiffLine value) => throw UnsupportedError('read-only');
 }
 
 List<DiffLine> _allAdded(String text) {
@@ -543,12 +596,17 @@ class _FileAccumulator {
               ...flat(blocks[i]),
             ],
           ];
-    final stats = diffStats(lines);
+    var added = 0, removed = 0;
+    for (final hunk in hunks) {
+      final stats = hunk.lines is _WholeWriteLines ? (added: hunk.lines.length, removed: 0) : diffStats(hunk.lines);
+      added += stats.added;
+      removed += stats.removed;
+    }
     return FileChange(
       path: path,
       created: created,
-      added: stats.added,
-      removed: stats.removed,
+      added: added,
+      removed: removed,
       lines: lines,
       edits: edits,
       hunks: hunks,

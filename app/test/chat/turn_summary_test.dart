@@ -229,6 +229,10 @@ void main() {
       const patch = '--- /dev/null\n+++ b/f\n@@ -0,0 +1,4 @@\n+a\r\n+\n+b\n+\n';
       expect(file.patch, patch);
       expect(file.patch, patch);
+
+      // 再算一遍时正文已不在摘要缓存的视图里,要从原始参数取回,后面的修改照样对位。
+      final edit = tool('whole-write-edit', 'edit', {'file_path': 'f', 'old_string': 'b', 'new_string': 'c'});
+      expect(sessionChangesOf([write, edit]).single.patch, '$patch@@ -3,1 +3,1 @@\n-b\n+c\n');
     });
 
     test('failed, denied and streaming edits are not changes', () {
