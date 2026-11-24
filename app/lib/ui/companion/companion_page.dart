@@ -3866,15 +3866,20 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
             children: [
               for (final tab in _CompanionTab.values)
                 if (tab == _CompanionTab.room)
-                  // Her stage's chrome keeps clear of the bar itself; the
-                  // first-run and failure screens get it as bottom padding.
-                  showStage
-                      ? room
-                      : MediaQuery(
-                          data: MediaQuery.of(context)
-                              .copyWith(padding: padding.copyWith(bottom: padding.bottom + navSpace)),
-                          child: room,
-                        )
+                  // Another page over her room covers it like a route: her
+                  // stage pauses there. Her stage's chrome keeps clear of the
+                  // bar itself; the first-run and failure screens get it as
+                  // bottom padding.
+                  TickerMode(
+                    enabled: _tab == _CompanionTab.room,
+                    child: showStage
+                        ? room
+                        : MediaQuery(
+                            data: MediaQuery.of(context)
+                                .copyWith(padding: padding.copyWith(bottom: padding.bottom + navSpace)),
+                            child: room,
+                          ),
+                  )
                 else if (!_visited.contains(tab))
                   const SizedBox.shrink()
                 else
