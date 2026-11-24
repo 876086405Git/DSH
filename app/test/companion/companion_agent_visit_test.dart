@@ -2918,7 +2918,12 @@ void main() {
       final previousSession = visit.memory.store.lightSessionId;
       final history = visit.memory.store.messages();
       final controlsBeforeRestart = background.controlChanges.length;
-      await reopened.restart();
+      final clearing = reopened.restart();
+      // While it clears, nothing new is taken: the room's composer keeps its words.
+      expect(reopened.preparing, isTrue);
+      await resident.submit('清空时说的话。');
+      await clearing;
+      expect(reopened.preparing, isFalse);
       expect(visit.memory.store.lightSessionId, isNot(previousSession));
       expect(resident.recentMessages, isEmpty);
       expect(reopened.text, isEmpty);
