@@ -4,14 +4,17 @@
 <!-- See THIRD_PARTY_NOTICES.md. -->
 <!-- DSH 手机操控 (phone/a11y/PhoneA11yService).
      Not an accessibility tool (isAccessibilityTool=false): Play / Play Protect rules, and
-     accessibilityDataSensitive views stay hidden from us, which is the safe side. -->
+     accessibilityDataSensitive views stay hidden from us, which is the safe side.
+     Selection events and no notificationTimeout: some apps send a view's text only in events
+     (vivo's calculator display), and a timeout delivers only the last event of each type, so the
+     display's text would be lost to the result line's (EventTexts). -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeWindowsChanged|typeViewTextChanged|typeViewScrolled"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeWindowsChanged|typeViewTextChanged|typeViewTextSelectionChanged|typeViewScrolled"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews|flagInputMethodEditor"
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
     android:canTakeScreenshot="true"
-    android:notificationTimeout="100"
+    android:notificationTimeout="0"
     android:description="@string/phone_a11y_description"
     android:isAccessibilityTool="false" />

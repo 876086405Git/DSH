@@ -84,7 +84,7 @@ internal object TreeCapture {
         )
     }
 
-    private class State(val deadline: Long, val typedTransitions: Long?, val typedEvents: Long?) {
+    private class State(val deadline: Long, val typedTransitions: Long?, val typedEvents: Long?, val eventTexts: EventTexts?) {
         val natives = ArrayList<AccessibilityNodeInfo>(256)
         var count = 0
         var typedFresh = true
@@ -95,7 +95,7 @@ internal object TreeCapture {
     }
 
     fun capture(service: AccessibilityService, screen: Box, ownPackage: String, budgetMs: Long, typedTransitions: Long? = null, typedEvents: Long? = null): Capture {
-        val st = State(SystemClock.uptimeMillis() + budgetMs, typedTransitions, typedEvents)
+        val st = State(SystemClock.uptimeMillis() + budgetMs, typedTransitions, typedEvents, (service as? PhoneA11yService)?.eventTexts)
         val all = try { service.windows } catch (_: Throwable) { null }
         val sorted = all.orEmpty().sortedByDescending { it.layer }
         // Scan every window before the content loop can stop at an opaque app window.
@@ -300,10 +300,16 @@ internal object TreeCapture {
         val roleHint = (extras?.getCharSequence("AccessibilityNodeInfo.roleDescription")
             ?: extras?.getCharSequence("AccessibilityNodeInfo.chromeRole"))?.toString()?.lowercase()
         val range = node.rangeInfo
+        val showingHint = Build.VERSION.SDK_INT >= 26 && node.isShowingHintText
+        // An empty node text may only be what the app hands accessibility (see EventTexts).
+        val text = node.text?.toString().let { own ->
+            if (!own.isNullOrEmpty() || showingHint || node.isPassword) own
+            else st.eventTexts?.text(node)?.takeIf { it.isNotEmpty() } ?: own
+        }
         return UiNode(
             ref = ref,
             className = node.className?.toString().orEmpty(),
-            text = node.text?.toString(),
+            text = text,
             desc = node.contentDescription?.toString(),
             hint = if (Build.VERSION.SDK_INT >= 26) node.hintText?.toString() else null,
             viewId = node.viewIdResourceName,
@@ -319,7 +325,7 @@ internal object TreeCapture {
             enabled = node.isEnabled,
             password = node.isPassword,
             heading = Build.VERSION.SDK_INT >= 28 && node.isHeading,
-            showingHint = Build.VERSION.SDK_INT >= 26 && node.isShowingHintText,
+            showingHint = showingHint,
             scroll = scroll,
             roleHint = roleHint,
             stateDesc = if (Build.VERSION.SDK_INT >= 30) node.stateDescription?.toString() else null,

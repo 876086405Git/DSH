@@ -57,6 +57,43 @@ class ReadBackMismatchTest {
         assertTrue(message, message.contains("没有重试，也没有提交"))
     }
 
+    /** vivo's calculator display reads "" while it shows what was typed: empty is "cannot see". */
+    @Test fun anEmptyReadBackIsUnconfirmedNotAMismatch() {
+        val note = typedNote("formula", ReadBackMatch.EMPTY)
+        assertTrue(note, note.contains("已在「formula」输入"))
+        assertTrue(note, note.contains("无法确认"))
+        assertTrue(note, note.contains("不要重复输入"))
+        assertFalse(note, note.contains("回读一致"))
+        assertFalse(note, note.contains("不一致"))
+        // The note comes before any submit, so it never claims one either way.
+        assertFalse(note, note.contains("提交"))
+        assertEquals("已在「formula」输入，回读一致。", typedNote("formula", ReadBackMatch.SAME))
+    }
+
+    @Test fun textThatWillBeSubmittedMustKeepItsSpacing() {
+        assertEquals(ReadBackMatch.DIFFERENT, readBackMatch("newyork", "new york", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.DIFFERENT, readBackMatch("new  york", "new york", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("newyork", "new york", ignoreSpaces = true))
+        // Display formatting and invisible marks still match when submitting.
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("１２×３", "12*3", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("\u200Enew york", "new york", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("new\u00A0york", "new york", ignoreSpaces = false))
+        assertEquals(ReadBackMatch.EMPTY, readBackMatch("", "new york", ignoreSpaces = false))
+    }
+
+    @Test fun readBackMatchToleratesFormattingOnly() {
+        assertEquals(ReadBackMatch.SAME, readBackMatch("12+30", "12+30"))
+        assertEquals(ReadBackMatch.UNKNOWN, readBackMatch(null, "12+30"))
+        assertEquals(ReadBackMatch.EMPTY, readBackMatch("", "12+30"))
+        assertEquals(ReadBackMatch.SAME, readBackMatch("", ""))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("138 0013 8000", "13800138000"))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("12×3−4÷2", "12*3-4/2"))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("１２＋３０", "12+30"))
+        assertEquals(ReadBackMatch.FORMATTED, readBackMatch("\u200E12 + 30\u200E", "12+30"))
+        assertEquals(ReadBackMatch.DIFFERENT, readBackMatch("12+3", "12+30"))
+        assertEquals(ReadBackMatch.DIFFERENT, readBackMatch("小明", "小红"))
+    }
+
     @Test fun anUnknownSecretReadBackDoesNotInventAnEmptyValue() {
         for (target in listOf(field(hint = "验证码"), field(hint = "密码", password = true))) {
             val message = MainScreenDriver.readBackMismatch(null, target)

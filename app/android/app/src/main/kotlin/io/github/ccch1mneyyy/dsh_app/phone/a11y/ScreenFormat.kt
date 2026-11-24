@@ -355,8 +355,10 @@ object ScreenFormat {
         }
         val content = if (node.password || secret || node.showingHint) null else clean(node.text)
         val states = mutableListOf<String>()
+        // Only a shown hint proves the field empty: some apps never expose a field's text (vivo's
+        // calculator display reads "" while showing 12+30), and 「空」 there reads as "my taps did nothing".
         // l10n:keep model screen format
-        if (content == null && !node.password && !secret) states += "空"
+        if (content == null && !node.password && !secret && node.showingHint) states += "空"
         // l10n:keep model screen format
         if (node.focused) states += "已聚焦"
         // l10n:keep model screen format

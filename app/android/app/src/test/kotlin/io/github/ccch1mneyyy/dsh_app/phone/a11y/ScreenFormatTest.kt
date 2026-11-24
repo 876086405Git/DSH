@@ -156,4 +156,19 @@ class ScreenFormatTest {
         assertNull(changingResult.image)
         assertEquals(1, policyReads)
     }
+
+    /** vivo's calculator: the display EditText reads "" with no hint while it shows 12+30. */
+    @Test fun anInputWithoutAShownHintIsNotCalledEmpty() {
+        val display = format(UiNode(className = "android.widget.EditText", text = "", hint = "",
+            viewId = "com.android.bbkcalculator:id/formula", bounds = Box(0, 100, 300, 150), clickable = true, editable = true))
+        val line = display.text.lines().single { it.contains("formula") }
+        assertFalse(line, line.contains("空"))
+        val search = format(UiNode(className = "android.widget.EditText", text = "搜索", showingHint = true,
+            bounds = Box(0, 100, 300, 150), editable = true))
+        assertTrue(search.text, search.text.lines().single { it.contains("搜索") }.contains("空"))
+        // Hint metadata alone is not a hint on screen.
+        val hinted = format(UiNode(className = "android.widget.EditText", hint = "昵称",
+            bounds = Box(0, 100, 300, 150), editable = true))
+        assertFalse(hinted.text, hinted.text.lines().single { it.contains("昵称") }.contains("空"))
+    }
 }
