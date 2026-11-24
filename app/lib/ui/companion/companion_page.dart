@@ -2437,6 +2437,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       CompanionLightError(failure: CompanionLightFailure.badKey) => l10n.companionLightBadKey,
       CompanionLightError(failure: CompanionLightFailure.busy) => l10n.companionLightBusy,
       DshRemoteException(code: 'companion/agent-retry-closed') => l10n.companionAgentRetryClosed,
+      DshRemoteException(code: 'companion/phone-run-stopped') => l10n.companionPhoneRunStopped,
       DshRemoteException(code: 'companion/cleanup-source-unknown') => l10n.companionMemoryCleanupUnknown,
       // Full mode only because nobody picked a mode yet: light would work without a host.
       DshClosedException() when ref.read(companionModeProvider) == null => l10n.companionNotConnectedTryLight,

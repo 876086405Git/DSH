@@ -386,6 +386,7 @@ class CompanionAgent extends ChangeNotifier {
                 );
               }
               if (call.name == 'public_lookup') run.externalWebContent = true;
+              if (call.name.startsWith(companionPhoneToolPrefix)) run.phoneUsed = true;
               final result = await binding.execute(call);
               if (result.externalWebContent) run.externalWebContent = true;
               if (result.externalNoticeContent) _markNoticeContent(run);
@@ -395,58 +396,86 @@ class CompanionAgent extends ChangeNotifier {
       ],
       retainToolOutcomes: true,
       exchanges: run.exchanges,
-      isCurrent: () => _current(run),
+      // A model route answers only for its own request (see _round): a Host
+      // reconnect while she works on the phone must not end her turn.
+      isCurrent: () => _turnCurrent(run),
       controlRevision: () => run.controlRevision,
       onToolDispatch: () => run.toolDispatchStarted = true,
       onNotice: (requestId, callId, words) => _notice(run, requestId, callId, words),
       request: () async {
-        final selection = await run.memory.selectForAgent(
-          run.source['text'] as String,
-          explicitUserInput: run.source['text'] as String,
-          characterId: run.source['character_id'] as String?,
-          offsetMinutes: run.source['offset_minutes']! as int,
-          isCurrent: () => _current(run),
-        );
-        if (!_current(run)) return null;
-        if (companionSelectionHasNotice(selection)) _markNoticeContent(run);
-        run.onSelected?.call(selection);
-
-        // Current control has already filtered the historical raw lines. The
-        // active instruction is kept separately: forget can move it below the
-        // history cutoff to prevent extraction from recreating a deleted card.
-        final history = run.memory.store.modelMessages(
-          sessionId: run.source['session_id'] as String,
-          characterId: run.source['character_id'] as String?,
-          limit: CompanionLightHistory.window + run.savedRows,
-        );
-        final oldLines = [
-          for (final row in history)
-            if ((row['first_seq'] as int) < (run.source['first_seq'] as int))
-              row['role'] == 'user'
-                  ? CompanionLine.user(row['text'] as String)
-                  : CompanionLine.her(row['text'] as String),
-        ];
-        List<Map<String, Object?>> messagesFrom(int skip) {
-          final lines = companionLightContext([
-            ...oldLines.skip(skip),
-            CompanionLine.user(run.source['text'] as String),
-          ]);
-          final messages = companionRequestMessages(
-            [for (final line in lines) (role: line.role, text: line.text)],
-            context: run.context,
-            memory: selection,
-            assistantPage: run.assistantPage,
-          );
-          for (final exchange in run.exchanges) {
-            messages.add(exchange.assistant.toRequest());
-            messages.add({'role': 'user', 'content': exchange.results});
+        for (var attempt = 1; ; attempt++) {
+          try {
+            final response = await _round(run);
+            if (response != null || !_retryRound(run, attempt)) return response;
+          } on Object catch (error) {
+            if (!_retryRound(run, attempt, error)) rethrow;
           }
-          return messages;
+          await Future<void>.delayed(roundRetryDelay(attempt));
         }
-
-        return _request(run, messagesFrom, oldLines.length);
       },
     );
+  }
+
+  /// Waits before her next try at a failed round; tests shorten it.
+  @visibleForTesting
+  Duration Function(int attempt) roundRetryDelay = (attempt) => Duration(seconds: 1 << attempt);
+
+  // Once she has acted on the phone the person cannot simply resend the turn,
+  // so a round that failed or lost its route (the app in the background, the
+  // link reconnecting) is hers to try again. A bad key or model will not heal.
+  bool _retryRound(_CompanionAgentRun run, int attempt, [Object? error]) =>
+      attempt < 4 &&
+      run.phoneUsed &&
+      _turnCurrent(run) &&
+      switch (error) {
+        CompanionHostError(hostFailure: CompanionHostFailure.modelUnavailable) => false,
+        CompanionLightError(failure: CompanionLightFailure.noKey || CompanionLightFailure.badKey) => false,
+        _ => true,
+      };
+
+  Future<({CompanionAgentMessage message, String requestId})?> _round(_CompanionAgentRun run) async {
+    // The last round's route no longer decides; _request picks the current one.
+    run.modelCurrent = null;
+    final selection = await run.memory.selectForAgent(
+      run.source['text'] as String,
+      explicitUserInput: run.source['text'] as String,
+      characterId: run.source['character_id'] as String?,
+      offsetMinutes: run.source['offset_minutes']! as int,
+      isCurrent: () => _current(run),
+    );
+    if (!_current(run)) return null;
+    if (companionSelectionHasNotice(selection)) _markNoticeContent(run);
+    run.onSelected?.call(selection);
+
+    // Current control has already filtered the historical raw lines. The
+    // active instruction is kept separately: forget can move it below the
+    // history cutoff to prevent extraction from recreating a deleted card.
+    final history = run.memory.store.modelMessages(
+      sessionId: run.source['session_id'] as String,
+      characterId: run.source['character_id'] as String?,
+      limit: CompanionLightHistory.window + run.savedRows,
+    );
+    final oldLines = [
+      for (final row in history)
+        if ((row['first_seq'] as int) < (run.source['first_seq'] as int))
+          row['role'] == 'user' ? CompanionLine.user(row['text'] as String) : CompanionLine.her(row['text'] as String),
+    ];
+    List<Map<String, Object?>> messagesFrom(int skip) {
+      final lines = companionLightContext([...oldLines.skip(skip), CompanionLine.user(run.source['text'] as String)]);
+      final messages = companionRequestMessages(
+        [for (final line in lines) (role: line.role, text: line.text)],
+        context: run.context,
+        memory: selection,
+        assistantPage: run.assistantPage,
+      );
+      for (final exchange in run.exchanges) {
+        messages.add(exchange.assistant.toRequest());
+        messages.add({'role': 'user', 'content': exchange.results});
+      }
+      return messages;
+    }
+
+    return _request(run, messagesFrom, oldLines.length);
   }
 
   Future<({CompanionAgentMessage message, String requestId})?> _request(
@@ -477,9 +506,7 @@ class CompanionAgent extends ChangeNotifier {
         category: 'chat',
         provider: route.provider,
         model: route.model,
-        inputTokens: estimateTokens(
-          jsonEncode({'system': system, 'messages': messages, 'tools': toolJson}),
-        ).ceil(),
+        inputTokens: estimateTokens(jsonEncode({'system': system, 'messages': messages, 'tools': toolJson})).ceil(),
         outputTokens: 800,
       )!;
       final request = _CompanionAgentRequest(requestId);
@@ -491,13 +518,14 @@ class CompanionAgent extends ChangeNotifier {
         if (route is CompanionHostMemoryTransport) {
           var skipped = 0;
           while (companionAgentRequestBytes(
-                route.capability,
-                requestId: requestId,
-                system: system,
-                messages: messages,
-                tools: toolJson,
-                maxTokens: 800,
-              ) > companionAgentRequestMaxBytes &&
+                    route.capability,
+                    requestId: requestId,
+                    system: system,
+                    messages: messages,
+                    tools: toolJson,
+                    maxTokens: 800,
+                  ) >
+                  companionAgentRequestMaxBytes &&
               skipped < historyCount) {
             // Rebuild from raw old lines: adjacent users may have been merged
             // with the current input. Current data and exchanges stay intact.
@@ -566,7 +594,10 @@ class CompanionAgent extends ChangeNotifier {
             if (request.notSentProven && !request.sent) {
               run.memory.store.finishRequest(requestId, terminal: 'not_sent');
             } else if (!request.finalized) {
-              run.memory.store.finishRequest(requestId, terminal: request.sent || request.uncertain ? 'cancelled' : 'not_sent');
+              run.memory.store.finishRequest(
+                requestId,
+                terminal: request.sent || request.uncertain ? 'cancelled' : 'not_sent',
+              );
             }
             _saveReply(run, request);
           } finally {
@@ -646,7 +677,9 @@ class CompanionAgent extends ChangeNotifier {
 
   void modelRouteChanged() {
     screenRouteChanged();
-    _visit?.connectionChanged(generationChanged: true);
+    // A reconnect or a newly picked model reaches her turn at its next round
+    // (_round); only a different host, client or mode resets the visit.
+    _visit?.connectionChanged();
   }
 
   void stop({bool discard = false}) {
@@ -728,6 +761,8 @@ class _CompanionAgentRun {
   bool cancelled = false;
   bool discard = false;
   bool toolDispatchStarted = false;
+  // She acted on the phone: those steps are not tasks, and resending is not a replay.
+  bool phoneUsed = false;
   // This capability narrowing belongs only to this original user run.
   bool externalWebContent = false;
   // Monotonic for this logical user turn, including later HTTP continuations.

@@ -74,7 +74,7 @@ class PhonePrompts(
         if (Looper.myLooper() == Looper.getMainLooper()) return Decision.UNAVAILABLE
         val taskOwner = request.owner ?: task.activeOwner() ?: return Decision.STOP
         if (!task.isCurrent(taskOwner)) return Decision.STOP
-        val shown = if (sessionId == null) request else request.copy(sentence = "[$sessionId]\n${request.sentence}")
+        val shown = request.copy(sentence = labelled(sessionId, request.sentence))
         val ticket = arbiter.begin(null, task,
             PromptContent(PromptKind.NATIVE_CONFIRM, shown.sentence.take(4096), shown, sessionId = sessionId), request.timeoutMs.coerceIn(1, 30_000),
             { enabled() && !locked() && task.isCurrent(taskOwner) }) ?: return Decision.UNAVAILABLE
@@ -106,7 +106,7 @@ class PhonePrompts(
         if (Looper.myLooper() == Looper.getMainLooper()) return HandoffResult.STOP
         val taskOwner = owner ?: return HandoffResult.STOP
         if (!task.isCurrent(taskOwner)) return HandoffResult.STOP
-        val ticket = arbiter.begin(null, task, PromptContent(PromptKind.HANDOFF, (if (sessionId == null) reason else "[$sessionId]\n$reason").take(4096), cause = cause, sessionId = sessionId),
+        val ticket = arbiter.begin(null, task, PromptContent(PromptKind.HANDOFF, labelled(sessionId, reason).take(4096), cause = cause, sessionId = sessionId),
             timeoutMs.coerceIn(1, 600_000), { enabled() && !locked() && task.isCurrent(taskOwner) }) ?: return HandoffResult.STOP
         schedule(ticket)
         val result = ticket.await()
@@ -119,6 +119,10 @@ class PhonePrompts(
             else -> HandoffResult.STOP
         }
     }
+
+    /** A chat's id says which conversation asks; her `companion:` run id is no chat and means nothing to the person. */
+    private fun labelled(sessionId: String?, text: String) =
+        if (sessionId == null || sessionId.startsWith("companion:")) text else "[$sessionId]\n$text"
 
     /** One UI arbiter, but every native ticket retains its own task and conversation. */
     fun scoped(task: PhoneTasks, sessionId: String?, enabled: () -> Boolean = this.enabled): UserGate = object : UserGate {
