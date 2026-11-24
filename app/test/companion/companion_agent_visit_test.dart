@@ -118,6 +118,46 @@ http.Response _message({
   );
 }
 
+// Words that never finish as a usable message: cut off by the token limit, or
+// by the connection dropping before message_stop.
+http.Response _unfinished(String words, {required bool dropped}) {
+  final events = <Map<String, Object?>>[
+    {
+      'type': 'message_start',
+      'message': {
+        'id': 'unfinished-message',
+        'role': 'assistant',
+        'content': <Object?>[],
+        'usage': {'input_tokens': 12, 'output_tokens': 0},
+      },
+    },
+    {
+      'type': 'content_block_start',
+      'index': 0,
+      'content_block': {'type': 'text', 'text': ''},
+    },
+    {
+      'type': 'content_block_delta',
+      'index': 0,
+      'delta': {'type': 'text_delta', 'text': words},
+    },
+    if (!dropped) ...[
+      {'type': 'content_block_stop', 'index': 0},
+      {
+        'type': 'message_delta',
+        'delta': {'stop_reason': 'max_tokens'},
+        'usage': {'output_tokens': 800},
+      },
+      {'type': 'message_stop'},
+    ],
+  ];
+  return http.Response.bytes(
+    utf8.encode([for (final event in events) 'event: ${event['type']}\ndata: ${jsonEncode(event)}\n\n'].join()),
+    200,
+    headers: {'content-type': 'text/event-stream; charset=utf-8'},
+  );
+}
+
 Map _context(Map<String, Object?> request) {
   final texts = <String>[
     for (final message in (request['messages']! as List).cast<Map>())
@@ -1133,6 +1173,75 @@ void main() {
     expect(visit.requests, hasLength(10));
     final asked = visit.memory.store.messages().where((row) => row['role'] == 'user' && row['text'] == raw);
     expect(asked, hasLength(2));
+  });
+
+  test('a phone turn whose retries bring no message back ends with the phone line, not silence', () async {
+    final phone = _FakePhone();
+    final visit = await _Visit.open([
+      _message(
+        calls: [
+          ('open', 'phone_open', {'app': '计算器'}),
+        ],
+      ),
+      for (var i = 0; i < 4; i++) _unfinished('我看到计算器', dropped: false),
+    ]);
+    visit.agent.roundRetryDelay = (_) => Duration.zero;
+    await visit.attachment.submit('打开计算器看看');
+    expect(phone.steps, ['open']);
+    expect(visit.requests, hasLength(5));
+    expect(
+      visit.ui.failures.single.error,
+      isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/phone-run-stopped'),
+    );
+  });
+
+  test('a retried phone round keeps only the finished reply, not the broken one', () async {
+    _FakePhone();
+    final visit = await _Visit.open([
+      _message(
+        calls: [
+          ('open', 'phone_open', {'app': '计算器'}),
+        ],
+      ),
+      _unfinished('我看到计算', dropped: true),
+      _message(words: '屏幕上是 0。'),
+    ]);
+    visit.agent.roundRetryDelay = (_) => Duration.zero;
+    await visit.attachment.submit('打开计算器看看');
+    expect(visit.ui.failures, isEmpty);
+    expect(visit.attachment.text, '屏幕上是 0。');
+    final replies = visit.memory.store.messages().where((row) => row['role'] == 'assistant');
+    expect(replies.map((row) => row['text']), ['屏幕上是 0。']);
+  });
+
+  test('a failed turn that also saved a reminder cannot be resent into a second reminder', () async {
+    final phone = _FakePhone();
+    final visit = await _Visit.open([
+      _message(
+        tool: true,
+        calls: [
+          ('open', 'phone_open', {'app': '日历'}),
+        ],
+      ),
+      // Every later request fails.
+    ]);
+    visit.agent.roundRetryDelay = (_) => Duration.zero;
+    await visit.attachment.submit(_raw);
+    expect(phone.steps, ['open']);
+    expect(visit.memory.store.tasks(), hasLength(1));
+    expect(
+      visit.ui.failures.single.error,
+      isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/agent-retry-closed'),
+    );
+    final sent = visit.requests.length;
+    await visit.attachment.submit(_raw);
+    expect(visit.requests, hasLength(sent));
+    expect(visit.memory.store.tasks(), hasLength(1));
+    expect(visit.memory.store.messages().where((row) => row['role'] == 'user'), hasLength(1));
+    expect(
+      visit.ui.failures.last.error,
+      isA<DshRemoteException>().having((error) => error.code, 'code', 'companion/agent-retry-closed'),
+    );
   });
 
   test('public attachment keeps the actual lookup report after adding a new memory', () async {

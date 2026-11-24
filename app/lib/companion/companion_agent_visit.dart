@@ -60,7 +60,7 @@ class CompanionAgentAttachment {
     // Only a turn that already ran a tool is closed: retrying it could repeat
     // the tool's effect. A dropped stream with words only is an ordinary failure.
     if (run != null && run.error != null && run.toolDispatchStarted) {
-      return run.phoneUsed ? _phoneRunStopped : _agentRetryClosed;
+      return run.phoneOnly ? _phoneRunStopped : _agentRetryClosed;
     }
     return run?.error;
   }
@@ -914,8 +914,10 @@ class _CompanionAgentVisit {
         // say has returned after its physical request's first cancel drain.
         // No tool callback has entered, so the original clock and budget can
         // survive until a later explicit click in this same live visit.
-        if (submittedRun.phoneUsed) {
+        if (submittedRun.phoneOnly) {
           // The person's new message is the go-ahead, the same words included.
+          // A turn that also saved a reminder or memory keeps the closed path
+          // below: a fresh source would commit that a second time.
           retrySource = null;
           failed(_phoneRunStopped);
         } else if (submittedRun.toolDispatchStarted) {

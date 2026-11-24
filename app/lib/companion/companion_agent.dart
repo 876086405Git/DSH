@@ -386,7 +386,11 @@ class CompanionAgent extends ChangeNotifier {
                 );
               }
               if (call.name == 'public_lookup') run.externalWebContent = true;
-              if (call.name.startsWith(companionPhoneToolPrefix)) run.phoneUsed = true;
+              if (call.name.startsWith(companionPhoneToolPrefix)) {
+                run.phoneUsed = true;
+              } else {
+                run.otherToolUsed = true;
+              }
               final result = await binding.execute(call);
               if (result.externalWebContent) run.externalWebContent = true;
               if (result.externalNoticeContent) _markNoticeContent(run);
@@ -404,11 +408,24 @@ class CompanionAgent extends ChangeNotifier {
       onNotice: (requestId, callId, words) => _notice(run, requestId, callId, words),
       request: () async {
         for (var attempt = 1; ; attempt++) {
+          Object? failure;
+          StackTrace? trace;
           try {
             final response = await _round(run);
-            if (response != null || !_retryRound(run, attempt)) return response;
-          } on Object catch (error) {
-            if (!_retryRound(run, attempt, error)) rethrow;
+            if (response != null) return response;
+          } on Object catch (error, stack) {
+            failure = error;
+            trace = stack;
+          }
+          if (!_retryRound(run, attempt, failure)) {
+            if (run.phoneUsed && _turnCurrent(run)) {
+              // Her phone work is still on and she is giving up: the person
+              // hears so, even when the last thing to go was the model route.
+              run.modelCurrent = null;
+              failure ??= const CompanionLightError(CompanionLightFailure.network, 'no reply after phone steps');
+            }
+            if (failure == null) return null;
+            Error.throwWithStackTrace(failure, trace ?? StackTrace.current);
           }
           await Future<void>.delayed(roundRetryDelay(attempt));
         }
@@ -513,6 +530,7 @@ class CompanionAgent extends ChangeNotifier {
       run.request = request;
       run.memory.retainReceipt(request.settled.future);
       final priorText = run.text;
+      var answered = false;
       CompanionLightMemoryTransport? fallback;
       try {
         if (route is CompanionHostMemoryTransport) {
@@ -574,6 +592,7 @@ class CompanionAgent extends ChangeNotifier {
           run.text = [if (priorText.isNotEmpty) priorText, if (request.text.isNotEmpty) request.text].join('\n');
           notifyListeners();
         }
+        answered = message != null;
         return message == null ? null : (message: message, requestId: requestId);
       } on CompanionHostError {
         final phone = CompanionLightMemoryTransport(apiKey: _apiKey, client: _client);
@@ -599,7 +618,14 @@ class CompanionAgent extends ChangeNotifier {
                 terminal: request.sent || request.uncertain ? 'cancelled' : 'not_sent',
               );
             }
-            _saveReply(run, request);
+            if (answered || !run.phoneUsed || !_turnCurrent(run)) {
+              _saveReply(run, request);
+            } else if (run.text != priorText) {
+              // After phone steps a broken round is tried again or ends in her
+              // failure line; its unfinished words are not a reply to keep.
+              run.text = priorText;
+              if (!_disposed) notifyListeners();
+            }
           } finally {
             request.settled.complete();
             if (identical(run.request, request)) run.request = null;
@@ -761,8 +787,12 @@ class _CompanionAgentRun {
   bool cancelled = false;
   bool discard = false;
   bool toolDispatchStarted = false;
-  // She acted on the phone: those steps are not tasks, and resending is not a replay.
+  // She acted on the phone: a failed model round is hers to retry.
   bool phoneUsed = false;
+  // A reminder, task or memory tool ran too: resending could commit it twice.
+  bool otherToolUsed = false;
+  // Only phone steps ran. They never become tasks, and saying it again is a new go-ahead.
+  bool get phoneOnly => phoneUsed && !otherToolUsed;
   // This capability narrowing belongs only to this original user run.
   bool externalWebContent = false;
   // Monotonic for this logical user turn, including later HTTP continuations.
