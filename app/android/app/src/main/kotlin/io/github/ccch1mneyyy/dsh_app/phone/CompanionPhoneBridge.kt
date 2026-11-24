@@ -9,8 +9,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Local companion transport only. Admission, execution, deadlines, native reply
- * commits and cleanup all remain in the existing PhoneControl/Core/SafetyGate.
+ * Local companion transport only. The person's own message to her is the go-ahead,
+ * so a run starts without a card; writes still pass the existing PhoneControl/Core/SafetyGate.
  */
 internal class CompanionPhoneBridge(
     private val control: PhoneControl,
@@ -21,9 +21,8 @@ internal class CompanionPhoneBridge(
 ) {
     private data class Key(val session: String, val run: String)
     private data class Step(val reply: String, val publish: () -> Unit)
-    private class Run(val key: Key, val requestId: String, val epoch: Long) {
+    private class Run(val key: Key, val epoch: Long) {
         @Volatile var retired = false
-        var approved = false
         var pending = 0
         var cleanupDone = false
         var cleanupFailed = false
@@ -32,7 +31,6 @@ internal class CompanionPhoneBridge(
     }
     private val runs = LinkedHashMap<Key, Run>()
     private val ended = HashSet<Key>()
-    private val owner = Any()
 
     private fun current(run: Run) = attached() && !run.retired && run.epoch == control.companionPhoneEpoch()
 
@@ -72,10 +70,8 @@ internal class CompanionPhoneBridge(
         val key = key(args)
         val source = PhoneCaller.identifier(args?.get("sourceId"))
         val revision = (args?.get("sourceRev") as? Number)?.toLong()
-        val raw = args?.get("sourceText") as? String
-        val first = args?.get("firstTool") as? String
         if (args == null || key == null || source == null || revision == null || revision < 1 ||
-            raw.isNullOrBlank() || first !in names ||
+            (args["sourceText"] as? String).isNullOrBlank() || args["firstTool"] !in names ||
             args.keys != setOf("sessionId", "runId", "sourceId", "sourceRev", "sourceText", "firstTool")) {
             result.success(PhonePrompts.unavailable("invalid")); return
         }
@@ -87,23 +83,8 @@ internal class CompanionPhoneBridge(
         if (runs.values.any { !it.retired }) {
             result.success(PhonePrompts.unavailable("busy")); return
         }
-        val run = Run(key, "companion-${java.util.UUID.randomUUID()}", control.companionPhoneEpoch())
-        runs[key] = run
-        val firstDescription = tools.first { it.name == first }.description.substringBefore('。').take(160)
-        // l10n:keep companion phone approval uses the actual submitted user text
-        val text = "按你刚才的要求操作手机吗？\n“${raw.take(3000)}”\n先做：$firstDescription。" +
-            if (raw.length > 3000) "\n（上方显示原话开头；每项操作仍按原生安全规则确认。）" else ""
-        control.prompts.present(
-            EnginePhonePrompt(run.requestId, null, key.session, "手机伙伴", PromptKind.APPROVAL, text),
-            owner, { current(run) },
-        ) { answer ->
-            if (current(run) && runs[key] === run) {
-                run.approved = answer["decision"] == "allowed-once"
-                result.success(answer)
-            } else if (attached()) {
-                result.success(PhonePrompts.unavailable("stopped"))
-            }
-        }
+        runs[key] = Run(key, control.companionPhoneEpoch())
+        result.success(mapOf("decision" to "allowed-once"))
     }
 
     private fun invoke(call: MethodCall, result: MethodChannel.Result) {
@@ -117,8 +98,8 @@ internal class CompanionPhoneBridge(
             args.keys != setOf("sessionId", "runId", "callId", "name", "arguments")) {
             result.success(failure(callId, "手机工具参数不完整，没有执行。")); return // l10n:keep agent error
         }
-        if (run == null || !current(run) || !run.approved || key in ended) {
-            result.success(failure(callId, "本轮没有当前授权，没有执行手机操作。")); return // l10n:keep agent error
+        if (run == null || !current(run) || key in ended) {
+            result.success(failure(callId, "这一轮已经结束，没有执行手机操作。")); return // l10n:keep agent error
         }
         if (!run.callIds.add(callId)) {
             result.success(failure(callId, "此调用已经提交过，不能自动重复操作。")); return // l10n:keep agent error
@@ -166,7 +147,7 @@ internal class CompanionPhoneBridge(
             args.keys != setOf("sessionId", "runId", "stopped")) {
             result.error("invalid_phone_run", "An exact companion run is required", null); return
         }
-        val run = runs.getOrPut(key) { Run(key, "", control.companionPhoneEpoch()) }
+        val run = runs.getOrPut(key) { Run(key, control.companionPhoneEpoch()) }
         run.endReplies += result
         retire(run, args["stopped"] == true)
     }
@@ -175,7 +156,6 @@ internal class CompanionPhoneBridge(
         if (run.retired) { finish(run); return }
         run.retired = true
         ended += run.key
-        if (run.requestId.isNotEmpty()) control.prompts.cancel(run.requestId)
         // Admission is sealed on the MethodChannel thread before any queued
         // call can run. A real stop also invokes the original synchronous stop.
         val settle = try {
@@ -206,7 +186,6 @@ internal class CompanionPhoneBridge(
 
     fun detach() {
         runs.values.toList().forEach { retire(it, true) }
-        control.prompts.detachOwner(owner)
     }
 
     private fun failure(callId: String?, words: String) =

@@ -22,6 +22,7 @@ import '../state/run_pulse.dart' show estimateTokens;
 import '../state/settings_state.dart';
 import 'companion_agent_loop.dart';
 import 'companion_agent_phone_tools.dart';
+import 'companion_agent_photo_tools.dart';
 import 'companion_memory_id.dart';
 import 'companion_agent_task_tools.dart';
 import 'companion_agent_task_ui.dart';
@@ -344,7 +345,7 @@ class CompanionAgent extends ChangeNotifier {
           (!run.externalWebContent || !_afterWebMemoryChanges.contains(tool.definition.name)))
         if (run.externalNoticeContent && tool.definition.name == 'forget')
           CompanionAgentMemoryTools.noticeForget
-        else if (run.externalWebContent && tool.definition.name == 'remember')
+        else if ((run.externalWebContent || run.externalNoticeContent) && tool.definition.name == 'remember')
           CompanionAgentTool(
             name: tool.definition.name,
             description: tool.definition.description,
@@ -371,9 +372,10 @@ class CompanionAgent extends ChangeNotifier {
               // later call in the same already-decoded model response.
               if (run.externalNoticeContent &&
                   (!CompanionAgentMemoryTools.allowedAfterNotice(call.name) ||
-                      (call.name == 'forget' && !CompanionAgentMemoryTools.pureDeletion(call.input)))) {
+                      (call.name == 'forget' && !CompanionAgentMemoryTools.pureDeletion(call.input)) ||
+                      (call.name == 'remember' && call.input['card'] != null))) {
                 return const CompanionAgentToolResult(
-                  content: '{"applied":false,"code":"memory_change_after_notice","message":"This turn includes a recent event from an external notification. It cannot create or rewrite lasting memories."}',
+                  content: '{"applied":false,"code":"memory_change_after_notice","message":"This turn includes a recent event from an external notification. New memories are fine; existing ones cannot be rewritten until the next message."}',
                   isError: true,
                 );
               }

@@ -368,9 +368,10 @@ void main() {
       expect(companionPersonaCore, startsWith(companionPersonaDefault));
       final own = companionPersona(custom: '你是一只猫娘。', name: '小蓝', callMe: '阿周');
       expect(own, startsWith('你的名字是「小蓝」。\n你是一只猫娘。\n称呼对方为「阿周」。'));
-      expect(own, endsWith('可以去普通对话里做。'));
+      expect(own, endsWith('你就去做。'));
       expect(own, contains(companionPersonaRules));
-      expect(companionPersona(custom: '你是一只猫娘。', tools: true), isNot(contains('你现在没有工具')));
+      expect(companionPersona(custom: '你是一只猫娘。', tools: true), isNot(contains('用不上工具')));
+      expect(companionPersona(custom: '你是一只猫娘。', tools: true), endsWith('说做完了什么。'));
       expect(companionPersonaUpdate(), isNull);
       expect(companionPersonaUpdate(callMe: '阿周'), contains('称呼对方为「阿周」'));
       expect(companionPersonaUpdate(custom: '你是一只猫娘。'), isNot(contains('[表情:')));

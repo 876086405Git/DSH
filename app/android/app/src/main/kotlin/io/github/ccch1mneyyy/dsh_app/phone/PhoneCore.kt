@@ -820,7 +820,7 @@ class PhoneCore(
             else -> {
                 env.notifyFix("a11y")
                 // l10n:keep agent tool result
-                "无障碍没开，看不了屏幕：已通知用户到 DSH 设置 → 手机操控 开启。仍可调用 apps / open / intent / notify / clipboard / calendar_list。"
+                "无障碍没开，暂时看不了屏幕：已请用户在 系统设置 → 无障碍 里打开「DSH 手机操控」，打开后再读屏就行。仍可调用 apps / open / intent / notify / clipboard / calendar_list。"
             }
         }
     }

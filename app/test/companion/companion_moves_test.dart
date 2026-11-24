@@ -117,9 +117,11 @@ void main() {
     final rules = CompanionMoves.from(_info, const {}).rules();
     final persona = companionPersona(moves: rules);
     expect(persona.indexOf('[动作:TapBody]'), greaterThan(persona.indexOf('[表情:开心]')));
-    expect(persona, contains('你现在没有工具'));
-    expect(persona.indexOf('你现在没有工具'), greaterThan(persona.indexOf('[动作:TapBody]')));
-    expect(companionPersona(moves: rules, tools: true), isNot(contains('你现在没有工具')));
+    expect(persona, contains('用不上工具'));
+    expect(persona.indexOf('用不上工具'), greaterThan(persona.indexOf('[动作:TapBody]')));
+    final withTools = companionPersona(moves: rules, tools: true);
+    expect(withTools, isNot(contains('用不上工具')));
+    expect(withTools.indexOf('直接用手上的工具'), greaterThan(withTools.indexOf('[动作:TapBody]')));
     expect(companionPersona(moves: '  '), companionPersonaCore);
   });
 

@@ -284,9 +284,13 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     }
 
     private fun createSessionCore(task: PhoneTasks, sessionId: String?): PhoneCore {
-        val gate = prompts.scoped(task, sessionId)
+        // The master switch is the person's choice for the engine's agent. Her runs start
+        // from the person asking her directly, which is its own go-ahead.
+        val companion = sessionId?.startsWith("companion:") == true
+        val gate = if (companion) prompts.scoped(task, sessionId) { true } else prompts.scoped(task, sessionId)
         val observations = PhoneTaskObservations(task)
         val env = object : PhoneEnv by this@PhoneControl {
+            override fun enabled(): Boolean = companion || isEnabled()
             override fun gate(): UserGate = gate
             override fun onTaskStarted(owner: PhoneTasks.Owner) {} // Registry owns managed trace start.
             override fun driver(screen: PhoneScreen, owner: PhoneTasks.Owner): PhoneDriver? =
@@ -294,7 +298,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
             override fun existingReplayDriver(owner: PhoneTasks.Owner, app: PhoneAppIdentity): PhoneDriver? =
                 background.existingReplayDriver(owner, app) { task.isCurrent(owner) }
                     ?.let { observations.bind(it, owner) }
-            override fun notifyFix(kind: String) = notifyFixFor(task, kind)
+            // She is talking with the person right now: put the system page in front of them.
+            override fun notifyFix(kind: String) = notifyFixFor(task, kind, open = companion && kind == "a11y")
             override fun beforeHandoff(screen: PhoneScreen, owner: PhoneTasks.Owner): String? {
                 if (screen != PhoneScreen.BACKGROUND) return null
                 background.endTask(owner.taskId)
@@ -1125,8 +1130,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     override fun notifyFix(kind: String) = notifyFixFor(tasks, kind)
 
-    private fun notifyFixFor(task: PhoneTasks, kind: String) {
+    private fun notifyFixFor(task: PhoneTasks, kind: String, open: Boolean = false) {
         if (!task.firstNotice(kind)) return
+        if (open) runCatching { app.startActivity(accessibilitySettingsIntent()) }
         if (!nm.areNotificationsEnabled()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL_FIX, AppStrings.get(app, R.string.phone_fix_channel), NotificationManager.IMPORTANCE_HIGH))

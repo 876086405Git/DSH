@@ -858,6 +858,10 @@ class _CompanionAgentVisit {
         },
       );
       activePhoneTools = phoneTools;
+      final photoTools = CompanionAgentPhotoTools(
+        describe: (image, question) =>
+            agent.describePhoto(owner: owner, image: image, question: question, isCurrent: current),
+      );
       if (noticeReply?.draftOnly != true) await phoneTools.prepare();
       if (!current()) return;
       if (noticeReply != null) {
@@ -874,7 +878,12 @@ class _CompanionAgentVisit {
         context: turnContext,
         assistantPage: assistantPage,
         tools: noticeReply == null
-            ? [...memoryTools.bindings, ...taskTools.bindings, ...phoneTools.bindings]
+            ? [
+                ...memoryTools.bindings,
+                ...taskTools.bindings,
+                ...phoneTools.bindings,
+                if (ref.read(androidSystemFeaturesProvider)) ...photoTools.bindings,
+              ]
             : noticeReply.draftOnly
             ? const []
             : phoneTools.bindings,

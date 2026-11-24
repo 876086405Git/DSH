@@ -2624,30 +2624,30 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                           value: visionEnabled,
                           onChanged: (on) => send(screen.configure(visionEnabled: on)),
                         ),
-                        if (visionEnabled)
-                          SettingsTile(
-                            tinted: false,
-                            title: l10n.companionScreenVisionModel,
-                            subtitle: visionSelection == null
-                                ? l10n.companionScreenVisionChoose
-                                : '${visionSelection.provider} / ${visionSelection.model}',
-                            onTap: () {
-                              final scope = ref.read(modelSelectionScopeProvider);
-                              final host = companionHostKey(ref.read(activeHostProvider));
-                              unawaited(
-                                showModelSheet(
-                                  sheet,
-                                  current: state['vision_host'] == host ? visionSelection : null,
-                                  onSelected: (selection) {
-                                    if (!mounted || !identical(scope, ref.read(modelSelectionScopeProvider))) {
-                                      return;
-                                    }
-                                    send(screen.configure(visionSelection: selection.toJson(), visionHost: host));
-                                  },
-                                ),
-                              );
-                            },
-                          ),
+                        // Also what she looks at album photos with, screen pictures on or off.
+                        SettingsTile(
+                          tinted: false,
+                          title: l10n.companionScreenVisionModel,
+                          subtitle: visionSelection == null
+                              ? l10n.companionScreenVisionChoose
+                              : '${visionSelection.provider} / ${visionSelection.model}',
+                          onTap: () {
+                            final scope = ref.read(modelSelectionScopeProvider);
+                            final host = companionHostKey(ref.read(activeHostProvider));
+                            unawaited(
+                              showModelSheet(
+                                sheet,
+                                current: state['vision_host'] == host ? visionSelection : null,
+                                onSelected: (selection) {
+                                  if (!mounted || !identical(scope, ref.read(modelSelectionScopeProvider))) {
+                                    return;
+                                  }
+                                  send(screen.configure(visionSelection: selection.toJson(), visionHost: host));
+                                },
+                              ),
+                            );
+                          },
+                        ),
                       ],
                     ),
                     Padding(
