@@ -2132,6 +2132,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     _bindingEpoch++;
     _greetingPending = true;
     _hush();
+    // A stop of the old room's phone work must not silence the new one.
+    _watchPhoneStops(false);
     if (_voice.active) unawaited(_voice.cancel());
     _bubbleTimer?.cancel();
     _settleTimer?.cancel();
