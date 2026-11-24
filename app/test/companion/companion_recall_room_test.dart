@@ -12,6 +12,9 @@ import 'package:dsh_app/links/launcher_entries.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
+import 'package:dsh_app/ui/companion/companion_ask.dart';
+import 'package:dsh_app/ui/companion/companion_chrome.dart';
+import 'package:dsh_app/ui/companion/companion_log.dart';
 import 'package:dsh_app/ui/companion/companion_page.dart';
 import 'package:dsh_app/ui/companion/companion_stage.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
@@ -234,6 +237,7 @@ class _Client extends DshClient {
   final prompts = <({String session, String text, String requestId})>[];
   bool dropNext = false;
   Completer<void>? releaseEcho;
+  Completer<void>? releaseCommit;
   final cancelledSessions = <String>[];
   final cancelled = Completer<void>();
   @override
@@ -302,14 +306,41 @@ class _Client extends DshClient {
       'source': {'kind': 'user', 'rpcId': id},
     });
     if (hold != null) await cancelled.future;
+    final commit = releaseCommit;
+    final words = commit == null ? '会话回复' : '[动作:点头]找到文件了。';
+    var revision = 0;
+    void stream(Map<String, Object?> frame) {
+      final data = {'type': 'assistant-stream', 'frame': {'attemptId': 'try-$turn', 'revision': ++revision, ...frame}};
+      for (final watch in _bySession[sessionId] ?? <StreamController<DshEvent>>[]) {
+        watch.add(parseFollowFrame(sessionId, data));
+      }
+    }
+    if (commit != null) {
+      event('step/start', {'turn': turn, 'step': 1});
+      stream({'type': 'start', 'turn': turn, 'step': 1, 'startedAfterSeq': log.length - 1});
+      stream({'type': 'chunk', 'index': 0, 'time': 1795260000123,
+        'chunk': {'type': 'block-start', 'index': 0, 'blockType': 'text'}});
+      stream({'type': 'chunk', 'index': 1, 'time': 1795260000124,
+        'chunk': {'type': 'text-delta', 'index': 0, 'text': words}});
+      await commit.future;
+    }
     event('assistant/message', {
       'turn': turn,
       'step': 1,
       'message': {
         'role': 'assistant',
-        'content': [{'type': 'text', 'text': '会话回复'}],
+        'content': [{'type': 'reasoning', 'text': '不显示的内部推理'}, {'type': 'text', 'text': words}],
       },
     });
+    if (commit != null) {
+      stream({'type': 'end', 'index': 2, 'outcome': {'kind': 'committed', 'eventType': 'assistant/message', 'seq': log.length - 1}});
+      event('step/end', {'turn': turn, 'step': 1});
+      event('step/start', {'turn': turn, 'step': 2});
+      event('assistant/message', {'turn': turn, 'step': 2, 'message': {
+        'role': 'assistant', 'content': [{'type': 'text', 'text': '里面有三行。'}],
+      }});
+      event('step/end', {'turn': turn, 'step': 2});
+    }
     event('turn/end', {'turn': turn, 'reason': {'kind': 'completed'}});
     return id;
   }
@@ -390,6 +421,7 @@ class _Room {
   final sessions = _Sessions();
   late CompanionMemoryOwner memory;
   CompanionStageEvents? events;
+  final actions = <String>[];
 
   /// Auxiliary traffic is recorded independently from session/prompt.
   final asked = <Map<String, Object?>>[];
@@ -442,7 +474,9 @@ class _Room {
           home: CompanionPage(
             assistantEntry: page == null ? null : CompanionAssistantEntry(page: page),
             storeOverride: CompanionPackStore(root),
-            stageController: CompanionStageController(sink: (_, _) {}),
+            stageController: CompanionStageController(sink: (type, args) {
+              if (type == 'action') actions.add(args['name'] as String);
+            }),
             stageBuilder: (_, next) {
               events = next;
               return const SizedBox.expand();
@@ -511,6 +545,33 @@ void main() {
       expect(jsonDecode(memory['block']! as String), containsPair('version', 3));
       expect(room.memory.store.messages().where((row) => row['role'] == 'user').single['text'], raw);
       expect(room.asked, isEmpty, reason: 'the phone never starts a second foreground tool loop');
+    } finally {
+      await room.close(tester);
+    }
+  });
+
+  testWidgets('DSH draft, durable message and second step share one bubble and run one stage action', (tester) async {
+    final room = _Room(root)..bridge.chatUsage = true;
+    await room.open(tester);
+    try {
+      final commit = room.client.releaseCommit = Completer<void>();
+      await room.say(tester, '看看文件');
+      expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, '找到文件了。');
+      expect(room.actions.where((action) => action == 'nod'), hasLength(1));
+      expect(find.byType(CompanionAsk), findsOneWidget);
+      expect(room.memory.store.messages().where((r) => r['role'] == 'assistant'), isEmpty);
+      commit.complete();
+      await room.settle(tester);
+      expect(tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).text, '找到文件了。\n里面有三行。');
+      expect(room.actions.where((action) => action == 'nod'), hasLength(1));
+      expect(room.memory.store.messages().where((r) => r['role'] == 'assistant').single['text'],
+          '[动作:点头]找到文件了。\n里面有三行。');
+      expect(room.memory.store.hostChatDeliveries().single['request_id'], room.client.prompts.single.requestId);
+      tester.widget<CompanionSpeech>(find.byType(CompanionSpeech)).onPullBack!();
+      await room.settle(tester);
+      await tester.pump(const Duration(milliseconds: 500));
+      final log = tester.widget<CompanionLog>(find.byType(CompanionLog));
+      expect(log.entries.map((e) => e.text), ['看看文件', '找到文件了。', '里面有三行。']);
     } finally {
       await room.close(tester);
     }

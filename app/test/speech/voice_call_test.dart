@@ -13,6 +13,7 @@ class _Rig {
   _Rig({
     FakeCloud? cloud,
     bool noRecognizer = false,
+    bool verbatim = false,
     CallStart start = CallStart.ok,
     bool bargeIn = true,
     Duration confirmAfter = const Duration(milliseconds: 60),
@@ -24,6 +25,7 @@ class _Rig {
     call = VoiceCallController(
       audio: audio,
       conversation: conversation,
+      verbatimInput: () => verbatim,
       recognizer: () async => noRecognizer ? null : (pick != null ? await pick!() : (next ?? this.cloud)),
       voice: () {
         final out = FakeOut();
@@ -137,8 +139,8 @@ void main() {
     expect(rig.conversation.sent.last, '那上海呢');
   });
 
-  Future<_Rig> speaking({Duration confirmAfter = const Duration(milliseconds: 60)}) async {
-    final rig = _Rig(confirmAfter: confirmAfter);
+  Future<_Rig> speaking({Duration confirmAfter = const Duration(milliseconds: 60), bool verbatim = false}) async {
+    final rig = _Rig(confirmAfter: confirmAfter, verbatim: verbatim);
     await rig.call.start();
     await rig.say();
     rig.conversation.reply('好的，我来详细说一说。');
@@ -175,6 +177,15 @@ void main() {
     expect(rig.outs.single.stopped, isTrue);
     expect(rig.conversation.interrupts, 1);
     expect(rig.conversation.sent.last, '（被打断在：好的，）\n换个话题吧');
+  });
+
+  test('verbatim companion call keeps app hint and cut-off assistant words out of the human prompt', () async {
+    final rig = await speaking(verbatim: true);
+    expect(rig.conversation.sent.single, '今天天气怎么样');
+    await over(rig, '换个话题吧');
+    expect(rig.conversation.interrupts, 1);
+    expect(rig.conversation.sent, ['今天天气怎么样', '换个话题吧']);
+    rig.call.dispose();
   });
 
   test('the turns: what was said and her reply, cut where she stopped', () async {

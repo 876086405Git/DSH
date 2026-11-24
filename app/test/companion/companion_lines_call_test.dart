@@ -29,6 +29,23 @@ void main() {
     expect(companionWithoutMarks('好呀。[表情:开'), '好呀。[表情:开');
   });
 
+  test('a tool-only call completes without words and follows the live room binding', () async {
+    String? session;
+    var waiting = false;
+    final call = CompanionCallConversation((_) async => true, () async {},
+        session: () => session, waitingForOwner: () => waiting, fullMode: () => true);
+    expect(call.sessionId, isNull);
+    await call.send('检查一下');
+    session = 'owner-session';
+    waiting = true;
+    expect(call.sessionId, 'owner-session');
+    expect(call.waiting, isTrue);
+    final terminal = call.replies.first;
+    call.reply('', running: false);
+    expect((await terminal).done, isTrue);
+    call.dispose();
+  });
+
   test('a call hears each reply once and ends the turn when she stops', () async {
     final sent = <String>[];
     final call = CompanionCallConversation((text) async {

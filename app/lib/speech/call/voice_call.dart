@@ -98,6 +98,7 @@ class VoiceCallController extends ChangeNotifier {
     required this.choices,
     this.permission,
     this.cutNote,
+    this.verbatimInput,
     this.thinkingCue,
     this.confirmAfter = const Duration(milliseconds: 1600),
     this.cueAfter = const Duration(milliseconds: 1200),
@@ -112,6 +113,10 @@ class VoiceCallController extends ChangeNotifier {
   /// The line telling the model where the person cut its reply off ([heard]:
   /// the end of what they heard, '' when they cut in before a word).
   final String Function(String heard)? cutNote;
+
+  /// The conversation carries its call context separately from the user's
+  /// utterance. Do not attribute the app hint or a cut-off reply to them.
+  final bool Function()? verbatimInput;
 
   /// Plays the soft "still thinking" sound.
   final Future<void> Function()? thinkingCue;
@@ -424,7 +429,7 @@ class VoiceCallController extends ChangeNotifier {
       _cueTimer = Timer(cueAfter, _cue);
       _set(CallPhase.thinking);
     }
-    final sent = await conversation.send(message);
+    final sent = await conversation.send(verbatimInput?.call() == true ? _heard : message);
     if (_phase == CallPhase.ended) return;
     if (!sent) {
       _replyDone = true;

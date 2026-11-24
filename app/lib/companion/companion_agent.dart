@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import '../l10n/l10n.dart';
 import '../notify/chat_alerts.dart' show companionHostKey;
 import '../state/chat_state.dart';
 import '../state/connection_state.dart';
@@ -144,6 +145,8 @@ class CompanionAgent extends ChangeNotifier {
   bool get running => (_run?.running ?? false) || _asideRequest != null;
   String get text => _run?.text ?? '';
   CompanionLightError? get error => _run?.error;
+  bool get hasSessionReply => _run?.hasSessionReply ?? false;
+  String? get sessionActivity => _run?.running == true ? _run?.sessionActivity : null;
 
   /// The original SQLite user source, not the tools' separate journal turn ID.
   String? get sourceId => _run?.source['id'] as String?;
@@ -744,6 +747,9 @@ class _CompanionAgentRun {
   // Tool-side model requests (a photo look) that Stop must abort with the turn.
   final aborts = <DshHttpAbort>{};
   String text = '';
+  bool hasSessionReply = false;
+  String? sessionActivity;
+  bool waitingForOwner = false;
   CompanionLightError? error;
   _CompanionAgentRequest? request;
 }

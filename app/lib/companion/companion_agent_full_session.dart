@@ -69,6 +69,7 @@ class _CompanionFullSession {
     final ended = Completer<void>();
     String? requestId;
     int? echoSeq;
+    Set<String>? previousSteps;
     CompanionSessionTools? devices;
     void finish() {
       if (!ended.isCompleted) ended.complete();
@@ -111,7 +112,47 @@ class _CompanionFullSession {
         (t) => t.startSeq <= echoSeq! && (t.endSeq == null || echoSeq! <= t.endSeq!),
       ).firstOrNull;
       if (trace == null) return;
-      if (trace.spans.any((s) => s.kind == TraceKind.tool)) run.toolDispatchStarted = true;
+      run.hasSessionReply = true;
+      // Interrupt may steer a still-running turn. A step already in flight
+      // before our echo belongs to that earlier input, even if it commits late.
+      if (previousSteps == null) {
+        final earlier = controller.events.where((e) => trace.startSeq <= e.seq && e.seq < echoSeq!);
+        previousSteps = {
+          if (earlier.whereType<UserMessageEvent>().any((e) => e.isHumanPrompt))
+            for (final event in earlier.whereType<StepStartedEvent>()) 'm${event.turn}.${event.step}',
+        };
+      }
+      final parts = <String>[];
+      var ourInputIsLatest = true;
+      for (final item in state.items.reversed) {
+        if (item is UserChatItem) {
+          if (item.seq == echoSeq) break;
+          if (item.seq < echoSeq!) return;
+          // A later person also spoke in this session. Their reply and
+          // pending controls do not belong to this room input.
+          ourInputIsLatest = false;
+          parts.clear();
+        } else if (item is AssistantChatItem &&
+            item.rowKey?.startsWith('m${trace.turn}.') == true &&
+            !previousSteps!.contains(item.rowKey) &&
+            item.text.isNotEmpty) {
+          parts.add(item.text);
+        }
+      }
+      final text = parts.reversed.join('\n');
+      final waiting = ourInputIsLatest && trace.running && (state.openApproval != null || state.questions.isNotEmpty);
+      final activity = switch ((ourInputIsLatest && trace.running, state.openApproval, trace.current)) {
+        (false, _, _) => null,
+        (true, _?, _) => appL10n.stateAlertPublicApproval,
+        _ when state.questions.isNotEmpty => appL10n.stateAlertPublicQuestion,
+        (_, _, TraceSpan(kind: TraceKind.tool, toolName: final name?)) => appL10n.companionSessionUsingTool(name),
+        _ => text.isEmpty ? appL10n.companionStatusThinking : null,
+      };
+      final changed = text != run.text || activity != run.sessionActivity;
+      run.text = text;
+      run.sessionActivity = activity;
+      run.waitingForOwner = waiting;
+      if (trace.spans.any((s) => s.kind == TraceKind.tool && s.seq > echoSeq!)) run.toolDispatchStarted = true;
       if (trace.endSeq != null) {
         if (prepared?.requestId == req) {
           prepared = null;
@@ -120,7 +161,15 @@ class _CompanionFullSession {
         final failure = trace.endReason?.error;
         if (failure != null) run.error = CompanionHostError(companionHostFailure(failure.code), failure.message);
         finish();
+        if (text.trim().isNotEmpty && !run.externalNoticeContent &&
+            run.controlRevision == run.memory.store.archive['control_revision']) {
+          final source = 'reply:${run.source['id']}:$req';
+          visit.agent._save(run, source, text);
+          run.unpresentedReplies[source] = (start: 0, end: text.length);
+        }
+        visit.refreshHostUsage();
       }
+      if (changed) visit.changed();
     }
 
     final listener = observeTurn;
@@ -263,6 +312,21 @@ class _CompanionFullSession {
       if (update['profile'] is Map && ack.profileAccepted == true) {
         profileFingerprint = jsonEncode(update['profile']);
       }
+    }
+    // The host receipt is anchored to the exact archive binding acknowledged
+    // in this sidecar. Recording it does not imply a model request or usage.
+    final phone = update?['phoneMemory'];
+    if (cap.chatUsage && phone is Map) {
+      run.memory.store.rememberHostChatDelivery(
+        hostKey: companionHostKey(visit.ref.read(activeHostProvider)),
+        instanceId: cap.instanceId,
+        sessionId: id,
+        requestId: req,
+        archiveId: phone['archiveId'] as String,
+        controlRevision: phone['controlRevision'] as int,
+        historyAfterSeq: phone['historyAfterSeq'] as int,
+        observedAt: DateTime.now().millisecondsSinceEpoch,
+      );
     }
     if (selectedCards case final cards?) {
       run.onSelected?.call(cards);

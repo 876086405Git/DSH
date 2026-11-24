@@ -1,7 +1,7 @@
 // 伙伴小屋: a whole page for the companion (docs/design/companion.md). She fills
 // the screen in a WebView; on top of it, in Flutter, her words and a small input.
-// Touches are answered on the spot. Both modes subscribe to the process phone
-// Agent; full mode adds the real captured Host tools to that same loop.
+// Both modes share the room's presentation. In full mode the Host session
+// supplies live assistant words, tools, questions and approvals.
 
 import 'dart:async';
 import 'dart:io';
@@ -50,6 +50,7 @@ import '../../speech/voice_cloud.dart';
 import '../../state/android_features.dart' show operatingSystemProvider;
 import '../../state/app_mode_state.dart';
 import '../../state/android_features.dart';
+import '../../state/chat_state.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
 import '../../state/models_state.dart';
@@ -78,6 +79,7 @@ import '../theme/surfaces.dart';
 import '../shell/page_frame.dart';
 import '../workshop/workshop_screen.dart';
 import '../workspace/directory_picker.dart';
+import 'companion_ask.dart';
 import 'companion_chrome.dart';
 import 'companion_assistant_settings.dart';
 import 'companion_draft_inputs.dart';
@@ -221,6 +223,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
 
   /// The backlog is over her (companion_log.dart).
   bool _logOpen = false;
+  bool _phoneLog = false;
   ({(CompanionMemoryStore, int, int, String?, String) key, List<CompanionLogEntry> entries})? _savedLightLog;
 
   /// What she's doing in her corner (the stage's word for it).
@@ -485,6 +488,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       mapHandoff: _mapHandoff,
     );
     _agent.addListener(_onAgentChanged);
+    if (_attachment.replyId != null) _onAgentChanged();
     ref.listenManual(companionEffectiveVoiceProvider, (_, settings) {
       if (settings != null) unawaited(_prepareVoice(settings));
     }, fireImmediately: true);
@@ -651,11 +655,11 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       setState(() {});
       return;
     }
-    _baselineSet = true;
     _onReply(
       id,
       _attachment.text,
       running: _attachment.running,
+      attention: _attachment.waitingForOwner,
       error: _attachment.error == null ? null : _failureText(_attachment.error!),
     );
     _queueObserve();
@@ -2383,7 +2387,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
       _stage.command('mood', {'mood': 'thinking'});
       await _attachment.submit(text, voiceCall: true);
       return true;
-    }, _stop);
+    }, _stop,
+        fullMode: () => mounted && !_light,
+        session: () => mounted && !_light ? _sessionId : null,
+        waitingForOwner: () => _attachment.waitingForOwner);
     await openVoiceCall(context, title: _name(context.l10n), conversation: call, backdrop: CallBackdrop.companion);
     if (identical(_call, call)) _call = null;
   }
@@ -2452,7 +2459,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
   }
 
   /// The backlog over her: this room's whole conversation, in either mode.
-  Future<void> _openLog() async {
+  Future<void> _openLog({bool phone = false}) async {
     _notesForegroundEpoch++;
     _mapHandoff.close();
     _acted();
@@ -2462,7 +2469,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     }
     if (!mounted) return;
     _focus.unfocus();
-    setState(() => _logOpen = true);
+    setState(() {
+      _phoneLog = phone;
+      _logOpen = true;
+    });
     // Under the log's blur she's barely seen: her stage draws slowly meanwhile.
     _stage.command('covered', {'on': true});
   }
@@ -2523,15 +2533,29 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
     ];
   }
 
-  Widget _log(String name) => CompanionLog(
-    key: const ValueKey('log-phone'),
-    entries: _visibleLightEntries,
-    name: name,
-    onClose: _closeLog,
-    // An explicit action still reaches the saved Host conversation. It is not
-    // subscribed as the ordinary phone Agent's live reply source.
-    onOpenChat: _sessionId == null ? null : _openFullChat,
-  );
+  Widget _log(String name) {
+    final id = _sessionId;
+    if (!_phoneLog && !_light && id != null) {
+      final chat = ref.watch(chatProvider(id));
+      return CompanionLog(
+        key: ValueKey('log-host:$id'),
+        entries: companionLogFromChat(chat.items, emotions: _moves.emotionLabels, actions: _moves.actionLabels),
+        name: name,
+        onClose: _closeLog,
+        onOpenChat: _openFullChat,
+        onLoadOlder: chat.hasMoreHistory ? ref.read(chatProvider(id).notifier).loadOlder : null,
+        loadingOlder: chat.loadingOlder,
+        history: chat.items.length,
+      );
+    }
+    return CompanionLog(
+      key: const ValueKey('log-phone'),
+      entries: _visibleLightEntries,
+      name: name,
+      onClose: _closeLog,
+      onOpenChat: id == null ? null : _openFullChat,
+    );
+  }
 
   void _openFullChat() {
     final id = _sessionId;
@@ -3131,6 +3155,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
           ],
           if (_sessionId != null || hasLightEntries)
             (icon: AppIcons.history, label: l10n.companionLogTitle, onTap: () => run(_openLog, stage: true)),
+          if (!_light && _sessionId != null && hasLightEntries)
+            (icon: AppIcons.history, label: l10n.companionLogOnDevice, onTap: () => run(() => _openLog(phone: true), stage: true)),
           (
             icon: AppIcons.companionVoice,
             label: l10n.companionMenuVoice,
@@ -3702,6 +3728,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage>
                       _openAgent(pill.sessionId);
                     },
                   ),
+                if (!_light && chatId != null) CompanionAsk(key: ValueKey(chatId), sessionId: chatId),
                 CompanionMyLine(text: _myLine),
                 CompanionSpeech(
                   text: _bubble,

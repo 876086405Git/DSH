@@ -1,4 +1,6 @@
 {
+  "companionLogOnDevice": "手机上的记录",
+  "companionSessionUsingTool": "正在用 {tool}",
   "companionTitle": "伙伴小屋",
   "companionEntrySubtitle": "和她待一会儿",
   "companionDefaultName": "她",

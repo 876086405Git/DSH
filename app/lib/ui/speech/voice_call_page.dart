@@ -16,6 +16,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../companion/companion_call.dart';
+import '../../companion/companion_state.dart' show companionSessionsProvider;
 import '../../companion/companion_voice.dart';
 import '../../companion/companion_voice_source.dart';
 import '../../l10n/l10n.dart';
@@ -151,6 +153,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     _call.ended == CallEnd.noRecognizer && ref.read(accountProvider).signedIn,
     switch (widget.conversation) {
       final ChatCallConversation chat => chat.sessionId,
+      final CompanionCallConversation room => room.sessionId,
       _ => null,
     },
   );
@@ -173,6 +176,10 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     _call = VoiceCallController(
       audio: audio,
       conversation: widget.conversation,
+      verbatimInput: switch (widget.conversation) {
+        final CompanionCallConversation room => room.fullMode,
+        _ => null,
+      },
       recognizer: () async {
         // The phone's own voice warms up while the call starts, not when changed mid-reply.
         await _settleVoice(warm: _call.phase == CallPhase.starting);
@@ -542,8 +549,10 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     final her = backdrop == CallBackdrop.companion && !_stageFailed;
     final (status, dots) = _status(l10n);
     final error = _call.error;
+    if (widget.conversation is CompanionCallConversation) ref.watch(companionSessionsProvider);
     final sessionId = switch (widget.conversation) {
       final ChatCallConversation chat => chat.sessionId,
+      final CompanionCallConversation room => room.sessionId,
       _ => null,
     };
     final width = MediaQuery.sizeOf(context).width;

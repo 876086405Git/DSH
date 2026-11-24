@@ -41,6 +41,7 @@ class CompanionAgentAttachment {
   // Retained API: local task speech has no model preparation.
   String? get preparingSignalId => null;
   String get text => _visit.run?.text ?? '';
+  bool get waitingForOwner => running && _visit.run!.waitingForOwner;
   String? get pendingText {
     final request = _visit.run?.request;
     return request != null && !request.saved && request.text.isNotEmpty ? request.text : null;
@@ -169,6 +170,7 @@ class CompanionAgentResident {
   CompanionAgentResident._(this._visit, this._ui);
   final _CompanionAgentVisit _visit;
   final CompanionAgentRoomUi _ui;
+  CompanionMoves get moves => _visit.moves;
   bool get active => _visit.active && identical(_visit.residentUi, _ui);
   CompanionMemoryOwner? get memory => active ? _visit.memory : null;
   String? get characterId => active ? _visit.characterId : null;

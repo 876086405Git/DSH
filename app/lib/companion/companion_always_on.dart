@@ -4,6 +4,7 @@ import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
+import '../l10n/l10n.dart';
 import '../pets/overlay_channel.dart';
 import '../speech/speech_settings.dart' show companionEffectiveVoiceProvider;
 
@@ -17,6 +18,7 @@ import 'companion_initiative.dart';
 import 'companion_initiative_owner.dart';
 import 'companion_maps.dart';
 import 'companion_moves.dart';
+import 'companion_reply.dart';
 import 'companion_residency.dart';
 import 'companion_screen_observer.dart';
 import 'companion_state.dart' show companionNameProvider;
@@ -233,11 +235,23 @@ class CompanionAlwaysOnOwner {
       _textAfterControl = 0;
     }
     final text = agent.text;
-    final visible = _textAfterControl <= text.length ? text.substring(_textAfterControl).trim() : '';
+    final raw = _textAfterControl <= text.length ? text.substring(_textAfterControl) : '';
+    final moves = _resident!.moves;
+    final parsed = !agent.hasSessionReply ? null : parseCompanionReply(
+      raw,
+      streaming: agent.running,
+      emotions: moves.emotionLabels,
+      actions: moves.actionLabels,
+    );
+    final activity = agent.sessionActivity;
+    final visible = parsed == null ? raw.trim() : activity ??
+        (parsed.words.isEmpty && !agent.running && _sentText != null
+            ? agent.error == null ? appL10n.stateAlertPublicDone : appL10n.stateAlertPublicFailed
+            : parsed.words);
     if (reply == null || visible.isEmpty || (visible == _sentText && _sentRunning == agent.running)) return;
     _sentText = visible;
     _sentRunning = agent.running;
-    final speak = !agent.running && _fromFloat && _resident?.ownsCurrentRun == true && _spokenReplies.add(reply);
+    final speak = (parsed?.words ?? raw.trim()).isNotEmpty && !agent.running && _fromFloat && _resident?.ownsCurrentRun == true && _spokenReplies.add(reply);
     while (_spokenReplies.length > 64) {
       _spokenReplies.remove(_spokenReplies.first);
     }
@@ -246,13 +260,18 @@ class CompanionAlwaysOnOwner {
       unawaited(
         resident.deliverReply(
           reply,
-          visible,
-          (noticeEpoch) =>
-              _presentLine(id: reply, text: visible, emotion: 'neutral', speak: speak, noticeEpoch: noticeEpoch),
+          raw,
+          (noticeEpoch) => _presentLine(
+            id: reply,
+            text: visible,
+            emotion: parsed?.marks.where((m) => m.kind == CompanionMarkKind.emotion).lastOrNull?.name ?? 'neutral',
+            speak: speak,
+            noticeEpoch: noticeEpoch,
+          ),
         ),
       );
     }
-    _postReply(reply, visible);
+    _postReply(reply, raw, visible);
   }
 
   /// The reply update still waiting in [_notificationQueue].
@@ -262,16 +281,17 @@ class CompanionAlwaysOnOwner {
   /// latest text each time: Android drops updates to a notification beyond
   /// about five a second (the last one too), and each update holds the
   /// platform thread for two file locks and several system calls.
-  void _postReply(String id, String text) {
+  void _postReply(String id, String raw, String text) {
     final waiting = _replyUpdate;
     if (waiting != null &&
         waiting.id == id &&
         waiting.generation == _outputGeneration &&
         waiting.epoch == _status.epoch) {
+      waiting.raw = raw;
       waiting.text = text;
       return;
     }
-    final update = _replyUpdate = _ReplyUpdate(id, text, _outputGeneration, _status.epoch);
+    final update = _replyUpdate = _ReplyUpdate(id, raw, text, _outputGeneration, _status.epoch);
     _notificationQueue = _notificationQueue.catchError((Object _) {}).then((_) async {
       await Future<void>.delayed(const Duration(milliseconds: 300));
       if (identical(_replyUpdate, update)) _replyUpdate = null;
@@ -280,7 +300,7 @@ class CompanionAlwaysOnOwner {
       if (resident == null) return;
       await resident.deliverReply(
         update.id,
-        update.text,
+        update.raw,
         (noticeEpoch) => channel.update(
           epoch: update.epoch,
           name: _name,
@@ -567,8 +587,9 @@ class _ResidentTaskUi implements CompanionAgentTaskUi {
 }
 
 final class _ReplyUpdate {
-  _ReplyUpdate(this.id, this.text, this.generation, this.epoch);
+  _ReplyUpdate(this.id, this.raw, this.text, this.generation, this.epoch);
   final String id;
+  String raw;
   String text;
   final int generation;
   final int epoch;

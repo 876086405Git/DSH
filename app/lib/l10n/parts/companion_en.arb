@@ -1,4 +1,13 @@
 {
+  "companionLogOnDevice": "On-device history",
+  "@companionLogOnDevice": {
+    "description": "Open this companion's local SQLite and earlier phone conversations."
+  },
+  "companionSessionUsingTool": "Using {tool}",
+  "@companionSessionUsingTool": {
+    "description": "Current tool activity in a companion session, shown on a floating or notification surface.",
+    "placeholders": {"tool": {"type": "String"}}
+  },
   "companionTitle": "Companion room",
   "companionEntrySubtitle": "Spend some time with her",
   "companionDefaultName": "her",
