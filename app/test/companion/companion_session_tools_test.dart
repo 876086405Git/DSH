@@ -26,6 +26,8 @@ void main() {
     final replies = StreamController<Map<String, Object?>>();
     final resultFrames = StreamIterator(replies.stream);
     late HttpResponse stream;
+    // The client sees `ready` before the handler's flush returns; write only after it.
+    final flushed = Completer<void>();
     final served = server.listen((req) async {
       final data = jsonDecode(await utf8.decoder.bind(req).join()) as Map;
       if (req.uri.path.endsWith('/open')) {
@@ -33,9 +35,10 @@ void main() {
         expect((data['tools'] as List).map((tool) => tool['name']), ['reminder', 'recall']);
         stream = req.response;
         stream.bufferOutput = false;
-        stream.headers.contentType = ContentType('application', 'x-ndjson');
+        stream.headers.contentType = ContentType('application', 'x-ndjson', charset: 'utf-8');
         stream.writeln(jsonEncode({'type': 'ready', 'token': 'owner'}));
         await stream.flush();
+        flushed.complete();
       } else {
         replies.add(Map<String, Object?>.from(data));
         req.response.write('{}');
@@ -72,6 +75,7 @@ void main() {
       client, sessionId: 'cabin', requestId: 'turn', tools: bindings, isCurrent: () => true,
     );
     expect(phone, isNotNull);
+    await flushed.future;
     stream.writeln(jsonEncode({'type': 'call', 'callId': 'one', 'name': 'reminder', 'input': {'text': '午饭'}}));
     await stream.flush();
     expect(await resultFrames.moveNext(), isTrue);
