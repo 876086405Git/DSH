@@ -204,7 +204,13 @@ class CompanionReplyStream {
       findCut: true,
     );
     final tail = part.reply;
-    final words = tail.words.isEmpty ? _committed.words : _committed.words + tail.words;
+    // Removing marks, trimming and collapsing spaces can only shorten the
+    // input. At the same length every displayed code unit is still raw.
+    final words = tail.words.isEmpty
+        ? _committed.words
+        : _committed.words.length + tail.words.length == text.length
+        ? text
+        : _committed.words + tail.words;
     final marks = tail.marks.isEmpty
         ? _committed.marks
         : List<CompanionMark>.unmodifiable([..._committed.marks, ...tail.marks]);
