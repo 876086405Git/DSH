@@ -94,6 +94,25 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('turn revision follows visible writes, including raw writes from another connection', () {
+    final other = sqlite3.open('${directory.path}/memory.sqlite');
+    addTearDown(other.close);
+    expect(store.hasControlRevision(0), isTrue);
+
+    other.execute('BEGIN IMMEDIATE');
+    other.execute('UPDATE memory_archive SET control_revision=1');
+    expect(store.hasControlRevision(0), isTrue);
+    other.execute('COMMIT');
+    expect(store.hasControlRevision(0), isFalse);
+    expect(store.hasControlRevision(1), isTrue);
+
+    database.execute('BEGIN IMMEDIATE');
+    database.execute('UPDATE memory_archive SET control_revision=2');
+    expect(store.hasControlRevision(2), isTrue);
+    database.execute('ROLLBACK');
+    expect(store.hasControlRevision(1), isTrue);
+  });
+
   test('structured corrections use current references without reparsing the user sentence', () {
     final card = seed('面试安排在周四');
     final source = say('source', '我把面试改成周五了，稍后再确认。');
