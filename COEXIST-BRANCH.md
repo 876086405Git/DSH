@@ -6,10 +6,12 @@
 
 最新共存版 APK 在 Releases 里，不用自己构建：
 
-**[⬇️ DSH Go 共存版 v1.3.0 (arm64)](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.3.0)**
+**[⬇️ DSH Go 共存版 v1.4.0 (arm64)](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.4.0)**
 
 ```
-文件：dsh-go-1.3.0-coexist-arm64.apk
+文件：dsh-go-1.4.0-coexist-arm64.apk
+大小：686.3 MB
+SHA-256：2359d7fbe4314f5835909b0461849eb812943c90ba980bf20e8447b3bd966246
 大小：688.1 MB（721,562,247 字节）
 SHA-256：26e79eb0d4b2bc26106bac951a32f41688b831bfa752dacca4e23783baf33591
 ```
@@ -17,12 +19,12 @@ SHA-256：26e79eb0d4b2bc26106bac951a32f41688b831bfa752dacca4e23783baf33591
 国内直连慢的话，在下载地址前加 `https://gh-proxy.com/`：
 
 ```
-https://gh-proxy.com/https://github.com/876086405Git/DSH/releases/download/coexist-v1.3.0/dsh-go-1.3.0-coexist-arm64.apk
+https://gh-proxy.com/https://github.com/876086405Git/DSH/releases/download/coexist-v1.4.0/dsh-go-1.4.0-coexist-arm64.apk
 ```
 
-上一版（1.2.0）留在 [coexist-v1.2.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.2.0) 兜底，1.1.0 在 [coexist-v1.1.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.1.0)。
+上一版（1.3.0）留在 [coexist-v1.3.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.2.0) 兜底，1.1.0 在 [coexist-v1.1.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.1.0)。
 
-> Release 标签用 `coexist-` 前缀（`coexist-v1.3.0`），和本仓库插件的 `v1.3.0` 区分开。
+> Release 标签用 `coexist-` 前缀（`coexist-v1.4.0`），和本仓库插件的 `v1.3.0` 区分开。
 
 ---
 > **和本仓库 `main` 分支的关系**：`main` 是「DSH 插件集合」（`plugins/` 下三个独立 DSH 桌面插件），和这个分支**内容零重叠、互不影响**。这个分支是完整的 Android 应用源码，不含任何插件代码。
@@ -124,9 +126,9 @@ flutter pub get
 flutter build apk --release \
   --flavor arm64 \
   --target-platform android-arm64 \
-  --build-name 1.3.0 \
+  --build-name 1.4.0 \
   --build-number <构建号> \
-  --dart-define=DSH_APP_VERSION=1.3.0+<构建号> \
+  --dart-define=DSH_APP_VERSION=1.4.0+<构建号> \
   --dart-define=DSH_COEXIST_BUILD=true
 ```
 
@@ -192,12 +194,13 @@ flutter build apk --release \
 
 | 项 | 值 |
 |---|---|
-| 官方基线 | `v1.3.0`（`da7980270`）；本分支基于它 rebase，当前 HEAD 见下表 |
+| 官方基线 | `v1.4.0`（`f2d589c4a`）；本分支基于它 rebase，当前 HEAD 见下表 |
 | 本分支 HEAD | 见 `git log -1`（随文档一起提交，不写死 SHA） |
-| versionName / versionCode | `1.3.0` / `11211206` |
-| APK 体积 / SHA-256 | 688.1 MB（721,562,247 字节）/ `26e79eb0d4b2bc26106bac951a32f41688b831bfa752dacca4e23783baf33591` |
-| 备份分支 | `coexist-v2-pre120`（1.2.0 之前的状态，回滚用） |
-| 真机验证 | Redmi 25053RT47C（Android 17 / arm64-v8a）：1.3.0 已安装并实际使用，未发现异常（2026-11-21） |
+| versionName / versionCode | `1.4.0` / `11260214` |
+| APK 体积 / SHA-256 | 686.3 MB / `2359d7fbe4314f5835909b0461849eb812943c90ba980bf20e8447b3bd966246` |
+| 备份分支 | `backup/coexist-v1.3.0-1126-0157`（1.3.0 状态，回滚用） |
+| 真机验证 | Redmi 25053RT47C（Android 17 / arm64-v8a）：1.4.0 待装待验 |
+| v1.4.0 升级中的修复 | 官方 v1.4.0 给 `_apply` 加了 `input.text != _draftText` 守卫，移植的内置模型分支漏写 `_draftText`，转写结果会丢失；已补（见提交 `fix(voice)`） |
 
 ---
 
