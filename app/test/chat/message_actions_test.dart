@@ -368,20 +368,16 @@ void main() {
   });
 
   group('prompt actions', () {
-    testWidgets('edit and resend: fork, switch, text back in the composer', (tester) async {
+    testWidgets('long press offers edit and resend directly, with the original draft preserved', (tester) async {
       _platform(tester);
       final harness = ChatHarness(session: 's1', states: {'s1': _conversation()});
       await _pump(tester, harness);
       await tester.enterText(find.byType(TextField), '原对话草稿');
       await tester.longPress(find.text('帮我看看测试为什么失败'));
       await pumpFrames(tester);
-      await tester.tap(find.widgetWithText(TextSelectionToolbarTextButton, '更多'));
-      await pumpFrames(tester);
-      for (final label in ['复制', '选择文字', '编辑后重发']) {
-        expect(find.widgetWithText(SettingsTile, label), findsOneWidget);
-      }
-      expect(find.widgetWithText(SettingsTile, '分享'), findsNothing);
-      await tester.tap(find.widgetWithText(SettingsTile, '编辑后重发'));
+      final edit = find.widgetWithText(TextSelectionToolbarTextButton, '编辑后重发').hitTestable();
+      expect(edit, findsOneWidget);
+      await tester.tap(edit);
       await pumpFrames(tester);
 
       expect(harness.controllers['s1']!.edited, [1]);
@@ -389,6 +385,7 @@ void main() {
       expect(container.read(currentSessionProvider), 'fork-session');
       expect(container.read(draftStoreProvider).drafts['s1']!.text, '原对话草稿');
       expect(_composerTexts(tester), contains('帮我看看测试为什么失败'));
+      expect(harness.controllers['fork-session']!.sent, isEmpty);
       expect(find.text('已在新对话中打开'), findsOneWidget);
     });
 
@@ -401,6 +398,10 @@ void main() {
       await pumpFrames(tester);
       await tester.tap(find.widgetWithText(TextSelectionToolbarTextButton, '更多'));
       await pumpFrames(tester);
+      for (final label in ['复制', '选择文字', '编辑后重发']) {
+        expect(find.widgetWithText(SettingsTile, label), findsOneWidget);
+      }
+      expect(find.widgetWithText(SettingsTile, '分享'), findsNothing);
       await tester.tap(find.widgetWithText(SettingsTile, '编辑后重发'));
       await pumpFrames(tester);
       final container = ProviderScope.containerOf(tester.element(find.byType(ChatScreen)));
@@ -425,6 +426,7 @@ void main() {
       await _pump(tester, harness);
       await tester.longPress(find.text('再看看依赖'));
       await pumpFrames(tester);
+      expect(find.widgetWithText(TextSelectionToolbarTextButton, '编辑后重发'), findsNothing);
       await tester.tap(find.widgetWithText(TextSelectionToolbarTextButton, '更多'));
       await pumpFrames(tester);
       expect(find.widgetWithText(SettingsTile, '编辑后重发'), findsNothing);

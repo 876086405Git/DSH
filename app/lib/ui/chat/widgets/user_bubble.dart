@@ -22,8 +22,8 @@ import 'theme_role_tag.dart';
 /// 禁配:气泡底上只用主文字 / 次级文字;三级文字(4.32)与主色(4.22)
 /// 不过 AA。
 ///
-/// 长按气泡里的字就地选字([MessageSelection]);选区上的「更多」打开菜单:复制 /
-/// 选择文字 / 引用 / 编辑后重发([onEdit])。
+/// 长按气泡里的字就地选字([MessageSelection])，可直接「编辑后重发」([onEdit])；
+/// 选区上的「更多」打开完整菜单。
 ///
 /// 以引用块开头的消息(引用追问),引文画在气泡顶部([BubbleQuote]),
 /// 下面是正文;复制、选择文字、编辑拿到的仍是发出去的原文。
@@ -56,8 +56,8 @@ class UserBubble extends StatelessWidget {
   /// Small text actions after the pending label ("改为插话", "撤回").
   final List<(String, VoidCallback)> pendingActions;
 
-  /// "编辑后重发" in the long-press menu; null leaves it out (optimistic
-  /// bubbles: they have "撤回" instead).
+  /// "编辑后重发" in the selection toolbar and the full menu. Optimistic
+  /// bubbles leave it out; they have "撤回" instead.
   final VoidCallback? onEdit;
 
   /// "引用" in the long-press menu (and in 选择文字); null leaves it out.
@@ -167,7 +167,13 @@ class UserBubble extends StatelessWidget {
           padding: themeStyle.pack == null
               ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
               : EdgeInsets.symmetric(horizontal: themeStyle.shapes.bubblePadH, vertical: themeStyle.shapes.bubblePadV),
-          child: MessageSelection(text: _shown, onQuote: onQuote, onMore: () => _menu(context), child: content),
+          child: MessageSelection(
+            text: _shown,
+            onQuote: onQuote,
+            onEdit: onEdit,
+            onMore: () => _menu(context),
+            child: content,
+          ),
         ),
       ),
     );

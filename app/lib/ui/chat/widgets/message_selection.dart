@@ -15,8 +15,8 @@ import 'message_menu.dart';
 
 /// A message's text, selectable where it is: a long-press selects the word
 /// under the finger, the handles drag the range. The toolbar over the
-/// selection: 复制 · 引用 ([onQuote]) · 分享 · 朗读 · 更多 ([onMore], the
-/// message's own menu) · 全选, then the system's text actions.
+/// selection offers copy, quote ([onQuote]), share, read aloud, more ([onMore],
+/// the message menu), and select all. Editable prompts put [onEdit] first.
 ///
 /// It copies and shares what is drawn (a masked credential stays
 /// masked; the eye shows it, the menu's 「复制」 takes the original); 朗读
@@ -27,6 +27,7 @@ class MessageSelection extends StatefulWidget {
     required this.text,
     required this.child,
     this.onQuote,
+    this.onEdit,
     this.onMore,
     this.live = false,
   });
@@ -37,6 +38,7 @@ class MessageSelection extends StatefulWidget {
 
   final Widget child;
   final ValueChanged<String>? onQuote;
+  final VoidCallback? onEdit;
   final VoidCallback? onMore;
 
   /// Still being written. Selecting works as on a finished message, but the
@@ -59,10 +61,29 @@ class _MessageSelectionState extends State<MessageSelection> {
     final selected = _selected;
     final some = selected.trim().isNotEmpty;
     final onQuote = widget.onQuote;
+    final onEdit = widget.onEdit;
     final onMore = widget.onMore;
+    final more = onMore == null
+        ? null
+        : ContextMenuButtonItem(
+            label: context.l10n.commonMore,
+            onPressed: () {
+              region.clearSelection();
+              onMore();
+            },
+          );
     return AdaptiveTextSelectionToolbar.buttonItems(
       anchors: region.contextMenuAnchors,
       buttonItems: [
+        if (onEdit != null)
+          ContextMenuButtonItem(
+            label: MessageAction.edit.label,
+            onPressed: () {
+              region.hideToolbar();
+              region.clearSelection();
+              onEdit();
+            },
+          ),
         ?item(ContextMenuButtonType.copy),
         if (some && onQuote != null)
           ContextMenuButtonItem(
@@ -72,6 +93,8 @@ class _MessageSelectionState extends State<MessageSelection> {
               onQuote(selected);
             },
           ),
+        // Keep the full menu visible when edit takes a slot on a narrow screen.
+        if (onEdit != null) ?more,
         ?item(ContextMenuButtonType.share),
         if (some)
           ContextMenuButtonItem(
@@ -82,16 +105,7 @@ class _MessageSelectionState extends State<MessageSelection> {
               readAloudReply(this.context, 'selection:$selected', speakableSelection(selected, widget.text));
             },
           ),
-        // Before 全选: a narrow toolbar folds its last items away, and 「更多」
-        // is the way to the message's menu.
-        if (onMore != null)
-          ContextMenuButtonItem(
-            label: context.l10n.commonMore,
-            onPressed: () {
-              region.clearSelection();
-              onMore();
-            },
-          ),
+        if (onEdit == null) ?more,
         ?item(ContextMenuButtonType.selectAll),
         ...system.where((i) => !ours.contains(i.type)),
       ],

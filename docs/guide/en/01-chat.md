@@ -90,7 +90,7 @@ Authorization covers only the displayed task, not arbitrary future actions. It d
 
 The row under a reply copies, shares, branches and regenerates in one tap. Touch and hold an AI reply for **Copy**, **Select text**, **Quote**, **Share**, **Regenerate** and **Branch here**. Plugins with a native UI add their actions below.
 
-Touch and hold your own message for **Copy**, **Select text** and **Edit and resend**.
+Touch and hold the text of your sent message, then tap **Edit and resend** in the toolbar. **More** opens the full menu.
 
 **Regenerate**, **Branch here** and **Edit and resend** continue in a new chat and leave the original as is. The notice that appears has **Back to original chat**; after it's gone, the original is still in the chat list.
 
