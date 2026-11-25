@@ -77,6 +77,11 @@ class _WorkshopScreenState extends ConsumerState<WorkshopScreen> {
     }
   }
 
+  Future<void> _publish() async {
+    final openMine = await WorkshopPublishPage.open(context);
+    if (mounted && openMine == true) setState(() => _tab = WorkshopTab.mine);
+  }
+
   void _report(WorkshopEntry entry) => unawaited(showWorkshopReportSheet(context, entry));
 
   @override
@@ -121,9 +126,7 @@ class _WorkshopScreenState extends ConsumerState<WorkshopScreen> {
                   child: TextButton.icon(
                     icon: const Icon(AppIcons.add),
                     label: Text(l10n.workshopMinePublish),
-                    onPressed: () => unawaited(
-                      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WorkshopPublishPage())),
-                    ),
+                    onPressed: () => unawaited(_publish()),
                   ),
                 ),
               ),

@@ -70,6 +70,10 @@ enum _Step {
 class WorkshopPublishPage extends ConsumerStatefulWidget {
   const WorkshopPublishPage({super.key});
 
+  /// Returns true when the result page asks to open My uploads.
+  static Future<bool?> open(BuildContext context) =>
+      Navigator.of(context).push(MaterialPageRoute<bool>(builder: (_) => const WorkshopPublishPage()));
+
   @override
   ConsumerState<WorkshopPublishPage> createState() => _WorkshopPublishPageState();
 }
@@ -435,7 +439,7 @@ class _WorkshopPublishPageState extends ConsumerState<WorkshopPublishPage> {
         return _Result(
           publish: publish,
           notes: notes,
-          onBack: _leave,
+          onBack: () => unawaited(Navigator.of(context).maybePop<bool>(true)),
           onSendAgain: () => unawaited(_sendAgain()),
           onClearRecord: () => unawaited(_resume()),
           onClearFiles: () => unawaited(ref.read(workshopPublishProvider.notifier).retryCleanup()),

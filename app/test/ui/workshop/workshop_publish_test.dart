@@ -158,13 +158,18 @@ class _RecoveryPreferences extends PublishPreferences implements WorkshopPending
 }
 
 class _Opener extends StatelessWidget {
-  const _Opener();
+  const _Opener({this.onReturn});
+
+  final ValueChanged<bool?>? onReturn;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     body: Center(
       child: TextButton(
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WorkshopPublishPage())),
+        onPressed: () async {
+          final openMine = await WorkshopPublishPage.open(context);
+          onReturn?.call(openMine);
+        },
         child: const Text('open'),
       ),
     ),
@@ -180,13 +185,21 @@ Future<void> _settle(WidgetTester tester) async {
 /// Lets a brief notice run out, so no timer outlives the test.
 Future<void> _clearNotice(WidgetTester tester) => tester.pump(const Duration(seconds: 4));
 
-Future<void> _open(WidgetTester tester, _World world, {Size size = const Size(390, 1800), double textScale = 1}) async {
+Future<void> _open(
+  WidgetTester tester,
+  _World world, {
+  Size size = const Size(390, 1800),
+  double textScale = 1,
+  ValueChanged<bool?>? onReturn,
+}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   tester.platformDispatcher.textScaleFactorTestValue = textScale;
   addTearDown(tester.view.reset);
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-  await tester.pumpWidget(goldenApp(home: const _Opener(), brightness: Brightness.light, overrides: world.overrides));
+  await tester.pumpWidget(
+    goldenApp(home: _Opener(onReturn: onReturn), brightness: Brightness.light, overrides: world.overrides),
+  );
   await tester.tap(find.text('open'));
   await _settle(tester);
 }
@@ -610,7 +623,8 @@ void main() {
   group('submit', () {
     testWidgets('the packed result is shown, and 「投稿」 needs the rights tick', (tester) async {
       final world = _World();
-      await _open(tester, world);
+      bool? openMine;
+      await _open(tester, world, onReturn: (result) => openMine = result);
       await _fillForm(tester);
       await tester.tap(find.text('下一步'));
       await _settle(tester);
@@ -640,6 +654,7 @@ void main() {
       await tester.tap(find.text('回到我的投稿'));
       await _settle(tester);
       expect(find.byType(WorkshopPublishPage), findsNothing);
+      expect(openMine, isTrue);
 
       // Coming back is for sending something else, not for reading it again.
       await tester.tap(find.text('open'));

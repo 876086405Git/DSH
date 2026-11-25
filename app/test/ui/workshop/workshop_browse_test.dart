@@ -11,6 +11,7 @@ import 'package:dsh_app/state/workshop_install_state.dart';
 import 'package:dsh_app/state/workshop_preferences.dart';
 import 'package:dsh_app/ui/common/side_insets.dart';
 import 'package:dsh_app/ui/theme/theme.dart';
+import 'package:dsh_app/ui/workshop/workshop_mine.dart';
 import 'package:dsh_app/ui/workshop/workshop_publish_page.dart';
 import 'package:dsh_app/ui/workshop/workshop_screen.dart';
 import 'package:dsh_app/workshop/workshop_client.dart';
@@ -269,6 +270,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(WorkshopPublishPage), findsOneWidget);
     expect(find.text('先登录 GitHub 账号'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+    expect(find.text('没有找到'), findsOneWidget);
+    expect(find.byType(WorkshopMineSliver), findsNothing);
+
+    await tester.tap(find.text('投稿'));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byType(WorkshopPublishPage))).pop<bool>(true);
+    await tester.pumpAndSettle();
+    expect(find.byType(WorkshopMineSliver), findsOneWidget);
   });
 
   testWidgets('the sheet installs through the controller and says when it is refused', (tester) async {

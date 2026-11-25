@@ -16,7 +16,7 @@ import 'package:dsh_app/themes/theme_pack.dart';
 import 'package:dsh_app/workshop/workshop_models.dart';
 import 'package:dsh_app/workshop/workshop_preview.dart';
 import 'package:dsh_app/workshop/workshop_repository.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
