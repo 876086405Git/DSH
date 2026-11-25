@@ -383,6 +383,7 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
     if (offlineWanted) {
       final offlineValue = input.value;
       _base = offlineValue;
+      _draftText = offlineValue.text;
       _anchorStart = offlineValue.selection.isValid ? offlineValue.selection.start : offlineValue.text.length;
       _anchorEnd = offlineValue.selection.isValid ? offlineValue.selection.end : offlineValue.text.length;
       _heard = '';
