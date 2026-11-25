@@ -137,7 +137,7 @@ class WorkshopPublishSourcesController extends Notifier<WorkshopPublishSources> 
   }
 }
 
-final workshopPublishSourcesProvider = NotifierProvider<WorkshopPublishSourcesController, WorkshopPublishSources>(
+final workshopPublishSourcesProvider = NotifierProvider.autoDispose<WorkshopPublishSourcesController, WorkshopPublishSources>(
   WorkshopPublishSourcesController.new,
 );
 
@@ -169,11 +169,8 @@ class WorkshopPreparedDraft {
   }
 }
 
-/// Unpacks a zip the person picked into a folder of its own, through the same
-/// import as 导入 (a pet: pack.json or a Codex pet; a companion: a Live2D
-/// model, with or without character.json), so a file that would not install
-/// fails here, before the form. Nothing joins their pets, and the companion
-/// they have stays: a character-only model borrows a copy of its runtime.
+/// Unpacks a picked ZIP through the normal pet, companion or theme importer
+/// in an isolated directory, without changing any installed content.
 typedef WorkshopFileStager = Future<WorkshopPublishSource> Function(File zip);
 
 final workshopFileStagerProvider = Provider<WorkshopFileStager>((ref) {

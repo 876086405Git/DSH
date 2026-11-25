@@ -19,6 +19,7 @@ import 'package:dsh_app/ui/workshop/workshop_publish_preview.dart';
 import 'package:dsh_app/ui/workshop/workshop_publish_text.dart';
 import 'package:dsh_app/workshop/workshop_models.dart';
 import 'package:dsh_app/workshop/workshop_preview.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -54,6 +55,7 @@ class _World {
   late final client = PublishClient(events);
   late final drafts = PublishDrafts(events);
   List<WorkshopPublishSource> sources = [publishSource];
+  Future<WorkshopPublishSources> Function()? loadSources;
   Map<String, WorkshopException> issues = {};
   WorkshopPublishController Function()? publisher;
   int ids = 0;
@@ -63,6 +65,7 @@ class _World {
   void capabilities({bool uploads = true, bool companion = true, List<String>? previews}) =>
       client.value = WorkshopCapabilities.fromJson({
         ...workshopCaps(uploads: uploads, companion: companion, account: authAccount.toString()),
+        'kinds': ['pet', 'companion', 'theme'],
         if (previews != null)
           'preview': {
             'schema': 1,
@@ -83,7 +86,7 @@ class _World {
     workshopRestoreDraftProvider.overrideWithValue(drafts.restore),
     workshopRequestIdProvider.overrideWithValue(() => (++ids).toRadixString(16).padLeft(32, '0')),
     workshopSourcesLoaderProvider.overrideWithValue(
-      () async => WorkshopPublishSources(values: sources, issues: issues),
+      loadSources ?? (() async => WorkshopPublishSources(values: sources, issues: issues)),
     ),
     workshopAutoCoverBuilderProvider.overrideWithValue((source, onResult) {
       if (generateCover) {
@@ -96,6 +99,28 @@ class _World {
     workshopCoverPickerProvider.overrideWithValue(() async => pickCover == null ? null : await pickCover!()),
     if (publisher case final publisher?) workshopPublishProvider.overrideWith(publisher),
   ];
+}
+
+class _FailingFilePicker extends FilePickerPlatform {
+  int picks = 0;
+
+  @override
+  Future<PlatformFile?> pickFile({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    int compressionQuality = 0,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    DarwinOptions darwinOptions = const DarwinOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
+  }) async {
+    if (++picks == 1) throw StateError('Picker could not open');
+    return null;
+  }
 }
 
 class _RecoverySnapshot implements WorkshopPendingRecoverySnapshot {
@@ -424,6 +449,41 @@ void main() {
   });
 
   group('source and form', () {
+    testWidgets('reopening submission reloads the newly saved local theme', (tester) async {
+      final world = _World()..capabilities();
+      await _open(tester, world);
+      expect(find.text('New theme'), findsNothing);
+      await _tapVisible(tester, find.byTooltip('返回'));
+      world.sources = [const WorkshopPublishSource(kind: 'theme', localId: 'user-new-theme', name: 'New theme')];
+      await _tapVisible(tester, find.text('open'));
+
+      await _tapVisible(tester, find.text('New theme'));
+      expect(_publish(tester).source?.kind, 'theme');
+      expect(tester.widget<TextField>(_field('title-en')).controller!.text, 'New theme');
+      expect(world.client.creates, isEmpty);
+    });
+
+    testWidgets('ZIP picker is usable while sources load and can be retried after a picker error', (tester) async {
+      final original = FilePickerPlatform.instance;
+      final picker = _FailingFilePicker();
+      FilePickerPlatform.instance = picker;
+      addTearDown(() => FilePickerPlatform.instance = original);
+      final loading = Completer<WorkshopPublishSources>();
+      final world = _World()..loadSources = () => loading.future;
+      await _open(tester, world);
+
+      final chooseFile = find.text('从文件选择');
+      expect(find.text('主题、宠物或伙伴的 ZIP，不用先导入'), findsOneWidget);
+      await _tapVisible(tester, chooseFile);
+      expect(find.text('没能读写手机上的文件。'), findsOneWidget);
+      await _tapVisible(tester, chooseFile);
+      expect(picker.picks, 2);
+      loading.complete(WorkshopPublishSources(issues: {'theme': const WorkshopException('workshop_storage')}));
+      await _settle(tester);
+      expect(find.text('没能读出本机的主题包。'), findsOneWidget);
+      expect(chooseFile, findsOneWidget);
+      await _clearNotice(tester);
+    });
     testWidgets('lists what can be sent, and why something cannot', (tester) async {
       final world = _World()
         ..capabilities(companion: false)

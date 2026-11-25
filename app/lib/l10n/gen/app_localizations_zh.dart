@@ -28440,7 +28440,7 @@ class L10nZh extends L10n {
   String get workshopTitle => '创意工坊';
 
   @override
-  String get workshopSubtitle => '大家做的宠物和伙伴，挑喜欢的装上';
+  String get workshopSubtitle => '大家做的主题、宠物和伙伴，挑喜欢的装上';
 
   @override
   String get workshopEntrySubtitle => '找别人做的宠物和伙伴';
@@ -29126,16 +29126,16 @@ class L10nZh extends L10n {
   String get workshopPublishCompanionCurrent => '现在的伙伴';
 
   @override
-  String get workshopPublishSourcesEmptyTitle => '还没有可以投稿的';
+  String get workshopPublishSourcesEmptyTitle => '本机没有可投稿的内容';
 
   @override
-  String get workshopPublishSourcesEmptyMessage => '自己导入的像素宠物和现在的伙伴可以投稿，也可以直接从文件选一个。';
+  String get workshopPublishSourcesEmptyMessage => '可以投稿本机的主题、像素宠物或伙伴，也可以直接选择 ZIP。';
 
   @override
   String get workshopPublishFromFile => '从文件选择';
 
   @override
-  String get workshopPublishFromFileHint => '宠物或伙伴的 zip，不用先导入';
+  String get workshopPublishFromFileHint => '主题、宠物或伙伴的 ZIP，不用先导入';
 
   @override
   String get workshopPublishTitleEnHelper => '选填，留空就用中文名称';
@@ -29148,6 +29148,9 @@ class L10nZh extends L10n {
 
   @override
   String get workshopPublishSourcesIssue => '没能读出本机可以投稿的内容。';
+
+  @override
+  String get workshopPublishThemesIssue => '没能读出本机的主题包。';
 
   @override
   String get workshopPublishPetsIssue => '没能读出本机的像素宠物。';

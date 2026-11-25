@@ -22,6 +22,7 @@ import '../theme/app_icons.dart';
 import 'workshop_browse.dart';
 import 'workshop_installed.dart';
 import 'workshop_mine.dart';
+import 'workshop_publish_page.dart';
 import 'workshop_report_sheet.dart';
 
 enum WorkshopTab { browse, installed, mine }
@@ -113,11 +114,21 @@ class _WorkshopScreenState extends ConsumerState<WorkshopScreen> {
                 ),
               ),
             ),
-            switch (_tab) {
-              WorkshopTab.browse => WorkshopBrowseSliver(
-                onSubmit: () => setState(() => _tab = WorkshopTab.mine),
-                onReport: _report,
+            if (_tab == WorkshopTab.browse && ref.watch(workshopAvailableProvider))
+              SliverToBoxAdapter(
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: TextButton.icon(
+                    icon: const Icon(AppIcons.add),
+                    label: Text(l10n.workshopMinePublish),
+                    onPressed: () => unawaited(
+                      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WorkshopPublishPage())),
+                    ),
+                  ),
+                ),
               ),
+            switch (_tab) {
+              WorkshopTab.browse => WorkshopBrowseSliver(onReport: _report),
               WorkshopTab.installed => WorkshopInstalledSliver(
                 onBrowse: () => setState(() => _tab = WorkshopTab.browse),
               ),

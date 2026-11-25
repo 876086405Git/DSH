@@ -112,9 +112,7 @@ String workshopSourceName(L10n l10n, WorkshopPublishSource source) {
   return name.isEmpty ? (source.fromFile ? l10n.workshopPublishFromFile : source.localId) : name;
 }
 
-/// What on this phone can be sent in: the person's own pixel pets and the
-/// companion they have now. A source the workshop will not take is listed
-/// with the reason instead of being left out.
+/// Local packages and a ZIP picker. A blocked local package shows the reason.
 class WorkshopPublishSourceList extends ConsumerWidget {
   const WorkshopPublishSourceList({super.key, required this.onPick});
 
@@ -127,62 +125,50 @@ class WorkshopPublishSourceList extends ConsumerWidget {
     final access = ref.watch(workshopAccessProvider);
     void reload() => unawaited(ref.read(workshopPublishSourcesProvider.notifier).refresh());
 
-    if (sources.loading && sources.values.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 48, bottom: 24),
-        child: Center(child: SizedBox.square(dimension: 22, child: CircularProgressIndicator(strokeWidth: 2))),
-      );
-    }
+    final waiting = sources.loading && sources.values.isEmpty;
+    final empty = !sources.loading && sources.values.isEmpty;
     final issues = sources.issues;
     final notes = [
       if (issues.containsKey('all'))
         WorkshopNote(l10n.workshopPublishSourcesIssue, actionLabel: l10n.commonRetry, onAction: reload),
       if (issues.containsKey('pet'))
         WorkshopNote(l10n.workshopPublishPetsIssue, actionLabel: l10n.commonRetry, onAction: reload),
+      if (issues.containsKey('theme'))
+        WorkshopNote(l10n.workshopPublishThemesIssue, actionLabel: l10n.commonRetry, onAction: reload),
       if (issues['companion'] case final issue?)
-        if (issue.code == 'workshop_companion_unavailable')
-          WorkshopNote(l10n.workshopPublishNoCompanion)
-        else
-          WorkshopNote(l10n.workshopPublishCompanionIssue, actionLabel: l10n.commonRetry, onAction: reload),
+        if (issue.code != 'workshop_companion_unavailable')
+          WorkshopNote(l10n.workshopPublishCompanionIssue, actionLabel: l10n.commonRetry, onAction: reload)
+        else if (!empty)
+          WorkshopNote(l10n.workshopPublishNoCompanion),
     ];
-    if (sources.values.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 24, bottom: 12),
-        child: Column(
-          children: [
-            EmptyView(
-              icon: AppIcons.workshop,
-              title: l10n.workshopPublishSourcesEmptyTitle,
-              message: l10n.workshopPublishSourcesEmptyMessage,
-            ),
-            const SizedBox(height: 16),
-            ListPageCard(children: [_FileRow(onPick: onPick)]),
-            // "No companion here" is what the empty state already says; a
-            // companion that could not be read is a reason worth showing.
-            if (issues.containsKey('all') ||
-                issues.containsKey('pet') ||
-                (issues['companion'] != null && issues['companion']!.code != 'workshop_companion_unavailable')) ...[
-              const SizedBox(height: 20),
-              ...notes,
-            ],
-          ],
-        ),
-      );
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ListPageCard(
           children: [
+            _FileRow(onPick: onPick),
             for (final source in sources.values)
               _SourceRow(
                 source: source,
                 block: workshopPublishBlock(access, source.kind),
                 onTap: () => onPick(source),
               ),
-            _FileRow(onPick: onPick),
           ],
         ),
+        if (waiting)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: SizedBox.square(dimension: 22, child: CircularProgressIndicator(strokeWidth: 2))),
+          ),
+        if (empty)
+          Padding(
+            padding: const EdgeInsets.only(top: 24, bottom: 12),
+            child: EmptyView(
+              icon: AppIcons.workshop,
+              title: l10n.workshopPublishSourcesEmptyTitle,
+              message: l10n.workshopPublishSourcesEmptyMessage,
+            ),
+          ),
         if (notes.isNotEmpty) ...[const SizedBox(height: 12), ...notes],
       ],
     );
@@ -212,9 +198,7 @@ class _SourceRow extends StatelessWidget {
   }
 }
 
-/// 「从文件选择」: a pet or companion zip that is not on this phone. It goes
-/// through the same import as 导入 first, so a file of the wrong shape is
-/// turned away here with the import's reason; what is in use stays as it is.
+/// 「从文件选择」: validate a ZIP without changing what's installed.
 class _FileRow extends ConsumerStatefulWidget {
   const _FileRow({required this.onPick});
 
@@ -230,11 +214,11 @@ class _FileRowState extends ConsumerState<_FileRow> {
   Future<void> _pick() async {
     final stage = ref.read(workshopFileStagerProvider);
     final l10n = context.l10n;
-    final picked = await FilePicker.pickFile();
-    if (picked == null || !mounted) return;
     setState(() => _busy = true);
     File? copy;
     try {
+      final picked = await FilePicker.pickFile();
+      if (picked == null || !mounted) return;
       // Picks may be content URIs: bring it somewhere the unzipper can seek.
       copy = File('${(await getTemporaryDirectory()).path}/workshop-pick-${DateTime.now().microsecondsSinceEpoch}.zip');
       final sink = copy.openWrite();
@@ -246,7 +230,12 @@ class _FileRowState extends ConsumerState<_FileRow> {
       final source = await stage(copy);
       if (mounted) widget.onPick(source);
     } on Object catch (error) {
-      if (mounted) showBriefNotice(context, workshopErrorLine(l10n, workshopLocalError(error).code));
+      if (mounted) {
+        showBriefNotice(
+          context,
+          copy == null ? l10n.workshopErrorStorage : workshopErrorLine(l10n, workshopLocalError(error).code),
+        );
+      }
     } finally {
       try { await copy?.delete(); } on Object { /* A cache file. */ }
       if (mounted) setState(() => _busy = false);

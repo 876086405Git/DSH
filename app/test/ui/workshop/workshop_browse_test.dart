@@ -4,10 +4,14 @@
 // (and a refusal is said), the replacement question, and that nothing on
 // screen is an error code.
 
+import 'package:dsh_app/state/workshop_account_state.dart';
 import 'package:dsh_app/state/workshop_catalog_state.dart';
+import 'package:dsh_app/state/workshop_dependencies.dart';
 import 'package:dsh_app/state/workshop_install_state.dart';
+import 'package:dsh_app/state/workshop_preferences.dart';
 import 'package:dsh_app/ui/common/side_insets.dart';
 import 'package:dsh_app/ui/theme/theme.dart';
+import 'package:dsh_app/ui/workshop/workshop_publish_page.dart';
 import 'package:dsh_app/ui/workshop/workshop_screen.dart';
 import 'package:dsh_app/workshop/workshop_client.dart';
 import 'package:dsh_app/workshop/workshop_models.dart';
@@ -19,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../state/workshop_auth_test_support.dart';
 import '../../support/test_fonts.dart';
 import '../../workshop/support.dart';
 
@@ -248,9 +253,22 @@ void main() {
     expectNoCodes(tester);
   });
 
-  testWidgets('an empty catalogue points to 我的投稿', (tester) async {
-    await pump(tester, catalog(const []));
-    expect(find.text('这里还空着'), findsOneWidget);
+  testWidgets('the empty theme filter links directly to submission', (tester) async {
+    final client = AuthClient();
+    await pump(
+      tester,
+      catalog([WorkshopItemState(entry: entry())]).copyWith(kind: WorkshopKindFilter.theme),
+      overrides: [
+        workshopAccountProvider.overrideWith(() => AuthAccountController(authSignedOut)),
+        workshopClientProvider.overrideWith((ref) async => client),
+        workshopPreferencesProvider.overrideWithValue(AuthPreferences()),
+      ],
+    );
+    expect(find.text('没有找到'), findsOneWidget);
+    await tester.tap(find.text('投稿'));
+    await tester.pumpAndSettle();
+    expect(find.byType(WorkshopPublishPage), findsOneWidget);
+    expect(find.text('先登录 GitHub 账号'), findsOneWidget);
   });
 
   testWidgets('the sheet installs through the controller and says when it is refused', (tester) async {
