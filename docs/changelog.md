@@ -6,25 +6,35 @@
 
 ### 中文
 
-- **伙伴小屋有了完整模式。** 可以让伙伴在她自己的 DSH 会话里工作，小屋里能看到回复和操作进度。支持多个伙伴、小屋内通话，以及从小屋打开伙伴的主会话。完整模式下清空对话会开启新会话，旧会话留在主机上归档。
-- **Android 手机操控。** 操作进度移到顶部悬浮岛，支持的手机也能用系统灵动岛显示。后台屏小窗可收成贴边小球，按住可以停止。做完一件事后，DSH 可以提议把做法保存成手机技能，经你确认后才会进入试用。也可以把小屋伙伴设为 Android 默认数字助理。
-- **模型和远程连接。** 支持的 Android 本机引擎新增 OpenAI 官方渠道，可以用 ChatGPT 账号授权订阅。远程主机页把账号和网页版入口放到更好找的位置，修复网页版换票和部分远程连接恢复问题。
-- **酒馆和外观。** 补充 SillyTavern 1.19 预设和 SPreset 支持，画布里的酒馆助手可以通过引擎发起生成。创意工坊支持更细的主题包自定义，壁纸支持动图，也可以关闭自动遮罩。
-- **iOS 实时活动。** 支持在锁屏和灵动岛显示实时活动，实际可见位置取决于设备和系统设置。
-- **使用统计。** 关闭详细使用统计后，只保留匿名日活计数。
-- **性能和修复。** 优化长对话与流式回复、宠物贴图缓存、通话字幕和本机运行时的内存占用。修复终端键盘重新唤起和复制粘贴，以及部分设备上的手机操控回读问题。
-- **安装包。** Android 提供 arm64 APK。iOS IPA 和鸿蒙 HAP 为未签名包，需要对应平台签名后安装。
+#### 新功能
+
+- **伙伴小屋有了完整模式。** 伙伴可以在自己的 DSH 会话里工作，小屋里能直接看进度、打电话或打开她的主会话。也可以养多个伙伴，或在 Android 上把伙伴设为系统默认助理。
+- **Android 手机操控有了悬浮岛和手机技能。** 操作进度能显示在屏幕顶部或支持的系统灵动岛里。完成任务后，可以把做法保存成手机技能，下次直接调用。
+- **OpenAI 官方渠道。** 支持的 Android 本机引擎可以用 ChatGPT 账号授权订阅，选用该账号可用的模型。
+- **酒馆和外观。** 补充了 SillyTavern 1.19 预设与 SPreset 支持。创意工坊的主题包可以改更多界面细节，壁纸也支持动图。
+- **iOS 实时活动。** 可以在锁屏和灵动岛查看进度。
+
+#### 修复与改进
+
+- 修复远程主机网页版偶尔打不开、部分连接断开后无法恢复的问题。
+- 修复终端键盘无法重新唤起、复制粘贴异常，以及部分 vivo 手机上手机操控无法读回结果的问题。
+- 减轻长对话和流式回复时的卡顿，修复通话字幕偶尔截断表情的问题。
 
 ### English
 
-- **Full mode in the companion room.** Your companion can work in her own DSH session, with replies and progress visible in the room. You can keep multiple companions, call from the room, and open your companion’s main session. Clearing the chat in full mode starts a fresh session and archives the previous one on the host.
-- **Android phone control.** Progress appears in a floating island at the top of the screen or in the system island on supported phones. The background screen can collapse to an edge bubble that you can hold to stop. After a task, DSH can suggest saving the steps as a phone skill for you to approve before it enters trial use. You can also set the companion as Android’s default digital assistant.
-- **Models and remote connections.** Supported local Android engines now offer an official OpenAI channel that can use a subscription authorized through a ChatGPT account. The Remote Hosts page makes the account and web app easier to find. Web app ticket exchange and some remote reconnection cases are fixed.
-- **Tavern and appearance.** Expanded SillyTavern 1.19 preset and SPreset support. Tavern Helper can start generation from the canvas through the engine. Workshop themes offer more customization, and wallpapers support animation and an option to disable automatic shading.
-- **iOS Live Activities.** Live Activities can appear on the Lock Screen and Dynamic Island, depending on the device and system settings.
-- **Usage statistics.** Turning off detailed usage statistics leaves only an anonymous daily active count.
-- **Performance and fixes.** Reduced work and memory use in long chats, streaming replies, pet textures, call captions, and the local runtime. Fixed reopening the terminal keyboard, copying and pasting, and reading phone control results back on some devices.
-- **Packages.** Android ships an arm64 APK. The iOS IPA and HarmonyOS HAP need their respective platform signatures before installation.
+#### New features
+
+- **Full mode in the companion room.** Your companion can work in her own DSH session. See progress, call her or open her main session from the room. You can keep multiple companions or set your companion as Android’s default assistant.
+- **Floating island and phone skills on Android.** See phone control progress at the top of the screen or in the system island on supported phones. After a task, you can save the steps as a phone skill and use it again later.
+- **Official OpenAI channel.** On supported local Android engines, sign in with a ChatGPT account to authorize your subscription and use the models available to it.
+- **Tavern and appearance.** Expanded SillyTavern 1.19 preset and SPreset support. Workshop themes can customize more of the interface, and wallpapers can be animated.
+- **iOS Live Activities.** See progress on the Lock Screen and Dynamic Island.
+
+#### Fixes and improvements
+
+- Fixed cases where a remote host’s web app failed to open or a dropped connection failed to recover.
+- Fixed reopening the terminal keyboard, copying and pasting, and reading phone control results back on some vivo phones.
+- Reduced stutter in long chats and streaming replies. Fixed call captions occasionally cutting off emoji.
 
 ## 1.3.0 · 2026-11-21
 
