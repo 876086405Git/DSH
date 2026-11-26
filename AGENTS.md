@@ -120,6 +120,20 @@ CI（`.github/workflows/ci.yml`）在 PR 上跑通用检查和改动涉及的部
 - 出问题先读真实输出定位根因，不靠加重试掩盖；改一处就重跑确认，通过后再跑几次看稳定。
 - 本节与上面硬规则冲突时以硬规则为准（Git 安全、外部 PR 政策、真机验证、双语同步）。
 
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as markdown files under `.scratch/` in this repo (local markdown). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles use their own names as label strings: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+single-context. See `docs/agents/domain.md`.
+
 ## 技能与流程
 
 - 内部 PR：走 `.agents/skills/pr`（流程、模板、验证记录）。
