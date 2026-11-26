@@ -13,7 +13,10 @@ const hostRequire = createRequire(testPrefix
 const llmPackage = pathToFileURL(hostRequire.resolve('@deepseek-ai/dsh-llm/package.json'))
 const piAi = new URL('../../@earendil-works/pi-ai/dist/', llmPackage)
 const [
-  { CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, LlmAdapter, LlmError, attributionHeaders, resolveRetryPolicy },
+  {
+    CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, LlmAdapter, LlmError,
+    attributionHeaders, offloadedImageText, resolveRetryPolicy, textOnlyImageText,
+  },
   { convertResponsesMessages, convertResponsesTools, processResponsesStream },
   { AssistantMessageEventStream },
 ] = await Promise.all([
@@ -42,40 +45,55 @@ function argumentsObject(raw) {
   throw new LlmError('A local function call has invalid JSON arguments.', 'INVALID_REQUEST')
 }
 
-function piMessages(messages, model, scope) {
-  return messages.map(({ role, content, source, toolCallId, isError }) => {
+async function piMessages(messages, model, scope, readImage) {
+  const transcript = []
+  for (const { role, content, source, toolCallId, isError } of messages) {
     const replay = source?.replayState
     const sameGrant = scope && source?.provider === PROVIDER && source.model === model.id &&
       replay?.response?.version === 1 && replay.response.scope === scope
-    const blocks = content.flatMap((block, index) => {
+    const blocks = []
+    for (const [index, block] of content.entries()) {
       switch (block.type) {
         case 'text': {
           const phase = sameGrant && replay.blocks?.[index]
-          return [isMessagePhase(phase) ? { ...block, textSignature: JSON.stringify(phase) } : block]
+          blocks.push(isMessagePhase(phase) ? { ...block, textSignature: JSON.stringify(phase) } : block)
+          break
         }
-        case 'tool-call': return [{
-          type: 'toolCall', id: block.id, name: block.name, arguments: argumentsObject(block.arguments),
-        }]
+        case 'image': {
+          if (role !== 'user' && role !== 'tool') throw new LlmError('Images require a user or tool message.', 'INVALID_REQUEST')
+          const ref = block.attachment
+          if (block.offloaded === true) blocks.push({ type: 'text', text: offloadedImageText(ref) })
+          else if (!model.input.includes('image')) blocks.push({ type: 'text', text: textOnlyImageText(ref) })
+          else blocks.push(await readImage(ref))
+          break
+        }
+        case 'tool-call':
+          blocks.push({ type: 'toolCall', id: block.id, name: block.name, arguments: argumentsObject(block.arguments) })
+          break
         case 'reasoning': {
-          const item = sameGrant && replay.blocks?.[index]
-          const signature = encryptedReasoning(item)
-          return signature ? [{ type: 'thinking', thinking: '', thinkingSignature: JSON.stringify(signature) }] : []
+          const signature = encryptedReasoning(sameGrant && replay.blocks?.[index])
+          if (signature) blocks.push({ type: 'thinking', thinking: '', thinkingSignature: JSON.stringify(signature) })
+          break
         }
         case 'tool-addition':
-        case 'tool-removal': return []
-        default: throw new LlmError('This SIWC adapter accepts text, not attachments.', 'INVALID_REQUEST')
+        case 'tool-removal': break
+        default: throw new LlmError('Unsupported SIWC message content.', 'INVALID_REQUEST')
       }
-    })
-    if (role === 'assistant') {
-      return { role, content: blocks, provider: source?.provider, model: source?.model, api: API, stopReason: 'stop' }
     }
-    if (role === 'tool') return { role: 'toolResult', content: blocks, toolCallId, isError }
-    return { role: role === 'developer' ? 'system' : role, content: blocks }
-  })
+    if (role === 'assistant') {
+      transcript.push({ role, content: blocks, provider: source?.provider, model: source?.model, api: API, stopReason: 'stop' })
+    } else if (role === 'tool') {
+      transcript.push({ role: 'toolResult', content: blocks, toolCallId, isError })
+    } else {
+      transcript.push({ role: role === 'developer' ? 'system' : role, content: blocks })
+    }
+  }
+  return transcript
 }
 
-function responsesBody(model, options, scope) {
-  const input = convertResponsesMessages(model, { messages: piMessages(options.messages, model, scope) }, new Set([PROVIDER]), {
+async function responsesBody(model, options, scope, readImage) {
+  const messages = await piMessages(options.messages, model, scope, readImage)
+  const input = convertResponsesMessages(model, { messages }, new Set([PROVIDER]), {
     supportsMidConvoSystemMessages: true,
   }).map((item) => {
     // Developer instructions only; no server-stored output item references.
@@ -122,6 +140,11 @@ function responseReplay(content, scope) {
     return null
   })
   if (blocks.some(Boolean)) return { response: { version: 1, scope }, blocks }
+}
+
+function inputModalities(value) {
+  if (!Array.isArray(value)) return ['text']
+  return [...new Set(value.filter((item) => item === 'text' || item === 'image'))]
 }
 
 function reasoningProfile(row) {
@@ -268,7 +291,7 @@ async function* decodeResponse(response, request, model) {
   yield { type: 'finish', reason: { kind: tools.length ? 'tool-calls' : 'stop' }, ...(replayState ? { replayState } : {}) }
 }
 
-export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
+export function registerSiwcProvider({ llm, oauth, getAttachments = () => undefined, fetch = globalThis.fetch }) {
   let account = new AbortController()
   let catalog = new AbortController()
   let catalogModels
@@ -291,6 +314,8 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
       throw new LlmError('Sign in with ChatGPT to use this provider.', 'SIWC_SIGN_IN_REQUIRED')
     }
     const scope = body ? oauth.replayScope(token) : undefined
+    const payload = body ? await body(scope) : undefined
+    signal.throwIfAborted()
     const response = await fetch(BASE_URL + path, {
       method: body ? 'POST' : 'GET', signal, redirect: 'error',
       headers: {
@@ -299,7 +324,7 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
         Accept: body ? 'text/event-stream' : 'application/json',
         ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
-      ...(body ? { body: JSON.stringify(body(scope)) } : {}),
+      ...(body ? { body: JSON.stringify(payload) } : {}),
     })
     if (!response.ok) {
       if (response.status === 401) oauth.rejectAccess(token)
@@ -344,7 +369,7 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
           const reasoning = reasoningProfile(row)
           const contextWindow = row.context_window
           listed.set(id, {
-            provider: PROVIDER, id, name, inputModalities: ['text'],
+            provider: PROVIDER, id, name, inputModalities: inputModalities(row.input_modalities),
             ...(reasoning ? { reasoning } : {}),
             ...(Number.isSafeInteger(contextWindow) && contextWindow > 0 ? { context: { contextWindow } } : {}),
           })
@@ -375,16 +400,43 @@ export function registerSiwcProvider({ llm, oauth, fetch = globalThis.fetch }) {
       return catalogModels?.get(id) ?? { provider, id, name: id, inputModalities: ['text'] }
     }
 
-    async *stream(options) {
+    async prepareCall(provider, id, signal) {
+      const accountSignal = account.signal
+      const model = await this.resolveModel(provider, id, signal)
+      // DSH projects history with these same capabilities before dispatch.
+      const input = [...model.inputModalities]
+      return { model, stream: (options) => this.#stream(options, input, accountSignal) }
+    }
+
+    stream(options) {
+      const input = catalogModels?.get(options.model)?.inputModalities ?? ['text']
+      return this.#stream(options, input, account.signal)
+    }
+
+    async *#stream(options, input, accountSignal) {
       const transport = new AbortController()
-      const signal = AbortSignal.any([account.signal, transport.signal, ...(options.signal ? [options.signal] : [])])
+      const signal = AbortSignal.any([accountSignal, transport.signal, ...(options.signal ? [options.signal] : [])])
       // Only the fields used by pi-ai's conversion and decoding, not model limits or prices.
-      const model = { id: options.model, provider: PROVIDER, api: API, input: ['text'],
+      const model = { id: options.model, provider: PROVIDER, api: API, input,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }
+      const images = new Map()
+      const readImage = async (ref) => {
+        if (images.has(ref.attachmentId)) return images.get(ref.attachmentId)
+        signal.throwIfAborted()
+        try {
+          const target = this.imageRequestTarget(PROVIDER, model.id, ref)
+          const version = await getAttachments()?.readImageRequest(ref, target, signal)
+          const image = { type: 'image', data: Buffer.from(version.data).toString('base64'), mimeType: version.mediaType }
+          images.set(ref.attachmentId, image)
+          return image
+        } catch {
+          throw new LlmError('Unable to read the normalized image for OpenAI.', 'SIWC_IMAGE_UNAVAILABLE')
+        }
+      }
       let accessToken
       try {
         signal.throwIfAborted()
-        const { response, token, scope } = await request('/responses', signal, (scope) => responsesBody(model, options, scope))
+        const { response, token, scope } = await request('/responses', signal, (scope) => responsesBody(model, options, scope, readImage))
         accessToken = token
         const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
         // The direct subscription route can omit this header on otherwise valid SSE.
