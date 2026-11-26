@@ -2022,6 +2022,20 @@ class L10nEn extends L10n {
       'Could not update background protection. Check the current status and try again.';
 
   @override
+  String get remoteBackgroundProtectionTitle => 'Remote connection protection';
+
+  @override
+  String get remoteBackgroundAudioHint =>
+      'Plays silent audio in the background and may use more battery. The system may still suspend the connection.';
+
+  @override
+  String get remoteBackgroundLocationHint =>
+      'Uses only approximate location and requires background access. Coordinates aren’t saved or sent. This may use more battery.';
+
+  @override
+  String get remoteBackgroundLocationPermission => 'Allow background location access, then turn this option on.';
+
+  @override
   String get botsFolderGone => 'This folder is gone';
 
   @override

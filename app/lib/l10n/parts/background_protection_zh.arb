@@ -25,5 +25,9 @@
   "backgroundProtectionTaskUnavailable": "当前版本缺少系统连续任务资格，请保持 App 在前台或使用远程主机。",
   "backgroundProtectionUnavailable": "保护暂不可用，请返回 App 重试；长任务可保持前台或使用远程主机。",
   "backgroundProtectionCleanup": "正在结束上一次后台保护，尚未完成释放。",
-  "backgroundProtectionUpdateFailed": "未能更新后台保护，请查看当前状态后重试。"
+  "backgroundProtectionUpdateFailed": "未能更新后台保护，请查看当前状态后重试。",
+  "remoteBackgroundProtectionTitle": "远程连接保活",
+  "remoteBackgroundAudioHint": "退到后台时播放静音音频，可能增加耗电；系统仍可能暂停连接。",
+  "remoteBackgroundLocationHint": "仅使用大致位置，需后台授权；不保存或发送坐标，可能增加耗电。",
+  "remoteBackgroundLocationPermission": "请授予后台位置权限，再开启此选项。"
 }

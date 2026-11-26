@@ -1909,6 +1909,18 @@ class L10nZh extends L10n {
   String get backgroundProtectionUpdateFailed => '未能更新后台保护，请查看当前状态后重试。';
 
   @override
+  String get remoteBackgroundProtectionTitle => '远程连接保活';
+
+  @override
+  String get remoteBackgroundAudioHint => '退到后台时播放静音音频，可能增加耗电；系统仍可能暂停连接。';
+
+  @override
+  String get remoteBackgroundLocationHint => '仅使用大致位置，需后台授权；不保存或发送坐标，可能增加耗电。';
+
+  @override
+  String get remoteBackgroundLocationPermission => '请授予后台位置权限，再开启此选项。';
+
+  @override
   String get botsFolderGone => '这个文件夹已经不在了';
 
   @override

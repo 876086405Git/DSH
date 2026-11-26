@@ -4,10 +4,12 @@ import android.content.Context
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.embedding.engine.dart.DartExecutor
+import io.flutter.plugin.common.MethodChannel
 import io.github.ccch1mneyyy.dsh_app.files.FilesPlugin
 import io.github.ccch1mneyyy.dsh_app.links.LinksPlugin
 import io.github.ccch1mneyyy.dsh_app.notify.NotifyPlugin
 import io.github.ccch1mneyyy.dsh_app.phone.PhonePlugin
+import io.github.ccch1mneyyy.dsh_app.remote.RemoteBackgroundService
 import io.github.ccch1mneyyy.dsh_app.runtime.RuntimePlugin
 import io.github.ccch1mneyyy.dsh_app.share.SharePlugin
 import io.github.ccch1mneyyy.dsh_app.shortcuts.ShortcutsPlugin
@@ -22,8 +24,10 @@ object DshFlutterEngine {
     fun getOrCreate(context: Context): FlutterEngine {
         val cache = FlutterEngineCache.getInstance()
         cache.get(ENGINE_ID)?.let { return it }
-        return FlutterEngine(context.applicationContext).also { engine ->
-            engine.plugins.add(RuntimePlugin())
+        val appContext = context.applicationContext
+        return FlutterEngine(appContext).also { engine ->
+            val runtime = RuntimePlugin()
+            engine.plugins.add(runtime)
             engine.plugins.add(PhonePlugin())
             engine.plugins.add(NotifyPlugin())
             engine.plugins.add(FilesPlugin())
@@ -55,6 +59,28 @@ object DshFlutterEngine {
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.companion.CompanionEmbeddingPlugin())
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.companion.CompanionNoticesPlugin())
             engine.plugins.add(io.github.ccch1mneyyy.dsh_app.companion.CompanionAlwaysOnPlugin())
+            // A disconnect can arrive after MainActivity has detached from this cached engine.
+            MethodChannel(
+                engine.dartExecutor.binaryMessenger, "io.github.ccch1mneyyy.dsh_app/remote_background",
+            ).setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "requestRemoteLocation" -> runtime.requestRemoteLocation(result)
+                    "setRemoteActive", "setRemoteAudio", "setRemoteLocation" -> {
+                        val enabled = call.arguments as? Boolean
+                        if (enabled == null) {
+                            result.error("bad_args", "Expected a boolean", null)
+                        } else {
+                            when (call.method) {
+                                "setRemoteActive" -> RemoteBackgroundService.setRemoteActive(appContext, enabled)
+                                "setRemoteAudio" -> RemoteBackgroundService.setRemoteAudio(enabled)
+                                "setRemoteLocation" -> RemoteBackgroundService.setRemoteLocation(enabled)
+                            }
+                            result.success(null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
             engine.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())
             cache.put(ENGINE_ID, engine)
         }

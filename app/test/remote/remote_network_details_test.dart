@@ -12,6 +12,7 @@ import 'package:dsh_app/ui/remote/remote_screen.dart';
 import 'package:dsh_app/ui/settings/settings_widgets.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,16 +22,26 @@ import 'support/fake_relay.dart';
 const _host = HostRef.relay('mac');
 
 class _InspectableLink extends HostLink implements NetworkInspectableHostLink {
-  _InspectableLink(this.status);
+  _InspectableLink(this._status);
+
+  HostLinkStatus _status;
+  VoidCallback? onStatusSample;
 
   @override
-  HostLinkStatus status;
+  HostLinkStatus get status {
+    final snapshot = _status;
+    final onSample = onStatusSample;
+    onStatusSample = null;
+    onSample?.call();
+    return snapshot;
+  }
+
   final changes = StreamController<HostLinkStatus>.broadcast(sync: true);
   int inspections = 0;
   Future<RemoteNetworkStatus?> Function()? inspect;
 
   void emit(HostLinkStatus next) {
-    status = next;
+    _status = next;
     changes.add(next);
   }
 
@@ -64,6 +75,37 @@ void main() {
   setUp(() {
     AppLocale.use(AppLocale.zhCN);
     SharedPreferences.setMockInitialValues({ActiveHostController.prefsKey: _host.encode()});
+  });
+
+  test('the host link subscription sees a broadcast scheduled during the initial snapshot', () async {
+    final link = _InspectableLink(const HostLinkStatus(HostLinkPhase.connecting));
+    addTearDown(link.changes.close);
+    bool? listeningWhenSampled;
+    link.onStatusSample = () {
+      // A fast handshake completes before the old async* resumes after its first yield.
+      listeningWhenSampled = link.changes.hasListener;
+      scheduleMicrotask(() => link.emit(const HostLinkStatus(HostLinkPhase.connected)));
+    };
+    final container = ProviderContainer(overrides: [hostLinkProvider.overrideWith((ref, host) => link)]);
+    addTearDown(container.dispose);
+    final provider = hostLinkStatusProvider(_host);
+    final phases = <HostLinkPhase>[];
+    container.listen(provider, (_, next) {
+      if (next.value case final status?) phases.add(status.phase);
+    }, fireImmediately: true);
+    await Future<void>.delayed(Duration.zero);
+    expect(listeningWhenSampled, isTrue);
+    expect(phases, [HostLinkPhase.connecting, HostLinkPhase.connected]);
+
+    link.emit(const HostLinkStatus(HostLinkPhase.reconnecting));
+    link.emit(const HostLinkStatus(HostLinkPhase.connected));
+    await Future<void>.delayed(Duration.zero);
+    expect(phases, [
+      HostLinkPhase.connecting,
+      HostLinkPhase.connected,
+      HostLinkPhase.reconnecting,
+      HostLinkPhase.connected,
+    ]);
   });
 
   Future<void> frames(WidgetTester tester) async {
