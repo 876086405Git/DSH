@@ -12,17 +12,15 @@
 文件：dsh-go-1.4.0-coexist-arm64.apk
 大小：686.3 MB
 SHA-256：2359d7fbe4314f5835909b0461849eb812943c90ba980bf20e8447b3bd966246
-大小：688.1 MB（721,562,247 字节）
-SHA-256：26e79eb0d4b2bc26106bac951a32f41688b831bfa752dacca4e23783baf33591
 ```
 
-国内直连慢的话，在下载地址前加 `https://gh-proxy.com/`：
+国内直连慢或超时的话，在下载地址前加 `https://gh-proxy.com/`：
 
 ```
 https://gh-proxy.com/https://github.com/876086405Git/DSH/releases/download/coexist-v1.4.0/dsh-go-1.4.0-coexist-arm64.apk
 ```
 
-上一版（1.3.0）留在 [coexist-v1.3.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.2.0) 兜底，1.1.0 在 [coexist-v1.1.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.1.0)。
+旧版本兜底：[coexist-v1.3.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.3.0)（1.3.0）、[coexist-v1.2.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.2.0)（1.2.0）、[coexist-v1.1.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.1.0)（1.1.0）。
 
 > Release 标签用 `coexist-` 前缀（`coexist-v1.4.0`），和本仓库插件的 `v1.3.0` 区分开。
 
