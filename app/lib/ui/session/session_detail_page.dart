@@ -535,6 +535,8 @@ class SessionHero extends ConsumerWidget {
     final finished = turns.fold(Duration.zero, (sum, t) => sum + (t.duration ?? Duration.zero));
     final steps = turns.fold(0, (sum, t) => sum + t.steps);
     final files = sessionChangesOf(tools).length;
+    // Dispatches count once each: a subagent that also received follow-ups is still one.
+    final subagents = tools.where((tool) => tool.name == 'subagent' || tool.name == 'subagent_fork').length;
     final subtitle = turns.isEmpty
         ? l10n.hubSessionNoTurns
         : running == null
@@ -546,6 +548,7 @@ class SessionHero extends ConsumerWidget {
         (formatClock(total), l10n.hubSessionElapsed),
         ('$steps', l10n.hubSessionSteps),
         ('$files', l10n.hubSessionChangedFiles),
+        if (subagents > 0) ('$subagents', l10n.hubTabSubagents),
       ];
       if (title case final title?) {
         return PageHero(
@@ -870,6 +873,7 @@ class _TurnCardState extends State<_TurnCard> {
     final facts = [
       if (trace.steps > 0) l10n.hubSessionStepCount(trace.steps),
       if (!trace.usage.isEmpty) '${formatTokens(trace.usage.total)} tokens',
+      ?turnSpeedLabel(trace),
       if (trace.waitTime > Duration.zero) l10n.hubSessionWaitTime(formatSpan(trace.waitTime)),
       ?turnCostLabel(trace),
     ];
@@ -1265,10 +1269,17 @@ class ContextTab extends ConsumerWidget {
         if (!trace.usage.isEmpty) trace,
     ].take(12).toList();
     final peak = recent.fold(0, (m, t) => t.usage.total > m ? t.usage.total : m);
+    final speed = speedFigure(tracesTokensPerSecond(turns));
+    // A turn's own line of detail: how long it took, how fast it decoded.
+    String? metaOf(TurnTrace trace) {
+      final parts = [if (trace.duration case final duration?) formatSpan(duration), ?turnSpeedLabel(trace)];
+      return parts.isEmpty ? null : parts.join(' · ');
+    }
+
     return ListView(
       padding: _listPadding(context),
       children: [
-        SessionUsageSections(usage: usage, pricing: pricing),
+        SessionUsageSections(usage: usage, pricing: pricing, speed: speed),
         if (recent.isNotEmpty)
           ListPageCard(
             title: l10n.hubSessionTurnUsage,
@@ -1278,45 +1289,58 @@ class ContextTab extends ConsumerWidget {
               for (final trace in recent)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 9, 16, 9),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(
-                        width: 52,
-                        child: Text(
-                          l10n.hubSessionTurn(trace.turn),
-                          style: AppType.tabular(theme.textTheme.bodySmall!.copyWith(color: dsh.textTertiary)),
-                        ),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 52,
+                            child: Text(
+                              l10n.hubSessionTurn(trace.turn),
+                              style: AppType.tabular(theme.textTheme.bodySmall!.copyWith(color: dsh.textTertiary)),
+                            ),
+                          ),
+                          Expanded(
+                            child: TimelineBar(
+                              start: Duration.zero,
+                              duration: Duration(milliseconds: trace.usage.total),
+                              total: Duration(milliseconds: peak <= 0 ? 1 : peak),
+                              color: theme.colorScheme.primary.withValues(alpha: 0.75),
+                              height: 6,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          SizedBox(
+                            width: 52,
+                            child: Text(
+                              formatTokens(trace.usage.total),
+                              textAlign: TextAlign.right,
+                              style: AppType.tabular(
+                                theme.textTheme.bodySmall!.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 64,
+                            child: Text(
+                              trace.usage.cacheHitRate == null
+                                  ? ''
+                                  : l10n.hubSessionCacheHit(formatPercent(trace.usage.cacheHitRate!)),
+                              textAlign: TextAlign.right,
+                              style: AppType.tabular(theme.textTheme.bodySmall!.copyWith(color: dsh.textTertiary)),
+                            ),
+                          ),
+                        ],
                       ),
-                      Expanded(
-                        child: TimelineBar(
-                          start: Duration.zero,
-                          duration: Duration(milliseconds: trace.usage.total),
-                          total: Duration(milliseconds: peak <= 0 ? 1 : peak),
-                          color: theme.colorScheme.primary.withValues(alpha: 0.75),
-                          height: 6,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: 52,
-                        child: Text(
-                          formatTokens(trace.usage.total),
-                          textAlign: TextAlign.right,
-                          style: AppType.tabular(
-                            theme.textTheme.bodySmall!.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      if (metaOf(trace) case final meta?)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            meta,
+                            style: AppType.tabular(theme.textTheme.bodySmall!.copyWith(color: dsh.textTertiary)),
                           ),
                         ),
-                      ),
-                      SizedBox(
-                        width: 64,
-                        child: Text(
-                          trace.usage.cacheHitRate == null
-                              ? ''
-                              : l10n.hubSessionCacheHit(formatPercent(trace.usage.cacheHitRate!)),
-                          textAlign: TextAlign.right,
-                          style: AppType.tabular(theme.textTheme.bodySmall!.copyWith(color: dsh.textTertiary)),
-                        ),
-                      ),
                     ],
                   ),
                 ),

@@ -105,7 +105,9 @@ void main() {
       final harness = ChatHarness(session: 's1', states: {'s1': runInfoState(finished: true)});
       await _pumpChat(tester, harness, Brightness.light);
       expect(find.byType(TurnFootnote), findsOneWidget);
-      expect(find.text('1 分 23 秒 · 5 步 · 80.1K tokens'), findsOneWidget);
+      // This width drops the token count before the speed, so the footnote shows
+      // the shorter variant even though variants() still offers the full one.
+      expect(find.text('1 分 23 秒 · 5 步 · 117 tokens/秒'), findsOneWidget);
 
       await tester.tap(find.byType(TurnFootnote));
       await pumpFrames(tester, 8);

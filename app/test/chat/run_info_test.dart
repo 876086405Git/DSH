@@ -56,6 +56,41 @@ void main() {
     });
   });
 
+  group('token speed', () {
+    test('nothing measured has no speed', () {
+      expect(tracesTokensPerSecond(const []), isNull);
+      expect(tracesTokensPerSecond([_modelTrace(output: null)]), isNull);
+      expect(tracesTokensPerSecond([_modelTrace(decoding: const Duration(milliseconds: 150))]), isNull);
+      expect(tracesTokensPerSecond([_modelTrace(firstToken: false)]), isNull);
+    });
+
+    test('output tokens over decoding time, aggregated across turns', () {
+      final first = _modelTrace(output: 300);
+      expect(turnTokensPerSecond(first), 300);
+      // 400 tokens over 3 s, not the mean of the two turns' rates.
+      final second = _modelTrace(turn: 2, output: 100, decoding: const Duration(seconds: 2));
+      expect(tracesTokensPerSecond([first, second]), closeTo(400 / 3, 1e-9));
+    });
+
+    test('the fixture turn: 1970 tokens over 16.8 s', () {
+      final trace = runInfoState(finished: true).turns.single;
+      expect(turnTokensPerSecond(trace), closeTo(1970 / 16.8, 1e-9));
+      expect(turnSpeedLabel(trace), '117 tokens/秒');
+    });
+
+    test('one decimal below ten, whole numbers at ten and up', () {
+      expect(speedFigure(8.34), '8.3');
+      // 9.95 already rounds up: no '10.0'.
+      expect(speedFigure(9.94), '9.9');
+      expect(speedFigure(9.96), '10');
+      expect(speedFigure(10.4), '10');
+      expect(speedFigure(117.26), '117');
+      expect(speedFigure(null), isNull);
+      expect(speedText(8.34), '8.3 tokens/秒');
+      expect(speedText(null), isNull);
+    });
+  });
+
   group('timed session', () {
     test('turn one: 1 分 23 秒, five requests, a 48 s wait for the person', () {
       final trace = runInfoState(finished: true).turns.single;
@@ -65,7 +100,7 @@ void main() {
       expect(trace.waitTime, const Duration(seconds: 48));
       expect(trace.ttft, const Duration(milliseconds: 1100));
       expect(trace.usage.total, 8226 + 69888 + 1970);
-      expect(TurnFootnote.variants(trace).first, '1 分 23 秒 · 5 步 · 80.1K tokens');
+      expect(TurnFootnote.variants(trace).first, '1 分 23 秒 · 5 步 · 80.1K tokens · 117 tokens/秒');
 
       final rows = trajectoryRows(trace);
       final labels = [
@@ -188,6 +223,35 @@ void main() {
       expect(login.hunks.every((h) => h.numbered), isTrue);
     });
   });
+}
+
+/// One model request that decoded [output] tokens over [decoding]; no usage
+/// when [output] is null, no first token when [firstToken] is false.
+TurnTrace _modelTrace({
+  int turn = 1,
+  int? output = 300,
+  Duration decoding = const Duration(seconds: 1),
+  bool firstToken = true,
+}) {
+  final start = DateTime(2026);
+  final end = start.add(decoding);
+  return TurnTrace(
+    turn: turn,
+    startSeq: turn * 10,
+    start: start,
+    end: end,
+    spans: [
+      TraceSpan(
+        kind: TraceKind.model,
+        step: 1,
+        seq: turn * 10 + 1,
+        start: start,
+        end: end,
+        firstToken: firstToken ? start : null,
+        usage: output == null ? null : TokenUsage(inputTokens: 100, outputTokens: output),
+      ),
+    ],
+  );
 }
 
 /// `knownPricing` stays empty until DeepSeek's prices are in the repo.

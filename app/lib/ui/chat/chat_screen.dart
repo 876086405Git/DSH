@@ -106,6 +106,7 @@ import 'mention/mention_controller.dart';
 import 'mention/mention_picker.dart';
 import 'mention/mention_text_controller.dart';
 import 'model_sheet.dart';
+import 'run_info.dart';
 import 'slash_palette.dart';
 import 'trajectory_sheet.dart';
 import 'usage_sheet.dart';
@@ -1484,7 +1485,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   }
 
   void _openUsage(String sessionId, ModelSelection? model) {
-    showUsageSheet(context, sessionId: sessionId, model: model);
+    final turns = ref.read(chatProvider(sessionId)).turns;
+    showUsageSheet(context, sessionId: sessionId, model: model, speed: speedFigure(tracesTokensPerSecond(turns)));
   }
 
   /// The header's 语音通话 key: a call with the conversation on screen.
