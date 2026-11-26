@@ -51951,7 +51951,7 @@ abstract class L10n {
   /// No description provided for @workshopSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'大家做的宠物和伙伴，挑喜欢的装上'**
+  /// **'大家做的主题、宠物和伙伴，挑喜欢的装上'**
   String get workshopSubtitle;
 
   /// No description provided for @workshopEntrySubtitle.
@@ -53259,13 +53259,13 @@ abstract class L10n {
   /// No description provided for @workshopPublishSourcesEmptyTitle.
   ///
   /// In zh, this message translates to:
-  /// **'还没有可以投稿的'**
+  /// **'本机没有可投稿的内容'**
   String get workshopPublishSourcesEmptyTitle;
 
   /// No description provided for @workshopPublishSourcesEmptyMessage.
   ///
   /// In zh, this message translates to:
-  /// **'自己导入的像素宠物和现在的伙伴可以投稿，也可以直接从文件选一个。'**
+  /// **'可以投稿本机的主题、像素宠物或伙伴，也可以直接选择 ZIP。'**
   String get workshopPublishSourcesEmptyMessage;
 
   /// No description provided for @workshopPublishFromFile.
@@ -53277,7 +53277,7 @@ abstract class L10n {
   /// No description provided for @workshopPublishFromFileHint.
   ///
   /// In zh, this message translates to:
-  /// **'宠物或伙伴的 zip，不用先导入'**
+  /// **'主题、宠物或伙伴的 ZIP，不用先导入'**
   String get workshopPublishFromFileHint;
 
   /// No description provided for @workshopPublishTitleEnHelper.
@@ -53303,6 +53303,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'没能读出本机可以投稿的内容。'**
   String get workshopPublishSourcesIssue;
+
+  /// No description provided for @workshopPublishThemesIssue.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能读出本机的主题包。'**
+  String get workshopPublishThemesIssue;
 
   /// No description provided for @workshopPublishPetsIssue.
   ///
