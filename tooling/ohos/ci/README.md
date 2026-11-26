@@ -17,10 +17,18 @@ dsh-Go 的 Release 发布后，`ohos-release-dispatch.yml` 把发布事件对应
 | 变量 | 路径 |
 | --- | --- |
 | `OHOS_SDK` | 含 `ets`、`js`、`native`、`toolchains` 的 OpenHarmony API 26 SDK 目录 |
-| `DSH_OHOS_NATIVE_LIBS` | 由 `runtime/ohos/native/build-hap-libs.py` 准备的 `arm64-v8a` 库目录，含 AOT 所需的原生资产，如 `libsqlite3.so` |
+| `DSH_OHOS_NATIVE_LIBS` | 已备齐的 `arm64-v8a` 库目录（绝对路径）。基础库由 `runtime/ohos/native/build-hap-libs.py` 准备，另需下述 `libdsh_image_codec.so` 及 AOT 所需的原生资产，如 `libsqlite3.so` |
 | `DSH_NODE_HEADERS` | 与该 `libnode.so` 匹配的 Node 源码 `src` 目录或 `include/node` |
 
 原生库或其构建契约变化时，先按 [鸿蒙工程说明](../../../app/ohos/README.md) 更新主机上的相应输入。每次运行会从选定提交重新生成 Dart AOT 和 DSH 运行时。原生库与 AOT 的匹配、原生依赖和运行时文件由现有 HAP 审计检查。
+
+### 图片编解码库（官方包必需）
+
+私有 runner 从 `tooling/ohos/ci/package-hap.sh` 直接把 `DSH_OHOS_NATIVE_LIBS` 传给 `check-arkts.sh --full`。若目录里的 `libdsh_image_codec.so` 缺失、为空或不可读，官方脚本会在安装 npm 依赖前退出，不产出 HAP。供库后，沿用现有 HAP 审计核对包内库集和载入段字节；开发用的 `check-arkts.sh` 和 `build-hap.sh` 不改，图片库仍可选。
+
+基础库脚本不构建图片库，当前 runner 入口也没有接入自动构建所需的完整配对输入。维护者须在可信主机按提交对应的 [SDK 26 图片库配方](../../../runtime/ohos/image/BUILD.zh.md)，使用 SDK 26.0.0.38 的完整 native 工具链和四个 arm64 Image 库、与打包输入一致的 Node 24.22.1 头文件及 `libnode.so`、对应的 `build.json`、clang++ 23.1.1 和配对静态 C++ 运行库，构建 Ninja 的 `dsh_image_codec` 目标。
+
+仅在配方的 ELF 检查完成、产生 `image-build-complete.stamp` 后，才把产物按原名放到 `$DSH_OHOS_NATIVE_LIBS/libdsh_image_codec.so`。不要使用宿主测试夹具或失败构建留下的库；更新时在 runner 空闲时切换完整输入目录，不要在打包期间原地更新。缺任一配对输入或目标构建未通过，就保持阻断，不出缺库包。
 
 ## 首次验收
 
