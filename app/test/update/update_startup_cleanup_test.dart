@@ -153,16 +153,21 @@ void main() {
     expect(r.http.requests, isEmpty);
   });
 
-  test('a newer cached offer keeps its valid APK and does not run startup cleanup', () async {
+  test('a newer cached APK can be verified and reused after an offline restart and refresh', () async {
     final r = _Rig(cachedVersion: '1.2.0', holdCleanup: false);
     r.apk.writeAsBytesSync(_bytes);
     await r.controller.ready;
     expect(r.directoryReads, 0);
+    expect(r.state.apkHere, isFalse, reason: 'the cached APK has not been verified in this process');
+    r.http.routes.clear();
+    expect(await r.controller.check(), UpdateCheckPhase.available);
+    expect(r.state.checkFailure, isNotNull);
     await r.controller.startDownload();
 
     expect(r.state.task, UpdateTaskPhase.ready);
+    expect(r.state.apkHere, isTrue);
     expect(r.apk.readAsBytesSync(), _bytes);
-    expect(r.http.requests, isEmpty, reason: 'the cached APK is rehashed and reused');
+    expect(_httpDownloads(r), isEmpty, reason: 'the cached APK is rehashed and reused without a download');
   });
 
   test('best-effort cleanup failure still permits a later download', () async {

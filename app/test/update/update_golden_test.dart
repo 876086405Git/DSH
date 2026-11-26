@@ -17,6 +17,7 @@ import 'package:dsh_app/ui/shell/page_frame.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/update/update_launch_check.dart';
 import 'package:dsh_app/ui/update/update_tiles.dart';
+import 'package:dsh_app/update/checker.dart';
 import 'package:dsh_app/update/release.dart';
 import 'package:dsh_app/update/version.dart';
 import 'package:flutter/material.dart';
@@ -359,6 +360,17 @@ void main() {
       expect(update.calls, ['check']);
       expect(find.text('DSH 1.4.0'), findsOneWidget);
       expect(find.text('DSH 1.2.0'), findsNothing);
+    });
+
+    testWidgets('a failed refresh still opens the cached offer after restart', (tester) async {
+      final update = await pump(tester, FakeUpdate(_offer().copyWith(checkFailure: () => CheckFailure.network)));
+      await _openSheet(tester);
+      expect(update.calls, ['check']);
+      expect(find.text('暂时检查不了'), findsOneWidget);
+      expect(find.text('发现新版本'), findsNothing);
+      expect(find.text('DSH 1.2.0'), findsOneWidget);
+      await tester.tap(find.text('立即更新'));
+      expect(update.calls, ['check', 'startDownload']);
     });
 
     testWidgets('manual check: up to date / unavailable say so in a snack bar, no dialog', (tester) async {

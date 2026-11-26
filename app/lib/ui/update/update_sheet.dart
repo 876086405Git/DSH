@@ -41,11 +41,6 @@ Future<void> checkForUpdates(BuildContext context, WidgetRef ref) async {
   if (!context.mounted) return;
   switch (phase) {
     case UpdateCheckPhase.available:
-      final refreshed = ref.read(appUpdateProvider);
-      if (refreshed.checkFailure != null && !refreshed.apkHere) {
-        messenger?.showSnackBar(SnackBar(content: Text(context.l10n.updateCheckUnavailable)));
-        return;
-      }
       await showUpdateSheet(context);
     case UpdateCheckPhase.upToDate:
       messenger?.showBriefNotice(context.l10n.updateUpToDate);
@@ -234,7 +229,7 @@ class _UpdateSheetState extends ConsumerState<UpdateSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SheetTitleBar(l10n.updateNewVersionFound),
+          SheetTitleBar(update.checkFailure == null ? l10n.updateNewVersionFound : l10n.updateTileUnavailable),
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(SheetTitleBar.inset, 0, SheetTitleBar.inset, 8),
