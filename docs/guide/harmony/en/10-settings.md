@@ -64,8 +64,8 @@ Shows your DeepSeek account or API key and balance; tap it to open your account.
 - **Diagnostics**: inspect the environment, export a bundle, or **Let the AI read diagnostics**, and enable **Automatic failure analysis** (off by default); when the keyboard covers the input, **This app's keyboard geometry** exports where the keyboard sat in the last two minutes, without anything typed. See [FAQ](11-faq.md).
 - **About DSH Go**:
   - **Version**: the app version, such as 0.9.2 (10251234), with the build number in parentheses. When there's a new version, this row on the Settings page says **Update available**.
-  - **Check for updates**: HarmonyOS can't update inside the app. A new version opens the update window with **What’s new**, and the release page says how to get it; it may not have a HarmonyOS package yet. To pass on this version, tap **Skip this version**.
-  - **Check automatically**: on by default; checks when the app opens, at most once a day. A new version opens the update window, unless you're on another page or typing, in which case **Check for updates** shows it. Skipped versions aren't offered again, and nothing downloads or installs.
+  - **Check for updates**: checks online for the latest release. HarmonyOS can't update inside the app. A new version opens the update window with **What’s new**, and the release page says how to get it; it may not have a HarmonyOS package yet. To pass on this version, tap **Skip this version**.
+  - **Check automatically**: on by default; checks on launch or return to the app, at most once in 24 hours after a successful check. Tapping Later only closes the window. A new version opens the update window, unless you're on another page or typing, in which case **Check for updates** shows it. Skipped versions aren't offered again, and nothing downloads or installs.
   - **Star DSH Go on GitHub**: opens the project page, where you can star it or share it with friends.
   - **Open-source licenses**.
 

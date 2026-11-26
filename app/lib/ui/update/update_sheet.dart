@@ -35,7 +35,7 @@ Future<void> checkForUpdates(BuildContext context, WidgetRef ref) async {
   await controller.ready;
   if (!context.mounted) return;
   final update = ref.read(appUpdateProvider);
-  if (update.hasUpdate || update.hasSelfUpdateResult) return showUpdateSheet(context);
+  if (update.hasSelfUpdateResult || (update.busy && update.hasUpdate)) return showUpdateSheet(context);
   final messenger = ScaffoldMessenger.maybeOf(context);
   final phase = await controller.check();
   if (!context.mounted) return;
@@ -229,7 +229,7 @@ class _UpdateSheetState extends ConsumerState<UpdateSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SheetTitleBar(l10n.updateNewVersionFound),
+          SheetTitleBar(update.checkFailure == null ? l10n.updateNewVersionFound : l10n.updateTileUnavailable),
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(SheetTitleBar.inset, 0, SheetTitleBar.inset, 8),

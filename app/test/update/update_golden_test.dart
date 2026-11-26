@@ -17,6 +17,7 @@ import 'package:dsh_app/ui/shell/page_frame.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/update/update_launch_check.dart';
 import 'package:dsh_app/ui/update/update_tiles.dart';
+import 'package:dsh_app/update/checker.dart';
 import 'package:dsh_app/update/release.dart';
 import 'package:dsh_app/update/version.dart';
 import 'package:flutter/material.dart';
@@ -28,10 +29,12 @@ import 'support.dart';
 
 /// Fixed state; records what the sheet asked for.
 class FakeUpdate extends AppUpdateController {
-  FakeUpdate(this.initial, {this.checkResult = UpdateCheckPhase.upToDate});
+  FakeUpdate(this.initial, {UpdateCheckPhase? checkResult, this.checkedRelease})
+    : checkResult = checkResult ?? (initial.hasUpdate ? UpdateCheckPhase.available : UpdateCheckPhase.upToDate);
 
   final AppUpdateState initial;
   final UpdateCheckPhase checkResult;
+  final ReleaseInfo? checkedRelease;
   final calls = <String>[];
 
   @override
@@ -43,7 +46,7 @@ class FakeUpdate extends AppUpdateController {
   @override
   Future<UpdateCheckPhase> check() async {
     calls.add('check');
-    state = state.copyWith(check: checkResult);
+    state = state.copyWith(check: checkResult, latest: checkedRelease == null ? null : () => checkedRelease);
     return checkResult;
   }
 
@@ -232,11 +235,11 @@ void main() {
       expect(find.byKey(const ValueKey('update-star')), findsNothing);
       await tester.tap(find.text('立即更新'));
       await tester.pump();
-      expect(update.calls, ['startDownload']);
+      expect(update.calls, ['check', 'startDownload']);
       expect(find.text('正在下载 0%'), findsOneWidget);
       await tester.tap(find.text('取消下载'));
       await tester.pump();
-      expect(update.calls, ['startDownload', 'cancelDownload']);
+      expect(update.calls, ['check', 'startDownload', 'cancelDownload']);
       expect(find.text('立即更新'), findsOneWidget);
     });
 
@@ -269,7 +272,7 @@ void main() {
       expect(find.byKey(const ValueKey('update-star')), findsNothing);
       await tester.tap(find.text('立即更新'));
       await tester.pump();
-      expect(update.calls, ['startDownload']);
+      expect(update.calls, ['check', 'startDownload']);
     });
 
     testWidgets('跳过这个版本 records the skip and closes the sheet', (tester) async {
@@ -277,7 +280,7 @@ void main() {
       await _openSheet(tester);
       await tester.tap(find.text('跳过这个版本'));
       await tester.pumpAndSettle();
-      expect(update.calls, ['skipLatest']);
+      expect(update.calls, ['check', 'skipLatest']);
       expect(find.text('发现新版本'), findsNothing);
       expect(find.text('已跳过 1.2.0'), findsOneWidget);
     });
@@ -292,7 +295,7 @@ void main() {
       expect(find.text('已取消安装'), findsNothing);
       await tester.tap(find.text('用系统安装器安装'));
       await tester.pump();
-      expect(update.calls, ['installWithSystem']);
+      expect(update.calls, ['check', 'installWithSystem']);
     });
 
     testWidgets('a stopped or failed install offers the system installer', (tester) async {
@@ -304,7 +307,7 @@ void main() {
       expect(find.text('已取消安装'), findsOneWidget);
       await tester.tap(find.text('用系统安装器安装'));
       await tester.pump();
-      expect(update.calls, ['installWithSystem']);
+      expect(update.calls, ['check', 'installWithSystem']);
       update.systemInstallerOpens = false;
       await tester.tap(find.text('用系统安装器安装'));
       await tester.pump();
@@ -348,6 +351,26 @@ void main() {
       await _openSheet(tester);
       expect(find.text('签名不一致，不能直接覆盖'), findsOneWidget);
       expect(find.text('导出安装包'), findsNothing);
+    });
+
+    testWidgets('manual check replaces a cached offer with the newly checked release', (tester) async {
+      final newer = parseGithubRelease(jsonDecode(fixture('github_release.json').replaceAll('1.2.0', '1.4.0')));
+      final update = await pump(tester, FakeUpdate(_offer(), checkedRelease: newer));
+      await _openSheet(tester);
+      expect(update.calls, ['check']);
+      expect(find.text('DSH 1.4.0'), findsOneWidget);
+      expect(find.text('DSH 1.2.0'), findsNothing);
+    });
+
+    testWidgets('a failed refresh still opens the cached offer after restart', (tester) async {
+      final update = await pump(tester, FakeUpdate(_offer().copyWith(checkFailure: () => CheckFailure.network)));
+      await _openSheet(tester);
+      expect(update.calls, ['check']);
+      expect(find.text('暂时检查不了'), findsOneWidget);
+      expect(find.text('发现新版本'), findsNothing);
+      expect(find.text('DSH 1.2.0'), findsOneWidget);
+      await tester.tap(find.text('立即更新'));
+      expect(update.calls, ['check', 'startDownload']);
     });
 
     testWidgets('manual check: up to date / unavailable say so in a snack bar, no dialog', (tester) async {

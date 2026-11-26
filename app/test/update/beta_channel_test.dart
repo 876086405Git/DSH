@@ -1,4 +1,4 @@
-// The beta channel: builds with a channel token ask go.dshtui.com/beta first
+// Builds with a channel token include go.dshtui.com/beta in their checks
 // and download from it with the token; the token never goes anywhere else.
 
 import 'dart:convert';
@@ -24,6 +24,7 @@ const _apk = 'dsh-go-1.2.0-arm64.apk';
 const _betaApk = 'https://go.dshtui.com/beta/1.2.0/$_apk';
 const _githubApk = 'https://github.com/ccch1mneyyy/dsh-go/releases/download/v1.2.0/$_apk';
 const _dlFeed = 'https://dl.dshtui.com/update.json';
+const _githubFeed = 'https://github.com/ccch1mneyyy/dsh-go/releases/latest/download/update.json';
 
 final _bytes = utf8.encode('PK pretend this is the 1.2.0 beta for arm64');
 
@@ -105,8 +106,8 @@ void main() {
       }
       expect(sources.metadataEndpoints(preferred: 'manifest:ghfast').map((e) => e.id).take(3), [
         'beta',
-        'manifest:ghfast',
         'feed',
+        'manifest:github',
       ]);
       expect(sources.metadataEndpoints().first.toString(), isNot(contains(_token)));
     });
@@ -127,11 +128,15 @@ void main() {
   });
 
   group('checking', () {
-    test('the channel answers: one request, with the token', () async {
-      final http = FakeHttp({_feed: _guarded((_, _) => textResponse(_manifest()))});
+    test('the beta and release feeds agree: use the channel with its token', () async {
+      final http = FakeHttp({
+        _feed: _guarded((_, _) => textResponse(_manifest())),
+        _dlFeed: (_, _) => textResponse(fixture('update.json')),
+        _githubFeed: (_, _) => textResponse(fixture('update.json')),
+      });
       final result = await UpdateChecker(http: http, sources: sources).check(preferred: 'api');
-      expect(http.urls, [_feed]);
-      expect(http.requests.single.$2, {'accept': 'application/json', 'authorization': _auth});
+      expect(http.urls, [_feed, _dlFeed, _githubFeed]);
+      _expectTokenOnlyOnChannel(http);
       final found = result as CheckFound;
       expect(found.endpoint.id, 'beta');
       expect(found.endpoint.mirrorId, isNull);
@@ -140,11 +145,22 @@ void main() {
       expect(found.release.pageUrl.toString(), 'https://go.dshtui.com/beta');
     });
 
+    test('a newer public release wins over an older reachable beta channel', () async {
+      final http = FakeHttp({
+        _feed: _guarded((_, _) => textResponse(_manifest())),
+        _githubFeed: (_, _) => textResponse(fixture('update.json').replaceAll('1.2.0', '1.4.0')),
+      });
+      final result = await UpdateChecker(http: http, sources: sources).check();
+      expect((result as CheckFound).release.version.toString(), '1.4.0+7');
+      expect(result.endpoint.id, 'manifest:github');
+      _expectTokenOnlyOnChannel(http);
+    });
+
     test('the channel refuses (token revoked) or is down: the public sources answer, without the token', () async {
       for (final route in <Route?>[(_, _) => textResponse('Unauthorized', status: 401), null]) {
         var http = FakeHttp({_feed: ?route, _dlFeed: (_, _) => textResponse(fixture('update.json'))});
         var result = await UpdateChecker(http: http, sources: sources).check();
-        expect(http.urls, [_feed, _dlFeed]);
+        expect(http.urls, [_feed, _dlFeed, _githubFeed, _api]);
         expect((result as CheckFound).endpoint.id, 'feed');
         _expectTokenOnlyOnChannel(http);
 
@@ -244,7 +260,7 @@ void main() {
       expect(c.read(appUpdateProvider).source, 'go.dshtui.com');
       await controller.install();
       expect(installer.calls, containsAllInOrder(['inspect', 'install']));
-      expect(http.urls, [_feed, _betaApk]);
+      expect(http.urls, [_feed, _dlFeed, _githubFeed, _api, _betaApk]);
       _expectTokenOnlyOnChannel(http);
     });
 

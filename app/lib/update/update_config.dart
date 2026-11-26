@@ -1,13 +1,9 @@
 /// Where in-app updates come from. Everything network-facing about updates is
 /// configured here; the conventions and trade-offs are in `docs/release.md`.
 ///
-/// Every build asks our own copy of the release files first
-/// ([updateDownloadOrigin]: `/update.json`, `/download/<version>/<file>`), then
-/// GitHub and the public accelerators, and the rate-limited GitHub API last.
-/// Beta builds carry a channel token (`--dart-define=DSH_BETA_CHANNEL_TOKEN`,
-/// put in by `tooling/build-apk.sh`): they ask the beta channel before all of
-/// that ([UpdateChannel], `go.dshtui.com/beta/update.json`,
-/// docs/design/share-links.md) and download from it with the token.
+/// Checks compare our own release feed and GitHub's manifest. Beta builds
+/// also compare their channel ([UpdateChannel], `go.dshtui.com/beta/update.json`).
+/// The GitHub API backs up its manifest; public accelerators are a last resort.
 ///
 /// Build-time overrides (no code change needed):
 /// - `--dart-define=DSH_BETA_CHANNEL_ORIGIN=https://example.com` moves the beta
@@ -207,7 +203,7 @@ class UpdateEndpoint {
     this.headers = const {},
   });
 
-  /// Stable id, remembered when it works so the next check starts there.
+  /// Stable id, used to remember a working accelerator for equal versions.
   final String id;
   final EndpointKind kind;
   final Uri url;
@@ -218,21 +214,17 @@ class UpdateEndpoint {
   /// Sent with the request (the beta channel's token). Never printed.
   final Map<String, String> headers;
 
+  bool get isAccelerator => mirrorId != null && mirrorId != UpdateMirror.github.id;
+
   @override
   String toString() => '$id <$url>';
 }
 
 /// The ordered list of update sources.
 ///
-/// Metadata: the beta channel (beta builds only; always asked first, since a
-/// GitHub release can lag behind it) → our `update.json` → `update.json` on
-/// the latest release through each GitHub mirror, GitHub first → GitHub API.
-/// Downloads: the asset's own URL (the channel's, with its token, when the
-/// channel answered), then each mirror in order, our copy first. Apart from
-/// the channel and the API, whatever worked last time moves to the front, so
-/// a phone that can't reach one source stops waiting on it every time. The
-/// API stays last even then: anonymous calls get 60 an hour per IP, shared
-/// IPs often find them spent, and its answer carries no delta patches.
+/// Metadata ties prefer the beta channel, then our feed, then GitHub, then
+/// accelerators. A previously selected accelerator wins ties among accelerators.
+/// Downloads use the asset URL and its configured mirrors as before.
 class UpdateSources {
   const UpdateSources({this.channel, this.feed, this.useGithubApi = true, this.mirrors = const [UpdateMirror.github]});
 
@@ -257,9 +249,10 @@ class UpdateSources {
           mirrorId: null,
           headers: channel.headers,
         ),
-      ..._preferFirst(manifests, (e) => e.id == preferred),
+      ...manifests.where((e) => !e.isAccelerator),
       if (useGithubApi)
         UpdateEndpoint(id: 'api', kind: EndpointKind.githubApi, url: githubLatestApi, mirrorId: UpdateMirror.github.id),
+      ..._preferFirst(manifests.where((e) => e.isAccelerator).toList(), (e) => e.id == preferred),
     ];
   }
 
