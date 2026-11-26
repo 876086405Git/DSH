@@ -1,6 +1,5 @@
 import 'package:dsh_app/update/checker.dart';
 import 'package:dsh_app/update/update_config.dart';
-import 'package:dsh_app/update/version.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support.dart';
@@ -21,9 +20,9 @@ void main() {
   group('source order', () {
     const sources = UpdateSources(mirrors: _mirrors);
 
-    test('metadata: update.json through GitHub and each mirror, then the API', () {
-      expect(sources.metadataEndpoints().map((e) => e.url.toString()), [_manifest, _m1, _m2, _api]);
-      expect(sources.metadataEndpoints().map((e) => e.id), ['manifest:github', 'manifest:m1', 'manifest:m2', 'api']);
+    test('metadata: GitHub manifest, API, then accelerators', () {
+      expect(sources.metadataEndpoints().map((e) => e.url.toString()), [_manifest, _api, _m1, _m2]);
+      expect(sources.metadataEndpoints().map((e) => e.id), ['manifest:github', 'api', 'manifest:m1', 'manifest:m2']);
     });
 
     test('a self-hosted feed goes first', () {
@@ -32,12 +31,12 @@ void main() {
       expect(withFeed.metadataEndpoints(), hasLength(5));
     });
 
-    test('whatever answered last time is tried first, the rest keep their order; the API stays last', () {
+    test('preference only reorders accelerators', () {
       expect(sources.metadataEndpoints(preferred: 'manifest:m2').map((e) => e.id), [
-        'manifest:m2',
         'manifest:github',
-        'manifest:m1',
         'api',
+        'manifest:m2',
+        'manifest:m1',
       ]);
       expect(sources.metadataEndpoints(preferred: 'gone').map((e) => e.id).first, 'manifest:github');
       expect(
@@ -62,17 +61,13 @@ void main() {
   });
 
   group('checker', () {
-    test('GitHub update.json unreachable → first mirror answers; the API is not asked', () async {
-      final http = FakeHttp({
-        _api: (_, _) => throw StateError('must not get this far'),
-        _m1: (_, _) => textResponse(fixture('update.json')),
-        _m2: (_, _) => throw StateError('must not get this far'),
-      });
+    test('GitHub manifest and API unreachable → use an accelerator', () async {
+      final http = FakeHttp({_m1: (_, _) => textResponse(fixture('update.json'))});
       final result = await UpdateChecker(
         http: http,
         sources: const UpdateSources(mirrors: _mirrors),
       ).check();
-      expect(http.urls, [_manifest, _m1]);
+      expect(http.urls, [_manifest, _api, _m1, _m2]);
       expect(result, isA<CheckFound>());
       final found = result as CheckFound;
       expect(found.release.version.toString(), '1.2.0+7');
@@ -80,19 +75,19 @@ void main() {
       expect(found.endpoint.mirrorId, 'm1');
     });
 
-    test('the API, once every update.json failed: GitHub headers are sent', () async {
+    test('the API backs up the GitHub manifest: GitHub headers are sent', () async {
       final http = FakeHttp({_api: (_, _) => textResponse(fixture('github_release.json'))});
       final result = await UpdateChecker(
         http: http,
         sources: const UpdateSources(mirrors: _mirrors),
       ).check();
       expect(result, isA<CheckFound>());
-      expect(http.urls, [_manifest, _m1, _m2, _api]);
+      expect(http.urls, [_manifest, _api]);
       expect(http.requests.last.$2['accept'], 'application/vnd.github+json');
       expect(http.requests.first.$2['accept'], 'application/json');
     });
 
-    test('API rate limited (403 with the limit spent) after every update.json failed', () async {
+    test('API rate limited (403 with the limit spent) and every manifest failed', () async {
       final http = FakeHttp({
         _api: (_, _) =>
             textResponse('{"message":"API rate limit exceeded"}', status: 403, headers: {'x-ratelimit-remaining': '0'}),
@@ -102,52 +97,55 @@ void main() {
         sources: const UpdateSources(mirrors: _mirrors),
       ).check();
       expect((result as CheckFailed).failure, CheckFailure.rateLimited);
-      expect(result.attempts.map((a) => a.$1), ['manifest:github', 'manifest:m1', 'manifest:m2', 'api']);
+      expect(result.attempts.map((a) => a.$1), ['manifest:github', 'api', 'manifest:m1', 'manifest:m2']);
     });
 
-    test('starts with the preferred endpoint', () async {
-      final http = FakeHttp({_m2: (_, _) => textResponse(fixture('update.json'))});
+    test('two official manifests: pick the newest, not the first answer above the installed version', () async {
+      for (final newerSource in [_feed, _manifest]) {
+        final old = fixture('update.json');
+        final newer = old.replaceAll('1.2.0', '1.4.0');
+        final http = FakeHttp({
+          _feed: (_, _) => textResponse(newerSource == _feed ? newer : old),
+          _manifest: (_, _) => textResponse(newerSource == _manifest ? newer : old),
+        });
+        final result = await UpdateChecker(
+          http: http,
+          sources: UpdateSources(feed: Uri.parse(_feed), mirrors: _mirrors),
+        ).check(preferred: 'manifest:m2');
+        expect((result as CheckFound).release.version.toString(), '1.4.0+7');
+        expect(result.endpoint.url.toString(), newerSource);
+        expect(http.urls, [_feed, _manifest], reason: 'official manifests do not need API or mirrors');
+        expect(http.requests.every((r) => r.$2['cache-control'] == 'no-cache'), isTrue);
+      }
+    });
+
+    test('the API can report a newer release than our feed when the GitHub manifest is down', () async {
+      final http = FakeHttp({
+        _feed: (_, _) => textResponse(fixture('update.json')),
+        _api: (_, _) => textResponse(fixture('github_release.json').replaceAll('1.2.0', '1.4.0')),
+      });
       final result = await UpdateChecker(
         http: http,
+        sources: UpdateSources(feed: Uri.parse(_feed), mirrors: _mirrors),
+      ).check();
+      expect((result as CheckFound).release.version.toString(), '1.4.0');
+      expect(result.endpoint.id, 'api');
+      expect(http.urls, [_feed, _manifest, _api]);
+    });
+
+    test('when every official route fails, compare both accelerators; preference only breaks ties', () async {
+      final manifest = fixture('update.json');
+      final http = FakeHttp({
+        _m1: (_, _) => textResponse(manifest),
+        _m2: (_, _) => textResponse(manifest.replaceAll('1.2.0', '1.1.0')),
+      });
+      final checker = UpdateChecker(
+        http: http,
         sources: const UpdateSources(mirrors: _mirrors),
-      ).check(preferred: 'manifest:m2');
-      expect(http.urls, [_m2]);
-      expect((result as CheckFound).endpoint.id, 'manifest:m2');
-    });
-
-    test('a source stuck on an older release does not hide a newer one', () async {
-      // The beta channel still says 1.0.4 while GitHub has 1.2.0 (the shape of
-      // the 1.0.4 "you are up to date" reports).
-      const stale = '{"schema":1,"version":"1.0.4+10310405","tag":"v1.0.4",'
-          '"assets":{"arm64":{"name":"dsh-go-1.0.4-arm64.apk","size":14,'
-          '"sha256":"3a8498bcf7d895bac5c9f2f02829c9ec7064cd8bc7ef9f1792f28277d44839f2"}}}';
-      final http = FakeHttp({
-        _m1: (_, _) => textResponse(stale),
-        _api: (_, _) => textResponse(fixture('github_release.json')),
-      });
-      final result = await UpdateChecker(http: http, sources: const UpdateSources(mirrors: _mirrors)).check(
-        preferred: 'manifest:m1',
-        installed: AppVersion.tryParse('1.0.4+10310405'),
       );
-      expect(result, isA<CheckFound>());
-      expect((result as CheckFound).release.version.toString(), startsWith('1.2.0'));
-      expect(http.urls.first, _m1, reason: 'the preferred source is still asked first');
-      expect(http.urls, contains(_api));
-    });
-
-    test('nothing newer anywhere: the newest answer is returned, not a failure', () async {
-      const stale = '{"schema":1,"version":"1.0.4+10310405","tag":"v1.0.4",'
-          '"assets":{"arm64":{"name":"dsh-go-1.0.4-arm64.apk","size":14,'
-          '"sha256":"3a8498bcf7d895bac5c9f2f02829c9ec7064cd8bc7ef9f1792f28277d44839f2"}}}';
-      final http = FakeHttp({
-        _api: (_, _) => textResponse(stale),
-        _manifest: (_, _) => textResponse(stale),
-      });
-      final result = await UpdateChecker(http: http, sources: const UpdateSources()).check(
-        installed: AppVersion.tryParse('1.0.4+10310405'),
-      );
-      expect(result, isA<CheckFound>());
-      expect((result as CheckFound).release.version.toString(), '1.0.4+10310405');
+      expect((await checker.check(preferred: 'manifest:m2') as CheckFound).endpoint.id, 'manifest:m1');
+      http.routes[_m2] = (_, _) => textResponse(manifest);
+      expect((await checker.check(preferred: 'manifest:m2') as CheckFound).endpoint.id, 'manifest:m2');
     });
 
     test('a mirror answering 200 with an HTML page is skipped', () async {
@@ -179,7 +177,7 @@ void main() {
         sources: const UpdateSources(mirrors: _mirrors),
       ).check();
       expect((result as CheckFailed).failure, CheckFailure.rateLimited);
-      expect(http.urls, [_manifest, _m1, _m2, _api]);
+      expect(http.urls, [_manifest, _api, _m1, _m2]);
     });
 
     test('offline: every endpoint unreachable', () async {

@@ -128,7 +128,7 @@ void main() {
       expect(state.autoCheck, isTrue);
     });
 
-    test('daily auto check: offers once, then waits a day; remembers the endpoint that answered', () async {
+    test('daily auto check: offers once, then waits a day', () async {
       const m1 = 'https://mirror-one.example/$_manifest';
       http.routes[m1] = (_, _) => textResponse(jsonEncode(_release()));
       final c = container();
@@ -139,16 +139,16 @@ void main() {
       expect(state.check, UpdateCheckPhase.available);
       expect(state.latest!.version.name, '1.2.0');
       expect(state.asset!.name, 'dsh-go-1.2.0-arm64.apk');
-      expect(http.urls, [_manifest, m1]);
+      expect(http.urls, [_manifest, _api, m1]);
 
       now = now.add(const Duration(hours: 5));
       expect(await controller.autoCheckIfDue(), isFalse);
-      expect(http.requests, hasLength(2), reason: 'throttled');
+      expect(http.requests, hasLength(3), reason: 'throttled');
 
       now = now.add(const Duration(hours: 20));
       http.requests.clear();
       expect(await controller.autoCheckIfDue(), isTrue);
-      expect(http.urls, [m1], reason: 'starts where it worked last time');
+      expect(http.urls, [_manifest, _api, m1]);
     });
 
     test('a build without the APK installer (HarmonyOS) never checks or offers', () async {
@@ -242,6 +242,15 @@ void main() {
       final controller = await ready(c);
       expect(await controller.check(), UpdateCheckPhase.unavailable);
       expect(await controller.autoCheckIfDue(), isFalse, reason: 'just attempted');
+    });
+
+    test('an offline automatic check does not offer the cached release as a fresh result', () async {
+      SharedPreferences.setMockInitialValues({'update_latest': jsonEncode(_release())});
+      final c = container();
+      final controller = await ready(c);
+      expect(await controller.autoCheckIfDue(), isFalse);
+      expect(c.read(appUpdateProvider).hasUpdate, isTrue, reason: 'the cached offer was not erased');
+      expect(c.read(appUpdateProvider).checkFailure, isNotNull);
     });
 
     test('the last offer survives a restart without the network, and is dropped once installed', () async {

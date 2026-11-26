@@ -35,12 +35,17 @@ Future<void> checkForUpdates(BuildContext context, WidgetRef ref) async {
   await controller.ready;
   if (!context.mounted) return;
   final update = ref.read(appUpdateProvider);
-  if (update.hasUpdate || update.hasSelfUpdateResult) return showUpdateSheet(context);
+  if (update.hasSelfUpdateResult || (update.busy && update.hasUpdate)) return showUpdateSheet(context);
   final messenger = ScaffoldMessenger.maybeOf(context);
   final phase = await controller.check();
   if (!context.mounted) return;
   switch (phase) {
     case UpdateCheckPhase.available:
+      final refreshed = ref.read(appUpdateProvider);
+      if (refreshed.checkFailure != null && !refreshed.apkHere) {
+        messenger?.showSnackBar(SnackBar(content: Text(context.l10n.updateCheckUnavailable)));
+        return;
+      }
       await showUpdateSheet(context);
     case UpdateCheckPhase.upToDate:
       messenger?.showBriefNotice(context.l10n.updateUpToDate);
