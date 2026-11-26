@@ -19,9 +19,8 @@ import '../state.dart';
 import '../transport/transport.dart';
 import '../util/bytes.dart';
 
-/// Fixed endpoint allow-list of the Host plugin (ds-harness-remote 0.5.17 to 0.6.0,
-/// `HARNESS_REMOTE_ALLOWLIST` + terminal endpoints). Everything else is
-/// refused by the Host; this client refuses it locally first.
+/// Endpoints this client can forward through the Host's fixed allow-list.
+/// Older Host plugins may still refuse entries added by newer versions.
 const Set<String> harnessRemoteAllowlist = {
   r'$events',
   r'$events/result',
@@ -34,6 +33,8 @@ const Set<String> harnessRemoteAllowlist = {
   'credentials/set',
   'credentials/unset',
   'directoryPicker/list',
+  DsBotRpcTransport.callEndpoint,
+  DsBotRpcTransport.feedEndpoint,
   'fileReferences/list',
   'goals/clear',
   'goals/complete',
@@ -128,6 +129,19 @@ const Set<String> harnessRemoteAllowlist = {
 /// Endpoints whose binary results arrive as a base64 `data` string over the
 /// tunnel (locally they are multipart, which the HTTP carrier rejects).
 const Set<String> base64ResultEndpoints = {'workspaceFiles/readBytes', 'officeToPdf/render'};
+
+// Only DS Bot reads that can return a large response may be dispatched again.
+const _replayableDsBotReads = {
+  'avatar',
+  'chat',
+  'file-download',
+  'file-text',
+  'image',
+  'markdown-image',
+  'memory-view',
+  'notices',
+  'room-chat',
+};
 
 /// Requests above this go through `harness.remote.transfer.*`.
 const int directRemoteCallBytes = 2 * 1024 * 1024;
@@ -464,9 +478,12 @@ class RemoteTunnelCarrier extends DshCarrier implements WorkspaceUploadCarrier {
     };
     _tracer?.call(DshTraceEntry('out', 'rpc', {'endpoint': endpoint, 'args': args}));
     final encoded = utf8.encode(jsonEncode(request));
+    final botOperation = endpoint == DsBotRpcTransport.callEndpoint ? args['endpoint'] : null;
     Object? response;
     try {
-      if (encoded.length > directRemoteCallBytes) {
+      // The team snapshot can be large, but reading it can also bootstrap a Bot.
+      // Transfer it from the start rather than re-dispatching it on overflow.
+      if (encoded.length > directRemoteCallBytes || (botOperation == 'state' && session.supportsTransfer)) {
         response = await _callTransferred(session, endpoint, encoded, timeout);
       } else {
         try {
@@ -479,7 +496,8 @@ class RemoteTunnelCarrier extends DshCarrier implements WorkspaceUploadCarrier {
               endpoint == 'commands/execute' ||
               endpoint == 'settings/mutate' ||
               endpoint == 'settings/update' ||
-              endpoint == 'settings/replace') {
+              endpoint == 'settings/replace' ||
+              (endpoint == DsBotRpcTransport.callEndpoint && !_replayableDsBotReads.contains(botOperation))) {
             rethrow;
           }
           response = await _callTransferred(session, endpoint, encoded, timeout);
