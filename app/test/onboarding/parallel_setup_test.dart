@@ -127,6 +127,21 @@ void main() {
       expect(tester.getSemantics(read), isSemantics(label: '正在准备运行环境，已完成 42%', isButton: true));
     });
 
+    testWidgets('the usage and privacy notice does not stop the unpack', (tester) async {
+      final rig = await pumpGate(tester);
+      await chooseThisPhone(tester, keepNotice: true);
+      expect(find.text('使用与隐私说明'), findsOneWidget);
+      expect(rig.runtime.calls, ['install']);
+
+      rig.runtime.unpack(0.42);
+      await frames(tester, 3);
+      expect(find.text('使用与隐私说明'), findsOneWidget);
+      await closeUsagePrivacyNotice(tester);
+      expect(find.text('使用与隐私说明'), findsNothing);
+      expect(_capsuleText('运行环境 42%'), findsOneWidget);
+      expect(rig.runtime.calls, ['install']);
+    });
+
     testWidgets('paging on never starts a second unpack', (tester) async {
       final rig = await pumpGate(tester);
       await chooseThisPhone(tester);

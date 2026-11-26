@@ -20820,6 +20820,38 @@ class L10nEn extends L10n {
   String get shellGetStarted => 'Start';
 
   @override
+  String get shellUsagePrivacyNotice => 'Use and privacy notice';
+
+  @override
+  String get shellUsageTermsTitle => 'Open-source license and use';
+
+  @override
+  String get shellUsageTermsBody =>
+      'DSH Go is an unofficial app built on DeepSeek Harness. Its source code is released under AGPL-3.0. The models, remote hosts, and plugins you choose are subject to their own terms.';
+
+  @override
+  String get shellUsageDisclaimerTitle => 'Risks and disclaimer';
+
+  @override
+  String get shellUsageDisclaimerBody =>
+      'AI answers and actions can be wrong. Review important actions before running commands, editing files, or controlling your phone, and grant only the permissions you need. The software is provided as is to the extent permitted by law, without limiting your statutory rights.';
+
+  @override
+  String get shellUsagePrivacyTitle => 'Privacy notice';
+
+  @override
+  String get shellUsagePrivacyBody =>
+      'Running the engine on this phone does not mean the model runs offline. Cloud models, remote hosts, and third-party plugins can process data through the services you choose. If you enable features such as screen reading, related content may also be sent to the model you use.';
+
+  @override
+  String get shellUsagePrivacyStats =>
+      'DSH Go’s anonymous usage stats are on by default and contain no chats, files, or account information. You can adjust the switch in Settings › Privacy & Sharing.';
+
+  @override
+  String get shellUsagePrivacyAndroid =>
+      'Android still reports basic daily activity when anonymous usage stats are turned off. Text recognition and QR pairing use Google ML Kit, whose SDK can send its own usage metrics to Google independently of DSH Go’s stats switch.';
+
+  @override
   String get shellSearchChats => 'Search chats';
 
   @override
@@ -27949,7 +27981,7 @@ class L10nEn extends L10n {
 
   @override
   String get usageStatsAndroidFooter =>
-      'This switch controls dsh-go’s own statistics: feature counts (tavern messages, companion room visits and voice calls included), the token counts model replies report, versions, phone maker and model, and system version. It includes no chats, character cards, files or accounts, and does not control Google ML Kit SDK statistics. Android also summarizes foreground days, the first day of collection, startup and remote connection results and timing bands, model usage, plugin actions, setup, and abnormal exits confirmed by the operating system. Turning it off clears unsent data.';
+      'Anonymous stats report how some features are used (no chats, files, or account info). When turned off, Android only collects daily activity data.';
 
   @override
   String viewArtifactSaved(String value) {

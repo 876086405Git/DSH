@@ -36282,6 +36282,60 @@ abstract class L10n {
   /// **'开始'**
   String get shellGetStarted;
 
+  /// No description provided for @shellUsagePrivacyNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用与隐私说明'**
+  String get shellUsagePrivacyNotice;
+
+  /// No description provided for @shellUsageTermsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'开源许可与使用'**
+  String get shellUsageTermsTitle;
+
+  /// No description provided for @shellUsageTermsBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'DSH Go 是基于 DeepSeek Harness 的非官方应用，项目源码按 AGPL-3.0 许可发布。你选择的模型、远程主机及插件适用各自的条款。'**
+  String get shellUsageTermsBody;
+
+  /// No description provided for @shellUsageDisclaimerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'风险提示与免责声明'**
+  String get shellUsageDisclaimerTitle;
+
+  /// No description provided for @shellUsageDisclaimerBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 的回答和操作可能出错。运行命令、改文件或操控手机前，请核对重要操作，只授予必要权限。在法律允许的范围内，软件按现状提供，不影响你依法享有的权利。'**
+  String get shellUsageDisclaimerBody;
+
+  /// No description provided for @shellUsagePrivacyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'隐私说明'**
+  String get shellUsagePrivacyTitle;
+
+  /// No description provided for @shellUsagePrivacyBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机运行不代表模型离线。使用云模型、远程主机或第三方插件时，相关数据可能由你所选的服务处理。开启读屏等功能后，相关内容也可能交给你使用的模型处理。'**
+  String get shellUsagePrivacyBody;
+
+  /// No description provided for @shellUsagePrivacyStats.
+  ///
+  /// In zh, this message translates to:
+  /// **'DSH Go 的匿名使用统计默认开启，不包含对话、文件或账号信息。你可以在「设置 › 隐私与分享」调整统计开关。'**
+  String get shellUsagePrivacyStats;
+
+  /// No description provided for @shellUsagePrivacyAndroid.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭匿名使用统计后，Android 仍会上报基础日活。文字识别与扫码配对使用 Google ML Kit，SDK 可独立向 Google 发送使用统计，不受 DSH Go 的匿名统计开关控制。'**
+  String get shellUsagePrivacyAndroid;
+
   /// No description provided for @shellSearchChats.
   ///
   /// In zh, this message translates to:
@@ -48639,7 +48693,7 @@ abstract class L10n {
   /// No description provided for @usageStatsAndroidFooter.
   ///
   /// In zh, this message translates to:
-  /// **'这个开关只控制 dsh-go 自身的统计：各功能使用次数（含酒馆消息、伙伴小屋、语音通话）、模型回复报告的 token 数、版本、手机品牌和型号、系统版本，不含对话、角色卡、文件和账号；它不控制 Google ML Kit SDK 的统计。 Android 还按日汇总前台及首次参与统计、启动和远程连接结果与耗时区间，以及模型用量、插件执行、引导和系统确认的异常退出。关闭会清空未上报的数据。'**
+  /// **'匿名统计会上报部分功能的使用情况（不含对话、文件或账号信息）。关闭后，Android 仅收集日活数据。'**
   String get usageStatsAndroidFooter;
 
   /// No description provided for @viewArtifactSaved.
