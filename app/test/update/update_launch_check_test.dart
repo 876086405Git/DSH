@@ -27,6 +27,17 @@ class _NoPendingInstall extends ChannelPrivilegedInstaller {
   Future<SelfUpdatePending> reconcile() async => const SelfUpdatePending();
 }
 
+// Lifecycle tests control when metadata arrives, not streamed HTTP timing.
+class _ReleaseResponse extends UpdateHttpResponse {
+  _ReleaseResponse(this.version) : super(status: 200, body: const Stream.empty());
+
+  final String version;
+
+  @override
+  Future<String> text({int maxBytes = 2 * 1024 * 1024, Duration timeout = const Duration(seconds: 20)}) async =>
+      _release(version);
+}
+
 String _release(String version) => jsonEncode({
   'schema': 1,
   'version': version,
@@ -82,7 +93,7 @@ void main() {
   testWidgets('Later leaves the offer intact; resume checks again only after 24 hours', (tester) async {
     var now = DateTime.utc(2026, 11, 26);
     var version = '1.2.0';
-    final http = FakeHttp({_manifest: (_, _) => textResponse(_release(version))});
+    final http = FakeHttp({_manifest: (_, _) => _ReleaseResponse(version)});
     final container = await _mount(tester, http, () => now);
     final sheet = find.byType(UpdateSheet, skipOffstage: false);
 
@@ -93,6 +104,8 @@ void main() {
     await tester.pump(_launchDelay);
     await tester.pumpAndSettle();
     expect(http.urls, [_manifest]);
+    expect(container.read(appUpdateProvider).checkFailure, isNull);
+    expect(container.read(appUpdateProvider).check, UpdateCheckPhase.available);
     expect(sheet, findsOneWidget);
     expect(find.text('DSH 1.2.0'), findsOneWidget);
 
@@ -135,8 +148,10 @@ void main() {
     expect(http.urls, [_manifest]);
 
     _background(tester);
-    answer.complete(textResponse(_release('1.3.0')));
+    answer.complete(_ReleaseResponse('1.3.0'));
     await tester.pump();
+    expect(container.read(appUpdateProvider).checkFailure, isNull);
+    expect(container.read(appUpdateProvider).check, UpdateCheckPhase.available);
     expect(container.read(appUpdateProvider).latest?.version.name, '1.3.0');
     expect(container.read(launchNoticeShownProvider), isFalse);
 
