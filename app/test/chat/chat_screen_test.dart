@@ -1,13 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show SemanticsAction;
 
+import 'package:dsh_app/l10n/l10n.dart';
+import 'package:dsh_app/remote/link_status.dart' show RelayPath;
 import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/attachments.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/composer_quote.dart';
 import 'package:dsh_app/state/connection_state.dart';
+import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/models_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/ui/chat/chat_header.dart';
@@ -20,6 +24,7 @@ import 'package:dsh_app/ui/chat/widgets/attachments.dart';
 import 'package:dsh_app/ui/chat/dock/dock_stack.dart' show DockStackMetrics;
 import 'package:dsh_app/ui/chat/widgets/auto_approve_pill.dart';
 import 'package:dsh_app/ui/chat/widgets/permission_pill.dart' show StripRiskChip;
+import 'package:dsh_app/ui/shell/sessions_drawer.dart';
 import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +47,13 @@ ProviderContainer containerOf(WidgetTester tester) =>
 
 ScrollPosition listPosition(WidgetTester tester) =>
     tester.widget<CustomScrollView>(find.byType(CustomScrollView)).controller!.position;
+
+class _RemoteHost extends ActiveHostController {
+  static const host = HostRef.relay('workstation');
+
+  @override
+  HostRef build() => host;
+}
 
 class _StartingRuntime extends LocalRuntimeController {
   @override
@@ -151,6 +163,71 @@ void main() {
     );
     expect(find.text('连接已断开'), findsOneWidget);
     expect(find.text('对话同步中断'), findsOneWidget);
+  });
+
+  testWidgets('header and drawer recover the same remote host independently of chat sync', (tester) async {
+    final changes = StreamController<HostLinkStatus>.broadcast(sync: true);
+    addTearDown(changes.close);
+    final harness = ChatHarness(
+      session: 's1',
+      extra: [
+        activeHostProvider.overrideWith(_RemoteHost.new),
+        hostNameProvider.overrideWith((ref, host) => 'Workstation'),
+        hostLinkStatusProvider(_RemoteHost.host).overrideWith((ref) => changes.stream),
+      ],
+    );
+    usePhoneView(tester);
+    mockClipboard(tester);
+    await tester.pumpWidget(
+      testApp(
+        Scaffold(
+          body: Column(
+            children: [
+              const Expanded(child: ChatScreen()),
+              IdentityBar(onHost: () {}, onFeatures: () {}, onSettings: () {}),
+            ],
+          ),
+        ),
+        overrides: harness.overrides,
+      ),
+    );
+    await pumpFrames(tester);
+    final headerFinder = find.byType(ChatHeader);
+    ChatHeader header() => tester.widget<ChatHeader>(headerFinder);
+    void expectLinkLabel(String label) {
+      expect(header().status.label, label);
+      expect(find.descendant(of: find.byType(IdentityBar), matching: find.text(label)), findsOneWidget);
+    }
+
+    changes.add(const HostLinkStatus(HostLinkPhase.connected, path: RelayPath.p2p));
+    await pumpFrames(tester);
+    expectLinkLabel(RelayPath.p2p.label);
+
+    changes.add(const HostLinkStatus(HostLinkPhase.reconnecting, path: RelayPath.p2p));
+    await pumpFrames(tester);
+    expectLinkLabel(appL10n.remoteReconnecting);
+    expect(find.text(RelayPath.p2p.label), findsNothing);
+
+    final chat = harness.controllers['s1']!;
+    chat.emit(chat.state.copyWith(streamLost: true));
+    changes.add(const HostLinkStatus(HostLinkPhase.connected));
+    await pumpFrames(tester);
+    expectLinkLabel(appL10n.remoteConnected);
+    expect(header().sessionStatus?.label, appL10n.stateChatSyncInterrupted);
+    expect(
+      find.descendant(of: headerFinder, matching: find.text(' · ${appL10n.stateChatSyncInterrupted}')),
+      findsOneWidget,
+    );
+
+    chat.emit(chat.state.copyWith(streamLost: false, syncing: true));
+    await pumpFrames(tester);
+    expectLinkLabel(appL10n.remoteConnected);
+    expect(header().sessionStatus?.label, appL10n.stateChatSynchronizing);
+
+    chat.emit(chat.state.copyWith(syncing: false));
+    await pumpFrames(tester);
+    expectLinkLabel(appL10n.remoteConnected);
+    expect(header().sessionStatus, isNull);
   });
 
   testWidgets('local startup has its own header and empty-state copy', (tester) async {

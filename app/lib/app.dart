@@ -15,6 +15,7 @@ import 'pets/pet_sheets.dart';
 import 'l10n/l10n.dart';
 import 'performance/performance_state.dart';
 import 'performance/refresh_rate.dart';
+import 'remote/remote_background.dart';
 import 'state/app_info.dart';
 import 'state/appearance_state.dart';
 import 'state/locale_state.dart';
@@ -200,6 +201,7 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     ref.watch(companionAlwaysOnOwnerProvider);
+    if (widget.home == null) ref.watch(remoteBackgroundProvider);
     // Only Android's native phone control knows her sessions.
     if (Platform.isAndroid) ref.watch(companionPhoneSessionsBridgeProvider);
     if (ref.watch(companionResidencyProvider).enabled) ref.watch(petOverlayBridgeProvider);

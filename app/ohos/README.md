@@ -15,7 +15,8 @@ DSH_NODE_HEADERS=/path/to/node-v24.22.1/src \
 
 - 测试包从 2026-11-06 起在 HBN-AL00（HarmonyOS 7.0.0.111）上旁加载安装运行，本机引擎、远程主机、语音、通话都在用；还没有上架应用市场。各通道的协议和尚待真机确认的边界在 `docs/design/harmonyos/`，总览是那里的 `README.md`。
 - 和 Android 的差别按功能处理：能做的直接用同一套界面，做不到的由 `androidSystemFeaturesProvider` 隐藏，用户能看到的差别写在 `docs/guide/harmony/`。没有手机操控（换成系统操作）、App 外的宠物和悬浮条、无障碍。
-- 仓库里的权限是联网、读网络状态、振动、麦克风和持久文件授权（`FILE_ACCESS_PERSIST`）。文件走系统选择器，不申请 `READ_MEDIA`。读剪贴板（`READ_PASTEBOARD`）和长时任务保活（`KEEP_BACKGROUND_RUNNING_SYSTEM`）是受限权限，只在 debug/device 签名的包里由 `tooling/ohos/hap-distribution.py` 加上，应用市场版本没有。
+- 仓库里的权限是联网、读网络状态、振动、麦克风、持久文件授权（`FILE_ACCESS_PERSIST`）及远程连接可选静音模式所用的普通后台权限（`KEEP_BACKGROUND_RUNNING`）。文件走系统选择器，不申请 `READ_MEDIA`。读剪贴板（`READ_PASTEBOARD`）和本机任务保活（`KEEP_BACKGROUND_RUNNING_SYSTEM`）是受限权限，只在 debug/device 签名的包里由 `tooling/ohos/hap-distribution.py` 加上，应用市场版本没有。
+- 远程连接默认使用系统短时任务。开启静音实验后，退后台时额外尝试音频长时任务，只写全零 PCM；系统可能通知、拒绝或中止，不保证延长后台时间，也不重试当前后台周期。
 - 图标是 1024px 分层图，来自 `app/assets/brand/tile.svg`；三个备用图标和两个快捷方式图标由 `tooling/ohos/make-launcher-icons.py` 生成。
 - 长按桌面图标有新对话和语音输入。最近对话发不到桌面，公开的 `shortcutManager` 没有发布接口。语音输入只在系统说明是桌面快捷方式拉起时才开麦克风，其他应用带同样参数只会开新对话。
 - 设置 › 主题可以换桌面图标（`bundleManager.setAlternateIcon`），也可以把自己的图片做成桌面快捷方式（AppGallery Kit，见 `docs/design/harmonyos/picture-shortcut.md`，真机表现待确认）。

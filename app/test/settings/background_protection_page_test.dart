@@ -9,6 +9,7 @@ import 'package:dsh_app/ui/settings/settings_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../shell/golden_harness.dart';
 
@@ -27,6 +28,8 @@ void main() {
   const location = ValueKey('background-protection-location');
   const task = ValueKey('background-protection-task');
   const status = ValueKey('background-protection-status');
+  const remoteAudio = ValueKey('remote-background-audio');
+  const remoteLocation = ValueKey('remote-background-location');
   late Map<String, Object?>? actual;
   late List<MethodCall> calls;
   late FutureOr<Object?> Function(MethodCall) update;
@@ -35,6 +38,7 @@ void main() {
   var opens = true;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     actual = {'supported': true};
     calls = [];
     runtime = _Runtime();
@@ -220,11 +224,13 @@ void main() {
     expect(find.text(l10n.backgroundProtectionAudioActive), findsOneWidget);
   });
 
-  testWidgets('HarmonyOS uses one switch and cannot fix ACL eligibility in settings', (tester) async {
+  testWidgets('HarmonyOS keeps remote audio separate from local ACL eligibility', (tester) async {
     actual = {'supported': true, 'permissionStatus': 'eligible'};
     await pump(tester, os: 'ohos');
-    expect(find.byType(SettingsSwitchTile), findsOneWidget);
+    expect(find.byType(SettingsSwitchTile), findsNWidgets(2));
     expect(toggle(tester, task).value, isFalse);
+    expect(toggle(tester, remoteAudio).value, isFalse);
+    expect(find.byKey(remoteLocation), findsNothing);
     update = (call) {
       actual = {
         'supported': true,
@@ -269,28 +275,34 @@ void main() {
   });
 
   group('Android', () {
-    testWidgets('an older host shows the existing guide without enhanced controls', (tester) async {
+    testWidgets('an older local engine response does not hide remote controls', (tester) async {
       actual = null;
       await pump(tester, os: 'android');
-      expect(find.byType(SettingsSwitchTile), findsNothing);
+      expect(find.byType(SettingsSwitchTile), findsNWidgets(2));
+      expect(find.byKey(audio), findsNothing);
+      expect(find.byKey(location), findsNothing);
+      expect(toggle(tester, remoteAudio).value, isFalse);
+      expect(toggle(tester, remoteLocation).value, isFalse);
       expect(find.byKey(status), findsNothing);
       expect(find.text(l10n.pluginsBackgroundDescription), findsOneWidget);
       expect(find.text(l10n.pluginsAllowHighPower), findsOneWidget);
       expect(calls.where((call) => call.method == 'backgroundProtection'), hasLength(1));
     });
 
-    testWidgets('supported hosts show two independent off switches alongside the vendor guide', (tester) async {
+    testWidgets('supported hosts show separate off switches for local and remote protection', (tester) async {
       actual = {'supported': true, 'locationAuthorization': 'notDetermined'};
       await pump(tester, os: 'android');
       expect(find.text(l10n.pluginsAllowHighPower), findsOneWidget);
-      expect(find.byType(SettingsSwitchTile), findsNWidgets(2));
+      expect(find.byType(SettingsSwitchTile), findsNWidgets(4));
+      expect(toggle(tester, remoteAudio).value, isFalse);
+      expect(toggle(tester, remoteLocation).value, isFalse);
       expect(toggle(tester, audio).value, isFalse);
       expect(toggle(tester, location).value, isFalse);
       expect(find.text(l10n.backgroundProtectionOff), findsOneWidget);
       expect(tester.widget<SettingsTile>(find.byKey(status)).onTap, isNull);
 
       update = (call) => actual = {...actual!, 'audioEnabled': true};
-      await tester.tap(find.text(l10n.backgroundProtectionAudio));
+      await tester.tap(find.byKey(audio));
       await tester.pumpAndSettle();
       expect(calls.singleWhere((call) => call.method == 'setBackgroundProtection').arguments, {'audioEnabled': true});
       expect(toggle(tester, audio).value, isTrue);
@@ -303,7 +315,7 @@ void main() {
       final pending = Completer<Object?>();
       update = (call) => pending.future;
       await pump(tester, os: 'android');
-      await tester.tap(find.text(l10n.backgroundProtectionLocation));
+      await tester.tap(find.byKey(location));
       await tester.pump();
       expect(calls.singleWhere((call) => call.method == 'setBackgroundProtection').arguments, {
         'locationEnabled': true,
@@ -349,7 +361,7 @@ void main() {
       expect(tester.widget<SettingsTile>(find.byKey(status)).onTap, isNull);
 
       update = (call) => actual = {...actual!, 'locationEnabled': false, 'locationActive': false};
-      await tester.tap(find.text(l10n.backgroundProtectionLocation));
+      await tester.tap(find.byKey(location));
       await tester.pumpAndSettle();
       expect(calls.singleWhere((call) => call.method == 'setBackgroundProtection').arguments, {
         'locationEnabled': false,

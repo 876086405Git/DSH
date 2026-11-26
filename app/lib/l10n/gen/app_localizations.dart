@@ -3632,6 +3632,30 @@ abstract class L10n {
   /// **'未能更新后台保护，请查看当前状态后重试。'**
   String get backgroundProtectionUpdateFailed;
 
+  /// No description provided for @remoteBackgroundProtectionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'远程连接保活'**
+  String get remoteBackgroundProtectionTitle;
+
+  /// No description provided for @remoteBackgroundAudioHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'退到后台时播放静音音频，可能增加耗电；系统仍可能暂停连接。'**
+  String get remoteBackgroundAudioHint;
+
+  /// No description provided for @remoteBackgroundLocationHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅使用大致位置，需后台授权；不保存或发送坐标，可能增加耗电。'**
+  String get remoteBackgroundLocationHint;
+
+  /// No description provided for @remoteBackgroundLocationPermission.
+  ///
+  /// In zh, this message translates to:
+  /// **'请授予后台位置权限，再开启此选项。'**
+  String get remoteBackgroundLocationPermission;
+
   /// No description provided for @botsFolderGone.
   ///
   /// In zh, this message translates to:

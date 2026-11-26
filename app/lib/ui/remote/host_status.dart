@@ -33,12 +33,17 @@ class HostStatusView {
 }
 
 /// Live status of [host]: the engine for 本机, the link for remote hosts.
-HostStatusView watchHostStatus(WidgetRef ref, HostRef host) {
+HostStatusView watchHostStatus(WidgetRef ref, HostRef host, {bool showRelayPath = false}) {
   if (host.isLocal) {
     final view = EngineStatusView.of(ref.watch(localRuntimeProvider));
     return HostStatusView(view.tone, view.label);
   }
-  final status = ref.watch(hostLinkStatusProvider(host)).value ?? HostLinkStatus.idle;
+  final snapshot = ref.watch(hostLinkStatusProvider(host));
+  final status = (snapshot.isLoading || snapshot.hasError ? null : snapshot.value) ?? HostLinkStatus.idle;
+  if (showRelayPath && host.kind == HostKind.relay && status.isConnected) {
+    final path = status.network?.path ?? status.path;
+    if (path != null) return HostStatusView(StatusTone.ok, path.label);
+  }
   return HostStatusView.ofLink(status);
 }
 

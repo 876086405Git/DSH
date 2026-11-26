@@ -25,6 +25,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.github.ccch1mneyyy.dsh_app.companion.CompanionAssistant
 import io.github.ccch1mneyyy.dsh_app.launch.LaunchScreen
 import io.github.ccch1mneyyy.dsh_app.launch.LaunchThemeSync
+import io.github.ccch1mneyyy.dsh_app.remote.RemoteBackgroundService
 import io.github.ccch1mneyyy.dsh_app.runtime.AndroidBackgroundProtection
 import io.github.ccch1mneyyy.dsh_app.runtime.LaunchStart
 import io.github.ccch1mneyyy.dsh_app.text.CachedTextActions
@@ -93,10 +94,12 @@ class MainActivity : FlutterActivity() {
 
     override fun onStart() {
         super.onStart()
+        RemoteBackgroundService.onHostStarted(applicationContext)
         AndroidBackgroundProtection.get(this).setAppVisible(true)
     }
 
     override fun onStop() {
+        RemoteBackgroundService.onHostStopped()
         AndroidBackgroundProtection.get(this).setAppVisible(false)
         super.onStop()
         finishAssistantYield(true)

@@ -285,14 +285,16 @@ void _observeRemoteLink(Ref ref, HostLink link, HostKind kind) {
 }
 
 /// Status of a host's link for the UI (idle for 本机).
-final hostLinkStatusProvider = StreamProvider.autoDispose.family<HostLinkStatus, HostRef>((ref, host) async* {
+final hostLinkStatusProvider = StreamProvider.autoDispose.family<HostLinkStatus, HostRef>((ref, host) {
   final link = ref.watch(hostLinkProvider(host));
-  if (link == null) {
-    yield HostLinkStatus.idle;
-    return;
-  }
-  yield link.status;
-  yield* link.statuses;
+  if (link == null) return Stream.value(HostLinkStatus.idle);
+  return Stream.multi((controller) {
+    // Subscribe before sampling so a broadcast cannot slip between them.
+    // Deliver asynchronously: opening a link can emit during another provider's build.
+    final sub = link.statuses.listen(controller.add, onError: controller.addError, onDone: controller.close);
+    controller.add(link.status);
+    controller.onCancel = sub.cancel;
+  });
 });
 
 /// Display name of a host as currently known.
