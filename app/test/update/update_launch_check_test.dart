@@ -6,6 +6,7 @@ import 'package:dsh_app/state/star_prompt.dart';
 import 'package:dsh_app/state/update_state.dart';
 import 'package:dsh_app/ui/update/update_launch_check.dart';
 import 'package:dsh_app/ui/update/update_sheet.dart';
+import 'package:dsh_app/update/privileged_installer.dart';
 import 'package:dsh_app/update/update_config.dart';
 import 'package:dsh_app/update/update_http.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,13 @@ import 'support.dart';
 
 const _manifest = 'https://updates.example/update.json';
 const _launchDelay = Duration(seconds: 2);
+
+class _NoPendingInstall extends ChannelPrivilegedInstaller {
+  const _NoPendingInstall();
+
+  @override
+  Future<SelfUpdatePending> reconcile() async => const SelfUpdatePending();
+}
 
 String _release(String version) => jsonEncode({
   'schema': 1,
@@ -42,6 +50,8 @@ Future<ProviderContainer> _mount(WidgetTester tester, FakeHttp http, DateTime Fu
       overrides: [
         updateHttpProvider.overrideWithValue(http),
         updateInstallerProvider.overrideWithValue(FakeInstaller()),
+        privilegedInstallerProvider.overrideWithValue(const _NoPendingInstall()),
+        updateFlavorNameProvider.overrideWithValue('arm64'),
         updateSourcesProvider.overrideWithValue(
           UpdateSources(feed: Uri.parse(_manifest), useGithubApi: false, mirrors: const []),
         ),
@@ -50,7 +60,12 @@ Future<ProviderContainer> _mount(WidgetTester tester, FakeHttp http, DateTime Fu
       ],
     ),
   );
-  return ProviderScope.containerOf(tester.element(find.byType(UpdateLaunchCheck)), listen: false);
+  final container = ProviderScope.containerOf(tester.element(find.byType(UpdateLaunchCheck)), listen: false);
+  final controller = container.read(appUpdateProvider.notifier);
+  await tester.pump();
+  expect(container.read(appUpdateProvider).loaded, isTrue);
+  await controller.ready;
+  return container;
 }
 
 void _lifecycle(WidgetTester tester, List<AppLifecycleState> states) {
