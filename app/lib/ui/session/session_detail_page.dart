@@ -535,6 +535,8 @@ class SessionHero extends ConsumerWidget {
     final finished = turns.fold(Duration.zero, (sum, t) => sum + (t.duration ?? Duration.zero));
     final steps = turns.fold(0, (sum, t) => sum + t.steps);
     final files = sessionChangesOf(tools).length;
+    // Dispatches count once each: a subagent that also received follow-ups is still one.
+    final subagents = tools.where((tool) => tool.name == 'subagent' || tool.name == 'subagent_fork').length;
     final subtitle = turns.isEmpty
         ? l10n.hubSessionNoTurns
         : running == null
@@ -546,6 +548,7 @@ class SessionHero extends ConsumerWidget {
         (formatClock(total), l10n.hubSessionElapsed),
         ('$steps', l10n.hubSessionSteps),
         ('$files', l10n.hubSessionChangedFiles),
+        if (subagents > 0) ('$subagents', l10n.hubTabSubagents),
       ];
       if (title case final title?) {
         return PageHero(
@@ -1266,7 +1269,6 @@ class ContextTab extends ConsumerWidget {
         if (!trace.usage.isEmpty) trace,
     ].take(12).toList();
     final peak = recent.fold(0, (m, t) => t.usage.total > m ? t.usage.total : m);
-    final subagents = ref.watch(subagentLineageProvider(sessionId)).length;
     final speed = speedFigure(tracesTokensPerSecond(turns));
     // A turn's own line of detail: how long it took, how fast it decoded.
     String? metaOf(TurnTrace trace) {
@@ -1277,28 +1279,7 @@ class ContextTab extends ConsumerWidget {
     return ListView(
       padding: _listPadding(context),
       children: [
-        if (speed != null || subagents > 0)
-          ListPageCard(
-            margin: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-                child: Row(
-                  children: [
-                    if (speed != null)
-                      Expanded(
-                        child: HeroStat(value: speed, label: l10n.hubSessionTokenSpeed),
-                      ),
-                    if (subagents > 0)
-                      Expanded(
-                        child: HeroStat(value: '$subagents', label: l10n.hubTabSubagents),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        SessionUsageSections(usage: usage, pricing: pricing),
+        SessionUsageSections(usage: usage, pricing: pricing, speed: speed),
         if (recent.isNotEmpty)
           ListPageCard(
             title: l10n.hubSessionTurnUsage,
