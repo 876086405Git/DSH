@@ -7,7 +7,7 @@
 - **手机是 DS Bot 的一等客户端，原生画，不嵌网页。** Bot 首页、私聊、群聊、Bot 详情、群详情、新建 Bot / 群聊都是原生页。
 - **协议走 DS Bot 自己的通道**：本机和 SSH 走 `POST /api/bot` + `GET /api/bot/feed`（SSE），和它的桌面应用一样；同一套调用也注册成 DSH Remote 方法 `dsBot/call` + `dsBot/feed`（流），给只转发 Remote 方法的中继用。上面是「移动端 API v1」（握手、群聊条目、提醒补发、头像引用、直接改记忆、用量汇总），两边都改了。
 - **跟着当前主机走**：主机切换器选本机，Bot 页就是手机里那个 DSH 的团队；选 NAS，就是 NAS 上的团队。本机没装就一键「安装 DS Bot」。
-- **SSH 能用；中继走 Remote 方法**：中继（ds-harness-remote）只转发它白名单里的 Remote 方法。DS Bot 已经提供 `dsBot/call`、`dsBot/feed`，手机在中继上自动改走这条路；还差中继的白名单（它的 Host 插件和 `dsh_remote` 的本地副本）加上这两个名字，见 §6。
+- **SSH 能用；中继走 Remote 方法**：手机在中继上通过 `dsBot/call` 和 `dsBot/feed` 访问 DS Bot。远端需启用 DS Bot，并使用包含 [ds-harness-remote #605](https://github.com/liguobao/ds-harness-remote/pull/605) 的 Host 插件版本；发布版 `0.6.8` 尚未包含这一改动。
 - **通知由 Bot 自己发**：DS Bot 的提醒（Bot 说话、群里发言、交活、等你回答 / 批准）变成「Chief：……」这样的系统通知；通用的「一轮完成」通知跳过 DS Bot 的会话，不然一句话会响好几次。
 
 ## 1. 两种形态
@@ -112,7 +112,7 @@
 | `notify_state.dart` `ChatAlertsController._onAlert` 第一行 | `if (ref.read(dsBotSessionFilterProvider)(alert.host, alert.sessionId)) return;` | 通用「一轮完成」等通知跳过 DS Bot 的会话 |
 | `ui/notify/chat_alert_host.dart` `_onTap` 的 `if (!mounted) return;` 之后 | `if (openDsBotTap(context, tap)) return;` | 点 Bot 通知打开 Bot / 群聊页 |
 | `ui/shell/sessions_drawer.dart` 取会话列表处 | `final hidden = ref.watch(dsBotOwnedSessionsProvider);` 再 `.where((s) => !hidden.contains(s.sessionId))`，列表最前放 `DsBotDrawerRow(onOpen: …)`（`ui/bots/drawer_row.dart`，没有 DS Bot 时不占位） | Bot 的会话折成一行「DS Bot · 3 个 Bot」，带未读数 / 运行点 |
-| `packages/dsh_remote/lib/src/carrier/tunnel_carrier.dart` 的 `harnessRemoteAllowlist` | 加 `'dsBot/call',` 和 `'dsBot/feed',` | 中继本地放行；同时要 ds-harness-remote 的 Host 插件白名单加同样两项 |
+| `packages/dsh_remote/lib/src/carrier/tunnel_carrier.dart` 的 `harnessRemoteAllowlist` | 放行 `dsBot/call` 和 `dsBot/feed` | 旧 Host 仍可拒绝；本机和 SSH 的 HTTP 路径不变 |
 | `ui/shell/home_shell.dart` 外壳的 Stack 里（`ChatAlertHost` 旁） | `const BotAlertsHost(),` | Bot 通知跟着外壳活着，回到前台时重连 feed |
 | `ui/chat/composer.dart` | 加 `final String? hintText;`（构造里 `this.hintText,`），`hint` 的最后一支改成 `: widget.hintText ?? '给 DSH 发消息…',`；然后 `bot_chat_page.dart` 的 `Composer(` 里加 `hintText: '给 ${bot.name} 发消息…',`，`room_chat_page.dart` 里加 `hintText: '在群里说点什么…',` | Bot 页的占位文字 |
 
@@ -127,7 +127,7 @@
 
 ## 8. 已定（2026-10-24，owner 委托决定）
 
-1. **中继**：DS Bot 的接口同时做成 DSH Remote 方法（`dsBot/call`、`dsBot/feed`），本机 / SSH 仍走 HTTP；中继上 `DsBotApi.of` 自动用 Remote 方法。剩下的是白名单：ds-harness-remote 的 Host 插件和 `dsh_remote` 的本地副本各加两项（§6）。
+1. **中继**：DS Bot 的接口同时做成 DSH Remote 方法（`dsBot/call`、`dsBot/feed`），本机 / SSH 仍走 HTTP；中继上 `DsBotApi.of` 自动用 Remote 方法。双方白名单都必须放行这两个方法（§6）。
 2. **推送**：先不做；远程 Bot 的消息在 App 活着时到。
 3. **抽屉**：Bot 的会话不散在列表里，折成一行「DS Bot」（`DsBotDrawerRow`），点进 Bot 首页。
 4. **预装**：不预装，保留一键安装。
@@ -135,5 +135,5 @@
 
 ## 9. 仍然开放
 
-- 中继白名单需要 ds-harness-remote 那边配合（Host 插件里的 `HARNESS_REMOTE_ALLOWLIST`）。
+- 中继端到端验证需要部署包含 #605 的 Host 插件；旧 Host 返回 `METHOD_NOT_ALLOWED` 时仍显示中继不支持。
 - Remote 方法走 Gateway 的源码模式：参数和回答只校验是 JSON，不按生成的类型校验。DSH 若给插件开放生成器或手写描述的注册方式，再换成严格模式。

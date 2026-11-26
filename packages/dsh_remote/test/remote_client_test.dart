@@ -312,6 +312,102 @@ void main() {
       );
     });
 
+    test('DS Bot discovers the tunnel transport and receives live feed events', () async {
+      final target = await signInAndFindHost();
+      host.handlers['dsBot/call'] = (args) {
+        expect(args, {
+          'endpoint': 'hello',
+          'payload': {
+            'client': {'name': 'dsh-go', 'platform': 'android'},
+            'api': [1],
+          },
+        });
+        return {
+          'ok': true,
+          'value': {
+            'ok': true,
+            'value': {
+              'api': 1,
+              'boot': 'bot-boot',
+              'capabilities': ['rpc'],
+            },
+          },
+        };
+      };
+      host.onOpen = (stream) {
+        expect(stream.endpoint, 'dsBot/feed');
+        stream.push({
+          'event': 'hello',
+          'data': {'revision': 42, 'api': 1, 'boot': 'bot-boot', 'seq': 7},
+        });
+        stream.push({
+          'event': 'revision',
+          'data': {'revision': 43},
+        });
+      };
+      final client = await account.connectHost(target, muxOptions: fastMux);
+      final bot = DsBotApi.of(client)!;
+      expect(bot.transport, isA<DsBotRpcTransport>());
+      expect((await bot.hello()).boot, 'bot-boot');
+
+      final feed = bot.feed();
+      addTearDown(feed.close);
+      final events = feed.events.take(2).toList().timeout(const Duration(seconds: 5));
+      feed.start();
+      expect(await events, [
+        isA<DsBotFeedHello>().having((e) => e.seq, 'sequence', 7),
+        isA<DsBotFeedRevision>().having((e) => e.revision, 'revision', 43),
+      ]);
+    });
+
+    test('DS Bot state transfers a large result without dispatching twice', () async {
+      final target = await signInAndFindHost();
+      host.directResponseLimit = maxSecureMessageBytes;
+      final largeField = 'x' * maxSecureMessageBytes;
+      host.handlers['dsBot/call'] = (args) {
+        expect(args['endpoint'], 'state');
+        return {
+          'ok': true,
+          'value': {
+            'ok': true,
+            'value': {'revision': 3, 'largeField': largeField},
+          },
+        };
+      };
+      final client = await account.connectHost(target, muxOptions: fastMux);
+      final bot = DsBotApi.of(client)!;
+      expect(await bot.call('state'), allOf(containsPair('revision', 3), containsPair('largeField', largeField)));
+      expect(host.calls.where((call) => call.$1 == 'dsBot/call'), hasLength(1));
+      expect(host.rpcMethods, isNot(contains('harness.remote.call')));
+      expect(host.rpcMethods.where((method) => method == 'harness.remote.transfer.read').length, greaterThan(1));
+    });
+
+    for (final (operation, payload) in <(String, Map<String, Object?>)>[
+      ('delete-bot', {'id': 'bot-1'}),
+      ('memory-view', {'botId': 'bot-1', 'regenerate': true}),
+      ('future-operation', <String, Object?>{}),
+    ]) {
+      test('DS Bot does not replay $operation after an oversized result', () async {
+        final target = await signInAndFindHost();
+        host.directResponseLimit = 1024;
+        host.handlers['dsBot/call'] = (args) {
+          expect(args['endpoint'], operation);
+          return {
+            'ok': true,
+            'value': {'ok': true, 'value': 'x' * 4096},
+          };
+        };
+        final client = await account.connectHost(target, muxOptions: fastMux);
+        final bot = DsBotApi.of(client)!;
+        await expectLater(
+          bot.call(operation, payload),
+          throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'RESPONSE_TOO_LARGE')),
+        );
+        expect(host.calls.where((call) => call.$1 == 'dsBot/call'), hasLength(1));
+        expect(host.rpcMethods, isNot(contains('harness.remote.transfer.open')));
+      });
+    }
+
     test('large prompts and responses use chunked transfers', () async {
       final target = await signInAndFindHost();
       String? receivedImage;
