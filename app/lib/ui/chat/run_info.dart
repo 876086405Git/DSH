@@ -97,7 +97,13 @@ double? tracesTokensPerSecond(Iterable<TurnTrace> traces) {
 double? turnTokensPerSecond(TurnTrace trace) => tracesTokensPerSecond([trace]);
 
 /// 速度的数字部分(`117`、`8.5`),单位另写;测不出时为 null。
-String? speedFigure(double? speed) => speed == null ? null : speed.toStringAsFixed(speed < 10 ? 1 : 0);
+///
+/// 一位小数只到 9.9;9.95 起取整,免得 `9.99` 写成 `10.0`。
+String? speedFigure(double? speed) => speed == null
+    ? null
+    : speed < 9.95
+    ? speed.toStringAsFixed(1)
+    : speed.round().toString();
 
 /// `117 tokens/秒`;测不出时为 null。
 String? speedText(double? speed) {

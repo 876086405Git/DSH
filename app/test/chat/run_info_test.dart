@@ -80,6 +80,9 @@ void main() {
 
     test('one decimal below ten, whole numbers at ten and up', () {
       expect(speedFigure(8.34), '8.3');
+      // 9.95 already rounds up: no '10.0'.
+      expect(speedFigure(9.94), '9.9');
+      expect(speedFigure(9.96), '10');
       expect(speedFigure(10.4), '10');
       expect(speedFigure(117.26), '117');
       expect(speedFigure(null), isNull);

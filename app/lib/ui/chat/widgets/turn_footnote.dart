@@ -36,7 +36,7 @@ class TurnFootnote extends StatelessWidget {
     return [
       if (note != null) join([time, steps, cost, tokens, speed, note]),
       join([time, steps, cost, tokens, speed]),
-      join([time, steps, cost, speed]),
+      if (speed != null) join([time, steps, cost, speed]),
       join([time, steps, cost]),
       join([time, cost]),
       time,

@@ -1266,14 +1266,7 @@ class ContextTab extends ConsumerWidget {
         if (!trace.usage.isEmpty) trace,
     ].take(12).toList();
     final peak = recent.fold(0, (m, t) => t.usage.total > m ? t.usage.total : m);
-    final subagents = ref
-        .watch(
-          chatProvider(sessionId).select(
-            (s) => _DetailItems(s.items.whereType<ToolChatItem>().where((item) => toolKindOf(item) == ToolKind.agent)),
-          ),
-        )
-        .items
-        .length;
+    final subagents = ref.watch(subagentLineageProvider(sessionId)).length;
     final speed = speedFigure(tracesTokensPerSecond(turns));
     // A turn's own line of detail: how long it took, how fast it decoded.
     String? metaOf(TurnTrace trace) {
