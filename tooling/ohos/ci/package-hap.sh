@@ -10,6 +10,15 @@ HAP="$(realpath -m "${2:?Pass the output HAP path}")"
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO"
+
+# Local HAP builds keep this library optional; the official runner must ship it.
+IMAGE_CODEC="$DSH_OHOS_NATIVE_LIBS/libdsh_image_codec.so"
+if [[ ! -f "$IMAGE_CODEC" || ! -s "$IMAGE_CODEC" || ! -r "$IMAGE_CODEC" ]]; then
+  printf '%s\n' "package-hap: required OH arm64 image codec is missing, empty, or unreadable: $IMAGE_CODEC" \
+    'Build it using runtime/ohos/image/BUILD.zh.md and put the verified libdsh_image_codec.so in DSH_OHOS_NATIVE_LIBS.' >&2
+  exit 1
+fi
+
 WORK="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/dsh-go-ohos.XXXXXXXX")"
 trap 'rm -rf -- "$WORK"' EXIT
 

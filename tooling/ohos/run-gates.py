@@ -1228,6 +1228,7 @@ def main():
     for mode in ['plain', 'jitless']:
         g.node_tests('plugin-store-recovery-' + mode, [rt + 'plugin-store.test.mjs', rt + 'plugin-linkless-recovery.test.mjs'], mode=mode, needs=('prepared-inputs',))
     g.node_tests('provider-body-timeout', [rt + 'provider-body-timeout.test.mjs'], needs=('android-targets',))
+    g.node_tests('inspector-compat', [rt + 'inspector-compat.test.mjs'], needs=('android-targets',), timeout=30)
     for mode in ['plain', 'jitless']:
         g.node_tests('piai-text-preabort-' + mode, [rt + 'piai-text-preabort.test.mjs'],
                      mode=mode, imports=(rt + 'piai-empty-models-network.mjs',),

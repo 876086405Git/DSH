@@ -1,5 +1,6 @@
 // Public SDK 26 APIs; actual redirect/cookie/cancellation behavior awaits a device.
 import http from '@ohos.net.http';
+import type { BusinessError } from '@ohos.base';
 import { LifecycleTransport, HostLifecycleObservation, HostLifecycleAck, LifecycleFailure } from './RuntimeLifecycle';
 
 class StopRedirect implements http.HttpInterceptor {
@@ -26,7 +27,7 @@ export class OhosLifecycleTransport implements LifecycleTransport {
 
   cancel(): void { this.generation++; this.cancelRequest?.(); }
 
-  private async request(url: string, options: http.HttpRequestOptions): Promise<http.HttpResponse> {
+  private async request(phase: string, url: string, options: http.HttpRequestOptions): Promise<http.HttpResponse> {
     const request = http.createHttp();
     return new Promise<http.HttpResponse>((resolve, reject) => {
       let settled = false;
@@ -43,8 +44,12 @@ export class OhosLifecycleTransport implements LifecycleTransport {
           finish(null, 'ohos_lifecycle_redirect_guard'); return;
         }
         request.request(url, options).then((response: http.HttpResponse): void => finish(response, null),
-          (): void => finish(null, 'ohos_lifecycle_unavailable'));
-      } catch (_) { finish(null, 'ohos_lifecycle_unavailable'); }
+          (error: BusinessError): void => {
+            // The SDK uses the same timeout code for connect and read/write.
+            const kind = error.code === 2300007 ? 'connect' : error.code === 2300028 ? 'timeout' : 'transport';
+            finish(null, 'ohos_lifecycle_' + phase + '_' + kind);
+          });
+      } catch (_) { finish(null, 'ohos_lifecycle_' + phase + '_transport'); }
     });
   }
 
@@ -64,7 +69,7 @@ export class OhosLifecycleTransport implements LifecycleTransport {
       this.origin = origin; this.launchToken = token; this.cookie = null;
     }
     if (this.cookie === null) {
-      const login = await this.request(origin + '/?token=' + encodeURIComponent(token), {
+      const login = await this.request('login', origin + '/?token=' + encodeURIComponent(token), {
         method: http.RequestMethod.GET, expectDataType: http.HttpDataType.STRING,
         usingCache: false, usingProxy: false, connectTimeout: 1000, readTimeout: 3000, maxLimit: 65536
       });
@@ -82,7 +87,7 @@ export class OhosLifecycleTransport implements LifecycleTransport {
       this.cookie = matches[0];
     }
     this.current(generation);
-    const response = await this.request(origin + '/dsh-go/v1/lifecycle', {
+    const response = await this.request('control', origin + '/dsh-go/v1/lifecycle', {
       method: http.RequestMethod.POST, expectDataType: http.HttpDataType.STRING,
       header: { 'cookie': this.cookie, 'content-type': 'application/json' },
       extraData: JSON.stringify({ operation: 'host', revision: observation.revision,

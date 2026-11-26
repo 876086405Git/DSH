@@ -105,6 +105,20 @@ test('wrong token produces no host control; arbitrary or redirected endpoints ar
   }
   assert.equal(httpState.created, before);
 });
+test('native HTTP failures distinguish login from control without copying SDK messages', async t => {
+  const f = await fixture(t), client = new OhosLifecycleTransport();
+  httpState.beforeReply = () => { throw Object.assign(new Error('private SDK detail'), { code: 2300007 }); };
+  await assert.rejects(client.send(f.origin, f.auth.launchToken, observation(1, false)), error =>
+    error.code === 'ohos_lifecycle_login_connect' && !error.message.includes('private SDK detail'));
+  httpState.beforeReply = (_reply, url) => {
+    if (new URL(url).pathname !== '/') throw Object.assign(new Error('private SDK detail'), { code: 2300028 });
+  };
+  await assert.rejects(client.send(f.origin, f.auth.launchToken, observation(1, false)), error =>
+    error.code === 'ohos_lifecycle_control_timeout' && !error.message.includes('private SDK detail'));
+  httpState.beforeReply = null;
+  assert.equal((await client.send(f.origin, f.auth.launchToken, observation(2, false))).confirmedPause, true);
+});
+
 test('Host/Origin and signed-cookie admission precede all host changes; status GET is read-only', async t => {
   const f = await fixture(t), cookie = await f.login();
   assert.equal((await f.post('dsh-auth-forged=invalid', { operation: 'host', ...observation(1, false) })).status, 401);
@@ -252,7 +266,7 @@ test('malformed native ACK cannot reach the owner callback as valid authority', 
 
 
 // The heartbeat is not a request for the per-call diagnostics view.
-test('steady host heartbeat avoids detailed history projection while full queries retain it', async t => {
+test('host heartbeats and transitions avoid detailed history while full queries retain it', async t => {
   const hash = '0'.repeat(64);
   const f = await fixture(t, { async seedHistory(journal) {
     for (let i = 0; i < 4; i++) {
@@ -278,7 +292,16 @@ test('steady host heartbeat avoids detailed history projection while full querie
     assert.deepEqual(ack, { v, host, nativeHost, busy, manualPaused, observationRevision: revision, closed, blocked, paused, confirmedPause, controlVersion });
   }
   assert.equal(detailedReads, 0, 'a stable host heartbeat must not rebuild historical call diagnostics');
-  const direct = await f.coordinator.observeHost(observation(504, true));
+  f.foreground(false);
+  const pause = await f.post(cookie, { operation: 'host', ...observation(504, false) });
+  assert.equal(pause.status, 200);
+  assert.equal(JSON.parse(pause.text).confirmedPause, true);
+  f.foreground(true);
+  const resume = await f.post(cookie, { operation: 'host', ...observation(505, true) });
+  assert.equal(resume.status, 200);
+  assert.equal(JSON.parse(resume.text).paused, false);
+  assert.equal(detailedReads, 0, 'host transitions must not build historical call diagnostics either');
+  const direct = await f.coordinator.observeHost(observation(506, true));
   assert.equal(direct.calls.length, 4, 'the default service API remains a full status view');
   assert.equal(detailedReads, 1);
   const get = await request(f.origin + '/dsh-go/v1/lifecycle', { headers: { cookie } });

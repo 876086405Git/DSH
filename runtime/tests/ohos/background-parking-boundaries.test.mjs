@@ -121,6 +121,27 @@ test('parking refresh: a rejected new ACK cannot reuse an older accepted idle fa
   } finally { wire.alterAck = null; await f.close(); }
 });
 
+test('a failure after a valid ACK is logged once and remains visible until the retry succeeds', async () => {
+  const f = await setup();
+  try {
+    await f.background();
+    assert.equal(f.controller.lifecycle.synchronized(), true);
+    wire.failure = new Error('private transport detail');
+    await f.observe();
+    assert.equal(f.controller.lifecycle.synchronized(), false);
+    assert.equal(f.controller.lifecycle.failureCode(), 'ohos_lifecycle_unavailable');
+    await advance(1000);
+    const lines = f.events.filter(event => event.type === 'logs').flatMap(event => event.entries.map(entry => entry.line));
+    assert.deepEqual(lines.filter(line => line.startsWith('lifecycle:')), ['lifecycle: ohos_lifecycle_unavailable']);
+    assert(!lines.some(line => line.includes('private transport detail')));
+    assert.equal(f.events.filter(event => event.type === 'notice').length, 1);
+    wire.failure = null;
+    await advance(2000);
+    assert.equal(f.controller.lifecycle.synchronized(), true);
+    assert.equal(f.controller.lifecycle.failureCode(), null);
+  } finally { await f.close(); }
+});
+
 test('parking foreground: immediate collection and original 10 ticks/one refresh per second remain', async () => {
   const f = await setup();
   try {
