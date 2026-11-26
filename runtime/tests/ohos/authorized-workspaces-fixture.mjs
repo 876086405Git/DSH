@@ -35,6 +35,7 @@ export async function workspaceFixture(t, initial = {}) {
   class Stub {
     static registerWith() {} static onForeground() {} static onBackground() {} static onDestroy() {}
     static receive() {} static applyFrameCache() {} attach() {} detach() {} setForeground() {}
+    onForeground() {} onBackground() {} stop() {}
   }
   class DocumentPicker {
     constructor(context) { assert.equal(context, app); }

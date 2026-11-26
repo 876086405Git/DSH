@@ -189,6 +189,7 @@ await fs.writeFile(path.join(temp, 'EntryAbility.mts'),
   `const MediaVideoPlugin = { onForeground() {}, onBackground() {}, onDestroy() {} };\n` +
   `const PictureShortcutPlugin = { onForeground() {}, onBackground() {} };\n` +
   `const AppLinksPlugin = { onForeground() {}, onBackground() {} };\n` +
+  `const RemoteBackgroundPlugin = class { onForeground() {} onBackground() {} stop() {} };\n` +
   `const PastePlugin = { onForeground() {}, onBackground() {} };\n` +
   `const NativeFilesPlugin = { onForeground() {}, onBackground() {} };\n` +
   `const NativeMediaPlugin = { onForeground() {}, onBackground() {} };\n` +
