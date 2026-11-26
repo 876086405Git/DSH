@@ -72,6 +72,43 @@ String? turnCostLabel(TurnTrace trace) {
   return formatCost(estimateTraceCost(trace.usage, pricing), pricing.currency);
 }
 
+/// 这些回合的出字速度:模型请求的输出 token 合计 ÷ 解码时长合计。
+///
+/// 与单步详情同一口径(首字到消息落定,[TraceSpan.decoding]);一轮里可能有
+/// 多次请求(每次工具往返后重开),传整段会话就是全程平均。测不出(没有用量
+/// 或首字时间)时为 null。
+double? tracesTokensPerSecond(Iterable<TurnTrace> traces) {
+  var output = 0;
+  var decoding = 0;
+  for (final trace in traces) {
+    for (final span in trace.spans) {
+      final tokens = span.usage?.outputTokens ?? 0;
+      final time = span.decoding;
+      if (span.kind != TraceKind.model || tokens <= 0 || time == null) continue;
+      output += tokens;
+      decoding += time.inMilliseconds;
+    }
+  }
+  if (output <= 0 || decoding < 200) return null;
+  return output / (decoding / 1000);
+}
+
+/// 一轮的出字速度。
+double? turnTokensPerSecond(TurnTrace trace) => tracesTokensPerSecond([trace]);
+
+/// 速度的数字部分(`117`、`8.5`),单位另写;测不出时为 null。
+String? speedFigure(double? speed) => speed == null ? null : speed.toStringAsFixed(speed < 10 ? 1 : 0);
+
+/// `117 tokens/秒`;测不出时为 null。
+String? speedText(double? speed) {
+  final figure = speedFigure(speed);
+  if (figure == null) return null;
+  return appL10n.activityStepTokenSpeed(figure);
+}
+
+/// 一轮的 `117 tokens/秒`;测不出时为 null。
+String? turnSpeedLabel(TurnTrace trace) => speedText(turnTokensPerSecond(trace));
+
 // -----------------------------------------------------------------------------
 // 一段轨迹叫什么
 

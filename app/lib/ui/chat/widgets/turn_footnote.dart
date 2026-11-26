@@ -12,9 +12,9 @@ import '../../theme/theme.dart';
 import '../run_info.dart';
 import '../usage_sheet.dart' show formatTokens;
 
-/// 一轮结束后的**回合脚注**:`47 秒 · 12 步 · 约 ¥0.03 · 36 万 tokens ›`。
+/// 一轮结束后的**回合脚注**:`47 秒 · 12 步 · 约 ¥0.03 · 36 万 tokens · 117 tokens/秒 ›`。
 ///
-/// 放不下时依次省掉 tokens、步数、花费,时长总在。点开本轮轨迹。
+/// 放不下时依次省掉 tokens、速度、步数、花费,时长总在。点开本轮轨迹。
 class TurnFootnote extends StatelessWidget {
   const TurnFootnote({super.key, required this.trace, this.onTap, this.notes});
 
@@ -31,10 +31,12 @@ class TurnFootnote extends StatelessWidget {
     final steps = trace.steps > 0 ? appL10n.chatTurnSteps(trace.steps) : null;
     final cost = turnCostLabel(trace);
     final tokens = trace.usage.isEmpty ? null : '${formatTokens(trace.usage.total)} tokens';
+    final speed = turnSpeedLabel(trace);
     String join(List<String?> parts) => parts.whereType<String>().join(' · ');
     return [
-      if (note != null) join([time, steps, cost, tokens, note]),
-      join([time, steps, cost, tokens]),
+      if (note != null) join([time, steps, cost, tokens, speed, note]),
+      join([time, steps, cost, tokens, speed]),
+      join([time, steps, cost, speed]),
       join([time, steps, cost]),
       join([time, cost]),
       time,

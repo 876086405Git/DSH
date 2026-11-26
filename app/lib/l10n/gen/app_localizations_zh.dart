@@ -10533,6 +10533,9 @@ class L10nZh extends L10n {
   String get hubSessionNotStarted => '未开始';
 
   @override
+  String get hubSessionTokenSpeed => 'tokens/秒';
+
+  @override
   String get hubSessionTurnUsage => '每轮用量';
 
   @override

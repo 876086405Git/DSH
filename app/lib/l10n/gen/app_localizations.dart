@@ -19530,6 +19530,12 @@ abstract class L10n {
   /// **'未开始'**
   String get hubSessionNotStarted;
 
+  /// No description provided for @hubSessionTokenSpeed.
+  ///
+  /// In zh, this message translates to:
+  /// **'tokens/秒'**
+  String get hubSessionTokenSpeed;
+
   /// No description provided for @hubSessionTurnUsage.
   ///
   /// In zh, this message translates to:
