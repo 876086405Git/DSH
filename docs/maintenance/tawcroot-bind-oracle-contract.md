@@ -12,7 +12,7 @@ PRoot 5.1.107.102 的 `build_glue()` 会用模式 000 创建最终绑定点，�
 
 它不新增绑定、不读取绑定源中的符号链接、不改变权限。快捷链接自身的 NOFOLLOW/lstat/readlink 仍经过 rootfs；`PhoneStorage`、`TawcrootLaunch` 和硬链接转换规则均不变。同名用户目录及自定义链接不会被覆盖。更深绑定的父级符号链接等其它路径语义没有在本片全面重做。
 
-构建顺序是原 archive SHA256 验证、提取、唯一旧块覆片、两 ABI 编译、ELF 检查及发布。源 commit/archive digest 保持原值；产物 manifest 的 `sourcePatch` 另记本地 diff 的路径与 SHA256。更新上游 pin 时应重新核对该旧块，不得静默跳过覆片。
+构建顺序是原 archive SHA256 验证、提取、唯一旧块覆片、两 ABI 编译、ELF 检查及发布。源 commit/archive digest 保持原值；产物 manifest 的 `sourcePatches` 按应用顺序记录各个本地 diff 的路径与 SHA256。更新上游 pin 时应重新核对各个旧块，不得静默跳过覆片。
 
 ## 定向验证
 
