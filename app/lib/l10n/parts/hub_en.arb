@@ -22,7 +22,7 @@
   "hubSessionPlanHint": "AI plans first, without changing files",
   "hubSessionTodos": "To-dos",
   "hubSessionNotStarted": "Not started",
-  "hubSessionTokenSpeed": "tokens/s",
+  "hubSessionTokenSpeed": "tokens/sec",
   "hubSessionTurnUsage": "Usage by turn",
   "hubSessionNoSubagents": "No subagents sent",
   "hubSessionDelegations": "Delegation history",
