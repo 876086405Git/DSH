@@ -470,6 +470,7 @@ class _RemoteBackgroundSection extends ConsumerWidget {
       title: l10n.remoteBackgroundProtectionTitle,
       children: [
         SettingsSwitchTile(
+          key: const ValueKey('remote-background-audio'),
           title: l10n.backgroundProtectionAudio,
           subtitle: l10n.remoteBackgroundAudioHint,
           value: options?.audio ?? false,
@@ -479,6 +480,7 @@ class _RemoteBackgroundSection extends ConsumerWidget {
         ),
         if (location)
           SettingsSwitchTile(
+            key: const ValueKey('remote-background-location'),
             title: l10n.backgroundProtectionLocation,
             subtitle: l10n.remoteBackgroundLocationHint,
             value: options?.location ?? false,
