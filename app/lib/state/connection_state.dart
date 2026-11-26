@@ -289,13 +289,10 @@ final hostLinkStatusProvider = StreamProvider.autoDispose.family<HostLinkStatus,
   final link = ref.watch(hostLinkProvider(host));
   if (link == null) return Stream.value(HostLinkStatus.idle);
   return Stream.multi((controller) {
-    // Subscribe before sampling: a broadcast can be lost across an async yield.
-    final sub = link.statuses.listen(
-      controller.addSync,
-      onError: controller.addErrorSync,
-      onDone: controller.closeSync,
-    );
-    controller.addSync(link.status);
+    // Subscribe before sampling so a broadcast cannot slip between them.
+    // Deliver asynchronously: opening a link can emit during another provider's build.
+    final sub = link.statuses.listen(controller.add, onError: controller.addError, onDone: controller.close);
+    controller.add(link.status);
     controller.onCancel = sub.cancel;
   });
 });
