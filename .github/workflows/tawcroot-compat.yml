@@ -33,7 +33,7 @@ jobs:
       - name: Build the packaged launcher for both ABIs
         run: |
           version=$(python3 -c 'import json; print(json.load(open("runtime/tawcroot/source.json"))["ndkVersion"])')
-          sdkmanager --install "ndk;$version"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$version"
           python3 -I runtime/tawcroot/build.py --ndk "$ANDROID_HOME/ndk/$version"
       - name: Verify the actual launcher on the Linux host
         run: |
