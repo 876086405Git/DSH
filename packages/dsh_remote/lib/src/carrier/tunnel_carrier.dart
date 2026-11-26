@@ -130,19 +130,6 @@ const Set<String> harnessRemoteAllowlist = {
 /// tunnel (locally they are multipart, which the HTTP carrier rejects).
 const Set<String> base64ResultEndpoints = {'workspaceFiles/readBytes', 'officeToPdf/render'};
 
-// Only DS Bot reads that can return a large response may be dispatched again.
-const _replayableDsBotReads = {
-  'avatar',
-  'chat',
-  'file-download',
-  'file-text',
-  'image',
-  'markdown-image',
-  'memory-view',
-  'notices',
-  'room-chat',
-};
-
 /// Requests above this go through `harness.remote.transfer.*`.
 const int directRemoteCallBytes = 2 * 1024 * 1024;
 
@@ -478,12 +465,13 @@ class RemoteTunnelCarrier extends DshCarrier implements WorkspaceUploadCarrier {
     };
     _tracer?.call(DshTraceEntry('out', 'rpc', {'endpoint': endpoint, 'args': args}));
     final encoded = utf8.encode(jsonEncode(request));
-    final botOperation = endpoint == DsBotRpcTransport.callEndpoint ? args['endpoint'] : null;
+    final isDsBotCall = endpoint == DsBotRpcTransport.callEndpoint;
     Object? response;
     try {
       // The team snapshot can be large, but reading it can also bootstrap a Bot.
       // Transfer it from the start rather than re-dispatching it on overflow.
-      if (encoded.length > directRemoteCallBytes || (botOperation == 'state' && session.supportsTransfer)) {
+      if (encoded.length > directRemoteCallBytes ||
+          (isDsBotCall && args['endpoint'] == 'state' && session.supportsTransfer)) {
         response = await _callTransferred(session, endpoint, encoded, timeout);
       } else {
         try {
@@ -497,7 +485,7 @@ class RemoteTunnelCarrier extends DshCarrier implements WorkspaceUploadCarrier {
               endpoint == 'settings/mutate' ||
               endpoint == 'settings/update' ||
               endpoint == 'settings/replace' ||
-              (endpoint == DsBotRpcTransport.callEndpoint && !_replayableDsBotReads.contains(botOperation))) {
+              isDsBotCall) {
             rethrow;
           }
           response = await _callTransferred(session, endpoint, encoded, timeout);

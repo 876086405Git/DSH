@@ -7,7 +7,7 @@
 - **手机是 DS Bot 的一等客户端，原生画，不嵌网页。** Bot 首页、私聊、群聊、Bot 详情、群详情、新建 Bot / 群聊都是原生页。
 - **协议走 DS Bot 自己的通道**：本机和 SSH 走 `POST /api/bot` + `GET /api/bot/feed`（SSE），和它的桌面应用一样；同一套调用也注册成 DSH Remote 方法 `dsBot/call` + `dsBot/feed`（流），给只转发 Remote 方法的中继用。上面是「移动端 API v1」（握手、群聊条目、提醒补发、头像引用、直接改记忆、用量汇总），两边都改了。
 - **跟着当前主机走**：主机切换器选本机，Bot 页就是手机里那个 DSH 的团队；选 NAS，就是 NAS 上的团队。本机没装就一键「安装 DS Bot」。
-- **SSH 能用；中继走 Remote 方法**：手机只通过 `dsBot/call` 和 `dsBot/feed` 访问 DS Bot。远端需启用 DS Bot，并使用包含 [ds-harness-remote #605](https://github.com/liguobao/ds-harness-remote/pull/605) 的 Host 插件版本；发布版 `0.6.8` 尚未包含这一改动。
+- **SSH 能用；中继走 Remote 方法**：手机在中继上通过 `dsBot/call` 和 `dsBot/feed` 访问 DS Bot。远端需启用 DS Bot，并使用包含 [ds-harness-remote #605](https://github.com/liguobao/ds-harness-remote/pull/605) 的 Host 插件版本；发布版 `0.6.8` 尚未包含这一改动。
 - **通知由 Bot 自己发**：DS Bot 的提醒（Bot 说话、群里发言、交活、等你回答 / 批准）变成「Chief：……」这样的系统通知；通用的「一轮完成」通知跳过 DS Bot 的会话，不然一句话会响好几次。
 
 ## 1. 两种形态

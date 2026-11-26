@@ -360,51 +360,33 @@ void main() {
       ]);
     });
 
-    test('DS Bot state uses a single transferred dispatch, including when the result is large', () async {
+    test('DS Bot state transfers a large result without dispatching twice', () async {
       final target = await signInAndFindHost();
-      host.directResponseLimit = 1024;
+      host.directResponseLimit = maxSecureMessageBytes;
+      final largeField = 'x' * maxSecureMessageBytes;
       host.handlers['dsBot/call'] = (args) {
         expect(args['endpoint'], 'state');
         return {
           'ok': true,
           'value': {
             'ok': true,
-            'value': {'revision': 3, 'padding': 'x' * 4096},
+            'value': {'revision': 3, 'largeField': largeField},
           },
         };
       };
       final client = await account.connectHost(target, muxOptions: fastMux);
       final bot = DsBotApi.of(client)!;
-      expect(await bot.call('state'), containsPair('revision', 3));
+      expect(await bot.call('state'), allOf(containsPair('revision', 3), containsPair('largeField', largeField)));
       expect(host.calls.where((call) => call.$1 == 'dsBot/call'), hasLength(1));
-      expect(host.rpcMethods, contains('harness.remote.transfer.commit'));
       expect(host.rpcMethods, isNot(contains('harness.remote.call')));
-    });
-
-    test('DS Bot reads an oversized avatar response in chunks', () async {
-      final target = await signInAndFindHost();
-      host.directResponseLimit = maxSecureMessageBytes;
-      final photo = 'data:image/png;base64,${'A' * maxSecureMessageBytes}';
-      host.handlers['dsBot/call'] = (args) {
-        expect(args['endpoint'], 'avatar');
-        return {
-          'ok': true,
-          'value': {
-            'ok': true,
-            'value': {'ref': 'ref-1', 'image': photo},
-          },
-        };
-      };
-      final client = await account.connectHost(target, muxOptions: fastMux);
-      final bot = DsBotApi.of(client)!;
-      final avatar = await bot.avatar('bot-1');
-      expect(avatar.ref, 'ref-1');
-      expect(avatar.image, photo);
-      expect(host.calls.where((call) => call.$1 == 'dsBot/call'), hasLength(2));
       expect(host.rpcMethods.where((method) => method == 'harness.remote.transfer.read').length, greaterThan(1));
     });
 
-    for (final operation in ['delete-bot', 'future-operation']) {
+    for (final (operation, payload) in <(String, Map<String, Object?>)>[
+      ('delete-bot', {'id': 'bot-1'}),
+      ('memory-view', {'botId': 'bot-1', 'regenerate': true}),
+      ('future-operation', <String, Object?>{}),
+    ]) {
       test('DS Bot does not replay $operation after an oversized result', () async {
         final target = await signInAndFindHost();
         host.directResponseLimit = 1024;
@@ -418,7 +400,7 @@ void main() {
         final client = await account.connectHost(target, muxOptions: fastMux);
         final bot = DsBotApi.of(client)!;
         await expectLater(
-          bot.call(operation, {'id': 'bot-1'}),
+          bot.call(operation, payload),
           throwsA(isA<DshRemoteException>().having((e) => e.code, 'code', 'RESPONSE_TOO_LARGE')),
         );
         expect(host.calls.where((call) => call.$1 == 'dsBot/call'), hasLength(1));
