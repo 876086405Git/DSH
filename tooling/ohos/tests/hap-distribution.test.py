@@ -169,6 +169,47 @@ class DistributionTests(unittest.TestCase):
                 self.assertEqual((app / 'pubspec.lock').read_text(), 'original lock\n')
 
 
+class RunnerPackageTests(unittest.TestCase):
+    def test_official_package_requires_image_before_dependency_install(self):
+        """Run the runner entry point with npm stubbed out; no SDK or build needed."""
+        import shutil
+        with tempfile.TemporaryDirectory(prefix='hap-runner-') as d:
+            root = Path(d)
+            path = 'tooling/ohos/ci/package-hap.sh'
+            script = root / path
+            script.parent.mkdir(parents=True)
+            shutil.copy2(ROOT / path, script)
+            composition = root / 'runtime/ohos/package/composition.json'
+            composition.parent.mkdir(parents=True)
+            composition.write_text('{"installation":{"npmVersion":"stub"}}')
+            npm = root / 'npm'
+            npm.write_text('#!/bin/sh\necho "fixture npm reached" >&2\nexit 73\n')
+            npm.chmod(0o755)
+            aot = root / 'aot'; aot.mkdir()
+            native = root / 'native libs'; native.mkdir()
+            hap = root / 'unsigned.hap'
+            env = dict(os.environ, PATH=d + os.pathsep + os.environ['PATH'],
+                       RUNNER_TEMP=d, OHOS_SDK=d, DSH_NODE_HEADERS=d,
+                       DSH_OHOS_NATIVE_LIBS=str(native))
+            image = native / 'libdsh_image_codec.so'
+            for state, payload in [('missing', None), ('empty', b''), ('supplied', b'fixture')]:
+                with self.subTest(state=state):
+                    if payload is not None:
+                        image.write_bytes(payload)
+                    result = subprocess.run(['bash', str(script), str(aot), str(hap)],
+                                            env=env, capture_output=True, text=True, timeout=30)
+                    if payload:
+                        self.assertEqual(result.returncode, 73, result.stderr)
+                        self.assertIn('fixture npm reached', result.stderr)
+                    else:
+                        self.assertEqual(result.returncode, 1, result.stderr)
+                        self.assertIn(str(image), result.stderr)
+                        self.assertIn('DSH_OHOS_NATIVE_LIBS', result.stderr)
+                        self.assertIn('runtime/ohos/image/BUILD.zh.md', result.stderr)
+                        self.assertNotIn('fixture npm reached', result.stderr)
+                    self.assertFalse(hap.exists())
+
+
 class NativeInputAuditTests(unittest.TestCase):
     def inspect(self, native_optional=(), packaged_optional=(), changed=None):
         """Only the real archive/input phase runs; these are synthetic ELF segments."""

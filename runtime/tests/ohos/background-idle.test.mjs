@@ -41,7 +41,7 @@ test('1287 R2a: foreground callback immediately collects before any timer advanc
 });
 
 test('1287 control: final idle ACK revokes same-owner native lease before targeted OS stop and emits non-7', async () => {
-  const f = await setup();
+  const f = await setup({ taskEnabled: true });
   try {
     wire.busy = true; await f.observe(); await f.background(); await flush();
     assert.equal(native.lifecycleSnapshot().phase, 7); assert.equal(osBoundary.requested.length, 1);
@@ -61,7 +61,7 @@ test('1287 control: final idle ACK revokes same-owner native lease before target
 });
 
 test('1287 control: old pending OS grant stays debt and its late id cannot activate a replacement owner', async () => {
-  const f = await setup(); let pending;
+  const f = await setup({ taskEnabled: true }); let pending;
   try {
     pending = Promise.withResolvers(); osBoundary.startDeferred = pending;
     wire.busy = true; await f.observe(); await f.background();
@@ -82,7 +82,7 @@ test('1287 control: old pending OS grant stays debt and its late id cannot activ
 });
 
 test('1287 control: failed OS stop retains cleanup debt and cannot be treated as parked completion', async () => {
-  const f = await setup();
+  const f = await setup({ taskEnabled: true });
   try {
     wire.busy = true; await f.observe(); await f.background(); await flush();
     osBoundary.stopError = true; wire.busy = false; await f.observe();
@@ -98,7 +98,7 @@ test('1287 control: failed OS stop retains cleanup debt and cannot be treated as
 });
 
 test('1287 control: HTTP success with wrong native revision does not count as owner-accepted idle', async () => {
-  const f = await setup();
+  const f = await setup({ taskEnabled: true });
   try {
     wire.busy = true; await f.observe(); await f.background(); await flush();
     wire.busy = false; wire.alterAck = ack => { ack.nativeHost.revision--; };

@@ -81,7 +81,7 @@ F05–F08 按 [M6 设备前提](M6-3-device-prerequisites.md) 安排受控条件
 | L01 | 前台→后台→前台，两个 Ability 交替及旧回调迟到 | 只有当前 Ability 的单调观察生效；旧后台/销毁不盖新前台；未有引擎时不加载 Node、不发控制 HTTP |
 | L02 | 手动 pause 后前台；后台时手动 resume；两者交错重开 | 两暂停原因分别保留，门不开错；持久手动意图恢复，历史 host 观察不冒充新进程系统事实 |
 | L03 | 303 登录、真实签名 cookie、401 重认证、重定向/Host/Origin 拒绝 | 只访问固定 loopback，关闭代理/重定向，限制响应体；取消可能已送达的旧请求仍由 revision 防倒退 |
-| L04 | 网络失败、慢确认、stop/新观察中断重试 | 单 timer、有界退避，只重试相同观察；现有 Dart error/notice 持续可见，当前确认才清除，不把 Node phase 改成假退出 |
+| L04 | 网络失败、慢确认、stop/新观察中断重试 | 单 timer、有界退避，只重试相同观察；区分登录/控制阶段的连接失败与操作超时；现有 Dart error/notice 持续可见，当前确认才清除，不把 Node phase 改成假退出 |
 | L05 | 无/有 KEEP_BACKGROUND_RUNNING 和 MODE_TASK_KEEPING 资格，API异常 | granted/denied/unknown 与实际公开查询对应；不因 onForeground 报 granted，不把9800005一概说成用户拒绝；policy仍 may-freeze |
 | L06 | 已确认逻辑暂停后锁屏/冻结，以及无预告直接冻结 | 两场景分开；活动预算只扣已确认时段；未预告时不猜精确冻结时长、不自动重放副作用 |
 | L07 | dispatch 后丢结果、outcome 后未 committed、并发 A慢B快 | 用实际文件/HTTP计数验证 unknown 或恢复同一次结果；顺序正确，无重复副作用，不因超时自动新建请求 |

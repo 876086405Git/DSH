@@ -588,6 +588,14 @@
         }
       }
     },
+    "ohos-inspector-unavailable.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-experimental-inspector/lib/index.js": {
+          "after": "a2b652a9afa99a914aa091ce3e634aaf75323da399c2624c15f63dd7ae4be243",
+          "before": "9cd7d04adf9c02caf5bb5d0d645d8f0ff409df6f32dc55b9131547511b1067c2"
+        }
+      }
+    },
     "ohos-jobs-active.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-jobs-local/lib/index.js": {
@@ -3465,7 +3473,8 @@
       "ohos-image-codec.diff",
       "ohos-mcp-start-close.diff",
       "ohos-jobs-active.diff",
-      "ohos-piai-text-preabort.diff"
+      "ohos-piai-text-preabort.diff",
+      "ohos-inspector-unavailable.diff"
     ]
   }
 }

@@ -1,0 +1,11 @@
+--- a/node_modules/@deepseek-ai/dsh-experimental-inspector/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-experimental-inspector/lib/index.js
+@@ -1809,6 +1809,8 @@
+ */
+ async function startInspector(options = {}) {
+ 	const spec = resolveInspectorOptions(options);
++	// A build without inspector must not start a Worker that imports node:inspector.
++	if (!process.features.inspector) throw Object.assign(new Error("Node.js was built without Inspector support"), { code: FEATURE_UNAVAILABLE_ON_PLATFORM });
+ 	const channel = new MessageChannel();
+ 	const clientProtocol = `dsh-inspector-v${String(0)}-${randomBytes(32).toString("base64url")}`;
+ 	const lifecycle = new InspectorWorkerLifecycle(spawnWorker({

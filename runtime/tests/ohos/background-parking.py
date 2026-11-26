@@ -126,11 +126,11 @@ def main():
                 raise ValueError('Missing/ambiguous original TAP total: ' + name)
             totals[name] = int(values[0])
         report['totals'] = totals
-        if totals != {'tests': 18, 'pass': 18, 'fail': 0, 'cancelled': 0, 'skipped': 0, 'todo': 0}:
-            raise ValueError('The original 18 assertions did not all complete')
+        if totals != {'tests': 19, 'pass': 19, 'fail': 0, 'cancelled': 0, 'skipped': 0, 'todo': 0}:
+            raise ValueError('The 19 assertions did not all complete')
         cases = sorted((out / 'cases').glob('*.json'))
-        if len(cases) != 18:
-            raise ValueError('Expected 18 original per-case records')
+        if len(cases) != 19:
+            raise ValueError('Expected 19 per-case records')
         for case in cases:
             modules = json.loads(case.read_text())['modules']
             if sorted(row['name'] for row in modules) != sorted(ETS):
