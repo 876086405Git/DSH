@@ -85,7 +85,7 @@ test('parking ownerless: destroyed idle Ability releases owner and does not reta
 });
 
 test('parking ownerless: rejected native revision and unresolved cleanup cannot park a destroyed owner', async () => {
-  const f = await setup(); const held = Promise.withResolvers();
+  const f = await setup({ taskEnabled: true }); const held = Promise.withResolvers();
   try {
     osBoundary.startDeferred = held; wire.busy = true; await f.observe(); await f.background();
     wire.busy = false; wire.alterAck = ack => { ack.nativeHost.revision--; };
@@ -139,6 +139,7 @@ test('a failure after a valid ACK is logged once and remains visible until the r
     await advance(2000);
     assert.equal(f.controller.lifecycle.synchronized(), true);
     assert.equal(f.controller.lifecycle.failureCode(), null);
+    await saveCase('V2-failed-revision-and-retry', { lines, lifecycle: plain(f.controller.lifecycle.status()) });
   } finally { await f.close(); }
 });
 

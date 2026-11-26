@@ -163,7 +163,7 @@ export const moduleIdentity = imported;
 export const plain = value => value instanceof Map ? Object.fromEntries([...value].map(([key, item]) => [key, plain(item)]))
   : Array.isArray(value) ? value.map(plain) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, plain(item)])) : value;
 
-export async function setup() {
+export async function setup({ taskEnabled = false } = {}) {
   native.reset(); linuxBoundary.shutdown = null; linuxBoundary.calls = 0;
   Object.assign(osBoundary, { allowed: true, requested: [], stopped: [], listeners: new Map(), startDeferred: null, stopError: false, nextId: 73 });
   Object.assign(wire, { busy: false, manualPaused: false, sends: [], cancels: 0, failure: null, alterAck: null });
@@ -175,7 +175,10 @@ export async function setup() {
   // Ready is a platform boundary input. No install/start/guest is exercised.
   controller.initialized = Promise.resolve();
   Object.assign(native.state, { phase: 'running', consumed: true, baseUrl: 'http://127.0.0.1:3080', token: 'private-fixture-token' });
-  controller.runtimeGeneration = 1; controller.bindOwner(); controller.collect(); await flush();
+  controller.runtimeGeneration = 1; controller.bindOwner();
+  // Model the persisted user opt-in without opening the preferences service.
+  controller.applyTaskEnabled(taskEnabled);
+  controller.collect(); await flush();
   const events = []; controller.sinks.push(event => { const record = plain(event); events.push(record); trace.push({ kind: 'controller-event', event: record }); });
   return { controller, ability, events, async background() { RuntimeController.onBackground(ability); await flush(); },
     async observe() { controller.lifecycle.observe(RuntimeController.foreground); await flush(); },
