@@ -1,0 +1,49 @@
+name: Tawcroot compatibility
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/tawcroot-compat.yml'
+      - 'runtime/tawcroot/**'
+      - 'runtime/tests/tawcroot_shm_probe.py'
+      - 'runtime/tests/test_tawcroot_build.py'
+      - 'runtime/lib/rtbuild.py'
+  workflow_dispatch:
+
+concurrency:
+  group: tawcroot-compat-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  shared-memory:
+    name: Tawcroot shared memory
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Verify source patch application
+        run: python3 -m unittest discover -s runtime/tests -p test_tawcroot_build.py
+      - name: Build the packaged launcher for both ABIs
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("runtime/tawcroot/source.json"))["ndkVersion"])')
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$version"
+          python3 -I runtime/tawcroot/build.py --ndk "$ANDROID_HOME/ndk/$version"
+      - name: Verify the actual launcher on the Linux host
+        run: |
+          timeout 45s /usr/bin/python3 runtime/tests/tawcroot_shm_probe.py --host-self-test
+          root="$RUNNER_TEMP/tawcroot-shm/rootfs"
+          mkdir -p "$root/var/lib/dsh-app/shm" "$root/dev/shm"
+          ln -s usr/lib "$root/lib"
+          ln -s usr/lib64 "$root/lib64"
+          cp runtime/tests/tawcroot_shm_probe.py "$root/probe.py"
+          timeout 45s env -i PATH=/usr/bin:/bin LC_ALL=C \
+            runtime/out-tawcroot/jniLibs/x86_64/libtawcroot.so -s -r "$root" \
+            -b /usr:/usr -b /etc:/etc -b /proc:/proc \
+            -b "$root/var/lib/dsh-app/shm:/dev/shm" -- /usr/bin/python3 /probe.py

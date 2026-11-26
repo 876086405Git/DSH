@@ -7,6 +7,10 @@
   "archiveRoot": "tawc-a49a4075228f4801dadc1eee584aed33fe8ea4ce",
   "ndkVersion": "28.2.13676358",
   "androidApi": 29,
+  "patches": [
+    "bind-aware-oracle.diff",
+    "shm-bind-precedence.diff"
+  ],
   "cSources": [
     "src/main.c",
     "src/io.c",

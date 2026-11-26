@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build libtawcroot.so (tawcroot launcher) for the APK from a pinned tawc commit.
 
-The pinned sources, with the local bind-oracle fix, are compiled with the
-project's NDK on Linux, macOS or Windows. The archive is verified before extraction.
+The pinned sources, with the local compatibility patches, are compiled with
+the project's NDK. The archive is verified before extraction.
 Output: runtime/out-tawcroot/jniLibs/<abi>/libtawcroot.so (+ manifest.json),
 picked up by app/android/app/build.gradle.kts. Without it the app still builds;
 the tawcroot launch option then reports itself unavailable.
@@ -93,15 +93,18 @@ def extract_source(archive, source, destination):
     return destination / "tawcroot"
 
 
-def apply_source_patch(runtime, source):
+def apply_source_patches(runtime, extracted, patches):
     """Patch the verified extraction, using the runtime's exact old-block rule."""
-    patch = runtime / "tawcroot/bind-aware-oracle.diff"
-    data = patch.read_bytes()
-    for name, hunks in parse_unified_diff(data.decode("utf-8")):
-        target = source / name
-        original = target.read_bytes().decode("utf-8")
-        target.write_bytes(apply_hunks(original, hunks, patch.name).encode("utf-8"))
-    return {"path": "tawcroot/" + patch.name, "sha256": hashlib.sha256(data).hexdigest()}
+    applied = []
+    for patch_name in patches:
+        patch = runtime / "tawcroot" / patch_name
+        data = patch.read_bytes()
+        for name, hunks in parse_unified_diff(data.decode("utf-8")):
+            target = extracted / name
+            original = target.read_bytes().decode("utf-8")
+            target.write_bytes(apply_hunks(original, hunks, patch.name).encode("utf-8"))
+        applied.append({"path": "tawcroot/" + patch.name, "sha256": hashlib.sha256(data).hexdigest()})
+    return applied
 
 
 def toolchain(ndk, source):
@@ -188,7 +191,7 @@ def build(runtime, ndk, supplied=None, offline=False, output=None):
     with tempfile.TemporaryDirectory(prefix="tawcroot-", dir=work) as scratch:
         scratch = Path(scratch)
         src = extract_source(archive, source, scratch / "source")
-        source_patch = apply_source_patch(runtime, src)
+        source_patches = apply_source_patches(runtime, src, source["patches"])
         staged = scratch / "out"
         artifacts = []
         for abi in ABIS:
@@ -208,9 +211,9 @@ def build(runtime, ndk, supplied=None, offline=False, output=None):
             subprocess.run([str(tools["llvm-strip"]), str(artifact)], check=True)
             artifacts.append(audit_artifact(artifact, abi))
         manifest = {
-            "schema": 1,
+            "schema": 2,
             "source": {key: source[key] for key in ("repo", "commit", "archiveSha256")},
-            "sourcePatch": source_patch,
+            "sourcePatches": source_patches,
             "ndkVersion": source["ndkVersion"],
             "artifacts": artifacts,
         }

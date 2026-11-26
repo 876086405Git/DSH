@@ -344,7 +344,7 @@ Libraries.dev metal-fx, translated to Flutter GLSL.
 
 ### tawcroot（tawc，MIT）
 
-「tawcroot 加速启动」（设置 → 开发者选项，默认关闭）用的 `libtawcroot.so`，由 `runtime/tawcroot/build.py` 从 [tawc](https://github.com/wmww/tawc) 固定提交 `a49a4075228f4801dadc1eee584aed33fe8ea4ce`（源码归档 SHA-256 `74487243bde86c303e786e79cd4a13e98c3279cae4ab7725dcf5fa51c0b530c1`）的 `tawcroot/src`、`tawcroot/include` 编译；编译前打上本地覆片 `runtime/tawcroot/bind-aware-oracle.diff`（`prod_readlink` 遇到已生效的绑定边界即停，修手机存储快捷链接子路径误报 EACCES），其余是上游原样。tawc 的 README 写明 `deps/` 以外的代码都是 MIT（[LICENSE.MIT](https://github.com/wmww/tawc/blob/a49a4075228f4801dadc1eee584aed33fe8ea4ce/LICENSE.MIT)）；整个项目因 `deps/` 里的 GPLv3 代码按 GPLv3 发布，那部分我们不编译、不分发。
+「tawcroot 加速启动」用的 `libtawcroot.so`，由 `runtime/tawcroot/build.py` 从 [tawc](https://github.com/wmww/tawc) 固定提交 `a49a4075228f4801dadc1eee584aed33fe8ea4ce`（源码归档 SHA-256 `74487243bde86c303e786e79cd4a13e98c3279cae4ab7725dcf5fa51c0b530c1`）的 `tawcroot/src`、`tawcroot/include` 编译；编译前打上本地覆片 `runtime/tawcroot/bind-aware-oracle.diff`（修复经手机存储快捷链接访问子路径误报 EACCES）及 `runtime/tawcroot/shm-bind-precedence.diff`（显式 `/dev/shm` 绑定优先，保留跨进程共享语义），其余是上游原样。tawc 的 README 写明 `deps/` 以外的代码都是 MIT（[LICENSE.MIT](https://github.com/wmww/tawc/blob/a49a4075228f4801dadc1eee584aed33fe8ea4ce/LICENSE.MIT)）；整个项目因 `deps/` 里的 GPLv3 代码按 GPLv3 发布，那部分我们不编译、不分发。
 
 - 版权：Copyright (c) 2026 Sophie Winter
 - 许可：MIT（全文见文末「MIT License」），App 内「开源许可」页的 `tawcroot (tawc)` 条目附全文
