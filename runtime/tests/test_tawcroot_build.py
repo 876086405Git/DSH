@@ -34,6 +34,17 @@ PATH_C = """static long prod_readlink(void *ctx, const char *suffix,
 """
 
 
+# Original classifier from the pinned tawc syscalls_fs.c.
+SYSCALLS_FS_C = """int tawcroot_fs_classify_shm(const char *local_path, const char **name_out)
+{
+	*name_out = tawcroot_shm_match(local_path);
+	if (*name_out) return SHM_PEEK_NAME;
+	if (tawcroot_shm_is_dir(local_path)) return SHM_PEEK_DIR;
+	return SHM_PEEK_NONE;
+}
+"""
+
+
 def synthetic_elf(abi, *, machine=None, alignment=16384, needed=None, entry_delta=512):
     """ELF headers only; nothing executable."""
     _, expected_machine, base = BUILD.ABIS[abi]
@@ -62,15 +73,19 @@ class TawcrootBuildTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.runtime = self.root / "runtime"
         (self.runtime / "tawcroot").mkdir(parents=True)
-        self.patch = (RUNTIME / "tawcroot/bind-aware-oracle.diff").read_bytes()
-        (self.runtime / "tawcroot/bind-aware-oracle.diff").write_bytes(self.patch)
         self.source = json.loads((RUNTIME / "tawcroot/source.json").read_text())
+        self.patches = []
+        for name in self.source["patches"]:
+            path = Path("tawcroot") / name
+            data = (RUNTIME / path).read_bytes()
+            (self.runtime / path).write_bytes(data)
+            self.patches.append({"path": path.as_posix(), "sha256": hashlib.sha256(data).hexdigest()})
         self.archive = self.root / "fixture.zip"
         prefix = self.source["archiveRoot"] + "/"
+        sources = {"src/path.c": PATH_C, "src/syscalls_fs.c": SYSCALLS_FS_C}
         with zipfile.ZipFile(self.archive, "w") as zipped:
             for name in self.source["cSources"] + ["include/example.h"]:
-                zipped.writestr(prefix + "tawcroot/" + name,
-                                PATH_C if name == "src/path.c" else "/* fixture */\n")
+                zipped.writestr(prefix + "tawcroot/" + name, sources.get(name, "/* fixture */\n"))
             zipped.writestr(prefix + "LICENSE.MIT", "MIT fixture\n")
             zipped.writestr(prefix + "tawcroot/tests/example.c", "not production\n")
             zipped.writestr(prefix + "app/example.kt", "not part of this build\n")
@@ -132,16 +147,16 @@ class TawcrootBuildTests(unittest.TestCase):
         self.assertFalse((src / "tests").exists())
         self.assertFalse((self.root / "x/app").exists())
 
-    def test_source_patch_requires_one_unchanged_old_block(self):
-        src = BUILD.extract_source(self.archive, self.source, self.root / "x")
-        path = src / "src/path.c"
-        anchor = "\tif (tawcroot_rootfs_fd < 0)    return TAWC_EBADF;\n"
-        for text in (PATH_C.replace(anchor, ""), PATH_C + PATH_C):
-            with self.subTest(matches=text.count(anchor)):
-                path.write_text(text)
-                with self.assertRaises(SystemExit):
-                    BUILD.apply_source_patch(self.runtime, src)
-                self.assertEqual(path.read_text(), text)
+    def test_source_patches_require_one_unchanged_old_block_each(self):
+        for filename, original in (("path.c", PATH_C), ("syscalls_fs.c", SYSCALLS_FS_C)):
+            for text in ("/* source drift */\n", original + original):
+                with self.subTest(filename=filename, duplicate=text.startswith(original)):
+                    src = BUILD.extract_source(self.archive, self.source, self.root / "x")
+                    path = src / "src" / filename
+                    path.write_text(text)
+                    with self.assertRaises(SystemExit):
+                        BUILD.apply_source_patches(self.runtime, src, self.source["patches"])
+                    self.assertEqual(path.read_text(), text)
 
     def test_toolchain_needs_the_pinned_ndk(self):
         self.assertIn("clang", BUILD.toolchain(self.ndk, self.source))
@@ -178,10 +193,9 @@ class TawcrootBuildTests(unittest.TestCase):
         self.assertEqual([a["abi"] for a in manifest["artifacts"]], list(BUILD.ABIS))
         self.assertEqual(manifest["source"],
                          {key: self.source[key] for key in ("repo", "commit", "archiveSha256")})
-        self.assertEqual(manifest["sourcePatch"], {
-            "path": "tawcroot/bind-aware-oracle.diff",
-            "sha256": hashlib.sha256(self.patch).hexdigest(),
-        })
+        self.assertEqual(manifest["schema"], 2)
+        self.assertEqual(manifest["sourcePatches"], self.patches)
+        self.assertEqual(len(self.patches), 2)
         before = (out / "manifest.json").read_bytes()
 
         def x64_wrong(abi):

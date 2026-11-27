@@ -22,6 +22,17 @@ test('loads from the real engine entry when the install is not at /opt/dsh', asy
 
 const provider = 'openai-siwc'
 const model = 'mock-text'
+const visionModel = 'mock-vision'
+const visionRow = {
+  slug: visionModel, display_name: 'Mock Vision', visibility: 'list',
+  input_modalities: ['text', 'image', 'audio', 'image'], context_window: 262_144,
+  supported_reasoning_levels: [{ effort: 'medium', description: 'Balanced' }], default_reasoning_level: 'medium',
+}
+const visionInfo = {
+  provider, id: visionModel, name: 'Mock Vision', inputModalities: ['text', 'image'], context: { contextWindow: 262_144 },
+  reasoning: { efforts: [{ id: 'medium', name: 'medium', description: 'Balanced' }], defaultEffort: 'medium' },
+}
+const textRow = { slug: 'aaa', display_name: 'Another', visibility: 'list', input_modalities: ['text', 'audio'] }
 const base = 'https://api.openai.com/v1'
 const fakeToken = 'mock-oauth-token'
 const message = (role, text) => ({ role, content: [{ type: 'text', text }] })
@@ -42,6 +53,23 @@ const toolEnd = { type: 'response.output_item.done', output_index: 0, item: {
   ...toolStart.item, arguments: '{"value":7}',
 } }
 
+const userImage = { attachmentId: 'sha256:' + 'a'.repeat(64), mediaType: 'image/png', width: 8, height: 6, bytes: 48 }
+const toolImage = { attachmentId: 'sha256:' + 'b'.repeat(64), mediaType: 'image/jpeg', width: 4, height: 3, bytes: 36 }
+const userBytes = new Uint8Array([137, 80, 78, 71])
+const toolBytes = new Uint8Array([255, 216, 255, 224])
+
+function imageHistory(modelId) {
+  return [
+    { role: 'user', content: [{ type: 'text', text: 'Compare this image.' }, { type: 'image', attachment: userImage }] },
+    { role: 'assistant', source: { provider, model: modelId }, content: [
+      { type: 'tool-call', id: 'call_1', name: 'echo', arguments: '{"value":7}' },
+    ] },
+    { role: 'tool', toolCallId: 'call_1', content: [
+      { type: 'text', text: 'Tool preview.' }, { type: 'image', attachment: toolImage },
+    ] },
+  ]
+}
+
 function frame(event) {
   if (event === '[DONE]') return 'data: [DONE]\n\n'
   const { type, ...data } = event
@@ -52,7 +80,7 @@ function sse(...events) {
   return new Response(events.map(frame).join(''), { headers: { 'content-type': 'text/event-stream' } })
 }
 
-function harness(handler, { signedIn = true, token = async () => fakeToken } = {}) {
+function harness(handler, { signedIn = true, token = async () => fakeToken, getAttachments } = {}) {
   let adapter
   const routes = []
   const requests = []
@@ -64,7 +92,7 @@ function harness(handler, { signedIn = true, token = async () => fakeToken } = {
       return Object.assign(() => routes.push([]), { replace: (next) => routes.push(next) })
     },
   }
-  const lifecycle = registerSiwcProvider({ llm, oauth, fetch: async (url, init) => {
+  const lifecycle = registerSiwcProvider({ llm, oauth, getAttachments, fetch: async (url, init) => {
     requests.push({ url, ...init })
     return handler(url, init)
   } })
@@ -83,9 +111,11 @@ test('visible models use catalog order and display names without invented capabi
     assert.equal(init.headers.Authorization, 'Bearer ' + fakeToken)
     assert.match(init.headers['user-agent'], /^deepseek-harness\//)
     return Response.json({ models: [
-      { slug: 'hidden', visibility: 'hidden' },
-      { slug: model, display_name: 'Mock Text', visibility: 'list', context_window: 500000, capabilities: ['image'] },
-      { slug: 'aaa', display_name: 'Another', visibility: 'list' },
+      { ...visionRow, slug: 'hidden', visibility: 'hidden' },
+      { slug: model, display_name: 'Mock Text', visibility: 'list', context_window: 500_000, input_modalities: 'image' },
+      visionRow,
+      textRow,
+      { slug: 'mock-audio', visibility: 'list', input_modalities: ['audio'] },
     ] })
   }, { signedIn: false })
   assert.deepEqual(routes, [[provider]])
@@ -100,11 +130,14 @@ test('visible models use catalog order and display names without invented capabi
   lifecycle.invalidate()
   assert.deepEqual(await adapter.listModels(), [
     { provider, id: model, name: 'Mock Text', inputModalities: ['text'], context: { contextWindow: 500_000 } },
+    visionInfo,
     { provider, id: 'aaa', name: 'Another', inputModalities: ['text'] },
+    { provider, id: 'mock-audio', name: 'mock-audio', inputModalities: [] },
   ])
   assert.deepEqual(await adapter.resolveModel(provider, model), {
     provider, id: model, name: 'Mock Text', inputModalities: ['text'], context: { contextWindow: 500_000 },
   })
+  assert.deepEqual(await adapter.resolveModel(provider, visionModel), visionInfo)
   oauth.status = () => ({ signedIn: false })
   lifecycle.invalidate()
   assert.equal((await adapter.resolveModel(provider, model)).name, model)
@@ -196,10 +229,32 @@ test('a catalog fetched before permission loss cannot restore old models', async
   await fetched.promise
   oauth.status = () => ({ signedIn: true, planEnabled: false })
   lifecycle.invalidate({ stopRequests: false })
-  response.resolve(Response.json({ models: [{ slug: model, display_name: 'Stale', visibility: 'list' }] }))
+  response.resolve(Response.json({ models: [visionRow] }))
   assert.deepEqual(await old, [])
   assert.deepEqual(await adapter.listModels(), [])
-  assert.equal((await adapter.resolveModel(provider, model)).name, model)
+  assert.deepEqual(await adapter.resolveModel(provider, visionModel), {
+    provider, id: visionModel, name: visionModel, inputModalities: ['text'],
+  })
+})
+
+test('an old prepared vision call cannot read attachments after permission loss', async () => {
+  let tokens = 0
+  let reads = 0
+  const { adapter, lifecycle, oauth, requests } = harness(() => Response.json({ models: [visionRow] }), {
+    token: async () => { ++tokens; return fakeToken },
+    getAttachments: () => ({ readImageRequest() { ++reads } }),
+  })
+  const call = await adapter.prepareCall(provider, visionModel)
+  assert.deepEqual(call.model, visionInfo)
+  oauth.status = () => ({ signedIn: true, planEnabled: false })
+  lifecycle.invalidate()
+
+  await assert.rejects(collect(call.stream({ ...options, model: visionModel, messages: imageHistory(visionModel) })), {
+    code: 'ABORTED',
+  })
+  assert.equal(reads, 0)
+  assert.equal(tokens, 1, 'only the initial model catalog acquires a token')
+  assert.deepEqual(requests.map(({ url }) => url), [base + '/models'])
 })
 
 test('aborting after usage prevents a successful terminal event', async () => {
@@ -336,6 +391,84 @@ test('declares a local function and replays its matching call and result', async
     { type: 'function_call', call_id: 'call_1', name: 'echo', arguments: '{"value":7}' },
     { type: 'function_call_output', call_id: 'call_1', output: '7' },
   ])
+})
+
+test('the prepared vision model sends user and tool images as Responses data URLs', async () => {
+  const reads = []
+  const getAttachments = () => ({
+    async readImageRequest(ref, target, signal) {
+      assert.ok(signal instanceof AbortSignal)
+      assert.equal(signal.aborted, false)
+      reads.push({ ref, target })
+      const data = ref.attachmentId === userImage.attachmentId ? userBytes : toolBytes
+      return {
+        attachment: ref, variantId: ref.attachmentId, data, mediaType: ref.mediaType, bytes: data.byteLength,
+        width: ref.width, height: ref.height, depth: 'uchar', space: 'srgb', hasAlpha: false,
+      }
+    },
+  })
+  const { adapter, requests } = harness((url) => url === base + '/models'
+    ? Response.json({ models: [visionRow, textRow] })
+    : sse(started, delta, ended, complete), { getAttachments })
+
+  const call = await adapter.prepareCall(provider, visionModel)
+  assert.deepEqual(call.model, visionInfo)
+  const chunks = await collect(call.stream({
+    ...options, model: visionModel, reasoningEffort: 'medium', messages: imageHistory(visionModel),
+  }))
+  assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
+  assert.deepEqual(reads, [userImage, toolImage].map((ref) => ({
+    ref, target: { width: ref.width, height: ref.height, maxBytes: ref.bytes },
+  })))
+  assert.deepEqual(requests.map(({ url, method }) => [url, method]), [
+    [base + '/models', 'GET'], [base + '/responses', 'POST'],
+  ])
+  const { model: requestedModel, reasoning, input } = JSON.parse(requests[1].body)
+  assert.equal(requestedModel, visionModel)
+  assert.deepEqual(reasoning, { effort: 'medium' })
+  assert.deepEqual(input, [
+    { role: 'user', content: [
+      { type: 'input_text', text: 'Compare this image.' },
+      { type: 'input_image', detail: 'auto', image_url: 'data:image/png;base64,iVBORw==' },
+    ] },
+    { type: 'function_call', call_id: 'call_1', name: 'echo', arguments: '{"value":7}' },
+    { type: 'function_call_output', call_id: 'call_1', output: [
+      { type: 'input_text', text: 'Tool preview.' },
+      { type: 'input_image', detail: 'auto', image_url: 'data:image/jpeg;base64,/9j/4A==' },
+    ] },
+  ])
+})
+
+test('text-only or undisclosed image support never reads or sends image bytes', async (t) => {
+  for (const [kind, row] of [
+    ['text only', textRow],
+    ['missing modalities', { slug: model, visibility: 'list' }],
+  ]) {
+    await t.test(kind, async () => {
+      let reads = 0
+      const { adapter, requests } = harness((url) => url === base + '/models'
+        ? Response.json({ models: [visionRow, row] })
+        : sse(started, delta, ended, complete), {
+        getAttachments: () => ({ readImageRequest() { ++reads } }),
+      })
+      const call = await adapter.prepareCall(provider, row.slug)
+      assert.deepEqual(call.model.inputModalities, ['text'])
+      const chunks = await collect(call.stream({ ...options, model: row.slug, messages: imageHistory(row.slug) }))
+      assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
+      assert.equal(reads, 0)
+      const [{ body }] = requests.filter(({ url }) => url === base + '/responses')
+      assert.doesNotMatch(body, /input_image|image_url|data:image|iVBORw==|\/9j\/4A==/)
+      const { input } = JSON.parse(body)
+      assert.deepEqual(input[0].content, [
+        { type: 'input_text', text: 'Compare this image.' },
+        { type: 'input_text', text: '[image omitted because this model accepts text only; attachment sha256:aaaaaaaa]' },
+      ])
+      assert.deepEqual(input.at(-1), {
+        type: 'function_call_output', call_id: 'call_1',
+        output: 'Tool preview.\n[image omitted because this model accepts text only; attachment sha256:bbbbbbbb]',
+      })
+    })
+  }
 })
 
 test('tool continuation replays opaque reasoning and phase only for the same account and model', async () => {

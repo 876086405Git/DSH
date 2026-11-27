@@ -121,7 +121,7 @@ void main() {
       await tester.tap(find.text('修复登录重复提交'));
       await pumpFrames(tester, 8);
       expect(find.byType(SessionDetailPage), findsOneWidget);
-      // The hero: rounds and the three figures.
+      // The hero: rounds and the figures.
       expect(find.text('共 2 轮 · 进行中'), findsOneWidget);
       expect(find.text('改动文件'), findsOneWidget);
       // No subagent was ever called: no such tab.

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="remote_background_channel">Remote connection</string>
+    <string name="remote_background_notification">Helps keep your remote connection active in the background.</string>
+</resources>

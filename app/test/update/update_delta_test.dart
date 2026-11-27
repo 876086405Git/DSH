@@ -218,7 +218,7 @@ void main() {
     expect(c.read(appUpdateProvider).downloadSize, _new.length);
     await controller.startDownload();
     expect(c.read(appUpdateProvider).task, UpdateTaskPhase.ready);
-    expect(http.urls, [_feed, '$_dl/$_apk']);
+    expect(http.urls.where((url) => url.endsWith('.apk')), ['$_dl/$_apk']);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('update_installed_sha256'), isNull);
     expect(jsonDecode(prefs.getString('update_latest')!), isNot(contains('patches')));

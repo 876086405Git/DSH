@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show Rect, Size;
 
@@ -10,13 +11,16 @@ import 'package:dsh_app/state/workshop_dependencies.dart';
 import 'package:dsh_app/state/workshop_preferences.dart';
 import 'package:dsh_app/state/workshop_publication.dart';
 import 'package:dsh_app/state/workshop_publish_sources.dart';
+import 'package:dsh_app/themes/theme_library.dart';
+import 'package:dsh_app/themes/theme_pack.dart';
 import 'package:dsh_app/workshop/workshop_models.dart';
 import 'package:dsh_app/workshop/workshop_preview.dart';
 import 'package:dsh_app/workshop/workshop_repository.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../workshop/support.dart' show workshopPng;
+import '../workshop/support.dart' show workshopPng, workshopUnzip, workshopZip;
 import 'workshop_state_support.dart' show StateClient, StatePackages, stateSettled, stateSignal;
 
 const _source = WorkshopPublishSource(kind: 'pet', localId: 'user-cat', name: 'Cat');
@@ -94,6 +98,68 @@ Future<WorkshopPublishSources> _ready(ProviderContainer container) {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('installed theme and picked theme ZIP both prepare an attributed theme archive', () async {
+    final root = await Directory.systemTemp.createTemp('workshop-theme-source-test-');
+    final library = ThemeLibrary(() async => Directory('${root.path}/local'));
+    final repository = WorkshopRepository(
+      client: StateClient(),
+      packages: StatePackages(),
+      downloadDirectory: Directory('${root.path}/downloads'),
+      appVersion: '1.4.0',
+    );
+    final container = ProviderContainer(overrides: [
+      workshopRepositoryProvider.overrideWith((ref) async => repository),
+      workshopDirectoryProvider.overrideWithValue(() async => root),
+      petLibraryProvider.overrideWithValue(_Pets()),
+      companionFloatStoreProvider.overrideWithValue(() async => _Companion()),
+      themeLibraryProvider.overrideWithValue(library),
+    ]);
+    const paths = MethodChannel('plugins.flutter.io/path_provider');
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(paths, (call) async {
+      expect(call.method, 'getTemporaryDirectory');
+      return root.path;
+    });
+    try {
+      final local = await library.saveCustom(ThemePack.parse({'schema': 1, 'id': 'mine', 'name': 'My local theme'}));
+      final sources = await container.read(workshopSourcesLoaderProvider)();
+      final installed = sources.values.singleWhere((source) => source.kind == 'theme');
+      expect(installed.localId, local.id);
+      expect(installed.fromFile, isFalse);
+
+      final zip = workshopZip(root, {
+        'folder/theme.json': utf8.encode(jsonEncode({'schema': 1, 'id': 'mine', 'name': 'My ZIP theme'})),
+      });
+      final picked = await container.read(workshopFileStagerProvider)(zip);
+      expect(picked.kind, 'theme');
+      expect(picked.localId, installed.localId);
+      expect(picked.fromFile, isTrue);
+      expect((await library.load(local.id)).name, 'My local theme');
+
+      final prepare = container.read(workshopPrepareDraftProvider);
+      final publication = _input().publication('theme');
+      for (final source in [installed, picked]) {
+        final draft = await prepare(source, publication);
+        try {
+          expect((draft.upload.metadata.kind, draft.upload.metadata.id), ('theme', 'cat'));
+          final files = workshopUnzip(draft.upload.file);
+          expect(files.keys, ['theme.json']);
+          final manifest = jsonDecode(utf8.decode(files['theme.json']!)) as Map<String, dynamic>;
+          expect(manifest['name'], source.name);
+          expect(manifest['author'], 'Author');
+        } finally {
+          await draft.dispose();
+        }
+      }
+    } finally {
+      messenger.setMockMethodCallHandler(paths, null);
+      container.dispose();
+      await root.delete(recursive: true);
+    }
+  });
+
   test('source loader lists local public attribution without a companion nickname', () async {
     final container = ProviderContainer(overrides: [
       petLibraryProvider.overrideWithValue(_Pets()),
@@ -134,6 +200,7 @@ void main() {
         return WorkshopPublishSources(values: [_source]);
       }),
     ]);
+    container.listen(workshopPublishSourcesProvider, (_, _) {});
     try {
       expect((await _ready(container)).values.single, same(_source));
       fail = true;
@@ -168,6 +235,7 @@ void main() {
       _loaderChoice.overrideWith(() => choice),
       workshopSourcesLoaderProvider.overrideWith((ref) => ref.watch(_loaderChoice)),
     ]);
+    container.listen(workshopPublishSourcesProvider, (_, _) {});
     await _ready(container);
     final pending = container.read(workshopPublishSourcesProvider.notifier).refresh();
     final settled = stateSettled(pending);

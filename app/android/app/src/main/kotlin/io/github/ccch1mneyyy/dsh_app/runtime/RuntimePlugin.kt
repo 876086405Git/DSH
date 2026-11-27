@@ -15,6 +15,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import android.provider.Settings
+import io.github.ccch1mneyyy.dsh_app.MainActivity
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -38,7 +39,8 @@ class RuntimePlugin :
     private var sink: RuntimeController.EventSink? = null
     private var activity: ActivityPluginBinding? = null
     private var pendingStorageResult: MethodChannel.Result? = null
-    private var pendingLocationResult: MethodChannel.Result? = null
+    private var pendingLocationResult: (() -> Unit)? = null
+    private var remoteCoarseRequested = false
     private val protection get() = AndroidBackgroundProtection.get(appContext)
     private var managedSkillOwner: ManagedSkillOwner? = null
     @Volatile private var diagnosticsAttached = false
@@ -320,18 +322,39 @@ class RuntimePlugin :
             result.success(protection.status())
             return
         }
+        requestCoarseLocation(host, { result.success(protection.status()) }, { result.error(it, null, null) })
+    }
+
+    /** Called by a foreground settings action, never by a preference update or the service. */
+    internal fun requestRemoteLocation(result: MethodChannel.Result) {
+        val host = activity?.activity ?: return result.success(false)
+        if (!MainActivity.inForeground || pendingLocationResult != null) return result.success(false)
+
+        fun isReady() = protection.hasBackgroundLocation() && protection.locationEnabledInSystem
+        val hasCoarse = protection.hasCoarseLocation()
+        val hasBackground = protection.hasBackgroundLocation()
+        if (isReady()) return result.success(true)
+        if (hasCoarse || remoteCoarseRequested && !host.shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_COARSE_LOCATION)) {
+            // Launching settings does not mean permission has already been granted.
+            openLocationSettings(host, locationDisabled = hasBackground)
+            return result.success(false)
+        }
+        requestCoarseLocation(host, {
+            remoteCoarseRequested = true
+            result.success(isReady())
+        }, { result.success(false) })
+    }
+
+    private fun requestCoarseLocation(host: Activity, onFinished: () -> Unit, onError: (String) -> Unit) {
         // With target 28, the system may offer background access as part of the coarse request.
         // Otherwise the user can grant it separately in the app's system settings.
-        if (pendingLocationResult != null) {
-            result.error("location_request_pending", null, null)
-            return
-        }
-        pendingLocationResult = result
+        if (pendingLocationResult != null) return onError("location_request_pending")
+        pendingLocationResult = onFinished
         try {
             host.requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), LOCATION_REQUEST)
         } catch (_: RuntimeException) {
             pendingLocationResult = null
-            result.error("location_request_failed", null, null)
+            onError("location_request_failed")
         }
     }
 
@@ -339,12 +362,16 @@ class RuntimePlugin :
         val pending = pendingLocationResult ?: return
         pendingLocationResult = null
         protection.refresh()
-        pending.success(protection.status())
+        pending()
     }
 
     private fun openBackgroundProtectionSettings(): Boolean {
         val host = activity?.activity ?: return false
-        val intent = if (protection.status()["error"] == AndroidBackgroundProtection.LOCATION_DISABLED) {
+        return openLocationSettings(host, protection.status()["error"] == AndroidBackgroundProtection.LOCATION_DISABLED)
+    }
+
+    private fun openLocationSettings(host: Activity, locationDisabled: Boolean): Boolean {
+        val intent = if (locationDisabled) {
             Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
         } else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${appContext.packageName}"))
         return runCatching { host.startActivity(intent) }.isSuccess

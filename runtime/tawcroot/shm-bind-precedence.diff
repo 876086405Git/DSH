@@ -1,0 +1,28 @@
+上游：wmww/tawc@a49a4075228f4801dadc1eee584aed33fe8ea4ce，MIT。
+位置：tawcroot/src/syscalls_fs.c:65-71；下方路径相对于解包后的 tawcroot 目录。
+范围：仅生效的精确 /dev/shm 绑定优先；仅有父级 /dev 绑定或没有生效的精确绑定时，保留原仿真。
+
+--- a/src/syscalls_fs.c
++++ b/src/syscalls_fs.c
+@@ -65,7 +65,17 @@
+ int tawcroot_fs_classify_shm(const char *local_path, const char **name_out)
+ {
+-	*name_out = tawcroot_shm_match(local_path);
+-	if (*name_out) return SHM_PEEK_NAME;
+-	if (tawcroot_shm_is_dir(local_path)) return SHM_PEEK_DIR;
+-	return SHM_PEEK_NONE;
++	const char *name = tawcroot_shm_match(local_path);
++	*name_out = 0;
++	if (!name && !tawcroot_shm_is_dir(local_path)) return SHM_PEEK_NONE;
++
++	/* An explicit /dev/shm bind takes precedence over per-process memfds.
++	 * Leave bind routing and read-only checks to normal translation. */
++	for (size_t i = 0; i < tawcroot_n_binds; i++) {
++		const struct tawcroot_bind *b = &tawcroot_binds[i];
++		if (b->active && tawc_streq(b->dst, "dev/shm"))
++			return SHM_PEEK_NONE;
++	}
++
++	*name_out = name;
++	return name ? SHM_PEEK_NAME : SHM_PEEK_DIR;
+ }

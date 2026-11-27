@@ -4,7 +4,6 @@ import 'dart:io';
 import 'release.dart';
 import 'update_config.dart';
 import 'update_http.dart';
-import 'version.dart';
 
 /// Why no endpoint could say what the latest release is. All of them read
 /// "暂时检查不了更新" to the person; the kind is for logs and tests.
@@ -31,7 +30,7 @@ final class CheckFound extends CheckResult {
 
   final ReleaseInfo release;
 
-  /// The endpoint that answered (remembered as the next check's first try).
+  /// The endpoint that reported the selected release.
   final UpdateEndpoint endpoint;
 }
 
@@ -44,7 +43,7 @@ final class CheckFailed extends CheckResult {
   final List<(String, CheckFailure)> attempts;
 }
 
-/// Asks the metadata endpoints in order until one answers with a release.
+/// Finds the newest release reported by the available metadata endpoints.
 class UpdateChecker {
   const UpdateChecker({required this.http, required this.sources, this.userAgent});
 
@@ -57,32 +56,47 @@ class UpdateChecker {
 
   static const _timeout = Duration(seconds: 12);
 
-  Future<CheckResult> check({
-    String? preferred,
-    void Function(UpdateEndpoint endpoint)? onAttempt,
-    /// What this build is. A source that answers with something no newer than
-    /// this is not the end of the search: another source may still know a
-    /// release (a stale channel must not hide the GitHub release). Null keeps
-    /// the old behaviour of taking the first answer.
-    AppVersion? installed,
-  }) async {
+  Future<CheckResult> check({String? preferred}) async {
+    final endpoints = sources.metadataEndpoints(preferred: preferred);
     final attempts = <(String, CheckFailure)>[];
-    CheckFound? stale;
-    for (final endpoint in sources.metadataEndpoints(preferred: preferred)) {
-      onAttempt?.call(endpoint);
-      final outcome = await _try(endpoint);
+    CheckFound? latest;
+
+    void collect(UpdateEndpoint endpoint, Object outcome) {
       switch (outcome) {
         case ReleaseInfo release:
-          final found = CheckFound(release, endpoint);
-          if (installed == null || release.version.isNewerThan(installed)) return found;
-          // Answering with an older release is not proof that nothing newer
-          // exists: keep the newest answer and ask the next source.
-          if (stale == null || release.version.isNewerThan(stale.release.version)) stale = found;
+          if (latest == null || release.version.isNewerThan(latest!.release.version)) {
+            latest = CheckFound(release, endpoint);
+          }
         case CheckFailure failure:
           attempts.add((endpoint.id, failure));
       }
     }
-    return stale ?? CheckFailed(_summarize(attempts.map((a) => a.$2)), attempts: attempts);
+
+    // Compare official manifests in parallel. A stale but reachable source
+    // must not hide a newer release from another official source.
+    final official = endpoints.where((e) => e.kind == EndpointKind.manifest && !e.isAccelerator).toList();
+    final results = await Future.wait(official.map(_try));
+    for (var i = 0; i < official.length; i++) {
+      collect(official[i], results[i]);
+    }
+    // The API and the direct GitHub manifest point to the same release. Only
+    // spend API quota when GitHub's manifest was unavailable.
+    final githubAnswered = official.indexWhere((e) => e.mirrorId == UpdateMirror.github.id);
+    if (githubAnswered < 0 || results[githubAnswered] is! ReleaseInfo) {
+      for (final endpoint in endpoints.where((e) => e.kind == EndpointKind.githubApi)) {
+        collect(endpoint, await _try(endpoint));
+      }
+    }
+    // Unofficial mirrors keep checks working when all official routes fail,
+    // but cannot override a release established by an official source.
+    if (latest == null) {
+      final mirrors = endpoints.where((e) => e.isAccelerator).toList();
+      final results = await Future.wait(mirrors.map(_try));
+      for (var i = 0; i < mirrors.length; i++) {
+        collect(mirrors[i], results[i]);
+      }
+    }
+    return latest ?? CheckFailed(_summarize(attempts.map((a) => a.$2)), attempts: attempts);
   }
 
   /// Rate limiting wins (it tells the person "later" for sure); 404 only
@@ -106,6 +120,7 @@ class UpdateChecker {
           ...endpoint.kind == EndpointKind.githubApi
               ? const {'accept': 'application/vnd.github+json', 'x-github-api-version': '2022-11-28'}
               : const {'accept': 'application/json'},
+          'cache-control': 'no-cache',
           ...endpoint.headers,
           if (userAgent case final agent? when endpoint.id == UpdateChannel.endpointId) 'user-agent': agent,
         },

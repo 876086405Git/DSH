@@ -101,7 +101,7 @@ export default class AppAuth extends TypertRemoteService {
         if (!oauth || !active) return
         const { registerSiwcProvider } = await import('./siwc/provider.mjs')
         if (!active) return
-        registration = registerSiwcProvider({ llm: owner.llm, oauth })
+        registration = registerSiwcProvider({ llm: owner.llm, oauth, getAttachments: () => owner.get('attachments') })
         this.#siwc = { oauth, invalidate: registration.invalidate }
       } catch {
         if (active) console.error('[dsh-app auth] OpenAI channel initialization failed')

@@ -99,6 +99,7 @@ Future<WorkshopPublishSources> _sources({bool initial = false, bool empty = fals
       });
     }),
   ]);
+  container.listen(workshopPublishSourcesProvider, (_, _) {});
   final first = container.read(workshopPublishSourcesProvider);
   Future<void>? pending;
   try {

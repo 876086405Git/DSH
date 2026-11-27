@@ -8,5 +8,5 @@
   "usageV4Notice": "Anonymous stats summarize feature results, model usage and abnormal exits. No chats.",
   "usageUpgradeLearn": "Learn more",
   "usageUpgradeOff": "Turn off",
-  "usageStatsAndroidFooter": "This switch controls dsh-go’s own statistics: feature counts (tavern messages, companion room visits and voice calls included), the token counts model replies report, versions, phone maker and model, and system version. It includes no chats, character cards, files or accounts, and does not control Google ML Kit SDK statistics. Android also summarizes foreground days, the first day of collection, startup and remote connection results and timing bands, model usage, plugin actions, setup, and abnormal exits confirmed by the operating system. Turning it off clears unsent data."
+  "usageStatsAndroidFooter": "Anonymous stats report how some features are used (no chats, files, or account info). When turned off, Android only collects daily activity data."
 }

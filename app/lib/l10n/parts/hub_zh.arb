@@ -22,6 +22,7 @@
   "hubSessionPlanHint": "AI 先出方案，不改文件",
   "hubSessionTodos": "待办",
   "hubSessionNotStarted": "未开始",
+  "hubSessionTokenSpeed": "tokens/秒",
   "hubSessionTurnUsage": "每轮用量",
   "hubSessionNoSubagents": "没有派出子代理",
   "hubSessionDelegations": "派活记录",

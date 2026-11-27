@@ -14,7 +14,7 @@ UIAbility 的 `onForeground`、`onBackground`、`onDestroy` 更新 RuntimeContro
 {"operation":"host","revision":2,"foreground":false,"computePermission":"unknown"}
 ```
 
-目标固定为 `http://127.0.0.1:<port>`，端口1至65535，只接受宿主给的地址，不接收Dart指定URL。关闭系统代理和缓存；连接超时1秒，读取超时3秒，响应上限65536字节。使用公开 `@ohos.net.http` 的 REDIRECTION 拦截器，安装失败时不发请求。401会丢弃旧cookie，下次重试重新认证。日志和UI只暴露固定错误码或固定中文提示，不传播原始网络异常、凭证或响应体。
+目标固定为 `http://127.0.0.1:<port>`，端口1至65535，只接受宿主给的地址，不接收Dart指定URL。关闭系统代理和缓存；连接超时1秒，读取超时3秒，响应上限65536字节。使用公开 `@ohos.net.http` 的 REDIRECTION 拦截器，安装失败时不发请求。401会丢弃旧cookie，下次重试重新认证。日志和UI只暴露固定错误码或固定中文提示，不传播原始网络异常、凭证或响应体。网络错误码区分 `login` 和 `control` 阶段；`*_connect` 表示 SDK 报连接失败，`*_timeout` 只表示该阶段操作超时（SDK 不区分连接和读写超时）。
 
 成功确认只携带固定数量字段：v、host、closed、blocked、paused、confirmedPause、controlVersion；不会携带所有历史工具调用。Ark核对版本、revision、foreground、computePermission及closed/blocked。旧请求的迟到确认与错误不能盖掉新观察。
 
@@ -24,7 +24,7 @@ UIAbility 的 `onForeground`、`onBackground`、`onDestroy` 更新 RuntimeContro
 
 手动暂停与宿主后台观察是两个原因。只有最新宿主处于前台，且没有手动暂停，才能释放工具准入门。手动resume仅释放手动原因；宿主前台事件仅释放后台原因。原先两个路径互相覆盖会导致后台继续写文件，回归证据保存了真实文件效果、日志与固定AgentLoop/ToolRuntime调用。
 
-pause/resume归属日志新增 `manualPaused` 布尔字段，仍使用既有版本。旧日志没有此字段时，把旧pause保守视作手动暂停。重开恢复已持久化的手动意图；host观察不当成重启后的系统事实，要等当前Ability重新上报。重复host请求等待对应控制写入后，重新读取当前状态，不能返回过期的paused快照。最新控制版本决定准入门是否能开启。
+pause/resume归属日志新增 `manualPaused` 布尔字段，仍使用既有版本。旧日志没有此字段时，把旧pause保守视作手动暂停。重开恢复已持久化的手动意图；host观察不当成重启后的系统事实，要等当前Ability重新上报。重复host请求等待对应控制写入后，重新读取当前状态，不能返回过期的paused快照。前后台切换和普通心跳都只读取本次确认需要的状态，不重建逐工具调用历史；显式查询及手动控制仍可返回完整状态。最新控制版本决定准入门是否能开启。
 
 该门约束后续工具准入，不撤销已经发生的副作用，也不自动重放prompt或工具。已在运行的工具继续遵守原O8取消、预算、边界记录与恢复规则。Ark回调到HTTP确认之间存在异步窗口；系统可以在请求送达前冻结整个App，所以本功能不承诺在每次后台切换瞬间就停止所有Node执行。
 
@@ -32,7 +32,7 @@ pause/resume归属日志新增 `manualPaused` 布尔字段，仍使用既有版�
 
 失败时只重试同一个幂等host观察，载荷在同revision期间保持不变，退避1、2、4、8、16、30秒，此后上限30秒。仅一个定时器；新观察重置退避并退休旧请求。每次重试不重新查询权限，否则同revision会隐含不同载荷。下一次真正前后台观察会重新查询。
 
-当前失败通过既有status事件的顶层error和notice事件显示“前后台状态尚未同步，本机任务可能仍在暂停或运行；正在重试。”。连续同类失败不重复发notice；轮询和正在进行的重试保持失败可见，只有当前确认或引擎结束才清除。Node phase仍是实际宿主状态，不能伪装为引擎退出。另附嵌套lifecycle诊断字段，但没有依赖Dart读取这组新字段：真实未修改RuntimeStatus模型已验证能读顶层error。没有修改Flutter界面，也没有运行Flutter widget测试。
+当前失败通过既有status事件的顶层error和notice事件显示“前后台状态尚未同步，本机任务可能仍在暂停或运行；正在重试。”。失败码也写入现有引擎日志；连续同类失败不重复写日志或发notice；轮询和正在进行的重试保持失败可见，只有当前确认或引擎结束才清除。Node phase仍是实际宿主状态，不能伪装为引擎退出。另附嵌套lifecycle诊断字段，但没有依赖Dart读取这组新字段：真实未修改RuntimeStatus模型已验证能读顶层error。没有修改Flutter界面，也没有运行Flutter widget测试。
 
 ## computePermission 的精确含义
 

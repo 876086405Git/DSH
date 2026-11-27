@@ -177,7 +177,15 @@ Future<void> pastAppearance(WidgetTester tester) async {
 }
 
 /// On the choice: 「本机」 is suggested on a roomy phone; 继续.
-Future<void> chooseThisPhone(WidgetTester tester) async {
+Future<void> chooseThisPhone(WidgetTester tester, {bool keepNotice = false}) async {
   await tester.tap(find.widgetWithText(FilledButton, '继续'));
+  await frames(tester);
+  if (!keepNotice) await closeUsagePrivacyNotice(tester);
+}
+
+Future<void> closeUsagePrivacyNotice(WidgetTester tester) async {
+  await tester.tap(
+    find.descendant(of: find.byKey(const ValueKey('usage-privacy-notice')), matching: find.byTooltip('关闭')),
+  );
   await frames(tester);
 }
