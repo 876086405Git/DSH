@@ -2,6 +2,50 @@
 
 每个版本先中文、后英文。发版时把对应版本的正文（不含版本标题）作为 Release 正文，见 `docs/release.md`。
 
+## 1.4.1 · 2026-11-27
+
+### 中文
+
+#### 改进
+
+- **对话显示解码速度。** 每轮结束的脚注、用量弹层和对话详情新增 `tokens/秒`（输出 token ÷ 解码时长，与单步详情同一口径）；子代理数量按会话谱系统计。
+- **远程主机后台连接。** 连上远程主机后由独立的前台服务维持连接：切到后台或息屏不再受 App 自设时限，也不会顺带启动本机引擎。后台运行页新增「远程连接保活」，可选静音音频和保护性后台定位（默认关闭，定位只用大致位置，不保存也不发送坐标）。
+- **状态显示更清楚。** 远程主机时顶栏把「主机连接」和「会话同步」分开显示，中继连接直接显示实际线路。
+
+#### 修复
+
+- **DS Bot 走中继。** 中继上通过 `dsBot/call`、`dsBot/feed` 访问 DS Bot（需要远端 Host 插件包含 ds-harness-remote#605）；只对可以安全重放的读操作重试，操作不会被执行两次。
+- **更新检查。** 多个官方源并行比较，选出版本最新的一个，旧的内测源不会再挡住 GitHub 正式版；打开 App 和从后台返回都会检查（成功检查后 24 小时内不重复）；检查失败时，已下载的安装包仍可校验并安装。
+- **OpenAI 订阅渠道支持图片。** ChatGPT 订阅渠道按官方声明的模型能力接收图片，可以直接发图。
+- **创意工坊投稿。** 可以投稿主题包，也可以直接选择 ZIP；投稿完成后回到「我的投稿」并看到这一条。
+- **tawcroot 启动。** 显式的 `/dev/shm` 绑定优先，不再被进程内的共享内存模拟覆盖。
+- **鸿蒙。** 修复真机图像打包、Inspector 与生命周期同步。
+
+#### 验证情况
+
+这版改动大多只经过自动测试和编译检查；1.4.1 的测试包在一台 vivo X200 Pro（Android 16）上装过并启动。远程主机后台保活、DS Bot 中继、OpenAI 订阅图片和更新检查需要相应的主机或账号，尚未逐项在真机上验证。
+
+### English
+
+#### Improvements
+
+- **Decoding speed in chats.** The end-of-turn footnote, the usage sheet and the conversation details now show `tokens/sec` (output tokens ÷ decoding time, the same measure as the step details), and the subagent count comes from the conversation lineage.
+- **Remote hosts in the background.** Once connected, a dedicated foreground service keeps the remote link alive: leaving the app or turning the screen off no longer runs into a self-imposed limit, and the local engine is not started. The background page gains remote connection protection — silent audio and protective background location, both off by default; location is coarse only and is never stored or sent.
+- **Clearer status.** With a remote host, the header shows the host link and the conversation sync state separately, and relay connections show the actual route.
+
+#### Fixes
+
+- **DS Bot over the relay.** DS Bot is reached through `dsBot/call` and `dsBot/feed` on relay hosts (the remote host plugin must include ds-harness-remote#605); only reads that are safe to replay are retried, so an action is never executed twice.
+- **Update checks.** Official sources are compared in parallel and the newest release wins, so a stale beta feed can no longer hide the GitHub release; checks run at launch and on returning to the app (at most once per 24 hours after a successful check); when a check fails, an already downloaded package can still be verified and installed.
+- **Images with an OpenAI subscription.** Models on the ChatGPT subscription channel now take images according to their declared capabilities.
+- **Workshop submissions.** Theme packs can be submitted, or a ZIP picked directly; a finished submission lands back in My uploads with the new entry.
+- **tawcroot launch.** Explicit `/dev/shm` binds take precedence instead of being shadowed by per-process shared-memory emulation.
+- **HarmonyOS.** Fixed on-device image packaging, the Inspector and lifecycle sync.
+
+#### Testing
+
+Most of this version has only been checked by automated tests and builds; the 1.4.1 test build was installed and started on a vivo X200 Pro (Android 16). Remote background protection, DS Bot over the relay, images on the OpenAI subscription and update checks need the matching host or account and have not each been verified on a real device.
+
 ## 1.4.0 · 2026-11-25
 
 ### 中文
