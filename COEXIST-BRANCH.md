@@ -22,7 +22,7 @@ https://gh-proxy.com/https://github.com/876086405Git/DSH/releases/download/coexi
 
 旧版本兜底：[coexist-v1.4.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.4.0)（1.4.0）、[coexist-v1.3.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.3.0)（1.3.0）、[coexist-v1.2.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.2.0)（1.2.0）、[coexist-v1.1.0](https://github.com/876086405Git/DSH/releases/tag/coexist-v1.1.0)（1.1.0）。
 
-> Release 标签用 `coexist-` 前缀（`coexist-v1.4.1`），和本仓库插件的 `v1.3.0` 区分开。
+> Release 标签用 `coexist-` 前缀（`coexist-v1.4.1`），和本仓库插件的 `v1.4.1` 区分开。
 
 ---
 > **和本仓库 `main` 分支的关系**：`main` 是「DSH 插件集合」（`plugins/` 下三个独立 DSH 桌面插件），和这个分支**内容零重叠、互不影响**。这个分支是完整的 Android 应用源码，不含任何插件代码。
@@ -197,7 +197,7 @@ flutter build apk --release \
 | versionName / versionCode | `1.4.1` / `11272104` |
 | APK 体积 / SHA-256 | 686.3 MB / `4da108f0daf26b14882650b7b849242196e7fadc58e6c9c98bb901bb6e6de753` |
 | 备份分支 | `backup/coexist-v1.3.0-1126-0157`（1.3.0 状态，回滚用） |
-| 真机验证 | Redmi 25053RT47C（Android 17 / arm64-v8a）：1.4.0 待装待验 |
+| 真机验证 | Redmi 25053RT47C（Android 17 / arm64-v8a）：1.4.1 已安装并实际使用，正常（2026-11-27） |
 | v1.4.0 升级中的修复 | 官方 v1.4.0 给 `_apply` 加了 `input.text != _draftText` 守卫，移植的内置模型分支漏写 `_draftText`，转写结果会丢失；已补（见提交 `fix(voice)`） |
 
 ---
